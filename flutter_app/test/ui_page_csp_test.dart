@@ -6,17 +6,30 @@ import 'dart:io';
 
 import 'package:app/web_ui/ui_server.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'fake_path_provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(() {
+  late Directory folder;
+
+  setUpAll(() async {
     HttpOverrides.global = null;
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
     SharedPreferences.setMockInitialValues({});
+    folder = await Directory.systemTemp.createTemp('ui-page-csp-');
+    PathProviderPlatform.instance = FakePathProvider(folder.path);
+  });
+
+  tearDownAll(() async {
+    try {
+      await folder.delete(recursive: true);
+    } catch (_) {}
   });
 
   Future<(String, String)> fetch(HttpClient client, UiServer server, List<Cookie> cookies) async {

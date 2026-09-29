@@ -10,8 +10,11 @@ import 'package:app/web_ui/ui_bridge.dart';
 import 'package:app/web_ui/ui_pages.dart';
 import 'package:app/web_ui/web_start_script.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'fake_path_provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +29,7 @@ void main() {
     databaseFactory = databaseFactoryFfi;
     folder = await Directory.systemTemp.createTemp('ui-bridge-');
     await databaseFactoryFfi.setDatabasesPath(folder.path);
+    PathProviderPlatform.instance = FakePathProvider(folder.path);
     SharedPreferences.setMockInitialValues({'user_bundesland': 'Brandenburg'});
   });
 
