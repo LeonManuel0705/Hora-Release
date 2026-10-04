@@ -23,7 +23,6 @@ def test_reminders_start_from_the_same_defaults_as_the_settings_page():
     expected = {
         item['key']: {'on': item['on'], 'lead': item.get('lead')}
         for item in ui_data.NOTIFY_DEFAULTS['categories']
-        if item['key'] != 'pomodoro'
     }
     assert reminder_defaults() == expected
 

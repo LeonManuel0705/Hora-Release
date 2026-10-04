@@ -1,4 +1,5 @@
 import { BRAND, LOCAL_KEYS, data, dayDiff, hm, isoDate, lessonsFor, minutesOf, startOfDay, storage, subject, toMin } from "./core.js";
+import { endNotice, read as readPomodoro, subscribe } from "./pomodoro-timer.js";
 
 const SHOWN_KEY = "app-reminders-shown";
 const TICK = 30000;
@@ -12,6 +13,7 @@ export const CATEGORY_DEFAULTS = {
   homework: { on: true, lead: 1 },
   events: { on: true, lead: 15 },
   tasks: { on: true },
+  pomodoro: { on: true },
 };
 
 export function readPrefs(saved = storage.get(LOCAL_KEYS.prefs)) {
@@ -105,6 +107,16 @@ function taskReminders(day, minute) {
   return reminders;
 }
 
+function pomodoroReminders(date) {
+  const ended = endNotice(readPomodoro(), date.getTime());
+  if (!ended) return [];
+  const key = `pomodoro:${ended.id}`;
+  const url = "/hub/pomodoro";
+  if (ended.phase === "break") return [{ key, url, title: "Pause vorbei", body: `Weiter mit der nächsten Runde, ${ended.next} Min.` }];
+  const course = ended.subject && Object.hasOwn(data.subjects || {}, ended.subject) ? `${subject(ended.subject).label}, ` : "";
+  return [{ key, url, title: "Arbeitsphase vorbei", body: `${course}${ended.minutes} Min. gearbeitet. Jetzt ${ended.next} Min. Pause.` }];
+}
+
 export function dueReminders(prefs, date) {
   const day = startOfDay(date);
   const minute = minutesOf(date);
@@ -114,6 +126,7 @@ export function dueReminders(prefs, date) {
     ...deadlineReminders(prefs, day),
     ...(prefs.categories.events.on ? eventReminders(prefs, day, minute) : []),
     ...(prefs.categories.tasks.on ? taskReminders(day, minute) : []),
+    ...(prefs.categories.pomodoro.on ? pomodoroReminders(date) : []),
   ];
 }
 
@@ -144,7 +157,14 @@ function tick() {
   for (const reminder of dueReminders(prefs, date)) {
     if (!claim(reminder.key, date.getTime())) continue;
     try {
-      new Notification(reminder.title, { body: reminder.body, icon, silent: !prefs.sound });
+      const notice = new Notification(reminder.title, { body: reminder.body, icon, tag: reminder.key, silent: !prefs.sound });
+      if (reminder.url) {
+        notice.onclick = () => {
+          window.focus();
+          notice.close();
+          if (location.pathname !== reminder.url) location.assign(reminder.url);
+        };
+      }
     } catch {}
   }
 }
@@ -153,6 +173,9 @@ export function initReminders() {
   if (!("Notification" in window) || !data) return;
   tick();
   setInterval(tick, TICK);
+  subscribe((event) => {
+    if (event.type === "end") tick();
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") tick();
   });
