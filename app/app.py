@@ -458,10 +458,6 @@ def hub_privacy():
 def hub_email():
     return render_template('hub/email.html', active_tab='email')
 
-@app.route('/hub/pomodoro')
-def hub_pomodoro():
-    return render_template('hub/pomodoro.html', active_tab='pomodoro')
-
 @app.route('/hub/bookmarks')
 def hub_bookmarks():
     return render_template('hub/bookmarks.html', active_tab='bookmarks')

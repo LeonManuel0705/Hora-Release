@@ -1,0 +1,106 @@
+{% extends "app/base.html" %}
+
+{% block title %}Pomodoro · {{ brand_name }}{% endblock %}
+
+{% block page_css %}<link rel="stylesheet" href="/static/app/css/pages/pomodoro.css?v={{ asset_version }}">{% endblock %}
+
+{% block content %}
+<div class="page pomodoro-page" id="pomodoroPage" data-page-module="pomodoro">
+    <header class="head">
+        <div class="head-row">
+            <div class="head-title">
+                <h1 class="head-date">Pomodoro</h1>
+                <span class="head-week" id="pomoToday"></span>
+            </div>
+        </div>
+    </header>
+
+    <section class="today is-desk pomo-stage" id="pomoStage" data-mood="ready" aria-label="Timer">
+        <div class="today-copy pomo-copy">
+            <div class="pomo-eyebrow">
+                <p class="today-eyebrow pomo-phase" id="pomoPhase"><svg class="icon" aria-hidden="true"><use href="#i-timer"/></svg><span id="pomoPhaseText">Bereit</span></p>
+                <label class="pomo-subject" id="pomoSubjectBox">
+                    <i class="subject-dot" aria-hidden="true"></i>
+                    <span class="pomo-subject-name" id="pomoSubjectName" aria-hidden="true">Kein Fach</span>
+                    <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+                    <select id="pomoSubject" aria-label="Fach"></select>
+                </label>
+            </div>
+            <div class="pomo-clock" id="pomoClock" role="timer" aria-label="Verbleibende Zeit">
+                <span class="digits" id="pomoDigits" aria-hidden="true"></span>
+                <span class="visually-hidden" id="pomoSpoken"></span>
+            </div>
+            <p class="pomo-meta" id="pomoMeta"></p>
+            <ol class="pomo-rounds" id="pomoRounds" aria-hidden="true"></ol>
+            <div class="pomo-actions">
+                <button class="btn btn-primary pomo-main" type="button" id="pomoMain"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg><span>Starten</span></button>
+                <button class="btn btn-quiet pomo-side" type="button" id="pomoSide" hidden><svg class="icon" aria-hidden="true"><use href="#i-rotate-ccw"/></svg><span>Zurücksetzen</span></button>
+            </div>
+        </div>
+        <div class="scene pomo-scene" id="pomoScene">
+            <div class="pomo-tinte" id="pomoTinte"></div>
+        </div>
+    </section>
+
+    <div class="columns pomo-columns">
+        <section class="pomo-rhythm" aria-labelledby="rhythmTitle">
+            <div class="section-head">
+                <h2 class="section-title" id="rhythmTitle">Rhythmus</h2>
+                <p class="section-meta" id="rhythmMeta"></p>
+            </div>
+            <div class="pomo-card">
+                <div class="pomo-cycle" aria-hidden="true">
+                    <i class="is-work" id="cycleWork"></i><i class="is-break" id="cycleBreak"></i>
+                </div>
+                <div class="pomo-steppers">
+                    <div class="stepper" role="group" aria-labelledby="stepWorkLabel" data-kind="work">
+                        <span class="stepper-label" id="stepWorkLabel"><i class="stepper-dot is-work" aria-hidden="true"></i>Arbeiten</span>
+                        <div class="stepper-control">
+                            <button class="stepper-button" type="button" data-step="-1" aria-label="Arbeitszeit kürzer"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+                            <label class="stepper-value"><input class="stepper-input" id="stepWork" type="number" inputmode="numeric" min="1" max="60" step="1" aria-labelledby="stepWorkLabel"><span aria-hidden="true">Min.</span></label>
+                            <button class="stepper-button" type="button" data-step="1" aria-label="Arbeitszeit länger"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+                        </div>
+                    </div>
+                    <div class="stepper" role="group" aria-labelledby="stepBreakLabel" data-kind="break">
+                        <span class="stepper-label" id="stepBreakLabel"><i class="stepper-dot is-break" aria-hidden="true"></i>Pause</span>
+                        <div class="stepper-control">
+                            <button class="stepper-button" type="button" data-step="-1" aria-label="Pausenzeit kürzer"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+                            <label class="stepper-value"><input class="stepper-input" id="stepBreak" type="number" inputmode="numeric" min="1" max="30" step="1" aria-labelledby="stepBreakLabel"><span aria-hidden="true">Min.</span></label>
+                            <button class="stepper-button" type="button" data-step="1" aria-label="Pausenzeit länger"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+                        </div>
+                    </div>
+                </div>
+                <p class="pomo-hint" id="rhythmHint" hidden></p>
+                <div class="pomo-notice" id="pomoNotice">
+                    <svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg>
+                    <div class="pomo-notice-body">
+                        <p id="pomoNoticeText"></p>
+                        <div class="pomo-notice-actions">
+                            <button class="text-button" type="button" data-notify hidden><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg><span data-notify-text>Erinnerungen aktivieren</span></button>
+                            <a class="text-button" id="pomoNoticeLink" href="/hub/settings" data-page="settings" hidden>Einstellungen</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="pomo-stats" aria-labelledby="statsTitle">
+            <div class="section-head">
+                <h2 class="section-title" id="statsTitle">Lernzeit</h2>
+                <div class="segmented pomo-range" role="group" aria-label="Zeitraum" id="pomoRange">
+                    <button type="button" data-range="today" aria-pressed="true">Heute</button>
+                    <button type="button" data-range="week" aria-pressed="false">7 Tage</button>
+                    <button type="button" data-range="month" aria-pressed="false">30 Tage</button>
+                </div>
+            </div>
+            <div class="pomo-figures" id="pomoFigures"></div>
+            <ul class="pomo-split" id="pomoSplit" aria-label="Lernzeit nach Fach"></ul>
+            <p class="pomo-empty" id="pomoEmpty" hidden></p>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block data %}
+<script type="application/json" id="appData">{{ data_json | safe }}</script>
+{% endblock %}

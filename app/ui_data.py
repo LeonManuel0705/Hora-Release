@@ -801,6 +801,10 @@ def page_assistant(data, school, settings, today, iserv):
     return {'install': local_ai.status()}
 
 
+def page_pomodoro(data, school, settings, today, iserv):
+    return {'stats': {name: db.get_pomodoro_stats(name) for name in ('today', 'week', 'month')}}
+
+
 def page_calendar(data, school, settings, today, iserv):
     from . import calendar_cache
     code = settings.get('bundesland') or ''
@@ -932,6 +936,7 @@ PAGE_BUILDERS = {
     'email': page_email,
     'settings': page_settings,
     'assistant': page_assistant,
+    'pomodoro': page_pomodoro,
 }
 
 
