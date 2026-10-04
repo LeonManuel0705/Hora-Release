@@ -3676,7 +3676,8 @@ def save_pomodoro_session():
     session_id = db.create_pomodoro_session(
         subject_id=data.get('subject_id'),
         duration=data.get('duration', 25),
-        session_type=data.get('session_type', 'work')
+        session_type=data.get('session_type', 'work'),
+        completed_at=db.pomodoro_end_stamp(data.get('ended_at'))
     )
     return jsonify({'success': True, 'session_id': session_id})
 

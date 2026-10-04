@@ -5,7 +5,8 @@ import json
 import sqlite3
 import os
 import logging
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
 from . import brand
@@ -1738,14 +1739,36 @@ def import_training_schedule_template(entries: List[Dict[str, Any]], user_id: st
     conn.close()
     return count
 
-def create_pomodoro_session(subject_id: str = None, duration: int = 25, session_type: str = 'work') -> int:
+POMODORO_MAX_AGE = 14 * 86400
+
+def pomodoro_end_stamp(milliseconds) -> Optional[str]:
+    if isinstance(milliseconds, bool) or not isinstance(milliseconds, (int, float)):
+        return None
+    seconds = milliseconds / 1000
+    now = time.time()
+    if not now - POMODORO_MAX_AGE <= seconds <= now + 60:
+        return None
+    return datetime.fromtimestamp(seconds, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+def create_pomodoro_session(subject_id: str = None, duration: int = 25, session_type: str = 'work',
+                            completed_at: str = None) -> int:
 
     conn = get_connection()
     cursor = conn.cursor()
+    if completed_at:
+        cursor.execute('''
+            SELECT id FROM pomodoro_sessions
+            WHERE completed_at = ? AND session_type = ? AND duration = ?
+              AND COALESCE(subject_id, '') = COALESCE(CAST(? AS TEXT), '')
+        ''', (completed_at, session_type, duration, subject_id))
+        known = cursor.fetchone()
+        if known:
+            conn.close()
+            return known[0]
     cursor.execute('''
-        INSERT INTO pomodoro_sessions (subject_id, duration, session_type)
-        VALUES (?, ?, ?)
-    ''', (subject_id, duration, session_type))
+        INSERT INTO pomodoro_sessions (subject_id, duration, session_type, completed_at)
+        VALUES (?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+    ''', (subject_id, duration, session_type, completed_at))
     session_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -1770,11 +1793,11 @@ def get_pomodoro_stats(range_type: str = 'week') -> Dict[str, Any]:
     cursor = conn.cursor()
 
     if range_type == 'today':
-        date_filter = "DATE(completed_at) = DATE('now', 'localtime')"
+        date_filter = "DATE(completed_at, 'localtime') = DATE('now', 'localtime')"
     elif range_type == 'week':
-        date_filter = "DATE(completed_at) >= DATE('now', 'localtime', '-7 days')"
+        date_filter = "DATE(completed_at, 'localtime') >= DATE('now', 'localtime', '-6 days')"
     elif range_type == 'month':
-        date_filter = "DATE(completed_at) >= DATE('now', 'localtime', '-30 days')"
+        date_filter = "DATE(completed_at, 'localtime') >= DATE('now', 'localtime', '-29 days')"
     else:
         date_filter = "1=1"
 
