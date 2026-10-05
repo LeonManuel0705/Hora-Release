@@ -823,7 +823,6 @@ function setCalendarFilter(filter) {
 }
 
 async function loadEvents(updatePanel = true) {
-    if (window.AppLoader) window.AppLoader.show();
     try {
         events = [];
 
@@ -871,8 +870,6 @@ async function loadEvents(updatePanel = true) {
         if (updatePanel) updateEventsForDate();
     } catch (err) {
         console.log('Calendar API not available:', err);
-    } finally {
-        if (window.AppLoader) window.AppLoader.hide();
     }
 }
 
