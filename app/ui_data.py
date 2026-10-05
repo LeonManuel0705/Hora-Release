@@ -704,6 +704,14 @@ def place_view(name, value):
     return {'id': usable or f'{lat},{lon}', 'name': name, 'detail': str(value.get('name') or value.get('address') or ''), 'stop': usable, 'lat': lat, 'lon': lon}
 
 
+def place_line(value):
+    if not isinstance(value, dict):
+        return ''
+    name = str(value.get('name') or '').strip()
+    area = str(value.get('address') or '').strip()
+    return f'{name}, {area}' if name and area and area not in name else name
+
+
 def known_places():
     try:
         from .vbb_service import get_vbb_service
@@ -751,8 +759,8 @@ def page_settings(data, school, settings, today, iserv):
         'notifications': copy.deepcopy(NOTIFY_DEFAULTS),
         'places': {
             'weather': city or '',
-            'home': str((known.get('home') or {}).get('name') or '') if isinstance(known.get('home'), dict) else '',
-            'school': str((known.get('school') or {}).get('name') or '') if isinstance(known.get('school'), dict) else '',
+            'home': place_line(known.get('home')),
+            'school': place_line(known.get('school')),
         },
         'about': {'version': '', 'license': 'AGPL-3.0', 'website': brand.WEBSITE, 'source': brand.REPOSITORY},
     }

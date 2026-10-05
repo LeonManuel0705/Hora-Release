@@ -102,14 +102,21 @@ class UiTransit {
     final bias = _arg(args, 'bias', 4) ?? (near != null && near.isNotEmpty ? '5' : null);
     final data = await _fetch('geocode', {'text': query, 'language': 'de', 'place': near, 'placeBias': bias}, 3600);
     final places = <Map<String, Object?>>[];
+    final seen = <String>{};
     for (final raw in _list(data)) {
       final item = _map(raw);
       final kind = {'STOP': 'stop', 'ADDRESS': 'address'}[item['type']] ?? 'place';
       if (item['country'] != null && item['country'] != 'DE' && kind != 'stop') continue;
+      var area = _areaOf(item);
+      if (kind != 'stop') {
+        area = ['${item['zip'] ?? ''}'.trim(), area].where((part) => part.isNotEmpty).join(' ');
+        final key = '$kind|${'${item['name'] ?? ''}'.toLowerCase()}|${area.toLowerCase()}';
+        if (!seen.add(key)) continue;
+      }
       places.add({
         'id': kind == 'stop' ? item['id'] : '${item['lat']},${item['lon']}',
         'name': item['name'] ?? '',
-        'area': _areaOf(item),
+        'area': area,
         'kind': kind,
         'modes': ({for (final mode in _list(item['modes'])) _category(mode)}.toList()..sort()),
         'lat': item['lat'],

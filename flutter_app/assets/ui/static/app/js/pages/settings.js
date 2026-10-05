@@ -1816,7 +1816,25 @@ function bindLook() {
   }).observe(root, { attributes: true, attributeFilter: ["data-theme-mode"] });
 }
 
-const placeState = { editing: false, place: null, query: "", results: [], searching: false, timer: 0, ticket: 0 };
+const placeState = { editing: false, place: null, query: "", results: [], searching: false, failed: false, timer: 0, ticket: 0 };
+const PLACE_WORDS = { home: "Zuhause", school: "Schule" };
+const placesCard = () => $("placesCard");
+const placeLine = (item) => (item.area && !item.name.includes(item.area) ? `${item.name}, ${item.area}` : item.name);
+
+function placeResultsHtml() {
+  if (placeState.results.length) {
+    const items = placeState.results.map((item, index) => `<li><button type="button" class="place-pick" data-place-pick="${index}"><span class="place-pick-icon" aria-hidden="true">${icon(item.kind === "stop" ? "train-front" : "map-pin")}</span><span class="place-pick-text"><b>${esc(item.name)}</b>${item.area ? `<small>${esc(item.area)}</small>` : ""}</span></button></li>`).join("");
+    return `<ul class="place-results" role="list" aria-label="Treffer">${items}</ul>`;
+  }
+  if (placeState.query.trim().length < 2) return "";
+  if (placeState.searching) return `<p class="set-row-desc">Suche …</p>`;
+  return `<p class="set-row-desc">${placeState.failed ? "Die Ortssuche ist gerade nicht erreichbar. Versuch es gleich noch einmal." : "Nichts gefunden. Versuch es mit Straße, Hausnummer und Ort."}</p>`;
+}
+
+function renderPlaceResults() {
+  const host = $("placeResults");
+  if (host) host.innerHTML = placeResultsHtml();
+}
 
 function renderPlaces() {
   const card = $("placesCard");
@@ -1829,11 +1847,10 @@ function renderPlaces() {
     : row({ id: "rowWeather", label: "Wetter", desc: "Ort für die Vorhersage auf der Übersicht", cls: "is-stack", control: `<span class="set-value">${esc(prefs.places.weather || "Noch nicht festgelegt")}</span><button class="btn btn-quiet" type="button" id="weatherEdit">${prefs.places.weather ? "Ändern" : "Festlegen"}</button>` });
   const placeRow = (key, id, label, desc) => {
     if (placeState.place === key) {
-      const items = placeState.results.map((item, index) => `<li><button type="button" class="place-pick" data-place-pick="${index}">${icon(item.kind === "stop" ? "train-front" : "map-pin")}<span><b>${esc(item.name)}</b><small>${esc(item.area || "")}</small></span></button></li>`).join("");
-      return `<form class="set-row is-stack place-form" id="placeForm" data-place="${key}" novalidate>
-        <div class="set-row-text"><label class="set-row-label" for="placeInput">${label}</label><p class="set-row-desc">Haltestelle oder Adresse suchen</p></div>
-        <div class="set-row-control"><input class="field-control" id="placeInput" value="${esc(placeState.query)}" maxlength="80" autocomplete="off" placeholder="z. B. Hauptbahnhof"><button class="btn btn-quiet" type="button" id="placeCancel">Abbrechen</button></div>
-        ${items ? `<ul class="place-results" role="list">${items}</ul>` : placeState.query.length >= 2 ? `<p class="set-row-desc">${placeState.searching ? "Suche …" : "Nichts gefunden."}</p>` : ""}
+      return `<form class="set-row is-stack place-form" id="placeForm" data-place="${key}" novalidate autocomplete="off">
+        <div class="set-row-text"><label class="set-row-label" for="placeInput">${label}</label><p class="set-row-desc" id="placeDesc">Adresse oder Haltestelle suchen, dann einen Treffer wählen</p></div>
+        <div class="set-row-control"><input class="field-control" id="placeInput" value="${esc(placeState.query)}" maxlength="80" autocomplete="off" spellcheck="false" placeholder="Straße, Hausnummer, Ort" aria-describedby="placeDesc">${info[key] ? `<button class="btn btn-quiet" type="button" id="placeRemove">Entfernen</button>` : ""}<button class="btn btn-quiet" type="button" id="placeCancel">Abbrechen</button></div>
+        <div class="place-found" id="placeResults" aria-live="polite">${placeResultsHtml()}</div>
       </form>`;
     }
     return row({ id, label, desc, cls: "is-stack", control: `<span class="set-value">${esc(info[key] || "Noch nicht festgelegt")}</span><button class="btn btn-quiet" type="button" data-place-edit="${key}">${info[key] ? "Ändern" : "Festlegen"}</button>` });
@@ -1870,82 +1887,98 @@ async function saveWeatherPlace(value, input) {
 async function searchPlaces(query) {
   const ticket = ++placeState.ticket;
   placeState.searching = true;
-  renderPlaces();
+  placeState.failed = false;
+  renderPlaceResults();
   let results = [];
+  let failed = false;
   try {
     const response = await fetch(`/api/ui/transit/suche?${new URLSearchParams({ q: query })}`, { credentials: "same-origin" });
     const body = await response.json();
-    results = response.ok ? body.places || [] : [];
-  } catch {}
+    if (response.ok) results = body.places || [];
+    else failed = true;
+  } catch {
+    failed = true;
+  }
   if (ticket !== placeState.ticket) return;
   placeState.searching = false;
+  placeState.failed = failed;
   placeState.results = results;
+  renderPlaceResults();
+}
+
+function closePlaceForm(key) {
+  clearTimeout(placeState.timer);
+  placeState.ticket += 1;
+  placeState.place = null;
+  placeState.results = [];
+  placeState.query = "";
+  placeState.searching = false;
   renderPlaces();
-  const input = $("placeInput");
-  if (input) {
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
-  }
+  placesCard().querySelector(`[data-place-edit="${key}"]`)?.focus({ preventScroll: true });
 }
 
 async function pickPlace(key, item) {
   try {
-    const response = await fetch(`/api/ui/places/${key}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: item.name, area: item.area || "", lat: item.lat, lon: item.lon, stop: item.kind === "stop" ? item.id : "" }),
-      credentials: "same-origin",
-    });
-    if (!response.ok) throw new Error();
-    page.places = { ...(page.places || {}), [key]: item.name };
-    placeState.place = null;
-    placeState.results = [];
-    placeState.query = "";
-    renderPlaces();
-    toast(`${key === "home" ? "Zuhause" : "Schule"}: ${esc(item.name)}`, { icon: "map-pin" });
-    card().querySelector(`[data-place-edit="${key}"]`)?.focus({ preventScroll: true });
+    await request("PUT", `/api/ui/places/${key}`, { name: item.name, area: item.area || "", lat: item.lat, lon: item.lon, stop: item.kind === "stop" ? item.id : "" });
+    page.places = { ...(page.places || {}), [key]: placeLine(item) };
+    closePlaceForm(key);
+    toast(`${PLACE_WORDS[key]}: ${esc(placeLine(item))}`, { icon: "map-pin" });
   } catch {
     toast("Der Ort ließ sich gerade nicht speichern.", { icon: "circle-alert" });
   }
 }
 
-const card = () => $("placesCard");
+async function removePlace(key) {
+  try {
+    await request("DELETE", `/api/ui/places/${key}`);
+    page.places = { ...(page.places || {}), [key]: "" };
+    closePlaceForm(key);
+    toast(`${PLACE_WORDS[key]} entfernt`, { icon: "map-pin" });
+  } catch {
+    toast("Der Ort ließ sich gerade nicht entfernen.", { icon: "circle-alert" });
+  }
+}
 
 function bindPlaces() {
-  const card = $("placesCard");
-  card.addEventListener("input", (event) => {
+  const host = $("placesCard");
+  host.addEventListener("input", (event) => {
     if (event.target.id !== "placeInput") return;
     placeState.query = event.target.value;
     clearTimeout(placeState.timer);
     if (placeState.query.trim().length < 2) {
+      placeState.ticket += 1;
       placeState.results = [];
+      placeState.searching = false;
+      renderPlaceResults();
       return;
     }
     placeState.timer = setTimeout(() => searchPlaces(placeState.query.trim()), 280);
   });
-  card.addEventListener("click", (event) => {
+  host.addEventListener("click", (event) => {
     const edit = event.target.closest("[data-place-edit]");
     if (edit) {
+      clearTimeout(placeState.timer);
+      placeState.ticket += 1;
       placeState.place = edit.dataset.placeEdit;
       placeState.query = "";
       placeState.results = [];
+      placeState.searching = false;
       renderPlaces();
       $("placeInput")?.focus();
       return;
     }
     const pick = event.target.closest("[data-place-pick]");
     if (pick) {
-      const key = card().querySelector("#placeForm")?.dataset.place;
       const item = placeState.results[Number(pick.dataset.placePick)];
-      if (key && item) pickPlace(key, item);
+      if (placeState.place && item) pickPlace(placeState.place, item);
+      return;
+    }
+    if (event.target.closest("#placeRemove")) {
+      removePlace(placeState.place);
       return;
     }
     if (event.target.closest("#placeCancel")) {
-      const key = placeState.place;
-      placeState.place = null;
-      placeState.results = [];
-      renderPlaces();
-      card().querySelector(`[data-place-edit="${key}"]`)?.focus();
+      closePlaceForm(placeState.place);
       return;
     }
     if (event.target.closest("#weatherEdit")) {
@@ -1958,9 +1991,13 @@ function bindPlaces() {
       $("weatherEdit")?.focus();
     }
   });
-  card.addEventListener("submit", (event) => {
-    if (event.target.id !== "weatherForm") return;
+  host.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (event.target.id === "placeForm") {
+      if (placeState.results.length) pickPlace(placeState.place, placeState.results[0]);
+      return;
+    }
+    if (event.target.id !== "weatherForm") return;
     const input = $("weatherInput");
     const value = input.value.replace(/\s+/g, " ").trim();
     if (!value) {
@@ -1970,13 +2007,28 @@ function bindPlaces() {
     }
     saveWeatherPlace(value, input);
   });
-  card.addEventListener("keydown", (event) => {
+  host.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && event.target.id === "weatherInput") {
       event.preventDefault();
       placeState.editing = false;
       renderPlaces();
       $("weatherEdit")?.focus();
+      return;
     }
+    if (!event.target.closest("#placeForm")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closePlaceForm(placeState.place);
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const picks = [...host.querySelectorAll(".place-pick")];
+    if (!picks.length) return;
+    const index = picks.indexOf(event.target.closest(".place-pick"));
+    const next = event.key === "ArrowDown" ? index + 1 : index - 1;
+    event.preventDefault();
+    if (next < 0) $("placeInput")?.focus();
+    else picks[Math.min(next, picks.length - 1)].focus();
   });
 }
 

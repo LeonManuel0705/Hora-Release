@@ -91,15 +91,23 @@ def search(args):
     bias = _arg(args, "bias", 4) or ("5" if near else None)
     data = fetch("geocode", {"text": text, "language": "de", "place": near, "placeBias": bias}, 3600)
     places = []
+    seen = set()
     for item in data:
         kind = {"STOP": "stop", "ADDRESS": "address"}.get(item.get("type"), "place")
         if item.get("country") not in (None, "DE") and kind != "stop":
             continue
+        area = area_of(item)
+        if kind != "stop":
+            area = " ".join(part for part in (str(item.get("zip") or "").strip(), area) if part)
+            key = (kind, str(item.get("name", "")).casefold(), area.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
         place = item.get("id") if kind == "stop" else f"{item.get('lat')},{item.get('lon')}"
         places.append({
             "id": place,
             "name": item.get("name", ""),
-            "area": area_of(item),
+            "area": area,
             "kind": kind,
             "modes": sorted({category(mode) for mode in item.get("modes") or []}),
             "lat": item.get("lat"),

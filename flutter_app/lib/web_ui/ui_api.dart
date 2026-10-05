@@ -543,9 +543,11 @@ class UiApi {
     final lat = double.tryParse('${payload['lat']}'), lon = double.tryParse('${payload['lon']}');
     if (lat == null || lon == null) return UiReply.error('Koordinaten fehlen');
     if (lat.abs() > 90 || lon.abs() > 180) return UiReply.error('Koordinaten ungültig');
-    final name = text(payload['name'], 120);
+    var name = text(payload['name'], 120);
     if (name.isEmpty) return UiReply.error('Name fehlt');
     final stop = text(payload['stop'], 120);
+    final area = text(payload['area'], 120);
+    if (stop.isEmpty && area.isNotEmpty && !name.contains(area)) name = text('$name, $area', 200);
     final row = {'key': key, 'name': name, 'vbb_id': stop, 'latitude': lat, 'longitude': lon, 'type': stop.isEmpty ? 'location' : 'stop'};
     await db.insert('vbb_known_locations', row, conflictAlgorithm: ConflictAlgorithm.replace);
     return UiReply.ok({'place': UiData.placeView(key == 'home' ? 'Zuhause' : 'Schule', row)});

@@ -223,3 +223,38 @@ def test_weather_place_reports_network_trouble(client, monkeypatch):
 def test_mobile_ui_assets_are_current():
     result = subprocess.run([sys.executable, str(ROOT / "scripts" / "build_mobile_ui.py"), "--check"], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_places_keep_the_address(client, monkeypatch):
+    saved = {}
+
+    class Places:
+        def save_known_location(self, key, location):
+            saved[key] = location
+
+        def get_known_locations(self):
+            return {"locations": saved}
+
+    from app import vbb_service
+    monkeypatch.setattr(vbb_service, "get_vbb_service", lambda: Places())
+    response = client.put("/api/ui/places/home", json={"name": "Unter den Linden 6", "area": "10117 Berlin", "lat": 52.519, "lon": 13.393, "stop": ""})
+    assert response.status_code == 200
+    assert page_data(client, "/hub/settings")["page"]["places"]["home"] == "Unter den Linden 6, 10117 Berlin"
+
+
+def test_the_address_search_drops_doubles_and_names_the_postcode(monkeypatch):
+    from app import transit_service
+
+    hits = [
+        {"type": "ADDRESS", "name": "Unter den Linden 6", "zip": "10117", "country": "DE", "lat": 52.5190, "lon": 13.3928, "areas": [{"name": "Berlin", "default": True}]},
+        {"type": "ADDRESS", "name": "Unter den Linden 6", "zip": "10117", "country": "DE", "lat": 52.5185, "lon": 13.3929, "areas": [{"name": "Berlin", "default": True}]},
+        {"type": "ADDRESS", "name": "Unter den Linden 6", "zip": "21255", "country": "DE", "lat": 53.28, "lon": 9.71, "areas": [{"name": "Tostedt", "default": True}]},
+        {"type": "STOP", "name": "Unter den Linden", "id": "de-1", "country": "DE", "lat": 52.51, "lon": 13.38, "areas": [{"name": "Berlin", "default": True}], "modes": ["BUS"]},
+    ]
+    monkeypatch.setattr(transit_service, "fetch", lambda path, params, ttl: hits)
+    places = transit_service.search({"q": "Unter den Linden 6"})[0]["places"]
+    assert [(place["kind"], place["name"], place["area"]) for place in places] == [
+        ("address", "Unter den Linden 6", "10117 Berlin"),
+        ("address", "Unter den Linden 6", "21255 Tostedt"),
+        ("stop", "Unter den Linden", "Berlin"),
+    ]
