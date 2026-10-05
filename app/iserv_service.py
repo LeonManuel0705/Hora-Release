@@ -31,6 +31,24 @@ CREDENTIALS_FILE = DATA_DIR / 'iserv_credentials.json'
 
 _MAX_MAIL_SOURCE = 5 * 1024 * 1024
 
+_PLAN_KINDS = (
+    (b'%PDF-', 'pdf', 'application/pdf', '.pdf'),
+    (b'\x89PNG\r\n\x1a\n', 'image', 'image/png', '.png'),
+    (b'\xff\xd8\xff', 'image', 'image/jpeg', '.jpg'),
+    (b'GIF87a', 'image', 'image/gif', '.gif'),
+    (b'GIF89a', 'image', 'image/gif', '.gif'),
+)
+_PLAN_CACHE_VERSION = 2
+
+
+def _plan_kind(content: bytes):
+    for magic, kind, mime, suffix in _PLAN_KINDS:
+        if content.startswith(magic):
+            return kind, mime, suffix
+    if content[:4] == b'RIFF' and content[8:12] == b'WEBP':
+        return 'image', 'image/webp', '.webp'
+    return None
+
 _METADATA_IPS = {'169.254.169.254', 'fd00:ec2::254'}
 
 
@@ -763,7 +781,7 @@ class IServService:
 
         import base64
         import re
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import ThreadPoolExecutor
 
         base_url = self.iserv_url.rstrip('/')
         if not base_url.startswith('http'):
@@ -850,14 +868,8 @@ class IServService:
                 return None
 
             with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = {executor.submit(check_url_fast, url): url for url in priority_urls}
-                for future in as_completed(futures, timeout=5):
-                    try:
-                        result = future.result()
-                        if result:
-                            pdf_links.insert(0, result)
-                    except Exception:
-                        pass
+                reachable = set(filter(None, executor.map(check_url_fast, priority_urls)))
+            pdf_links = [url for url in priority_urls if url in reachable] + pdf_links
 
             for img in soup.find_all('img'):
                 src = img.get('src', '')
@@ -934,42 +946,36 @@ class IServService:
                         content = _read_capped(resp, _MAX_ATTACHMENT_BYTES)
                         if content is None or len(content) < 10000:
                             return None
-                        return {'url': url, 'content': content, 'content_type': ct}
+                        kind = _plan_kind(content)
+                        if kind is None:
+                            return None
+                        return {'url': url, 'content': content, 'kind': kind}
                 except Exception:
                     return None
 
+            candidates = unique_links[:10]
             with ThreadPoolExecutor(max_workers=6) as executor:
+                results = list(executor.map(fetch_pdf, candidates))
 
-                futures = {executor.submit(fetch_pdf, url): url for url in unique_links[:10]}
-                for future in as_completed(futures, timeout=15):
-                    if len(pdfs) >= 6:
-                        break
-                    try:
-                        result = future.result()
-                        if result:
-                            pdf_content_type = result['content_type']
-                            pdf_base64 = base64.b64encode(result['content']).decode('utf-8')
-                            page_num = len(pdfs) + 1
-
-                            if 'pdf' in pdf_content_type:
-                                file_type = 'pdf'
-                                filename = f'vertretungsplan_tag{page_num}.pdf'
-                            else:
-                                file_type = 'image'
-                                ext = 'png' if 'png' in pdf_content_type else 'jpg'
-                                filename = f'vertretungsplan_tag{page_num}.{ext}'
-
-                            pdfs.append({
-                                'data': pdf_base64,
-                                'filename': filename,
-                                'page': page_num,
-                                'content_type': pdf_content_type,
-                                'type': file_type,
-                                'url': result['url']
-                            })
-                            logging.info(f"Vertretungsplan: Fetched {file_type} from {result['url']}")
-                    except Exception:
-                        pass
+            seen_content = set()
+            for result in results:
+                if not result or len(pdfs) >= 6:
+                    continue
+                digest = hash(result['content'])
+                if digest in seen_content:
+                    continue
+                seen_content.add(digest)
+                file_type, content_type, suffix = result['kind']
+                page_num = len(pdfs) + 1
+                pdfs.append({
+                    'data': base64.b64encode(result['content']).decode('utf-8'),
+                    'filename': f'vertretungsplan_tag{page_num}{suffix}',
+                    'page': page_num,
+                    'content_type': content_type,
+                    'type': file_type,
+                    'url': result['url']
+                })
+                logging.info(f"Vertretungsplan: Fetched {file_type} from {result['url']}")
 
             if pdfs:
                 return {
@@ -998,43 +1004,57 @@ class IServService:
         import base64
 
         try:
-            for pdf in pdfs:
-                import re as _re
-                raw_name = pdf.get('filename', f'page_{pdf.get("page", 1)}.pdf')
-                filename = _re.sub(r'[^a-zA-Z0-9._-]', '_', raw_name)[:100]
-                if not filename.endswith('.pdf'):
-                    filename += '.pdf'
-                file_path = cache_dir / filename
-                if not file_path.resolve().parent == cache_dir.resolve():
+            files = []
+            for index, pdf in enumerate(pdfs, start=1):
+                content = base64.b64decode(pdf['data'])
+                kind = _plan_kind(content)
+                if kind is None:
                     continue
+                file_type, content_type, suffix = kind
+                filename = f'plan_{index}{suffix}'
+                (cache_dir / filename).write_bytes(content)
+                files.append({'filename': filename, 'page': index, 'content_type': content_type, 'type': file_type})
+            if not files:
+                return
 
-                pdf_data = base64.b64decode(pdf['data'])
-                with open(file_path, 'wb') as f:
-                    f.write(pdf_data)
+            keep = {entry['filename'] for entry in files} | {meta_file.name}
+            for stale in cache_dir.iterdir():
+                if stale.is_file() and stale.name not in keep:
+                    try:
+                        stale.unlink()
+                    except OSError:
+                        pass
 
-            meta = {
-                'cached_at': datetime.now().isoformat(),
-                'files': [
-                    {
-                        'filename': pdf.get('filename'),
-                        'page': pdf.get('page'),
-                        'content_type': pdf.get('content_type'),
-                        'type': pdf.get('type', 'pdf')
-                    }
-                    for pdf in pdfs
-                ]
-            }
-            encrypt_file(meta, meta_file)
+            encrypt_file({'version': _PLAN_CACHE_VERSION, 'cached_at': datetime.now().isoformat(), 'files': files}, meta_file)
 
-            logging.info(f"Cached {len(pdfs)} Vertretungsplan files")
+            logging.info(f"Cached {len(files)} Vertretungsplan files")
         except Exception as e:
             logging.error(f"Error caching Vertretungsplan: {e}")
+
+    def plan_cache(self):
+        cache_dir = self.VERTRETUNGSPLAN_CACHE_DIR
+        try:
+            meta = decrypt_file(cache_dir / 'cache_meta.json')
+        except Exception:
+            return None
+        if not isinstance(meta, dict) or meta.get('version') != _PLAN_CACHE_VERSION:
+            return None
+        files = []
+        for entry in meta.get('files') or []:
+            path = cache_dir / str(entry.get('filename') or '')
+            if path.resolve().parent != cache_dir.resolve() or not path.is_file():
+                continue
+            files.append({'page': entry.get('page'), 'type': entry.get('type'), 'content_type': entry.get('content_type'), 'path': path})
+        if not files:
+            return None
+        return {'files': files, 'cached_at': meta.get('cached_at')}
 
     def _get_cached_vertretungsplan(self, cache_dir: Path, meta_file: Path):
 
         import base64
 
-        if not meta_file.exists():
+        cache = self.plan_cache()
+        if not cache:
             return {
                 'success': False,
                 'error': 'Kein Cache vorhanden',
@@ -1042,39 +1062,19 @@ class IServService:
             }
 
         try:
-            meta = decrypt_file(meta_file)
-
-            pdfs = []
-            for file_info in meta.get('files', []):
-                file_path = cache_dir / file_info['filename']
-                if not file_path.resolve().parent == cache_dir.resolve():
-                    continue
-                if file_path.exists():
-                    with open(file_path, 'rb') as f:
-                        pdf_data = f.read()
-
-                    pdfs.append({
-                        'data': base64.b64encode(pdf_data).decode('utf-8'),
-                        'filename': file_info['filename'],
-                        'page': file_info['page'],
-                        'content_type': file_info.get('content_type', 'application/pdf'),
-                        'type': file_info.get('type', 'pdf')
-                    })
-
-            if pdfs:
-                return {
-                    'success': True,
-                    'pdfs': pdfs,
-                    'cached_at': meta.get('cached_at'),
-                    'from_cache': True
-                }
-
+            pdfs = [{
+                'data': base64.b64encode(entry['path'].read_bytes()).decode('utf-8'),
+                'filename': entry['path'].name,
+                'page': entry['page'],
+                'content_type': entry['content_type'],
+                'type': entry['type'],
+            } for entry in cache['files']]
             return {
-                'success': False,
-                'error': 'Cache-Dateien nicht gefunden',
-                'offline': True
+                'success': True,
+                'pdfs': pdfs,
+                'cached_at': cache['cached_at'],
+                'from_cache': True
             }
-
         except Exception as e:
             logging.error(f"IServ Vertretungsplan cache error: {e}")
             return {

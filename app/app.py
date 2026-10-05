@@ -132,7 +132,9 @@ def require_auth(f):
 
 @app.after_request
 def set_security_headers(response):
-    response.headers['X-Frame-Options'] = 'DENY'
+    framed = getattr(g, 'frame_same_origin', False)
+    ancestors = "'self'" if framed else "'none'"
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN' if framed else 'DENY'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     nonce = getattr(g, 'csp_nonce', None)
@@ -148,7 +150,7 @@ def set_security_headers(response):
         "object-src 'none'; "
         "base-uri 'none'; "
         "form-action 'self'; "
-        "frame-ancestors 'none'"
+        f"frame-ancestors {ancestors}"
     )
     if request.is_secure:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'

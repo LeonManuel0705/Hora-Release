@@ -290,6 +290,52 @@
 .ov-loading .empty-title { font-size: var(--text-sm); }
 .ov-loading .empty-text { font-size: var(--text-xs); }
 
+.plan-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 168px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--desk-card-edge);
+  cursor: zoom-in;
+  transition: scale var(--spring-tactile-dur) var(--spring-tactile);
+}
+.plan-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+.plan-thumb::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--desk-card-edge), inset 0 -28px 24px -18px rgb(20 28 21 / 0.18); pointer-events: none; }
+.plan-thumb:active { scale: var(--scale-press); transition-duration: var(--dur-press); }
+.plan-thumb.is-file { display: flex; align-items: center; justify-content: center; gap: 8px; height: 64px; background: var(--tile); font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--ink); cursor: pointer; }
+.plan-thumb.is-file::after { content: none; }
+.plan-thumb.is-file .icon { --s: 18; color: var(--ink-soft); }
+.plan-pages { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+.plan-viewer {
+  width: min(980px, calc(100vw - 32px));
+  height: min(92vh, 1200px);
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--overlay);
+  color: var(--ink);
+  box-shadow: var(--shadow-overlay);
+  overflow: hidden;
+}
+.plan-viewer[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); animation: plan-in var(--dur-popover-in) var(--ease-out); }
+.plan-viewer::backdrop { background: light-dark(rgba(15, 22, 17, 0.34), rgba(0, 0, 0, 0.6)); }
+@keyframes plan-in { from { opacity: 0; scale: var(--scale-from); } }
+.plan-bar { display: flex; align-items: center; gap: 12px; padding: 14px 14px 12px 20px; border-bottom: 1px solid var(--line-soft); }
+.plan-bar-text { min-width: 0; margin-right: auto; }
+.plan-bar-meta { font-size: var(--text-sm); color: var(--ink-muted); }
+.plan-bar-meta:empty { display: none; }
+.plan-stage { overflow: auto; padding: 16px; background: var(--surface-sunken); overscroll-behavior: contain; }
+.plan-stage:focus-visible { outline-offset: -2px; }
+.plan-sheet { display: block; width: 100%; max-width: 900px; height: auto; margin: 0 auto; border-radius: 10px; background: #fff; box-shadow: 0 1px 3px rgb(20 28 21 / 0.18); cursor: zoom-in; }
+.plan-stage.is-zoomed .plan-sheet { width: 180%; max-width: none; cursor: zoom-out; }
+.plan-frame { display: block; width: 100%; height: 100%; min-height: 60vh; border: 0; border-radius: 10px; background: #fff; }
+
 .ov-calm { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 4px; font-size: var(--text-sm); color: var(--ink-soft); text-wrap: pretty; }
 .ov-calm .icon { --s: 16; margin-top: 1px; color: var(--done); }
 .ov-calm.is-quiet { margin-top: 8px; }

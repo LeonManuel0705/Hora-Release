@@ -573,6 +573,67 @@ def synced_events():
     return jsonify({'success': True, 'events': events or [], 'source': 'mac' if events is not None else None})
 
 
+PLAN_PROBLEMS = {
+    'setup': 'IServ ist nicht verbunden.',
+    'login': 'Die Anmeldung bei IServ ist abgelaufen. Verbinde IServ in den Einstellungen neu.',
+    'empty': 'IServ zeigt gerade keinen Vertretungsplan.',
+    'offline': 'IServ ist gerade nicht erreichbar.',
+}
+
+
+def _plan_problem(result):
+    if result.get('success') and not result.get('from_cache'):
+        return None
+    if result.get('needs_setup'):
+        return 'setup'
+    if result.get('needs_reconnect'):
+        return 'login'
+    if result.get('iserv_connected') or result.get('fetch_error') == 'Keine PDFs gefunden':
+        return 'empty'
+    return 'offline'
+
+
+@bp.route('/api/ui/vplan')
+def substitution_plan():
+    from .iserv_service import get_iserv_service
+    service = get_iserv_service()
+    problem = None
+    if request.args.get('frisch') == '1':
+        try:
+            problem = _plan_problem(service.get_vertretungsplan_pdfs())
+        except Exception:
+            problem = 'offline'
+    cache = service.plan_cache() or {'files': [], 'cached_at': None}
+    stamp = re.sub(r'\D', '', str(cache['cached_at'] or ''))[:14]
+    files = [
+        {'page': index, 'type': 'pdf' if entry['type'] == 'pdf' else 'image', 'url': f'/api/ui/vplan/datei/{index}?v={stamp}'}
+        for index, entry in enumerate(cache['files'], start=1)
+    ]
+    return jsonify({
+        'success': True,
+        'files': files,
+        'cachedAt': str(cache['cached_at'] or '')[:16] or None,
+        'problem': problem,
+        'message': PLAN_PROBLEMS.get(problem, ''),
+    })
+
+
+@bp.route('/api/ui/vplan/datei/<int:page>')
+def substitution_plan_file(page):
+    from .iserv_service import get_iserv_service
+    cache = get_iserv_service().plan_cache()
+    files = cache['files'] if cache else []
+    if not 1 <= page <= len(files):
+        return _error('Seite nicht gefunden', 404)
+    entry = files[page - 1]
+    g.frame_same_origin = True
+    response = send_file(entry['path'], mimetype=entry['content_type'], max_age=0)
+    response.headers['Cache-Control'] = 'private, no-store'
+    suffix = entry['path'].suffix
+    response.headers['Content-Disposition'] = f'inline; filename="vertretungsplan-{page}{suffix}"'
+    return response
+
+
 @bp.route('/api/ui/places/<key>', methods=['PUT', 'DELETE'])
 def save_place(key):
     if key not in ('home', 'school'):

@@ -70,6 +70,18 @@
         </div>
     </div>
 </div>
+
+<dialog class="plan-viewer" id="planViewer" aria-labelledby="planViewerTitle">
+    <div class="plan-bar">
+        <div class="plan-bar-text">
+            <h2 class="sheet-title" id="planViewerTitle">Vertretungsplan</h2>
+            <p class="plan-bar-meta" id="planViewerMeta"></p>
+        </div>
+        <div class="segmented plan-tabs" id="planTabs" role="group" aria-label="Seite" hidden></div>
+        <button class="icon-button" type="button" data-close-dialog aria-label="Schließen"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="plan-stage" id="planStage" tabindex="0" autofocus aria-label="Vertretungsplan, zum Vergrößern klicken"></div>
+</dialog>
 {% endblock %}
 
 {% block data %}

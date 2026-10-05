@@ -225,6 +225,46 @@ def test_mobile_ui_assets_are_current():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_the_substitution_plan_is_served_from_the_cache(client, tmp_path, monkeypatch):
+    import base64
+
+    from app import iserv_service
+
+    cache = tmp_path / "plan"
+    cache.mkdir()
+    monkeypatch.setattr(iserv_service.IServService, "VERTRETUNGSPLAN_CACHE_DIR", cache)
+    service = iserv_service.get_iserv_service()
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+    pdf = b"%PDF-1.4\n" + b"0" * 64
+    (cache / "left_over.png").write_bytes(b"old")
+    service._cache_vertretungsplan_pdfs(
+        [{"data": base64.b64encode(png).decode(), "filename": "a.png"}, {"data": base64.b64encode(pdf).decode(), "filename": "b"}, {"data": base64.b64encode(b"<svg onload=alert(1)>").decode(), "filename": "c.svg"}],
+        cache, cache / "cache_meta.json",
+    )
+    assert sorted(path.name for path in cache.iterdir()) == ["cache_meta.json", "plan_1.png", "plan_2.pdf"]
+    payload = client.get("/api/ui/vplan").get_json()
+    assert [(item["page"], item["type"]) for item in payload["files"]] == [(1, "image"), (2, "pdf")]
+    assert payload["cachedAt"] and payload["problem"] is None
+    image = client.get(payload["files"][0]["url"])
+    assert image.status_code == 200 and image.mimetype == "image/png" and image.data == png
+    assert image.headers["Cache-Control"] == "private, no-store"
+    assert image.headers["X-Frame-Options"] == "SAMEORIGIN" and "frame-ancestors 'self'" in image.headers["Content-Security-Policy"]
+    assert client.get("/api/ui/vplan/datei/3").status_code == 404
+    assert client.get("/hub").headers["X-Frame-Options"] == "DENY"
+
+
+def test_an_unreachable_iserv_keeps_the_last_plan(client, tmp_path, monkeypatch):
+    from app import iserv_service
+
+    cache = tmp_path / "plan"
+    cache.mkdir()
+    monkeypatch.setattr(iserv_service.IServService, "VERTRETUNGSPLAN_CACHE_DIR", cache)
+    service = iserv_service.get_iserv_service()
+    monkeypatch.setattr(service, "get_vertretungsplan_pdfs", lambda display_id=3: {"success": False, "error": "x", "needs_reconnect": True})
+    payload = client.get("/api/ui/vplan?frisch=1").get_json()
+    assert payload["files"] == [] and payload["problem"] == "login" and "abgelaufen" in payload["message"]
+
+
 def test_written_tests_stay_in_the_page_data_for_half_a_year(client):
     key = own_subject(client, "kunst")
     for offset in (-3, -100, -300):

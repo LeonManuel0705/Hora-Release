@@ -594,23 +594,23 @@ function changeRow(lesson) {
   </button></li>`;
 }
 
-function vplanHtml() {
+function planStand() {
+  const stamp = state.vplan.stand;
+  if (!stamp) return "";
+  const date = new Date(stamp);
+  if (Number.isNaN(date.getTime())) return "";
+  const time = `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const diff = dayDiff(clockState().date, isoDate(date));
+  if (diff === 0) return `Stand ${time} Uhr`;
+  if (diff === -1) return `Stand gestern, ${time} Uhr`;
+  return `Stand ${shortDate(date)} ${time} Uhr`;
+}
+
+function changesHtml(head) {
   const time = clockState();
-  const offline = flags.offline;
-  const tools = `<button class="icon-button${state.vplan.loading ? " is-spinning" : ""}" type="button" id="vplanRefresh" aria-label="Vertretungsplan aus IServ neu laden" data-tip="Neu laden">${icon("refresh-cw")}</button>`;
-  const head = `<div class="ov-head"><h2 class="side-title" id="vplanTitle">Vertretungsplan</h2>${tools}</div>`;
-  if (state.vplan.loading) {
-    return `${head}<div class="ov-loading" role="status">${tinte("laedt", 84)}<div><p class="empty-title">Hole Vertretungsplan aus IServ</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
-  }
-  if (!data.status?.iserv) {
-    return `<div class="ov-head"><h2 class="side-title" id="vplanTitle">Vertretungsplan</h2></div><p class="ov-calm is-quiet">${icon("graduation-cap")}<span>Verbinde IServ unter <a class="inline-link" href="${esc(pageUrl("settings", "/hub/settings#konten"))}" data-page="settings">Einstellungen, Konten</a>, dann erscheint hier der Vertretungsplan.</span></p>`;
-  }
-  if (!(data.changes || []).length && !(page.changes || []).length) {
-    return `${head}<p class="ov-calm is-quiet">${icon("graduation-cap")}<span>Der Vertretungsplan kommt als Datei aus IServ. Änderungen siehst du dort.</span></p>`;
-  }
-  const stand = offline
-    ? `<p class="side-meta is-offline">${icon("wifi-off")}Offline, Stand ${esc(state.vplan.stand || syncTime())} Uhr</p>`
-    : `<p class="side-meta">Stand ${esc(state.vplan.stand || syncTime())} Uhr</p>`;
+  const stand = flags.offline
+    ? `<p class="side-meta is-offline">${icon("wifi-off")}Offline, Stand ${esc(syncTime())} Uhr</p>`
+    : `<p class="side-meta">Stand ${esc(syncTime())} Uhr</p>`;
   const days = changeDays();
   const groups = days.map((day) => {
     const changed = lessonsOn(day).filter((lesson) => lesson.changed);
@@ -630,6 +630,63 @@ function vplanHtml() {
     return `<div class="change-group"><h3 class="ov-label">${esc(label)}</h3>${body}</div>`;
   }).join("");
   return `${head}${stand}${lists}`;
+}
+
+function vplanHtml() {
+  const plan = state.vplan;
+  const title = `<h2 class="side-title" id="vplanTitle">Vertretungsplan</h2>`;
+  if (!data.status?.iserv) {
+    return `<div class="ov-head">${title}</div><p class="ov-calm is-quiet">${icon("graduation-cap")}<span>Verbinde IServ unter <a class="inline-link" href="${esc(pageUrl("settings", "/hub/settings#konten"))}" data-page="settings">Einstellungen, Konten</a>, dann erscheint hier der Vertretungsplan.</span></p>`;
+  }
+  const tools = `<button class="icon-button${plan.loading ? " is-spinning" : ""}" type="button" id="vplanRefresh" aria-label="Vertretungsplan aus IServ neu laden" data-tip="Neu laden">${icon("refresh-cw")}</button>`;
+  const head = `<div class="ov-head">${title}${tools}</div>`;
+  if ((data.changes || []).length || (page.changes || []).length) return changesHtml(head);
+  if (!plan.supported) {
+    return `<div class="ov-head">${title}</div><p class="ov-calm is-quiet">${icon("graduation-cap")}<span>Der Vertretungsplan kommt als Datei aus IServ. Änderungen siehst du dort.</span></p>`;
+  }
+  if (!plan.files.length) {
+    if (plan.loading || !plan.loaded) {
+      return `${head}<div class="ov-loading" role="status">${tinte("laedt", 84)}<div><p class="empty-title">Hole Vertretungsplan aus IServ</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
+    }
+    return `${head}<p class="ov-calm is-quiet">${icon("graduation-cap")}<span>${esc(plan.message || "IServ zeigt gerade keinen Vertretungsplan.")}</span></p>`;
+  }
+  const unreachable = plan.problem === "offline" || plan.problem === "login";
+  const note = [plan.problem ? plan.message : "", planStand()].filter(Boolean).join(" ");
+  const stand = `<p class="side-meta${unreachable ? " is-offline" : ""}">${unreachable ? icon("wifi-off") : ""}<span>${esc(note)}</span></p>`;
+  const first = plan.files[0];
+  const thumb = first.type === "image"
+    ? `<button type="button" class="plan-thumb" data-plan-open="0" aria-label="Vertretungsplan groß ansehen" data-tip="Groß ansehen"><img src="${esc(first.url)}" alt="" decoding="async"></button>`
+    : `<button type="button" class="plan-thumb is-file" data-plan-open="0">${icon("file-text")}<span>Vertretungsplan öffnen</span></button>`;
+  const pages = plan.files.length > 1
+    ? `<div class="plan-pages" role="group" aria-label="Seiten">${plan.files.map((file, index) => `<button type="button" class="pill" data-plan-open="${index}">Seite ${index + 1}</button>`).join("")}</div>`
+    : "";
+  return `${head}${stand}${thumb}${pages}`;
+}
+
+function renderPlanViewer() {
+  const plan = state.vplan;
+  const file = plan.files[plan.page];
+  const stage = $("planStage");
+  if (!file || !stage) return;
+  const tabs = $("planTabs");
+  tabs.hidden = plan.files.length < 2;
+  tabs.innerHTML = plan.files.map((entry, index) => `<button type="button" data-plan-page="${index}" aria-pressed="${index === plan.page}">Seite ${index + 1}</button>`).join("");
+  $("planViewerMeta").textContent = planStand();
+  const label = `Vertretungsplan, Seite ${plan.page + 1}`;
+  stage.classList.toggle("is-zoomed", plan.zoomed && file.type === "image");
+  stage.innerHTML = file.type === "image"
+    ? `<img class="plan-sheet" src="${esc(file.url)}" alt="${label}">`
+    : `<iframe class="plan-frame" src="${esc(file.url)}" title="${label}"></iframe>`;
+  stage.scrollTo(0, 0);
+}
+
+function openPlan(index) {
+  const dialog = $("planViewer");
+  if (!dialog || !state.vplan.files.length) return;
+  state.vplan.page = Math.max(0, Math.min(index, state.vplan.files.length - 1));
+  state.vplan.zoomed = false;
+  renderPlanViewer();
+  if (!dialog.open) dialog.showModal();
 }
 
 function nextTestHtml() {
@@ -1859,6 +1916,11 @@ function bind() {
       startVplan({ manual: true });
       return;
     }
+    const planButton = event.target.closest("[data-plan-open]");
+    if (planButton) {
+      openPlan(Number(planButton.dataset.planOpen));
+      return;
+    }
     const change = event.target.closest("[data-open-lesson]");
     if (change) {
       const [iso, block] = change.dataset.openLesson.split(":");
@@ -1874,6 +1936,21 @@ function bind() {
     if (grades) openGrades(grades);
   });
   bindPanel();
+  $("planViewer")?.addEventListener("click", (event) => {
+    const dialog = event.currentTarget;
+    const tab = event.target.closest("[data-plan-page]");
+    if (tab) {
+      state.vplan.page = Number(tab.dataset.planPage);
+      state.vplan.zoomed = false;
+      renderPlanViewer();
+      dialog.querySelector('[aria-pressed="true"]')?.focus();
+    } else if (event.target.closest(".plan-sheet")) {
+      state.vplan.zoomed = !state.vplan.zoomed;
+      $("planStage").classList.toggle("is-zoomed", state.vplan.zoomed);
+    } else if (event.target === dialog) {
+      dialog.close();
+    }
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || !state.selection || overlayOpen()) return;
     if (typing(event.target) && event.target.closest("#gradeForm")) {
@@ -1899,11 +1976,58 @@ function bind() {
   document.fonts?.ready.then(fitLabels);
 }
 
-function startVplan({ manual = false } = {}) {
-  state.vplan.loaded = true;
-  state.vplan.loading = false;
+const PLAN_FRESH = 15 * 60 * 1000;
+
+async function fetchPlan(fresh) {
+  const response = await fetch(`/api/ui/vplan${fresh ? "?frisch=1" : ""}`, { credentials: "same-origin", cache: "no-store" });
+  if (response.status === 404) return null;
+  const body = await response.json();
+  if (!response.ok || body.success === false) throw new Error(body.error || "");
+  return body;
+}
+
+function applyPlan(body) {
+  const plan = state.vplan;
+  plan.files = body.files || [];
+  plan.stand = body.cachedAt || null;
+  plan.problem = body.problem || null;
+  plan.message = body.message || "";
+  plan.loaded = true;
+}
+
+async function startVplan({ manual = false } = {}) {
+  const plan = state.vplan;
+  if (!data.status?.iserv || plan.loading || flags.empty || (data.changes || []).length || (page.changes || []).length) {
+    if (manual && !plan.loading) location.reload();
+    return;
+  }
+  plan.loading = true;
   renderOverview();
-  if (manual) location.reload();
+  try {
+    let body = manual ? null : await fetchPlan(false);
+    if (!manual && body === null) {
+      plan.supported = false;
+      return;
+    }
+    if (body) {
+      applyPlan(body);
+      renderOverview();
+    }
+    const age = body?.cachedAt ? Date.now() - new Date(body.cachedAt).getTime() : Infinity;
+    if (manual || !body.files.length || !(age < PLAN_FRESH)) {
+      body = await fetchPlan(true);
+      if (body === null) plan.supported = false;
+      else applyPlan(body);
+    }
+  } catch {
+    plan.problem = "offline";
+    plan.message = "IServ ist gerade nicht erreichbar.";
+  } finally {
+    plan.loading = false;
+    plan.loaded = true;
+    renderOverview();
+    if ($("planViewer")?.open) renderPlanViewer();
+  }
 }
 
 function changedKeys() {
