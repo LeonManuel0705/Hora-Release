@@ -55,18 +55,24 @@ _NOT_TOMORROW_BEFORE = re.compile(
     rf'(?<!\w)(?:am|jeden|jedem|guten|gestern|heute|frühen|nächsten|das|der|den|dem|diesen|diesem|einen|einem|{_NAME})\s+$')
 # Behind a weekday: a date or a count of weeks that was not understood. The weekday alone would then be the wrong day.
 _UNREAD_AFTER = re.compile(rf'\s*[,(–-]?\s*(?:de[nmr]\s+)?\d{{1,2}}\.\s?(?:\d{{1,2}}\.|(?:{"|".join(MONTHS)})\b)|\s+in\s+\S+\s+wochen?\b')
-_UNIT = (
-    r'(?:tage?n?|wochen?|monate?n?|jahre?n?|stunden?|std|minuten?|min|sekunden?|euro|€|cent|%|prozent|punkte?n?|noten?|stufen?|grad|seiten?'
-    r'|zeilen?|wörter|worte|meter|cm|km|kg|kilo|kilogramm|gramm|liter|ml|stück|mal|plätze?|klassen?|runden?|sätze?|aufgaben?|vokabeln?|kapitel)'
+# What a number measures ("um 2 Punkte", "5:30 pro km") and, in _UNIT, also what it may simply count ("halb 10 Seiten").
+_MEASURE = (
+    r'(?:tage?n?|wochen?|monate?n?|jahre?n?|stunden?|std|minuten?|min|sekunden?|euro|€|cent|%|prozent|punkte?n?|noten?|stufen?|grad'
+    r'|meter|cm|km|kg|kilo|kilogramm|gramm|liter|ml|stück|mal|pro)'
 )
+_UNIT = rf'(?:{_MEASURE}|seiten?|zeilen?|wörter|worte|plätze?|klassen?|runden?|sätze?|aufgaben?|vokabeln?|kapitel)'
 _AMOUNT_VERB = re.compile(
     r'\b(?:erhöh|senk|verbesser|verschlechter|reduzier|verringer|verlänger|verkürz|steiger|kürz|vergrößer|verkleiner|ergänz|erweiter|aufstock)\w*')
 _NOT_A_DAY_AFTER = re.compile(r'\s*(?:uhr|stunden?|std|min|minuten|seiten?|punkte?|euro|€|%|prozent|km|meter|m|cm|kg|kilo|gramm|g|liter|l|grad|mal)\b')
 _HAND_IN = re.compile(r'\b(?:abgeb|abzugeb|hochlad|hochzulad|einreich|einzureich|einsend|abschick|korrigier)\w*')
-# In front of a clock only what really carries a number counts, a room does not: "Blatt 3 bis 18 Uhr", but "Proberaum 17 bis 19 Uhr".
-_NUMBERED_BEFORE = re.compile(
-    r'(?:\w*(?:blatt|aufgaben?)|(?<![\w.])(?:nr\.?|nummer|s\.|seiten?|aufg\.?|kapitel|abschnitt|teil|übung(?:en)?|lektion|unit|klasse|zeilen?|vers|punkt))'
-    r'\s*(?:\d{1,3}\s*)?$')
+# In front of a clock only a word that really carries a number counts, and only right in front of it:
+# "Übungsblatt 3 bis 18 Uhr", but "Proberaum 17 bis 19 Uhr", "Hausaufgaben 8 bis 10 Uhr" and "Kapitel 4 8 bis 10 Uhr".
+_NUMBERED = (
+    r'(?:\w*(?:blatt|aufgabe)|(?<![\w.])(?:nr\.?|nummer|s\.|seiten?|aufgaben|aufg\.?|kapitel|abschnitt|teil|übung(?:en)?|lektion|unit|klasse'
+    r'|zeilen?|vers|punkt))'
+)
+_NUMBERED_BEFORE = re.compile(rf'{_NUMBERED}\s*$')
+_NUMBERED_STRETCH_BEFORE = re.compile(rf'{_NUMBERED}\s*(?:\d{{1,3}}\s*)?$')
 _RATIO_BEFORE = re.compile(r'(?<![\w.])(?:maßstab|verhältnis|stand|spielstand|ergebnis|quote|vers|kapitel|seite|s\.|bestzeit|rekord|pace|tempo|laufzeit|dauer)\s*$')
 _NOT_A_SPAN_BEFORE = re.compile(r'(?<![\w.])(?:vom|am|den|zum)\s*$')
 _NOT_PM_BEFORE = re.compile(rf'(?:{_LABEL}|(?<![\w.])(?:und|oder|zwischen|bis))\s*$')
@@ -255,7 +261,8 @@ def _numeric_day(low, today, match, refused):
             near = _written_day(today, number, int(match.group('m')), int(match.group('y')) if match.group('y') else None)
             if not near or (near - today).days > NEAR:
                 return True
-        if refused and (_LISTED.search(before) or not low[refused[0]:match.start()].strip(' ,;–-')):
+        between = low[refused[0]:match.start()].strip() if refused else ''
+        if refused and (_LISTED.search(before) or (between and not between.strip(',;–-'))):
             return True
     elif refused and match.group('lead').split()[:1] == ['bis'] and not low[refused[0]:match.start()].strip():
         # "Kapitel 3.1. bis 3.4." goes on in the same or the next chapter, a deadline behind it ("... bis 12.10.") does not.
@@ -351,9 +358,15 @@ def _time_of_day(match, part, whole=True):
     return late or groups.get('early') or groups.get('early2') or part
 
 
-def _numbers_something(low, start, end):
-    """True when the number at `start` belongs to what stands before it ("Aufgabe 3", "Seiten 12 bis 15") or to what is handed in after `end`."""
-    return bool(_NUMBERED_BEFORE.search(low[:start]) or _HAND_IN.search(low[end:]))
+def _numbers_something(low, start, end, numbered=_NUMBERED_BEFORE):
+    """True when the number at `start` belongs to what stands before it ("Aufgabe 3").
+
+    A word in front and a verb for handing in behind are enough ("Protokoll 2
+    bis 15 Uhr abgeben"). Behind the day, behind another number or at the very
+    start a number has nothing to belong to ("Freitag 8 bis 10 Uhr Aufsatz abgeben").
+    """
+    word_before = low[:start].rstrip()[-1:].isalpha()
+    return bool(numbered.search(low[:start]) or (word_before and _HAND_IN.search(low[end:])))
 
 
 def _clocks(text, low, part):
@@ -394,7 +407,7 @@ def _clocks(text, low, part):
         hour, end, half = int(match.group('h')), match.end(), match.group('half')
         if half == 'am' and low[match.end('half'):].strip(' .!,;'):
             half, end = None, match.end('min')
-        if re.match(rf'\s*(?:{_UNIT}|pro)\b', low[match.end('min'):]):
+        if re.match(rf'\s*{_MEASURE}\b', low[match.end('min'):]):
             continue
         if not match.group('lead') and not match.group('early') and not match.group('early2') and not half:
             # "Maßstab 1:25" and "Johannes 3:16" are no clock; on its own a small hour only counts when written "03:16".
@@ -408,7 +421,7 @@ def _clocks(text, low, part):
     for form in (_DOTTED, _BARE):
         for match in form.finditer(low):
             position = match.end('h') if form is _BARE else match.end('min')
-            if amount or re.match(rf'\s*{_UNIT}\b', low[position:]):
+            if amount or re.match(rf'\s*{_MEASURE}\b', low[position:]):
                 continue
             # "gegen 3 Gegner spielen" and "um 4 Häuser drehen" name no hour, "um 7 Brötchen holen" and "nachmittags um 4 Zahnarzt" do.
             small = int(match.group('h')) < 6 and not _time_of_day(match, part)
@@ -419,7 +432,9 @@ def _clocks(text, low, part):
 
     for match in _SPOKEN.finditer(low):
         word, hour = match.group('word'), int(match.group('h'))
-        if not 1 <= hour <= 24 or re.match(rf'\s*{_UNIT}\b', low[match.end('h'):]):
+        # "Halb 10 Seiten gelesen haben" counts pages. After "um" or with "Uhr" only a real measure speaks against a clock.
+        counted = _MEASURE if match.group('lead') or match.group('uhr') else _UNIT
+        if not 1 <= hour <= 24 or re.match(rf'\s*{counted}\b', low[match.end('h'):]):
             continue
         if word:
             if not (match.group('lead') or match.group('uhr') or word == 'halb'):
@@ -431,7 +446,8 @@ def _clocks(text, low, part):
             off, sure = int(match.group('off')), match.group('minutes') or set(match.group('lead').split()) & {'um', 'gegen'}
             if not 0 < off < 30 or not (sure or match.group('uhr')):
                 continue
-            if not sure and _numbers_something(low, match.start(), match.end()):
+            # The number may also close a stretch of numbers: "Seiten 12 bis 15 nach 16 Uhr lesen".
+            if not sure and _numbers_something(low, match.start(), match.end(), _NUMBERED_STRETCH_BEFORE):
                 continue
             hour, minute = (hour - 1, 60 - off) if match.group('side') == 'vor' else (hour, off)
         yield _clock(_later(hour or 12, _time_of_day(match, part)), minute, match.span())
