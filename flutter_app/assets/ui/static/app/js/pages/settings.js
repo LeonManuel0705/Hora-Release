@@ -1737,8 +1737,6 @@ function applyTheme(mode, { animate = true } = {}) {
     setTheme(mode);
     return;
   }
-  if (mode === "light" || mode === "dark") storage.set(THEME_KEY, mode);
-  else removeKey(THEME_KEY);
   root.dataset.theme = mode === "auto" ? (systemDark.matches ? "dark" : "light") : mode;
   root.dataset.themeMode = mode;
 }

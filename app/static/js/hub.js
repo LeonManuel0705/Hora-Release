@@ -298,7 +298,7 @@ const HubApp = {
             localStorage.setItem('app-theme', theme);
             return theme;
         })(),
-        language: localStorage.getItem('hub_language') || 'en',
+        language: localStorage.getItem('hub_language') || 'de',
         currentDate: new Date(),
         viewDate: new Date(),
         events: JSON.parse(localStorage.getItem('hub_events') || '[]'),

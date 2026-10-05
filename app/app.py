@@ -596,12 +596,23 @@ def skip_hub_task_api(task_id):
         })
     return jsonify({'success': False, 'error': 'Task not found'}), 404
 
+def _review_view(review):
+    if not review:
+        return review
+    try:
+        answers = json.loads(review.get('data') or '{}')
+    except (TypeError, ValueError):
+        answers = {}
+    fixed = ('id', 'type', 'date', 'energy', 'data', 'created_at', 'updated_at')
+    return {**{key: value for key, value in answers.items() if key not in fixed}, **review} if isinstance(answers, dict) else review
+
+
 @app.route('/api/hub/reviews', methods=['GET'])
 def get_reviews():
 
     review_type = _bounded_str(request.args.get('type'))
     reviews = db.get_hub_reviews(review_type=review_type)
-    return jsonify({'reviews': reviews})
+    return jsonify({'reviews': [_review_view(review) for review in reviews]})
 
 @app.route('/api/hub/reviews', methods=['POST'])
 def create_review():
@@ -620,7 +631,7 @@ def create_review():
     review_id = db.create_hub_review(review_type, date, data_json, energy)
     review = db.get_hub_review(review_id)
 
-    return jsonify({'success': True, 'review': review})
+    return jsonify({'success': True, 'review': _review_view(review)})
 
 @app.route('/api/hub/reviews/<int:review_id>', methods=['GET'])
 def get_review(review_id):
@@ -628,7 +639,7 @@ def get_review(review_id):
     review = db.get_hub_review(review_id)
     if not review:
         return jsonify({'success': False, 'error': 'Review not found'}), 404
-    return jsonify({'success': True, 'review': review})
+    return jsonify({'success': True, 'review': _review_view(review)})
 
 @app.route('/api/hub/reviews/<int:review_id>', methods=['PUT'])
 def update_review(review_id):
@@ -648,7 +659,7 @@ def update_review(review_id):
     db.update_hub_review(review_id, data=data_json, energy=energy)
     updated_review = db.get_hub_review(review_id)
 
-    return jsonify({'success': True, 'review': updated_review})
+    return jsonify({'success': True, 'review': _review_view(updated_review)})
 
 @app.route('/api/hub/reviews/<int:review_id>', methods=['DELETE'])
 def delete_review(review_id):

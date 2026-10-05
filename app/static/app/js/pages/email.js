@@ -1368,7 +1368,8 @@ function onKey(event) {
     else setRead(id, true);
   } else if ((event.key === "#" || event.key === "Delete") && mail) {
     event.preventDefault();
-    runAct(id, mail.folder === "trash" || mail.folder === "drafts" ? "destroy" : "delete");
+    if (mail.account?.endsWith("@iserv") && mail.folder === "inbox") toast("IServ-Mails lassen sich hier noch nicht löschen.", { icon: "info" });
+    else runAct(id, mail.folder === "trash" || mail.folder === "drafts" ? "destroy" : "delete");
   } else if (event.key === "/") {
     event.preventDefault();
     $("mailSearch").focus();

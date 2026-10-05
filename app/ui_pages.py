@@ -796,7 +796,7 @@ def mail_message():
             if account.endswith('@iserv'):
                 return _error('IServ-Mails lassen sich hier noch nicht löschen', 400)
             result = delete_gmail_message(account, uid, permanent=False) if account in google else delete_email(account, uid)
-            return jsonify({'success': True}) if result.get('success') else _error(result.get('error') or 'Löschen ging nicht')
+            return jsonify({'success': True}) if result.get('success') else _error('Die Mail ließ sich nicht löschen')
         if account.endswith('@iserv'):
             service = get_iserv_service()
             if not service.is_connected():
@@ -809,7 +809,7 @@ def mail_message():
     except Exception:
         return _error('Die Mail ließ sich nicht laden', 502)
     if not result.get('success'):
-        return _error(result.get('error') or 'Die Mail ließ sich nicht laden', 502)
+        return _error('Die Mail ließ sich nicht laden', 502)
     detail = result.get('email') or {}
     return jsonify({'success': True, 'body': str(detail.get('body') or ''), 'to': str(detail.get('to') or '')})
 
@@ -841,5 +841,5 @@ def mail_send():
     except Exception:
         return _error('Senden ging gerade nicht', 502)
     if not result.get('success'):
-        return _error(result.get('error') or 'Senden ging nicht', 502)
+        return _error('Der Mailserver hat die Nachricht nicht angenommen. Prüf die Adresse und versuch es noch einmal', 502)
     return jsonify({'success': True})

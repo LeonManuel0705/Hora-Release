@@ -758,8 +758,7 @@ export function registerSearch(provider) {
 
 export function setTheme(theme) {
   const mode = theme === "light" || theme === "dark" ? theme : "auto";
-  if (mode === "auto") storage.remove("app-theme-choice");
-  else storage.set("app-theme-choice", mode);
+  storage.set("app-theme-choice", mode);
   const apply = () => {
     root.dataset.theme = mode === "auto" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : mode;
     root.dataset.themeMode = mode;

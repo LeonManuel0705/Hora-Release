@@ -331,3 +331,20 @@ def test_the_address_search_drops_doubles_and_names_the_postcode(monkeypatch):
         ("address", "Unter den Linden 6", "21255 Tostedt"),
         ("stop", "Unter den Linden", "Berlin"),
     ]
+
+
+def test_a_saved_review_comes_back_with_its_answers(client):
+    created = client.post("/api/hub/reviews", json={"type": "daily", "date": "2026-10-04", "achieved": "Mathe geübt", "energy": 4}).get_json()["review"]
+    assert created["achieved"] == "Mathe geübt" and created["energy"] == 4
+    listed = client.get("/api/hub/reviews").get_json()["reviews"]
+    assert [(review["date"], review["achieved"]) for review in listed if review["id"] == created["id"]] == [("2026-10-04", "Mathe geübt")]
+    client.put(f"/api/hub/reviews/{created['id']}", json={"achieved": "Mathe und Physik", "went_well": "Fokus"})
+    again = client.get(f"/api/hub/reviews/{created['id']}").get_json()["review"]
+    assert (again["achieved"], again["went_well"], again["date"]) == ("Mathe und Physik", "Fokus", "2026-10-04")
+
+
+def test_the_automatic_colour_scheme_survives_a_reload(client):
+    client.put("/api/ui/store/app-theme-choice", json="dark")
+    assert 'data-theme-mode="dark"' in client.get("/hub").get_data(as_text=True)
+    client.put("/api/ui/store/app-theme-choice", json="auto")
+    assert 'data-theme-mode="auto"' in client.get("/hub").get_data(as_text=True)

@@ -154,12 +154,16 @@ let dailyEnergy = null;
 let reviews = [];
 let currentViewingReviewId = null;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initDates();
     initEnergyScale();
-    loadReviews();
+    await loadReviews();
     loadCurrentReview();
 });
+
+function localDay(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 function initDates() {
     const today = new Date();
@@ -214,7 +218,7 @@ async function loadReviews() {
 }
 
 async function loadCurrentReview() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDay(new Date());
     const todayReview = reviews.find(r => r.date === today && r.type === 'daily');
     if (todayReview) {
         document.getElementById('dailyAchieved').value = todayReview.achieved || '';
@@ -227,7 +231,7 @@ async function loadCurrentReview() {
         }
     }
 
-    const weekStart = getWeekStart(new Date()).toISOString().split('T')[0];
+    const weekStart = localDay(getWeekStart(new Date()));
     const weekReview = reviews.find(r => r.date === weekStart && r.type === 'weekly');
     if (weekReview) {
         document.getElementById('weeklyHighlights').value = weekReview.highlights || '';
@@ -363,7 +367,7 @@ async function saveReview() {
     let date;
 
     if (currentType === 'daily') {
-        date = new Date().toISOString().split('T')[0];
+        date = localDay(new Date());
         data = {
             type: 'daily',
             date: date,
@@ -374,7 +378,7 @@ async function saveReview() {
             energy: dailyEnergy
         };
     } else if (currentType === 'weekly') {
-        date = getWeekStart(new Date()).toISOString().split('T')[0];
+        date = localDay(getWeekStart(new Date()));
         data = {
             type: 'weekly',
             date: date,

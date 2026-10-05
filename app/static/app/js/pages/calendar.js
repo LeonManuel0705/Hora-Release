@@ -623,7 +623,7 @@ function renderOverview() {
 
 function routeLink(place) {
   if (!place || ONLINE.test(place)) return "";
-  return `<a class="cal-route" id="calRoute" href="${esc(pageUrl("vbb", `/fahrplan?nach=${encodeURIComponent(place)}`))}" data-page="vbb">${icon("route")}Route planen</a>`;
+  return `<a class="cal-route" id="calRoute" href="${esc(pageUrl("vbb", `/hub/vbb?nach=${encodeURIComponent(place)}`))}" data-page="vbb">${icon("route")}Route planen</a>`;
 }
 
 function whenNote(item) {

@@ -24,7 +24,13 @@ const CALC_TOOLS = [["ziel", "Zielnote"], ["fach", "Fachnote"], ["umrechnen", "U
 const CALC_SYSTEMS = [["points", "Punkte"], ["grades", "Noten"]];
 const MARKS = [6, 5.3, 5, 4.7, 4.3, 4, 3.7, 3.3, 3, 2.7, 2.3, 2, 1.7, 1.3, 1, 0.7];
 const SEMESTER = page.semester || "Q3";
-const SEMESTERS = ["Q1", "Q2", SEMESTER].filter((value, index, list) => list.indexOf(value) === index);
+const SEMESTERS = (() => {
+  const earlier = new Set(Object.values(page.history || {}).flatMap((terms) => Object.keys(terms || {})));
+  const upper = /^Q([1-4])$/.exec(SEMESTER);
+  for (let number = 1; upper && number < Number(upper[1]); number += 1) earlier.add(`Q${number}`);
+  earlier.delete(SEMESTER);
+  return [...[...earlier].sort((a, b) => a.localeCompare(b, "de", { numeric: true })), SEMESTER];
+})();
 
 const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const widow = (text) => text.replace(/ (\S{1,12})$/, "\u00a0$1");
@@ -1039,7 +1045,9 @@ function gradesPanelHtml() {
   const value = overallOf(rows);
   const scored = sortedSubjects(rows.filter((row) => row.value != null));
   const missing = sortedSubjects(rows.filter((row) => row.value == null && !retiredKey(row.key)));
-  const switcher = `<div class="segmented grade-switch" role="group" aria-label="Halbjahr">${SEMESTERS.map((item) => `<button type="button" data-semester="${item}" aria-pressed="${item === semester}">${item}</button>`).join("")}</div>`;
+  const switcher = SEMESTERS.length > 1
+    ? `<div class="segmented grade-switch" role="group" aria-label="Halbjahr">${SEMESTERS.map((item) => `<button type="button" data-semester="${item}" aria-pressed="${item === semester}">${item}</button>`).join("")}</div>`
+    : "";
   const bars = scored.map((row) => {
     const info = subject(row.key);
     const gone = retiredKey(row.key);
