@@ -281,9 +281,10 @@ function dropFollow(task) {
 }
 
 function followUp(task, date, extra = {}) {
-  const twin = state.tasks.find((item) => item !== task && !item.done && item.title === task.title && (item.subject || null) === (task.subject || null) && item.repeat === task.repeat && item.date === date);
+  const twin = state.tasks.find((item) => item !== task && item.title === task.title && (item.subject || null) === (task.subject || null) && item.repeat === task.repeat && item.date === date);
   if (twin) {
-    task.follow = twin.id;
+    const taken = twin.done || followLinks.leadsTo(savedId(twin)) || state.tasks.some((other) => other !== task && other.follow === twin.id);
+    if (!taken) task.follow = twin.id;
     return twin;
   }
   const follow = { ...task, ...extra, id: `${task.id}-${Date.now()}`, done: false, follow: null, date };

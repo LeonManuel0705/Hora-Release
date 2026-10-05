@@ -1645,6 +1645,7 @@ function deleteItem(id) {
   if (!item) return;
   if (state.selection?.type === "test" && state.draft?.id === id) closePanel({ refocus: true });
   removeItem(id);
+  if (document.activeElement === document.body) (document.querySelector("#overview [data-open-item]") || $("newTest"))?.focus({ preventScroll: true });
   toast(`Gelöscht: ${esc(item.kind)} „${esc(item.title)}“`, {
     icon: "trash-2",
     action: { label: "Rückgängig", undo: true, run: () => {
@@ -1971,7 +1972,7 @@ function bind() {
     if (grades) openGrades(grades);
   });
   bindPanel();
-  $("planViewer")?.addEventListener("close", () => document.querySelector("#schoolOverview [data-plan-open], [data-plan-open]")?.focus({ preventScroll: true }));
+  $("planViewer")?.addEventListener("close", () => document.querySelector("#overview [data-plan-open]")?.focus({ preventScroll: true }));
   $("planViewer")?.addEventListener("click", (event) => {
     const dialog = event.currentTarget;
     const tab = event.target.closest("[data-plan-page]");
