@@ -3665,14 +3665,24 @@ def get_calendar_holidays():
 @app.route('/api/pomodoro/session', methods=['POST'])
 def save_pomodoro_session():
 
-    data = request.get_json()
-    if not data:
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
         return jsonify({'success': False, 'error': 'No data provided'}), 400
 
+    subject_id = data.get('subject_id')
+    duration = data.get('duration', 25)
+    session_type = data.get('session_type', 'work')
+    if isinstance(duration, bool) or not isinstance(duration, int) or not 1 <= duration <= 180:
+        return jsonify({'success': False, 'error': 'Invalid duration'}), 400
+    if session_type not in ('work', 'break'):
+        return jsonify({'success': False, 'error': 'Invalid session type'}), 400
+    if subject_id is not None and (not isinstance(subject_id, str) or not 0 < len(subject_id) <= 80):
+        return jsonify({'success': False, 'error': 'Invalid subject'}), 400
+
     session_id = db.create_pomodoro_session(
-        subject_id=data.get('subject_id'),
-        duration=data.get('duration', 25),
-        session_type=data.get('session_type', 'work'),
+        subject_id=subject_id,
+        duration=duration,
+        session_type=session_type,
         completed_at=db.pomodoro_end_stamp(data.get('ended_at'))
     )
     return jsonify({'success': True, 'session_id': session_id})

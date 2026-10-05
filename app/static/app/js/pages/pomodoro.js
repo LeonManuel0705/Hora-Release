@@ -62,6 +62,7 @@ const known = (key) => !!key && Object.hasOwn(data.subjects || {}, key);
 const nameOf = (key) => (known(key) ? subject(key).label : key ? "Anderes Fach" : "Ohne Fach");
 const hueOf = (key) => (known(key) ? hueVar(key) : "var(--line-strong)");
 const sessionsWord = (count) => `${count}\u00a0${count === 1 ? "Sitzung" : "Sitzungen"}`;
+const minutesWord = (count) => `${count} ${count === 1 ? "Minute" : "Minuten"}`;
 const clockText = (left) => {
   const seconds = Math.ceil(left / 1000);
   return `${pad(Math.floor(seconds / 60))}:${pad(seconds % 60)}`;
@@ -443,7 +444,7 @@ function onEnd(finished) {
   count(finished);
   celebrate(finished);
   const state = read();
-  say(finished.phase === "work" ? `Arbeitsphase vorbei. ${finished.minutes} Minuten gearbeitet. Jetzt ${state.minutes.break} Minuten Pause.` : "Pause vorbei. Die nächste Runde kann starten.");
+  say(finished.phase === "work" ? `Arbeitsphase vorbei. ${minutesWord(finished.minutes)} gearbeitet. Jetzt ${minutesWord(state.minutes.break)} Pause.` : "Pause vorbei. Die nächste Runde kann starten.");
 }
 
 async function refreshStats() {
@@ -502,7 +503,7 @@ function bind() {
       clearTimeout(view.cheerTimer);
       actions.start();
       const next = read();
-      say(state.status === "paused" ? "Weiter." : `${next.phase === "work" ? "Arbeitsphase" : "Pause"} gestartet, ${next.minutes[next.phase]} Minuten.`);
+      say(state.status === "paused" ? "Weiter." : `${next.phase === "work" ? "Arbeitsphase" : "Pause"} gestartet, ${minutesWord(next.minutes[next.phase])}.`);
       nudgeTinte();
     }
   });

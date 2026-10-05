@@ -113,6 +113,30 @@ def test_unusable_end_times_fall_back_to_the_moment_of_saving(client, make):
     assert abs((datetime.strptime(stored, STAMP).replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)).total_seconds()) < 120
 
 
+UNUSABLE_SESSIONS = {
+    'no object': ['mathe', 25],
+    'text as duration': {'duration': '25'},
+    'no minutes': {'duration': 0},
+    'days of minutes': {'duration': 5000},
+    'truth as duration': {'duration': True},
+    'fraction as duration': {'duration': 12.5},
+    'unknown kind': {'session_type': 'nap'},
+    'number as subject': {'subject_id': 7},
+    'empty subject': {'subject_id': ''},
+    'endless subject': {'subject_id': 'm' * 81},
+}
+
+
+@pytest.mark.parametrize('fields', UNUSABLE_SESSIONS.values(), ids=UNUSABLE_SESSIONS.keys())
+def test_a_session_that_makes_no_sense_is_refused(client, fields):
+    body = {'subject_id': 'mathe', 'duration': 25, 'session_type': 'work', **fields} if isinstance(fields, dict) else fields
+    response = client.post('/api/pomodoro/session', json=body)
+    assert response.status_code == 400
+    assert response.get_json()['success'] is False
+    assert client.get('/api/pomodoro/sessions').get_json()['sessions'] == []
+    assert stats(client, 'today')['total_sessions'] == 0
+
+
 def test_end_stamp_helper_only_accepts_plausible_numbers():
     ended = milliseconds(-90)
     assert db.pomodoro_end_stamp(ended) == utc_text(ended)
