@@ -81,6 +81,7 @@ export const tasks = {
       if ("date" in changes && changes.date) body.date = changes.date;
       if ("title" in changes) body.title = changes.title;
       if ("subject" in changes) body.subject = clean(changes.subject);
+      if ("notes" in changes) body.detail = changes.notes || "";
       return Object.keys(body).length ? deadlines.update(ref, body) : Promise.resolve();
     }
     const body = Object.fromEntries(Object.entries(changes).map(([key, value]) => [key, clean(value)]));
@@ -95,7 +96,12 @@ export const tasks = {
     return queue(id, async () => send("DELETE", `/api/ui/tasks/${encodeURIComponent(await resolved(id))}`));
   },
   restore(task) {
-    if (homeworkRef(task.id)) return Promise.resolve();
+    const ref = homeworkRef(task.id);
+    if (ref) {
+      serverIds.delete(ref);
+      creations.delete(ref);
+      return deadlines.create({ id: ref, kind: "Hausaufgabe", title: task.title, subject: task.subject, date: task.date, detail: task.detail || "" });
+    }
     serverIds.delete(task.id);
     creations.delete(task.id);
     return tasks.create(task);

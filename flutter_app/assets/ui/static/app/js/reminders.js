@@ -90,7 +90,7 @@ function eventReminders(prefs, day, minute) {
 
 function taskReminders(day, minute) {
   const today = isoDate(day);
-  const open = (data.tasks || []).filter((task) => !task.done && task.date === today);
+  const open = (data.tasks || []).filter((task) => !task.done && (!task.date || task.date === today));
   const reminders = open
     .filter((task) => task.dueTime && dueAt(minute, toMin(task.dueTime)))
     .map((task) => ({ key: `task:${task.id}:${today}`, title: task.title, body: `Fällig um ${task.dueTime}` }));

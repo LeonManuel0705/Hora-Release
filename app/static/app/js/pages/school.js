@@ -1,7 +1,7 @@
 import {
   data, flags, params, esc, icon, tinte, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, isoWeek, subject, hueVar, blockOf, glue, relativeDay, inDays, duration, shortDate, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT,
-  abWeeks, gradeScale, activeSubjectKeys,
+  abWeeks, gradeScale, activeSubjectKeys, pastText, homeworkDate,
 } from "../core.js";
 import { animates, travels, token, ms } from "../motion.js";
 import { toast, registerSearch, syncTime, typing, overlayOpen, pageUrl } from "../shell.js";
@@ -81,7 +81,8 @@ const state = {
   gradeForm: false,
   gradeSemester: SEMESTER,
   calc: { open: false, table: false, tool: "ziel", system: null, subject: null, average: "", count: "", target: "", exams: ["", "", "", ""], other: "", points: 12, mark: 2 },
-  vplan: { loaded: false, loading: false, stand: null },
+  vplan: { loaded: false, loading: false, stand: null, files: [], problem: null, message: "", supported: true, page: 0, zoomed: false },
+  writtenOpen: false,
   signature: "",
   tick: 0,
   fresh: new Set(),
@@ -678,21 +679,24 @@ function dueMeta(item, time) {
   const kind = `<span class="kind${isExam(item) ? " is-test" : ""}">${isExam(item) ? icon("nx-test") : ""}${esc(item.kind)}</span>`;
   const tag = item.subject ? `${subjectTag(item.subject)}, ` : "";
   const prep = prepOf(item);
+  const written = diff < 0 && isAssessment(item);
   let when;
-  if (diff < 0) when = `<span class="due-when is-urgent">${overdueText(diff, target)}</span>`;
+  if (written) when = `<span class="row-note is-ready">${icon("check")}${esc(pastText(diff, target, item.kind))}</span>`;
+  else if (diff < 0) when = `<span class="due-when is-urgent">${overdueText(diff, target)}</span>`;
   else if (diff <= 1) when = `<span class="due-when${prep.total && !prep.open ? "" : " is-urgent"}">${relativeDay(diff, target)}</span>`;
   else when = `<span class="due-when">${inDays(diff)}</span>`;
   const blockText = block && diff >= 0 ? `, ${block}.\u00a0Block` : "";
   let prepText = "";
-  if (prep.total) prepText = prep.open ? `, ${plural(prep.open, "Aufgabe offen", "Aufgaben offen")}` : `, <span class="row-note is-ready">${icon("check")}vorbereitet</span>`;
+  if (prep.total && !written) prepText = prep.open ? `, ${plural(prep.open, "Aufgabe offen", "Aufgaben offen")}` : `, <span class="row-note is-ready">${icon("check")}vorbereitet</span>`;
   return `${kind} ${tag}${when}${blockText}${prepText}`;
 }
 
 function dueRow(item, time) {
   const diff = dayDiff(time.date, item.date);
   const prep = prepOf(item);
-  const leafClass = diff < 0 ? "is-overdue" : diff <= 1 && !(prep.total && !prep.open) ? "is-soon" : "";
-  return `<li class="row due is-interactive" data-row="${esc(item.id)}">
+  const written = diff < 0 && isAssessment(item);
+  const leafClass = written ? "is-done" : diff < 0 ? "is-overdue" : diff <= 1 && !(prep.total && !prep.open) ? "is-soon" : "";
+  return `<li class="row due is-interactive${written ? " is-written" : ""}" data-row="${esc(item.id)}">
     ${leaf(parseDate(item.date), leafClass)}
     <div class="row-main">
       <p class="row-title"><button type="button" class="row-link" data-open-item="${esc(item.id)}">${widow(glue(esc(item.title)))}</button></p>
@@ -705,6 +709,7 @@ function dueRow(item, time) {
 function renderTests() {
   const time = clockState();
   const list = state.items.filter((item) => isAssessment(item) && item.date >= time.iso).sort(byDate);
+  const written = state.items.filter((item) => isAssessment(item) && item.date < time.iso).sort((a, b) => byDate(b, a));
   const exams = list.filter((item) => item.kind === "Klausur").length;
   const tests = list.filter((item) => item.kind === "Test").length;
   const parts = [];
@@ -714,14 +719,19 @@ function renderTests() {
   if (others) parts.push(plural(others, "Referat", "Referate"));
   $("testsMeta").textContent = parts.join(", ");
   const body = $("testsBody");
+  const open = state.writtenOpen && written.length > 0;
+  const past = written.length
+    ? `<button class="done-toggle" type="button" id="writtenToggle" aria-expanded="${open}" aria-controls="writtenList">${icon("chevron-right")}<span>${written.length} ${written.every(isExam) ? "geschrieben" : "vorbei"}</span></button>
+      <ul class="rows done-list" id="writtenList" aria-label="Geschrieben"${open ? "" : " hidden"}>${open ? written.map((item) => dueRow(item, time)).join("") : ""}</ul>`
+    : "";
   keepFocus(body, () => {
     if (!list.length) {
       const hour = time.min / 60;
       const kind = hour >= 21 || hour < 5 ? "schlaeft" : "ruhe";
-      body.innerHTML = `<div class="empty-state">${tinte(kind)}<p class="empty-title">Keine Tests in Sicht.</p><p class="empty-text">Angekündigte Tests und Klausuren trägst du hier ein.</p><button type="button" class="empty-action" data-new-test="">Test eintragen${icon("chevron-right")}</button></div>`;
+      body.innerHTML = `<div class="empty-state">${tinte(kind)}<p class="empty-title">Keine Tests in Sicht.</p><p class="empty-text">Angekündigte Tests und Klausuren trägst du hier ein.</p><button type="button" class="empty-action" data-new-test="">Test eintragen${icon("chevron-right")}</button></div>${past}`;
       return;
     }
-    body.innerHTML = `<ul class="rows" aria-labelledby="testsTitle">${list.map((item) => dueRow(item, time)).join("")}</ul>`;
+    body.innerHTML = `<ul class="rows" aria-labelledby="testsTitle">${list.map((item) => dueRow(item, time)).join("")}</ul>${past}`;
   });
 }
 
@@ -818,6 +828,38 @@ function panelHead(title, sub = "", key = null) {
   </div>`;
 }
 
+const editable = (item) => !item.pinned && /^(hw|test|exam|new)-/.test(item.id);
+
+function itemTools(item) {
+  if (!editable(item)) return "";
+  const title = esc(item.title);
+  const done = isHomework(item) && item.status !== "abgegeben"
+    ? `<button class="icon-button" type="button" data-done-item="${esc(item.id)}" aria-label="Erledigt: ${title}" data-tip="Erledigt">${icon("check")}</button>`
+    : "";
+  const edit = item.origin === "iserv"
+    ? ""
+    : `<button class="icon-button" type="button" data-edit-item="${esc(item.id)}" aria-label="Bearbeiten: ${title}" data-tip="Bearbeiten">${icon("pencil")}</button>`;
+  return `<span class="note-tools">${done}${edit}<button class="icon-button is-danger" type="button" data-delete-item="${esc(item.id)}" aria-label="Löschen: ${title}" data-tip="Löschen">${icon("trash-2")}</button></span>`;
+}
+
+function itemNote(item) {
+  const test = isAssessment(item);
+  const done = item.status === "abgegeben" ? `<small>Erledigt</small>` : "";
+  return `<div class="lesson-note${test ? " is-test" : ""}">${icon(FLAG_ICONS[item.kind] || "notebook-pen")}<span class="note-text"><b>${esc(item.kind)}:</b> ${esc(item.title)}${item.detail ? `<small>${esc(item.detail)}</small>` : ""}${done}</span>${itemTools(item)}</div>`;
+}
+
+function itemBox(item, time) {
+  const target = parseDate(item.date);
+  const diff = dayDiff(time.date, item.date);
+  const written = diff < 0 && isAssessment(item);
+  const status = written ? pastText(diff, target, item.kind) : diff < 0 ? overdueText(diff, target) : inDays(diff);
+  return `<div class="lesson-box is-${diff < 0 ? "past" : "future"}">
+    <p class="lesson-box-when"><b>${esc(slotText(target, itemBlock(item)))}</b></p>
+    <p class="lesson-box-status">${esc(cap(status))}</p>
+    ${itemNote(item)}
+  </div>`;
+}
+
 function lessonBox(lesson, time) {
   const phase = phaseOf(lesson, time);
   const diff = dayDiff(time.date, lesson.iso);
@@ -825,10 +867,7 @@ function lessonBox(lesson, time) {
   const lines = [];
   if (lesson.cancelled) lines.push(`<p class="lesson-note is-urgent">${icon("calendar-x-2")}<span>Entfällt${lesson.note ? `, Grund: ${esc(lesson.note)}` : ""}</span></p>`);
   else if (lesson.movedFrom) lines.push(`<p class="lesson-note is-urgent">${icon("nx-room")}<span>In <b>${esc(lesson.room)}</b> statt ${esc(lesson.movedFrom)}</span></p>`);
-  items.forEach((item) => {
-    const test = isAssessment(item);
-    lines.push(`<p class="lesson-note${test ? " is-test" : ""}">${icon(FLAG_ICONS[item.kind] || "notebook-pen")}<span><b>${esc(item.kind)}:</b> ${esc(item.title)}${item.detail ? `<small>${esc(item.detail)}</small>` : ""}</span></p>`);
-  });
+  items.forEach((item) => lines.push(itemNote(item)));
   let status;
   if (lesson.cancelled) status = phase === "past" ? "Vorbei" : cap(relativeDay(diff, lesson.date));
   else if (phase === "now") status = `Läuft, noch <b data-remaining>${lesson.endMin - time.min}</b>\u00a0Min.`;
@@ -880,7 +919,7 @@ function gradeListHtml(key) {
     const type = GRADE_TYPES[grade.type] || grade.type;
     const what = grade.title || type;
     const when = `${date.getDate()}.${date.getMonth() + 1}.`;
-    return `<li class="grade-row"><span class="grade-points num" aria-label="${grade.points} Punkte">${grade.points}</span><span class="grade-what">${esc(what)}<small>${esc(what === type ? when : `${type}, ${when}`)}</small></span></li>`;
+    return `<li class="grade-row"><span class="grade-points num" aria-label="${grade.points} Punkte">${grade.points}</span><span class="grade-what">${esc(what)}<small>${esc(what === type ? when : `${type}, ${when}`)}</small></span><button class="icon-button is-danger grade-remove" type="button" data-delete-grade="${esc(grade.id)}" aria-label="Note löschen: ${esc(what)}, ${grade.points} Punkte" data-tip="Löschen">${icon("trash-2")}</button></li>`;
   }).join("");
   const form = state.gradeForm
     ? gradeFormHtml()
@@ -919,7 +958,8 @@ function subjectPanelHtml(key, lesson = null) {
   const rooms = [...new Set([...slots.A, ...slots.B].map((slot) => slot.room))];
   const next = upcoming(time, (entry) => entry.subject === key)[0] || null;
   const showNext = next && !(lesson && next.iso === lesson.iso && next.block === lesson.block);
-  const due = upcomingFor(key, time, lesson);
+  const picked = !lesson && state.selection?.item ? state.items.find((item) => item.id === state.selection.item) : null;
+  const due = upcomingFor(key, time, lesson).filter((item) => item !== picked);
   const fields = [];
   if (showNext) {
     const diff = dayDiff(time.date, next.iso);
@@ -931,7 +971,7 @@ function subjectPanelHtml(key, lesson = null) {
   fields.push(`<div class="field"><span class="field-label" id="dueLabel">Anstehend</span>${due.length ? `<ul class="mini-list" aria-labelledby="dueLabel">${due.map((item) => miniDueHtml(item, time)).join("")}</ul>` : `<p class="field-empty">Nichts angekündigt.</p>`}</div>`);
   fields.push(gradeListHtml(key));
   return `${panelHead(info.name, sub, key)}
-    ${lesson ? lessonBox(lesson, time) : ""}
+    ${lesson ? lessonBox(lesson, time) : picked ? itemBox(picked, time) : ""}
     <div class="panel-fields school-fields">${fields.join("")}</div>
     <div class="panel-actions"><button type="button" class="btn btn-quiet" data-new-test="${esc(key)}">${icon("plus")}Test eintragen</button></div>`;
 }
@@ -1224,25 +1264,36 @@ function testSlots(key) {
 
 function testFormHtml() {
   const draft = state.draft;
+  const editing = !!draft.id;
+  const homework = isHomework(draft);
   const slots = draft.subject ? testSlots(draft.subject) : [];
   const custom = draft.date && !slots.some((slot) => slot.iso === draft.date && slot.block === draft.block);
-  const options = activeSubjectKeys().map((key) => `<option value="${esc(key)}"${key === draft.subject ? " selected" : ""}>${esc(subject(key).name)}</option>`).join("");
+  const keys = activeSubjectKeys();
+  if (draft.subject && !keys.includes(draft.subject) && data.subjects[draft.subject]) keys.push(draft.subject);
+  const none = homework ? `<option value=""${draft.subject ? "" : " selected"}>Kein Fach</option>` : "";
+  const options = none + keys.map((key) => `<option value="${esc(key)}"${key === draft.subject ? " selected" : ""}>${esc(subject(key).name)}</option>`).join("");
   const time = clockState();
   const pills = slots.map((slot) => `<button type="button" class="pill" data-slot="${cellKey(slot.iso, slot.block)}" aria-pressed="${draft.date === slot.iso && draft.block === slot.block}">${esc(slotLabel(slot, time))}</button>`).join("");
   const customLabel = custom ? esc(slotText(parseDate(draft.date), draft.block)) : "Anderer Tag";
+  const head = editing ? panelHead(`${draft.kind} bearbeiten`) : panelHead("Test eintragen", "Wähle die Stunde hier oder direkt im Stundenplan.");
+  const kinds = homework
+    ? ""
+    : `<div class="field"><span class="field-label" id="testKindLabel">Art</span>
+        <div class="field-body" role="group" aria-labelledby="testKindLabel">${["Test", "Klausur"].map((kind) => `<button type="button" class="pill" data-kind="${kind}" aria-pressed="${draft.kind === kind}">${kind}</button>`).join("")}</div>
+      </div>`;
+  const ready = draft.date && (homework || draft.subject);
   return `<form id="testForm" class="test-form" autocomplete="off" novalidate>
-    ${panelHead("Test eintragen", "Wähle die Stunde hier oder direkt im Stundenplan.")}
+    ${head}
     <div class="panel-fields school-fields">
       <label class="field"><span class="field-label">Fach</span><select class="field-control" id="testSubject">${options}</select></label>
-      <div class="field"><span class="field-label" id="testWhenLabel">Wann</span>
-        <div class="field-body" role="group" aria-labelledby="testWhenLabel">${pills}<button type="button" class="pill" data-slot="pick" aria-pressed="${custom}">${icon("calendar-days")}${customLabel}</button><input class="date-proxy" type="date" id="testDate" value="${esc(draft.date || "")}" min="${esc(clockState().iso)}" tabindex="-1" aria-hidden="true"></div>
+      <div class="field"><span class="field-label" id="testWhenLabel">${homework ? "Fällig" : "Wann"}</span>
+        <div class="field-body" role="group" aria-labelledby="testWhenLabel">${pills}<button type="button" class="pill" data-slot="pick" aria-pressed="${custom}">${icon("calendar-days")}${customLabel}</button><input class="date-proxy" type="date" id="testDate" value="${esc(draft.date || "")}"${editing ? "" : ` min="${esc(time.iso)}"`} tabindex="-1" aria-hidden="true"></div>
       </div>
-      <div class="field"><span class="field-label" id="testKindLabel">Art</span>
-        <div class="field-body" role="group" aria-labelledby="testKindLabel">${["Test", "Klausur"].map((kind) => `<button type="button" class="pill" data-kind="${kind}" aria-pressed="${draft.kind === kind}">${kind}</button>`).join("")}</div>
-      </div>
-      <label class="field"><span class="field-label">Thema</span><input class="field-control" id="testTitle" value="${esc(draft.title)}" placeholder="z. B. Vektoren im Raum" maxlength="90"></label>
+      ${kinds}
+      <label class="field"><span class="field-label">${homework ? "Aufgabe" : "Thema"}</span><input class="field-control" id="testTitle" value="${esc(draft.title)}" placeholder="${homework ? "z. B. Arbeitsblatt Nr. 3" : "z. B. Vektoren im Raum"}" maxlength="90"></label>
+      <label class="field"><span class="field-label">${homework ? "Notiz" : "Lernstoff"}</span><textarea class="field-control" id="testDetail" rows="2" maxlength="600" placeholder="${homework ? "z. B. Seite und Nummer" : "z. B. Seiten, Themen, Hilfsmittel"}">${esc(draft.detail || "")}</textarea></label>
     </div>
-    <div class="panel-actions"><button type="button" class="btn btn-quiet" data-panel-close>Abbrechen</button><button type="submit" class="btn btn-primary" id="testSave"${draft.subject && draft.date ? "" : " disabled"}>Eintragen</button></div>
+    <div class="panel-actions">${editing ? `<button type="button" class="btn btn-quiet panel-delete" data-delete-item="${esc(draft.id)}">${icon("trash-2")}Löschen</button>` : ""}<button type="button" class="btn btn-quiet" data-panel-close>Abbrechen</button><button type="submit" class="btn btn-primary" id="testSave"${ready ? "" : " disabled"}>${editing ? "Speichern" : "Eintragen"}</button></div>
   </form>`;
 }
 
@@ -1258,7 +1309,7 @@ function renderPanel() {
       panel.innerHTML = subjectPanelHtml(selection.key);
     } else if (selection.type === "grades") {
       panel.innerHTML = gradesPanelHtml();
-    } else if (selection.type === "test") {
+    } else if (selection.type === "test" && state.draft) {
       panel.innerHTML = testFormHtml();
     }
   });
@@ -1360,6 +1411,10 @@ function revealCell(iso, block) {
 function openItem(id, trigger) {
   const item = state.items.find((entry) => entry.id === id);
   if (!item) return;
+  if (!item.subject || !activeKey(item.subject)) {
+    if (editable(item)) openEditForm(id, trigger);
+    return;
+  }
   const block = itemBlock(item);
   if (block && lessonAt(item.date, block)) {
     openLesson(item.date, block, trigger);
@@ -1381,9 +1436,17 @@ function defaultSubject() {
 }
 
 function openTestForm(key, trigger) {
-  state.draft = { subject: key || defaultSubject(), date: null, block: null, kind: "Test", title: "" };
+  state.draft = { subject: key || defaultSubject(), date: null, block: null, kind: "Test", title: "", detail: "" };
   openPanel({ type: "test" }, { trigger });
   requestAnimationFrame(() => $("testSubject")?.focus({ preventScroll: true }));
+}
+
+function openEditForm(id, trigger) {
+  const item = state.items.find((entry) => entry.id === id);
+  if (!item || !editable(item)) return;
+  state.draft = { id, subject: item.subject || "", date: item.date, block: itemBlock(item), kind: item.kind, title: item.title, detail: item.detail || "" };
+  openPanel({ type: "test", item: id }, { trigger });
+  requestAnimationFrame(() => $("testTitle")?.focus({ preventScroll: true }));
 }
 
 function updateDraft(changes) {
@@ -1406,11 +1469,26 @@ function popCell(iso, block) {
   node.animate([{ opacity: 0, transform: "scale(0.6)" }, { opacity: 1, transform: "none" }], { duration: ms("--spring-tactile-dur") || 340, easing: token("--spring-tactile"), fill: "backwards" });
 }
 
+function showItem(item) {
+  const block = itemBlock(item);
+  if (!item.subject || !activeKey(item.subject)) closePanel();
+  else if (block && lessonAt(item.date, block)) openPanel({ type: "lesson", iso: item.date, block, item: item.id });
+  else openPanel({ type: "subject", key: item.subject, item: item.id });
+  markSelection();
+  flashRow(item.id);
+}
+
 function saveTest() {
   const draft = state.draft;
-  if (!draft?.subject || !draft.date) return;
-  const title = draft.title.trim() || `${draft.kind} in ${subject(draft.subject).label}`;
-  const item = { id: `new-${Date.now()}`, kind: draft.kind, title, subject: draft.subject, date: draft.date, detail: "", status: "offen" };
+  const homework = !!draft && isHomework(draft);
+  if (!draft?.date || (!homework && !draft.subject)) return;
+  const title = draft.title.trim() || (homework ? "Hausaufgabe" : `${draft.kind} in ${subject(draft.subject).label}`);
+  const detail = (draft.detail || "").trim();
+  if (draft.id) {
+    updateItem(draft, title, detail);
+    return;
+  }
+  const item = { id: `new-${Date.now()}`, kind: draft.kind, title, subject: draft.subject, date: draft.date, detail, status: "offen" };
   if (draft.block) item.block = draft.block;
   state.items.push(item);
   deadlineApi.create(item);
@@ -1419,15 +1497,48 @@ function saveTest() {
   renderWeekSwitch();
   renderAll();
   state.draft = null;
-  if (item.block && lessonAt(item.date, item.block)) openPanel({ type: "lesson", iso: item.date, block: item.block, item: item.id });
-  else openPanel({ type: "subject", key: item.subject, item: item.id });
-  markSelection();
-  flashRow(item.id);
+  showItem(item);
   if (item.block) popCell(item.date, item.block);
   $("panelTitle")?.focus({ preventScroll: true });
   toast(`Eingetragen: ${esc(item.kind)} ${esc(subject(item.subject).label)}, ${esc(shortDate(parseDate(item.date)))}`, {
     icon: "nx-test",
     action: { label: "Rückgängig", undo: true, run: () => removeItem(item.id) },
+  });
+}
+
+function updateItem(draft, title, detail) {
+  const index = state.items.findIndex((entry) => entry.id === draft.id);
+  if (index < 0) return;
+  const item = state.items[index];
+  const changes = { title, subject: draft.subject || null, date: draft.date, detail };
+  state.draft = null;
+  if (draft.kind !== item.kind) {
+    const moved = { ...item, ...changes, id: `new-${Date.now()}`, kind: draft.kind, status: "offen" };
+    if (draft.block) moved.block = draft.block;
+    else delete moved.block;
+    state.items.splice(index, 1, moved);
+    deadlineApi.remove(item.id);
+    deadlineApi.create(moved);
+    renderAll();
+    showItem(moved);
+    toast(`Gespeichert: ${esc(moved.kind)} „${esc(moved.title)}“`, { icon: "check" });
+    return;
+  }
+  const before = { title: item.title, subject: item.subject || null, date: item.date, detail: item.detail || "" };
+  const apply = (values) => {
+    Object.assign(item, values);
+    item.block = itemBlock({ ...item, block: null }) || undefined;
+    deadlineApi.update(item.id, values);
+    renderAll();
+  };
+  apply(changes);
+  showItem(item);
+  toast(`Gespeichert: ${esc(item.kind)} „${esc(item.title)}“`, {
+    icon: "check",
+    action: { label: "Rückgängig", undo: true, run: () => {
+      apply(before);
+      if (state.selection?.type !== "test") showItem(item);
+    } },
   });
 }
 
@@ -1439,6 +1550,60 @@ function removeItem(id) {
   if (state.selection?.item === id) delete state.selection.item;
   renderAll();
   if (state.selection) renderPanel();
+}
+
+function deleteItem(id) {
+  const item = state.items.find((entry) => entry.id === id);
+  if (!item) return;
+  if (state.selection?.type === "test" && state.draft?.id === id) closePanel();
+  removeItem(id);
+  toast(`Gelöscht: ${esc(item.kind)} „${esc(item.title)}“`, {
+    icon: "trash-2",
+    action: { label: "Rückgängig", undo: true, run: () => {
+      const back = { ...item, id: `new-${Date.now()}` };
+      state.items.push(back);
+      deadlineApi.create(back);
+      if (back.status === "abgegeben") deadlineApi.update(back.id, { status: "abgegeben" });
+      renderAll();
+      if (state.selection) renderPanel();
+      flashRow(back.id);
+    } },
+  });
+}
+
+function completeItem(id) {
+  const item = state.items.find((entry) => entry.id === id);
+  if (!item) return;
+  const mark = (status) => {
+    item.status = status;
+    deadlineApi.update(id, { status });
+    renderAll();
+    if (state.selection) renderPanel();
+  };
+  mark("abgegeben");
+  toast(`Erledigt: „${esc(item.title)}“`, { icon: "check", action: { label: "Rückgängig", undo: true, run: () => mark("offen") } });
+}
+
+function deleteGrade(id) {
+  const index = state.grades.findIndex((grade) => grade.id === id);
+  if (index < 0) return;
+  const grade = state.grades[index];
+  const repaint = () => {
+    if (state.selection) renderPanel();
+    renderOverview();
+  };
+  state.grades.splice(index, 1);
+  gradeApi.remove(id);
+  repaint();
+  toast(`Note gelöscht: ${plural(grade.points, "Punkt", "Punkte")} in ${esc(subject(grade.subject).label)}`, {
+    icon: "trash-2",
+    action: { label: "Rückgängig", undo: true, run: () => {
+      const back = { ...grade, id: `g-new-${Date.now()}` };
+      state.grades.push(back);
+      gradeApi.create(back);
+      repaint();
+    } },
+  });
 }
 
 function saveGrade(form) {
@@ -1481,6 +1646,26 @@ function bindPanel() {
     const target = event.target;
     if (target.closest("[data-panel-close]")) {
       closePanel({ refocus: true });
+      return;
+    }
+    const editButton = target.closest("[data-edit-item]");
+    if (editButton) {
+      openEditForm(editButton.dataset.editItem, editButton);
+      return;
+    }
+    const deleteButton = target.closest("[data-delete-item]");
+    if (deleteButton) {
+      deleteItem(deleteButton.dataset.deleteItem);
+      return;
+    }
+    const doneButton = target.closest("[data-done-item]");
+    if (doneButton) {
+      completeItem(doneButton.dataset.doneItem);
+      return;
+    }
+    const gradeButton = target.closest("[data-delete-grade]");
+    if (gradeButton) {
+      deleteGrade(gradeButton.dataset.deleteGrade);
       return;
     }
     const lessonButton = target.closest("[data-open-lesson]");
@@ -1560,7 +1745,11 @@ function bindPanel() {
       renderPanel();
       return;
     }
-    if (event.target.id === "testSubject" && state.draft) updateDraft({ subject: event.target.value, date: null, block: null });
+    if (event.target.id === "testSubject" && state.draft) {
+      const key = event.target.value;
+      if (state.draft.id) updateDraft({ subject: key, block: lessonsOn(parseDate(state.draft.date)).find((entry) => entry.subject === key)?.block || null });
+      else updateDraft({ subject: key, date: null, block: null });
+    }
     if (event.target.id === "testDate" && state.draft && event.target.value) {
       const lesson = lessonsOn(parseDate(event.target.value)).find((entry) => entry.subject === state.draft.subject);
       updateDraft({ date: event.target.value, block: lesson?.block || null });
@@ -1569,6 +1758,7 @@ function bindPanel() {
   });
   panel.addEventListener("input", (event) => {
     if (event.target.id === "testTitle" && state.draft) state.draft.title = event.target.value;
+    if (event.target.id === "testDetail" && state.draft) state.draft.detail = event.target.value;
     const field = event.target.dataset.calc;
     if (!field || field === "subject") return;
     if (field === "points") {
@@ -1645,6 +1835,12 @@ function bind() {
   $("newGrade").addEventListener("click", (event) => openGradeForm(event.currentTarget));
   const lists = $("schoolLists");
   lists.addEventListener("click", (event) => {
+    if (event.target.closest("#writtenToggle")) {
+      state.writtenOpen = !state.writtenOpen;
+      renderTests();
+      if (state.writtenOpen && travels()) [...$("writtenList").children].forEach((node, index) => node.animate([{ opacity: 0, translate: "0 -4px" }, { opacity: 1, translate: "0 0" }], { duration: 240, delay: index * 30, easing: token("--ease-out"), fill: "backwards" }));
+      return;
+    }
     const item = event.target.closest("[data-open-item]");
     if (item) {
       openItem(item.dataset.openItem, item);
@@ -1784,23 +1980,40 @@ function registerPalette() {
   ]);
 }
 
+function bindNotes() {
+  window.addEventListener("app:note", (event) => {
+    const detail = event.detail;
+    if (detail.type !== "homework") return;
+    event.preventDefault();
+    const item = { id: `hw-new-${Date.now()}`, kind: "Hausaufgabe", title: detail.title, subject: detail.subject || null, date: detail.date || homeworkDate(detail.subject), detail: detail.details || "", status: "offen" };
+    state.items.push(item);
+    deadlineApi.create(item);
+    renderAll();
+    flashRow(item.id);
+    toast(`Hausaufgabe für ${esc(shortDate(parseDate(item.date)))} angelegt: „${esc(item.title)}“`, {
+      icon: "check",
+      action: { label: "Rückgängig", undo: true, run: () => removeItem(item.id) },
+    });
+  });
+}
+
 export function init() {
   if (!$("schoolPage") || !data) return;
   state.items = flags.empty ? [] : [...(data.deadlines || []), ...(page.exams || [])].filter(visibleItem).map((item) => ({ ...item }));
   state.grades = flags.empty ? [] : (page.grades || []).map((grade) => ({ ...grade }));
-  state.vplan.loaded = true;
-  state.vplan.stand = syncTime();
+  state.vplan.loaded = !!((data.changes || []).length || (page.changes || []).length);
   state.signature = timeSignature();
   const edit = $("editTimetable");
   if (edit) edit.href = settingsHref();
   renderWeekSwitch();
   renderAll();
   bind();
+  bindNotes();
   registerPalette();
   scrollToToday();
   growNow();
   openFromUrl();
-  if (!state.vplan.loaded) startVplan();
+  startVplan();
   scheduleTick();
 }
 

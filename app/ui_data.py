@@ -30,6 +30,7 @@ STATES = [
     ('ST', 'Sachsen-Anhalt'), ('SH', 'Schleswig-Holstein'), ('TH', 'Thüringen'),
 ]
 DEADLINE_KINDS = {'hw': ('homework', 'Hausaufgabe'), 'test': ('tests', 'Test'), 'exam': ('exams', 'Klausur')}
+WRITTEN_DAYS = 183
 EVENT_KINDS = {'school': 'school', 'training': 'training'}
 NOTIFY_DEFAULTS = {
     'enabled': False,
@@ -324,13 +325,14 @@ def deadline_view(prefix, item, school, today):
 
 def deadlines(school, today):
     horizon_back = (today - timedelta(days=14)).isoformat()
+    written_back = (today - timedelta(days=WRITTEN_DAYS)).isoformat()
     result = []
     for prefix, (name, _) in DEADLINE_KINDS.items():
         for item in load_list(name):
             view = deadline_view(prefix, item, school, today)
             if not view:
                 continue
-            if view['date'] < horizon_back:
+            if view['date'] < (horizon_back if prefix == 'hw' else written_back):
                 continue
             if prefix == 'hw' and view['status'] == 'abgegeben' and view['date'] < today.isoformat():
                 continue

@@ -158,6 +158,15 @@ export function nextSchoolDay(from) {
   return null;
 }
 
+export function homeworkDate(subjectKey, from = now()) {
+  for (let offset = 1; offset <= 14; offset += 1) {
+    const date = addDays(startOfDay(from), offset);
+    const lessons = activeLessons(lessonsFor(date));
+    if (subjectKey ? lessons.some((lesson) => lesson.subject === subjectKey) : lessons.length) return isoDate(date);
+  }
+  return isoDate(addDays(startOfDay(from), 1));
+}
+
 export function relativeDay(offset, date) {
   if (offset === 0) return "heute";
   if (offset === 1) return "morgen";
@@ -173,6 +182,27 @@ export function inDays(offset) {
   if (offset < 14) return `in ${offset}\u00a0Tagen`;
   const weeks = Math.round(offset / 7);
   return `in ${weeks}\u00a0Wochen`;
+}
+
+export const isAssessment = (item) => !!item && (item.kind === "Test" || item.kind === "Klausur" || item.kind === "Referat");
+export const isOverdue = (item, today) => item.date < today && item.status !== "abgegeben" && !isAssessment(item);
+
+export function pastText(offset, date, kind) {
+  const word = kind === "Referat" ? "gehalten" : "geschrieben";
+  if (offset === -1) return `gestern ${word}`;
+  if (offset > -7) return `vor ${-offset}\u00a0Tagen ${word}`;
+  return `am ${date.getDate()}.${date.getMonth() + 1}. ${word}`;
+}
+
+export function nextRepeatDate(iso, repeat) {
+  const date = parseDate(iso);
+  if (repeat === "daily") return isoDate(addDays(date, 1));
+  if (repeat === "weekly") return isoDate(addDays(date, 7));
+  if (repeat !== "monthly") return null;
+  const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+  const last = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(date.getDate(), last));
+  return isoDate(next);
 }
 
 export function duration(min) {

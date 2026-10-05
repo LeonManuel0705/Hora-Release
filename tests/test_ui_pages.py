@@ -225,6 +225,15 @@ def test_mobile_ui_assets_are_current():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_written_tests_stay_in_the_page_data_for_half_a_year(client):
+    key = own_subject(client, "kunst")
+    for offset in (-3, -100, -300):
+        client.post("/api/ui/deadlines", json={"kind": "Test", "title": f"Test {offset}", "subject": key, "date": (date.today() + timedelta(days=offset)).isoformat()})
+    client.post("/api/ui/deadlines", json={"kind": "Hausaufgabe", "title": "Alt", "date": (date.today() - timedelta(days=30)).isoformat()})
+    titles = [item["title"] for item in page_data(client, "/hub")["deadlines"]]
+    assert [title for title in titles if title in ("Test -3", "Test -100", "Test -300", "Alt")] == ["Test -100", "Test -3"]
+
+
 def test_places_keep_the_address(client, monkeypatch):
     saved = {}
 

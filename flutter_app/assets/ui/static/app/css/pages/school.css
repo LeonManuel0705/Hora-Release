@@ -406,6 +406,15 @@
 .lesson-note small { display: block; font-size: var(--text-xs); color: var(--ink-muted); }
 .lesson-note.is-urgent { color: var(--urgent-ink); font-weight: var(--weight-medium); }
 .lesson-note.is-urgent .icon, .lesson-note.is-test .icon { color: var(--urgent-ink); }
+.lesson-note .note-text { flex: 1; min-width: 0; }
+.note-tools { display: flex; flex: none; margin: -6px -8px -6px 0; }
+.note-tools .icon-button { width: 30px; height: 30px; }
+.lesson-note .note-tools .icon-button .icon { --s: 16; margin-top: 0; color: currentColor; }
+.note-tools .icon-button.is-danger { color: var(--ink-muted); }
+@media (hover: hover) and (pointer: fine) {
+  .note-tools .icon-button:hover { background: color-mix(in oklab, var(--ink) 8%, transparent); }
+  .note-tools .icon-button.is-danger:hover, .grade-remove:hover { color: var(--urgent-ink); }
+}
 
 .school-fields { margin-top: 10px; }
 .school-fields .field + .field { margin-top: 0; }
@@ -478,7 +487,9 @@
 .grade-average { font-size: var(--text-sm); color: var(--ink-soft); }
 .grade-average b { font-weight: var(--weight-strong); color: var(--ink); }
 .grade-list { display: grid; gap: 6px; }
-.grade-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: start; gap: 10px; }
+.grade-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: start; gap: 10px; }
+.grade-row .grade-remove { width: 28px; height: 28px; margin-right: -6px; color: var(--ink-muted); }
+.grade-row .grade-remove .icon { --s: 16; }
 
 .grade-points {
   display: grid;
@@ -507,6 +518,7 @@
 
 .panel-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
 .panel-actions .btn .icon { --s: 16; }
+.panel-actions .panel-delete { margin-right: auto; color: var(--urgent-ink); }
 .school-panel .btn-quiet { background: var(--tile); }
 
 .test-form .field-control { width: 100%; }

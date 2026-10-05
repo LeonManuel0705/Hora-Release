@@ -55,6 +55,10 @@
                 <a class="section-link" href="/hub/school" data-page="school">Schule<svg class="icon"><use href="#i-chevron-right"/></svg></a>
             </div>
             <ul class="rows" id="dueList" aria-labelledby="dueTitle"></ul>
+            <button class="done-toggle" type="button" id="writtenToggle" aria-expanded="false" aria-controls="writtenList" hidden>
+                <svg class="icon"><use href="#i-chevron-right"/></svg><span id="writtenLabel"></span>
+            </button>
+            <ul class="rows done-list" id="writtenList" aria-label="Geschrieben" hidden></ul>
         </section>
     </div>
 

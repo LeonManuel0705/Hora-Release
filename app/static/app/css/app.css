@@ -764,6 +764,9 @@ kbd .icon { --s: 12; }
 .leaf.is-soon .leaf-day, .leaf.is-soon .leaf-date { color: var(--urgent-ink); }
 .leaf.is-overdue { background: var(--urgent-soft); box-shadow: inset 0 0 0 1.5px var(--urgent); }
 .leaf.is-overdue .leaf-day, .leaf.is-overdue .leaf-date { color: var(--urgent-ink); }
+.leaf.is-done { background: var(--done-soft); box-shadow: none; }
+.leaf.is-done .leaf-day, .leaf.is-done .leaf-date { color: var(--done-ink); }
+.row.is-written .row-title { color: var(--ink-soft); }
 
 .due-when { color: var(--ink-soft); font-weight: var(--weight-medium); }
 .due-when.is-urgent { color: var(--urgent-ink); }

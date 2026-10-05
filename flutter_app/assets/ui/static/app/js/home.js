@@ -1,7 +1,7 @@
 import {
   data, flags, esc, icon, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, abWeeks, isoWeek, subject, hueVar, glue, lessonsFor, activeLessons, nextSchoolDay, relativeDay, inDays, duration, shortDate,
-  longDate, eventsOn, nextDeparture, schoolDeparture, weatherAt, rainFrom, hourIcon, hasWeather, storage, changesFor,
+  longDate, eventsOn, nextDeparture, schoolDeparture, weatherAt, rainFrom, hourIcon, hasWeather, storage, changesFor, isAssessment, isOverdue, pastText, nextRepeatDate, homeworkDate,
   WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "./core.js";
 import { animates, travels, rich, level, flipKeyed, exitInPlace, enterInPlace, setDigits, pop, crossfade, swapText, breath, chalkCheck, bezier, token, ms } from "./motion.js";
 import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
@@ -12,16 +12,18 @@ const $ = (id) => document.getElementById(id);
 const DAY_START = data.blocks?.length ? Math.min(...data.blocks.map((block) => toMin(block.start))) : 480;
 const DAY_END = data.blocks?.length ? Math.max(...data.blocks.map((block) => toMin(block.end))) : 900;
 const SPAN = DAY_END - DAY_START;
+const WRITTEN_DAYS = 14;
 const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const clamp = (value, low = 0, high = 1) => Math.min(high, Math.max(low, value));
 const widow = (text) => text.replace(/ (\S{1,12})$/, "\u00a0$1");
 const nb = (text) => String(text).replace(/ /g, " ");
 
 const state = {
-  tasks: flags.empty ? [] : data.tasks.map((task) => ({ ...task })),
+  tasks: flags.empty ? [] : [...data.tasks, ...(data.taskPool || []).filter((task) => !task.done && task.date && !task.someday)].map((task) => ({ ...task })),
   deadlines: flags.empty ? [] : data.deadlines.map((item) => ({ ...item })),
   deleted: [],
   doneOpen: false,
+  writtenOpen: false,
   day: null,
   pending: new Set(),
   settleTimer: 0,
@@ -721,11 +723,11 @@ function taskRow(task, date) {
       ${meta ? `<p class="row-meta">${meta}</p>` : ""}
     </div>
     <div class="row-trailing">
-      ${task.done ? "" : `<div class="row-actions">
-        <button class="icon-button" type="button" data-act="later" aria-label="Auf morgen verschieben: ${title}" data-tip="Auf morgen">${icon("calendar-plus")}</button>
+      <div class="row-actions">
+        ${task.done ? "" : `<button class="icon-button" type="button" data-act="later" aria-label="Auf morgen verschieben: ${title}" data-tip="Auf morgen">${icon("calendar-plus")}</button>`}
         <button class="icon-button" type="button" data-act="delete" aria-label="Löschen: ${title}" data-tip="Löschen">${icon("trash-2")}</button>
       </div>
-      <button class="icon-button row-menu-button" type="button" data-act="menu" aria-label="Aktionen für ${title}" aria-haspopup="menu" aria-controls="rowMenu">${icon("ellipsis")}</button>`}
+      <button class="icon-button row-menu-button" type="button" data-act="menu" aria-label="Aktionen für ${title}" aria-haspopup="menu" aria-controls="rowMenu">${icon("ellipsis")}</button>
       ${task.priority && !task.done ? `<span class="flag" data-tip="Wichtig" role="img" aria-label="Wichtig">${icon("flag")}</span>` : ""}
     </div>
   </li>`;
@@ -821,7 +823,8 @@ function dueMeta(item, date) {
   }
   const kind = `<span class="kind${isTest(item) ? " is-test" : ""}">${isTest(item) ? icon("nx-test") : ""}${esc(item.kind)}</span>`;
   let when;
-  if (diff < 0) when = `<span class="due-when is-urgent">${overdueText(diff, target)}</span>`;
+  if (diff < 0 && isAssessment(item)) when = `<span class="row-note is-ready">${icon("check")}${esc(pastText(diff, target, item.kind))}</span>`;
+  else if (diff < 0) when = `<span class="due-when is-urgent">${overdueText(diff, target)}</span>`;
   else if (diff <= 1) when = `<span class="due-when${prepared ? "" : " is-urgent"}">${cap(relativeDay(diff, target))}</span>`;
   else when = `<span class="due-when">${inDays(diff)}</span>`;
   const prep = prepared ? `, <span class="row-note is-ready">${icon("check")}vorbereitet</span>` : "";
@@ -831,12 +834,14 @@ function dueMeta(item, date) {
 function dueRow(item, date) {
   const target = parseDate(item.date);
   const meta = dueMeta(item, date);
-  const leafClass = meta.diff < 0 ? "is-overdue" : meta.diff <= 1 && !meta.prepared && !item.pinned ? "is-soon" : "";
+  const written = meta.diff < 0 && isAssessment(item);
+  const leafClass = written ? "is-done" : meta.diff < 0 ? "is-overdue" : meta.diff <= 1 && !meta.prepared && !item.pinned ? "is-soon" : "";
   const page = item.source === "task" ? "tasks" : "school";
-  return `<li class="row due is-interactive" data-id="${esc(item.id)}" tabindex="-1">
+  const href = page === "tasks" ? "/hub/tasks" : `/hub/school?eintrag=${encodeURIComponent(item.id)}`;
+  return `<li class="row due is-interactive${written ? " is-written" : ""}" data-id="${esc(item.id)}" tabindex="-1">
     ${leaf(target, date, leafClass)}
     <div class="row-main">
-      <p class="row-title"><a class="row-link" href="${page === "tasks" ? "/hub/tasks" : "/hub/school"}" data-page-action="${page}">${widow(glue(esc(item.title)))}</a></p>
+      <p class="row-title"><a class="row-link" href="${esc(href)}" data-page-action="${page}">${widow(glue(esc(item.title)))}</a></p>
       <p class="row-meta">${meta.html}</p>
     </div>
     ${icon("chevron-right", "chev-end")}
@@ -849,21 +854,36 @@ function dueItems(date) {
   const own = upcomingTasks().map((task) => ({
     id: task.id, kind: "Aufgabe", title: task.title, subject: task.subject, date: task.date, block: task.block, source: "task", diff: dayDiff(date, task.date),
   }));
-  const overdue = deadlines.filter((item) => item.diff < 0 && item.status !== "abgegeben").sort((a, b) => a.diff - b.diff);
+  const today = isoDate(date);
+  const overdue = deadlines.filter((item) => isOverdue(item, today)).sort((a, b) => a.diff - b.diff);
+  const written = deadlines.filter((item) => item.diff < 0 && item.diff >= -WRITTEN_DAYS && isAssessment(item)).sort((a, b) => b.diff - a.diff);
   const soon = [
     ...deadlines.filter((item) => item.diff >= 0 && item.diff <= 14 && !item.pinned && !(item.diff === 0 && linked.has(item.id))),
     ...own.filter((item) => item.diff <= 14),
   ].sort((a, b) => a.diff - b.diff || Number(isTest(b)) - Number(isTest(a)));
   const pinned = deadlines.filter((item) => item.pinned && item.diff >= 0);
-  return { overdue, soon, pinned };
+  return { overdue, soon, pinned, written };
+}
+
+function renderWritten(written, date) {
+  const toggle = $("writtenToggle");
+  const list = $("writtenList");
+  if (!toggle || !list) return;
+  const open = state.writtenOpen && written.length > 0;
+  toggle.hidden = !written.length;
+  $("writtenLabel").textContent = written.every(isTest) ? `${written.length} geschrieben` : `${written.length} vorbei`;
+  toggle.setAttribute("aria-expanded", String(open));
+  list.hidden = !open;
+  list.innerHTML = open ? written.map((item) => dueRow(item, date)).join("") : "";
 }
 
 function renderDue() {
   const date = state.day.date;
   const list = $("dueList");
-  const { overdue, soon, pinned } = dueItems(date);
+  const { overdue, soon, pinned, written } = dueItems(date);
   const horizon = addDays(startOfDay(date), 14);
   $("dueMeta").textContent = `bis ${shortDate(horizon)}`;
+  renderWritten(written, date);
   if (!overdue.length && !soon.length && !pinned.length) {
     const stand = flags.offline ? ` (Stand ${syncTime()} Uhr)` : "";
     list.innerHTML = `<li class="empty-line" data-flip="due-empty">Bis ${longDate(horizon)} keine Abgaben${stand}.<small>Tests und Hausaufgaben kommen automatisch aus IServ.</small></li>`;
@@ -914,7 +934,7 @@ function renderWeek(day) {
     const line = active.length
       ? `${active.length} ${active.length === 1 ? "Block" : "Blöcke"}, ${active[0].startMin === DAY_START ? "" : `${hm(active[0].start)} `}bis ${hm(active[active.length - 1].end)}`
       : "Unterrichtsfrei";
-    const overdueHere = state.deadlines.filter((item) => item.date === iso && iso < today && item.status !== "abgegeben");
+    const overdueHere = state.deadlines.filter((item) => item.date === iso && isOverdue(item, today));
     const markers = [];
     if (past && !isToday) {
       overdueHere.forEach((item) => markers.push({ order: 0, text: `${item.kind} ${subject(item.subject).name.replace(/ LK$/, "")}, überfällig`, html: `<p class="marker is-overdue">${icon("triangle-alert")}<span>${esc(item.kind)} ${esc(subject(item.subject).name.replace(/ LK$/, ""))}, überfällig</span></p>` }));
@@ -998,6 +1018,7 @@ function renderWeather() {
 function interactiveRows() {
   const lists = [$("taskList"), $("dueList")];
   if (!$("doneList").hidden) lists.splice(1, 0, $("doneList"));
+  if ($("writtenList") && !$("writtenList").hidden) lists.push($("writtenList"));
   return lists.flatMap((list) => [...list.querySelectorAll(".row.is-interactive")]);
 }
 
@@ -1017,7 +1038,7 @@ const FLIP_SELECTOR = "#taskList > li, #addTask, #doneToggle, #doneList > li, #d
 
 function holdFocus(paint) {
   const active = document.activeElement;
-  const row = active?.closest?.("#taskList .row[data-id], #doneList .row[data-id], #dueList .row[data-id]");
+  const row = active?.closest?.("#taskList .row[data-id], #doneList .row[data-id], #dueList .row[data-id], #writtenList .row[data-id]");
   const part = !row || active === row ? "" : active.matches(".check") ? ".check" : active.matches(".row-link") ? ".row-link" : active.dataset.act ? `[data-act="${active.dataset.act}"]` : "";
   const list = row?.parentElement.id;
   paint();
@@ -1129,9 +1150,21 @@ function toggleTask(id, { restoreFocus = false, via = "keyboard" } = {}) {
   renderTaskMeta();
   state.celebrationDue = task.done && !openTasks().length && storage.get("app-celebrated") !== todayIso();
   if (task.done) {
-    toast(`Erledigt: „${esc(task.title)}“`, {
+    let follow = null;
+    if (task.repeat) {
+      follow = { ...task, id: `${task.id}-${Date.now()}`, done: false, doneAt: null, doneDay: null, date: nextRepeatDate(task.date || todayIso(), task.repeat) };
+      state.tasks.push(follow);
+      taskApi.create(follow);
+    }
+    toast(follow ? `Erledigt. Nächste am ${esc(shortDate(parseDate(follow.date)))}` : `Erledigt: „${esc(task.title)}“`, {
       icon: "check",
-      action: { label: "Rückgängig", undo: true, run: () => toggleTask(id, { restoreFocus: true }) },
+      action: { label: "Rückgängig", undo: true, run: () => {
+        if (follow) {
+          state.tasks = state.tasks.filter((item) => item.id !== follow.id);
+          taskApi.remove(follow.id);
+        }
+        toggleTask(id, { restoreFocus: true });
+      } },
       returnFocus: () => focusTaskAt(0),
     });
     state.pending.add(id);
@@ -1159,6 +1192,7 @@ function removeTask(id, kind, { refocus = false } = {}) {
   const row = rowFor(id);
   const rowIndex = row ? [...$("taskList").querySelectorAll(".task")].indexOf(row) : -1;
   const hadFocus = refocus || row?.contains(document.activeElement) || document.activeElement === row;
+  const before = task.date || null;
   if (kind === "later") {
     task.date = isoDate(addDays(state.day.date, 1));
     taskApi.update(id, { date: task.date, someday: false });
@@ -1174,17 +1208,17 @@ function removeTask(id, kind, { refocus = false } = {}) {
   exitInPlace(row).then(finish);
   toast(kind === "later" ? `Auf morgen verschoben: „${esc(task.title)}“` : `Gelöscht: „${esc(task.title)}“`, {
     icon: kind === "later" ? "calendar-plus" : "trash-2",
-    action: { label: "Rückgängig", undo: true, run: () => restoreTask(id, kind) },
+    action: { label: "Rückgängig", undo: true, run: () => restoreTask(id, kind, before) },
     returnFocus: () => focusTaskAt(0),
   });
 }
 
-function restoreTask(id, kind) {
+function restoreTask(id, kind, before = null) {
   if (kind === "later") {
     const task = state.tasks.find((item) => item.id === id);
     if (task) {
-      delete task.date;
-      taskApi.update(id, { date: null, someday: false });
+      task.date = before;
+      taskApi.update(id, { date: before, someday: false });
     }
   } else {
     const at = state.deleted.findIndex((entry) => entry.task.id === id);
@@ -1199,8 +1233,8 @@ function restoreTask(id, kind) {
   back?.querySelector(".check")?.focus({ preventScroll: true });
 }
 
-function createTask({ title, subjectKey, date, block, minutes = 20 }) {
-  const task = { id: `new-${Date.now()}`, title, subject: subjectKey, anchor: block ? `vor dem ${block}. Block` : "", minutes, done: false };
+function createTask({ title, subjectKey, date, block, minutes = 20, notes = "" }) {
+  const task = { id: `new-${Date.now()}`, title, subject: subjectKey, anchor: block ? `vor dem ${block}. Block` : "", minutes, notes, done: false };
   if (date && date > todayIso()) task.date = date;
   if (block) task.block = block;
   state.tasks.push(task);
@@ -1263,6 +1297,7 @@ function openRowMenu(button) {
   if (!menu || !row) return;
   menuInvoker = button;
   menu.dataset.id = row.dataset.id;
+  menu.querySelector('[data-menu-act="later"]').hidden = row.classList.contains("is-done");
   menu.showPopover();
   placeNear(menu, button, "right");
   clampSheet(menu);
@@ -1328,7 +1363,11 @@ function bindLists() {
       return;
     }
     const row = event.target.closest(".task");
-    if (row && event.target.closest(".check")) toggleTask(row.dataset.id, { restoreFocus: true });
+    if (!row) return;
+    if (event.target.closest(".check")) toggleTask(row.dataset.id, { restoreFocus: true });
+    const act = event.target.closest("[data-act]")?.dataset.act;
+    if (act === "delete") removeTask(row.dataset.id, "delete");
+    if (act === "menu") openRowMenu(event.target.closest("[data-act]"));
   });
   $("doneToggle").addEventListener("click", () => {
     state.doneOpen = !state.doneOpen;
@@ -1349,14 +1388,19 @@ function bindLists() {
     const row = document.querySelector(`#dueList .due[data-id="${CSS.escape($("headOverdue").dataset.id || "")}"]`);
     focusRow(row);
   });
+  $("writtenToggle")?.addEventListener("click", () => {
+    state.writtenOpen = !state.writtenOpen;
+    renderDue();
+    if (state.writtenOpen && travels()) [...$("writtenList").children].forEach((node, index) => node.animate([{ opacity: 0, translate: "0 -4px" }, { opacity: 1, translate: "0 0" }], { duration: 240, delay: index * 30, easing: token("--ease-out"), fill: "backwards" }));
+  });
   document.addEventListener("click", (event) => {
     const target = event.target.closest("[data-page-action]");
     if (!target || event.target.closest(".check, [data-act]")) return;
     if (target.matches("a")) event.preventDefault();
-    openPage(target.dataset.pageAction);
+    openPage(target.dataset.pageAction, target.matches("a") ? target.getAttribute("href") : undefined);
   });
   document.addEventListener("click", (event) => {
-    const row = event.target.closest("#dueList .row.is-interactive");
+    const row = event.target.closest("#dueList .row.is-interactive, #writtenList .row.is-interactive");
     if (!row || event.target.closest("a, button")) return;
     row.querySelector(".row-link")?.click();
   });
@@ -1397,6 +1441,9 @@ function bindKeys() {
     } else if (key === "x" && current?.classList.contains("task") && current.contains(event.target)) {
       event.preventDefault();
       toggleTask(current.dataset.id, { restoreFocus: true });
+    } else if ((key === "backspace" || key === "delete") && current?.classList.contains("task") && event.target === current) {
+      event.preventDefault();
+      removeTask(current.dataset.id, "delete", { refocus: true });
     } else if (key === "enter" && event.target === current) {
       event.preventDefault();
       current.querySelector(".row-link")?.click();
@@ -1415,13 +1462,14 @@ function bindEvents() {
     const detail = event.detail;
     const today = todayIso();
     const typeWords = { task: "Aufgabe", homework: "Hausaufgabe", note: "Notiz", idea: "Idee" };
-    const when = detail.date && detail.date !== today ? ` für ${shortDate(parseDate(detail.date))}` : "";
+    const date = detail.type === "homework" ? detail.date || homeworkDate(detail.subject) : detail.date;
+    const when = date && date !== today ? ` für ${shortDate(parseDate(date))}` : "";
     let id = null;
-    if (detail.type === "task" || (detail.type === "homework" && (!detail.date || detail.date === today))) {
-      id = createTask({ title: detail.title, subjectKey: detail.subject, date: detail.date, block: detail.block }).id;
+    if (detail.type === "task") {
+      id = createTask({ title: detail.title, subjectKey: detail.subject, date: detail.date, block: detail.block, notes: detail.details || "" }).id;
     } else if (detail.type === "homework") {
       id = `hw-new-${Date.now()}`;
-      const item = { id, kind: "Hausaufgabe", title: detail.title, subject: detail.subject || null, date: detail.date, block: detail.block, detail: detail.details || "", status: "offen" };
+      const item = { id, kind: "Hausaufgabe", title: detail.title, subject: detail.subject || null, date, block: detail.block, detail: detail.details || "", status: "offen" };
       state.deadlines.push(item);
       deadlineApi.create(item);
       settleLists();

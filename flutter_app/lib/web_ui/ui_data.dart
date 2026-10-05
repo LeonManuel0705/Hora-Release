@@ -431,11 +431,12 @@ class UiData {
 
   Future<List<Map<String, Object?>>> deadlines(School school) async {
     final back = isoOf(today.subtract(const Duration(days: 14)));
+    final writtenBack = isoOf(today.subtract(const Duration(days: 183)));
     final result = <Map<String, Object?>>[];
     void keep(Map<String, Object?>? view, bool homework) {
       if (view == null) return;
       final date = view['date'] as String;
-      if (date.compareTo(back) < 0) return;
+      if (date.compareTo(homework ? back : writtenBack) < 0) return;
       if (homework && view['status'] == 'abgegeben' && date.compareTo(todayIso) < 0) return;
       result.add(view);
     }

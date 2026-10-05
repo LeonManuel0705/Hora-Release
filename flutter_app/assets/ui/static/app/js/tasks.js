@@ -1,7 +1,7 @@
-import { data, esc, icon, tinte, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, relativeDay, now, minutesOf, subject, hueVar, glue, WEEKDAYS, WEEKDAYS_SHORT, storage } from "./core.js";
+import { data, esc, icon, tinte, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, relativeDay, now, minutesOf, subject, hueVar, glue, nextRepeatDate, homeworkDate, WEEKDAYS, WEEKDAYS_SHORT, storage } from "./core.js";
 import { animates, travels, flipKeyed, exitInPlace, enterInPlace, token } from "./motion.js";
 import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen } from "./shell.js";
-import { tasks as taskApi, debounced } from "./api.js";
+import { tasks as taskApi, deadlines as deadlineApi, debounced } from "./api.js";
 
 const saveText = debounced(700, (key, id, changes) => taskApi.update(id, changes));
 
@@ -15,7 +15,6 @@ const effort = (min) => {
 };
 
 const REPEAT_WORDS = { daily: "täglich", weekly: "wöchentlich", monthly: "monatlich" };
-const REPEAT_DAYS = { daily: 1, weekly: 7, monthly: 30 };
 const FILTER_WORDS = { heute: "Heute", woche: "Woche", alle: "Alle" };
 
 const state = {
@@ -42,7 +41,7 @@ function load() {
   const linked = new Set(state.tasks.map((task) => task.deadline).filter(Boolean));
   state.homework = data.deadlines
     .filter((item) => ["Hausaufgabe", "Abgabe"].includes(item.kind) && !item.pinned && !linked.has(item.id) && item.status !== "abgegeben")
-    .map((item) => ({ id: `iserv-${item.id}`, title: item.title, subject: item.subject, date: item.date, minutes: 30, source: item.origin === "iserv" ? "iserv" : "homework", synced: true, kind: item.kind, detail: item.detail, notes: "", done: false }));
+    .map((item) => ({ id: `iserv-${item.id}`, title: item.title, subject: item.subject, date: item.date, minutes: 30, source: item.origin === "iserv" ? "iserv" : "homework", synced: true, kind: item.kind, detail: item.detail, notes: item.origin === "iserv" ? "" : item.detail || "", done: false }));
 }
 
 const deadlineOf = (task) => data.deadlines.find((item) => item.id === task.deadline);
@@ -121,10 +120,10 @@ function rowHtml(task) {
       <p class="row-meta">${metaFor(task)}</p>
     </div>
     <div class="row-trailing">
-      ${task.done ? "" : `<div class="row-actions">
-        <button class="icon-button" type="button" data-act="later" aria-label="Auf morgen: ${title}" data-tip="Auf morgen">${icon("calendar-plus")}</button>
+      <div class="row-actions">
+        ${task.done ? "" : `<button class="icon-button" type="button" data-act="later" aria-label="Auf morgen: ${title}" data-tip="Auf morgen">${icon("calendar-plus")}</button>`}
         <button class="icon-button" type="button" data-act="delete" aria-label="Löschen: ${title}" data-tip="Löschen">${icon("trash-2")}</button>
-      </div>`}
+      </div>
       ${task.priority && !task.done ? `<span class="flag" data-tip="Wichtig" role="img" aria-label="Wichtig">${icon("flag")}</span>` : ""}
     </div>
   </li>`;
@@ -285,7 +284,7 @@ function toggleTask(id, { via = "keyboard" } = {}) {
     if (via === "mouse") settle.pointerInside = true;
     let follow = null;
     if (task.repeat && task.date) {
-      follow = { ...task, id: `${task.id}-${Date.now()}`, done: false, date: isoDate(addDays(parseDate(task.date), REPEAT_DAYS[task.repeat])) };
+      follow = { ...task, id: `${task.id}-${Date.now()}`, done: false, date: nextRepeatDate(task.date, task.repeat) };
       state.tasks.push(follow);
       taskApi.create(follow);
     }
@@ -357,7 +356,7 @@ function createTask(text) {
   const info = parseNote(text);
   const title = cleanTitle(text, info);
   if (!title) return;
-  const task = {
+  addTask({
     id: `new-${Date.now()}`,
     title,
     subject: info.subject,
@@ -367,9 +366,13 @@ function createTask(text) {
     source: "own",
     notes: "",
     done: false,
-  };
+  });
+}
+
+function addTask(task) {
   state.tasks.push(task);
-  taskApi.create(task);
+  if (task.synced) deadlineApi.create({ id: task.id.slice(6), kind: "Hausaufgabe", title: task.title, subject: task.subject || null, date: task.date, detail: task.detail || "" });
+  else taskApi.create(task);
   document.dispatchEvent(new CustomEvent("app:task-created", { detail: { id: task.id, title: task.title } }));
   if (!inFilter(task)) {
     state.filter = "alle";
@@ -410,6 +413,8 @@ function renderPanel() {
     ["nextweek", "Nächste Woche", isoDate(addDays(startOfDay(now()), 8 - (startOfDay(now()).getDay() || 7)))],
     ["none", "Ohne Datum", null],
   ];
+  const homework = !!task.synced;
+  if (homework) dates.pop();
   const custom = !!task.date && !dates.some(([, , value]) => value === task.date);
   panel.innerHTML = `<div class="panel-head">
       <button class="check" type="button" role="checkbox" aria-checked="${task.done}" aria-label="Erledigt: ${esc(task.title)}" data-panel-check>${icon("check")}</button>
@@ -428,13 +433,13 @@ function renderPanel() {
           <input class="date-proxy" type="date" id="panelDate" value="${esc(task.date || "")}" tabindex="-1" aria-hidden="true">
         </div>
       </div>
-      <div class="field is-inline"><span class="field-label" id="panelPrioLabel">Wichtig</span><button type="button" class="switch" role="switch" id="panelPriority" aria-checked="${!!task.priority}" aria-labelledby="panelPrioLabel"><span></span></button></div>
+      ${homework ? "" : `<div class="field is-inline"><span class="field-label" id="panelPrioLabel">Wichtig</span><button type="button" class="switch" role="switch" id="panelPriority" aria-checked="${!!task.priority}" aria-labelledby="panelPrioLabel"><span></span></button></div>
       <label class="field"><span class="field-label">Wiederholen</span><select class="field-control" id="panelRepeat">
         <option value="">Nie</option>${Object.entries(REPEAT_WORDS).map(([key, word]) => `<option value="${key}"${task.repeat === key ? " selected" : ""}>${word[0].toUpperCase()}${word.slice(1)}</option>`).join("")}
-      </select></label>
-      <label class="field"><span class="field-label">Notizen</span><textarea class="field-control" id="panelNotes" rows="3" placeholder="Seiten, Links, was du nicht vergessen willst">${esc(task.notes || "")}</textarea></label>
+      </select></label>`}
+      ${task.source === "iserv" ? "" : `<label class="field"><span class="field-label">Notizen</span><textarea class="field-control" id="panelNotes" rows="3" placeholder="Seiten, Links, was du nicht vergessen willst">${esc(task.notes || "")}</textarea></label>`}
       ${linked ? `<div class="field"><span class="field-label">Gehört zu</span><span class="field-value">${isTest(linked) ? icon("nx-test") : icon("calendar-days")}${esc(linked.kind)}: ${esc(linked.title)}, ${esc(shortDate(parseDate(linked.date)))}</span></div>` : ""}
-      ${task.source === "iserv" ? `<p class="panel-source">${icon("graduation-cap")}Aus IServ${task.detail ? `, ${esc(task.detail)}` : ""}</p>` : ""}
+      ${task.source === "iserv" ? `<p class="panel-source">${icon("graduation-cap")}Aus IServ${task.detail ? `, ${esc(task.detail)}` : ""}</p>` : homework ? `<p class="panel-source">${icon("notebook-pen")}Hausaufgabe, steht auch unter Schule</p>` : ""}
     </div>`;
 }
 
@@ -640,6 +645,9 @@ function bind() {
     } else if (key === "x" && current) {
       event.preventDefault();
       toggleTask(current.dataset.id);
+    } else if ((key === "backspace" || key === "delete") && event.target === current) {
+      event.preventDefault();
+      removeTask(current.dataset.id, "delete");
     } else if (key === "enter" && event.target === current) {
       event.preventDefault();
       openPanel(current.dataset.id);
@@ -658,10 +666,25 @@ function setFilter(filter) {
   render({ flip: true });
 }
 
+function bindNotes() {
+  window.addEventListener("app:note", (event) => {
+    const detail = event.detail;
+    if (detail.type !== "task" && detail.type !== "homework") return;
+    event.preventDefault();
+    const base = { title: detail.title, subject: detail.subject, notes: detail.details || "", done: false };
+    if (detail.type === "task") {
+      addTask({ ...base, id: `new-${Date.now()}`, date: detail.date || today(), anchor: detail.block ? `vor dem ${detail.block}. Block` : "", minutes: 20, source: "own" });
+    } else {
+      addTask({ ...base, id: `iserv-hw-new-${Date.now()}`, date: detail.date || homeworkDate(detail.subject), minutes: 30, source: "homework", synced: true, kind: "Hausaufgabe", detail: detail.details || "" });
+    }
+  });
+}
+
 export function initTasks() {
   if (!$("tasksPage")) return;
   load();
   state.tasks.push(...state.homework.map((task) => ({ ...task })));
   bind();
+  bindNotes();
   render();
 }

@@ -1,4 +1,4 @@
-import { data, flags, icon, esc, safeMarkup, root, subject, hueVar, now, addDays, startOfDay, isoDate, shortDate, clock, minutesOf, pinnedTime, platform, storage, BRAND } from "./core.js";
+import { data, flags, icon, esc, safeMarkup, root, subject, hueVar, now, addDays, startOfDay, isoDate, parseDate, shortDate, clock, minutesOf, pinnedTime, platform, storage, homeworkDate, BRAND } from "./core.js";
 import { animates, travels, rich } from "./motion.js";
 import { tasks as taskApi, deadlines as deadlineApi, notes as noteApi } from "./api.js";
 import { switchRemindersOn } from "./reminders.js";
@@ -163,8 +163,8 @@ export function pageUrl(page, href = ROUTES[page]) {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
-export function openPage(page) {
-  location.assign(ROUTES[page] ? pageUrl(page) : `/hub/${page}`);
+export function openPage(page, href) {
+  location.assign(ROUTES[page] ? pageUrl(page, href || ROUTES[page]) : `/hub/${page}`);
 }
 
 const tooltip = $("tooltip");
@@ -704,14 +704,17 @@ function saveNote(detail) {
   const words = { task: "Aufgabe", homework: "Hausaufgabe", note: "Notiz", idea: "Idee" };
   const today = isoDate(now());
   let job;
-  if (detail.type === "task" || (detail.type === "homework" && (!detail.date || detail.date === today))) {
-    job = taskApi.create({ id: `new-${Date.now()}`, title: detail.title, subject: detail.subject, date: detail.date && detail.date > today ? detail.date : null, minutes: 20, done: false });
+  let when = "";
+  if (detail.type === "task") {
+    job = taskApi.create({ id: `new-${Date.now()}`, title: detail.title, subject: detail.subject, date: detail.date && detail.date > today ? detail.date : null, minutes: 20, notes: detail.details || "", done: false });
   } else if (detail.type === "homework") {
-    job = deadlineApi.create({ id: `hw-new-${Date.now()}`, kind: "Hausaufgabe", title: detail.title, subject: detail.subject || null, date: detail.date, detail: detail.details });
+    const date = detail.date || homeworkDate(detail.subject);
+    when = ` für ${shortDate(parseDate(date))}`;
+    job = deadlineApi.create({ id: `hw-new-${Date.now()}`, kind: "Hausaufgabe", title: detail.title, subject: detail.subject || null, date, detail: detail.details });
   } else {
     job = noteApi.create({ type: detail.type, title: detail.title, details: detail.details });
   }
-  job.then(() => toast(`${words[detail.type]} angelegt: „${esc(detail.title)}“`, { icon: "check" })).catch(() => {});
+  job.then(() => toast(`${words[detail.type]}${when} angelegt: „${esc(detail.title)}“`, { icon: "check" })).catch(() => {});
 }
 
 const weatherSheet = $("weatherSheet");
