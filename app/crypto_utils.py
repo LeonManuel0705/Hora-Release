@@ -6,6 +6,7 @@ import json
 import base64
 import hashlib
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 from cryptography.fernet import Fernet
 
@@ -71,6 +72,7 @@ _SALT_PREFIX = 'ENC2:'
 _LEGACY_SALT_PREFIX = 'NEXUS2:'
 
 
+@lru_cache(maxsize=128)
 def _derive_fernet_key(secret: str, salt: bytes, iterations: int = _PBKDF2_ITERATIONS) -> bytes:
     dk = hashlib.pbkdf2_hmac('sha256', secret.encode(), salt, iterations)
     return base64.urlsafe_b64encode(dk)
