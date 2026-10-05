@@ -34,37 +34,48 @@ _LEAD = (
     r'|übernächsten?|nächsten?|kommenden?|diesen|diesem|letzten?|vergangenen?|jeden|jedem)\s+)*)'
 )
 _OF_THE_CONTENT = frozenset(('von', 'vom', 'seit', 'über', 'letzte', 'letzten', 'vergangene', 'vergangenen', 'jeden', 'jedem'))
-_DEADLINE = frozenset(('bis', 'spätestens', 'vor', 'schon', 'bereits'))
-# Words that number something: what follows them is no day and no clock. The first kind also counts at the end of a compound.
-_COUNTED = (
-    r'(?:\w*(?:blatt|aufgaben?|übung(?:en)?|kapitel|seiten?|abschnitt|lektion|folie|abbildung|tabelle|thema|material|raum|zimmer|saal'
-    r'|paragraph|artikel|ziel|schritt|phase|szene|strophe)'
-    r'|(?<![\w.])(?:nr\.?|s\.|aufg\.?|abb\.?|tab\.?|m|§|nummer|teil|version|klasse|zeilen?|vers|unit|band|punkt|ziffer|note|schnitt|stufe'
-    r'|level|grafik|diagramm|quelle|modul|absatz|station|versuch))'
+_DEADLINE = frozenset(('bis', 'spätestens', 'vor'))
+_EARLY = frozenset(('schon', 'bereits'))
+_PLAIN = 2
+# Words that number something: "Kapitel 12.10." is a chapter, no day.
+_LABEL = (
+    r'(?<![\w.])(?:nr\.?|s\.|aufg\.?|abb\.?|tab\.?|m|§|nummer|seiten?|aufgaben?|kapitel|abschnitt|teil|übung(?:en)?|lektion|blatt|raum|zimmer'
+    r'|saal|version|klasse|zeilen?|vers|unit|band|punkt|ziffer|note|schnitt|stufe|level|thema|abbildung|tabelle|material|folie|paragraph'
+    r'|artikel|ziel|schritt|szene|strophe|grafik|diagramm|modul|absatz|auf|um)'
 )
-_NOT_A_DAY_BEFORE = re.compile(rf'(?:{_COUNTED}|(?<![\w.])(?:auf|um))\s*$')
-_NOT_A_DAY_AFTER = re.compile(r'\s*(?:uhr|stunden?|std|min|minuten|seiten?|punkte?|euro|€|%|prozent)\b')
+_NOT_A_DAY_BEFORE = re.compile(rf'{_LABEL}\s*$')
+# At the end of a longer word, and for a few words of their own, it can be either: "Hausaufgabe 2.3." is a number,
+# "Hausaufgaben 12.10." a day. There only a date within the next NEAR days counts as one.
+_MAYBE_A_LABEL_BEFORE = re.compile(
+    r'(?:\w(?:blatt|aufgaben?|übung(?:en)?|kapitel|seiten?|abschnitt|lektion|folie|abbildung|tabelle|thema|material|raum|zimmer|saal'
+    r'|paragraph|artikel|ziel|schritt|phase|szene|strophe)|(?<![\w.])(?:versuch|station|phase|quelle))\s*$')
+NEAR = 21
 _LISTED = re.compile(r'\b(?:und|oder|sowie)\s*$')
 _NOT_TOMORROW_BEFORE = re.compile(
     rf'(?<!\w)(?:am|jeden|jedem|guten|gestern|heute|frühen|nächsten|das|der|den|dem|diesen|diesem|einen|einem|{_NAME})\s+$')
-_UNREAD_BEFORE = re.compile(r'\bwochen?\s+(?:am\s+)?$')
-_UNREAD_AFTER = re.compile(rf'\s*[,(–-]?\s*(?:de[nmr]\s+)?\d{{1,2}}\.\s?(?:\d|{"|".join(MONTHS)})|\s+(?:in\s+(?:der\s+)?)?\S+\s+wochen?\b')
+# Behind a weekday: a date or a count of weeks that was not understood. The weekday alone would then be the wrong day.
+_UNREAD_AFTER = re.compile(rf'\s*[,(–-]?\s*(?:de[nmr]\s+)?\d{{1,2}}\.\s?(?:\d{{1,2}}\.|(?:{"|".join(MONTHS)})\b)|\s+in\s+\S+\s+wochen?\b')
 _UNIT = (
     r'(?:tage?n?|wochen?|monate?n?|jahre?n?|stunden?|std|minuten?|min|sekunden?|euro|€|cent|%|prozent|punkte?n?|noten?|stufen?|grad|seiten?'
     r'|zeilen?|wörter|worte|meter|cm|km|kg|kilo|kilogramm|gramm|liter|ml|stück|mal|plätze?|klassen?|runden?|sätze?|aufgaben?|vokabeln?|kapitel)'
 )
 _AMOUNT_VERB = re.compile(
     r'\b(?:erhöh|senk|verbesser|verschlechter|reduzier|verringer|verlänger|verkürz|steiger|kürz|vergrößer|verkleiner|ergänz|erweiter|aufstock)\w*')
-_HAND_IN = re.compile(r'\b(?:abgeb|abzugeb|abgabe|hochlad|hochzulad|einreich|einzureich|einsend|abschick|korrigier)\w*')
+_NOT_A_DAY_AFTER = re.compile(r'\s*(?:uhr|stunden?|std|min|minuten|seiten?|punkte?|euro|€|%|prozent|km|meter|m|cm|kg|kilo|gramm|g|liter|l|grad|mal)\b')
+_HAND_IN = re.compile(r'\b(?:abgeb|abzugeb|hochlad|hochzulad|einreich|einzureich|einsend|abschick|korrigier)\w*')
+# In front of a clock only what really carries a number counts, a room does not: "Blatt 3 bis 18 Uhr", but "Proberaum 17 bis 19 Uhr".
+_NUMBERED_BEFORE = re.compile(
+    r'(?:\w*(?:blatt|aufgaben?)|(?<![\w.])(?:nr\.?|nummer|s\.|seiten?|aufg\.?|kapitel|abschnitt|teil|übung(?:en)?|lektion|unit|klasse|zeilen?|vers|punkt))'
+    r'\s*(?:\d{1,3}\s*)?$')
 _RATIO_BEFORE = re.compile(r'(?<![\w.])(?:maßstab|verhältnis|stand|spielstand|ergebnis|quote|vers|kapitel|seite|s\.|bestzeit|rekord|pace|tempo|laufzeit|dauer)\s*$')
-_NOT_A_SPAN_BEFORE = re.compile(rf'(?:{_COUNTED}|(?<![\w.])(?:vom|am|den|zum))\s*$')
-_NOT_PM_BEFORE = re.compile(rf'(?:{_COUNTED}|(?<![\w.])(?:und|oder|zwischen|bis))\s*$')
+_NOT_A_SPAN_BEFORE = re.compile(r'(?<![\w.])(?:vom|am|den|zum)\s*$')
+_NOT_PM_BEFORE = re.compile(rf'(?:{_LABEL}|(?<![\w.])(?:und|oder|zwischen|bis))\s*$')
 
 _RELATIVE = re.compile(
     rf'{_START}(?P<lead>(?:(?:bis|ab|vor|für|spätestens|noch|schon|bereits|erst|von|vom|seit)\s+)*)'
     rf'(?P<word>heute|today|übermorgen|morgen|tomorrow)(?:\s+(?P<part>{_PART}|morgen))?(?:\s+noch)?{_END}'
 )
-_WEEK = r'(?:in\s+der\s+)?(?:übernächsten?|nächsten?|kommenden?|diese[rn]?)\s+woche'
+_WEEK = r'(?:(?:in\s+)?der\s+)?(?:übernächste[rn]?|nächste[rn]?|kommende[rn]?|diese[rn]?)\s+woche'
 _WEEKDAY = re.compile(
     rf'{_START}{_LEAD}(?:(?P<week>{_WEEK})\s+(?:am\s+)?)?(?P<name>{_NAME})(?:\s+(?P<part>{_PART}|morgen))?'
     rf'(?P<range>\s+bis\s+(?:(?:zum|einschließlich)\s+)?(?P<last>{_NAME}))?'
@@ -75,7 +86,7 @@ _SHORT_DAY = re.compile(rf'(?<![\w.])(?:{"|".join(SHORT_WEEKDAYS)})(?=\.?,?\s+(?
 _NAMED_DAY = (
     rf'(?:(?P<name>{_NAME}|{"|".join(SHORT_WEEKDAYS)})\.?(?:\s*,\s*|\s*[–-]\s+|\s*(?P<open>\()\s*|\s+)(?:de[nmr]\s+)?)?'
 )
-_NAMED_AFTER = rf'(?(open)\s*\))(?:\s*(?:,\s*|\(\s*){_NAME}\s*\)?(?=\s*(?:$|[,.;!?])))?'
+_NAMED_AFTER = rf'(?(open)\s*\))(?:\s*\(\s*{_NAME}\s*\)|\s*,\s*{_NAME}(?=\s*(?:$|[,.;!?]|(?:um|ab|gegen)\b|\d)))?'
 _NUMERIC = re.compile(
     rf'(?<![\w.,:]){_LEAD}{_NAMED_DAY}(?:(?P<first>\d{{1,2}})\.\s*(?:-|–|bis)\s*)?'
     r'(?P<d>\d{1,2})\.\s?(?P<m>\d{1,2})(?P<close>\.(?P<y>\d{4}|\d{2})?)?(?![\d:])'
@@ -117,7 +128,7 @@ class Day(NamedTuple):
 
 
 class Clock(NamedTuple):
-    text: str
+    text: Optional[str]
     span: tuple
 
 
@@ -137,7 +148,7 @@ def _rank(lead):
     words = set(lead.split())
     if words & _OF_THE_CONTENT:
         return None
-    return 0 if words & _DEADLINE else 2 if 'für' in words else 1
+    return 0 if words & _DEADLINE else 1 if words & _EARLY else 3 if 'für' in words else _PLAIN
 
 
 def _dated(year, month, day):
@@ -184,7 +195,7 @@ def _weekdays(low, today):
                 span = (match.start(), match.start('range'))
                 position = match.start('range')
             else:
-                rank = 1
+                rank = _PLAIN
         if rank is None:
             continue
         index = WEEKDAYS.index(match.group('name'))
@@ -199,7 +210,7 @@ def _weekdays(low, today):
         elif weeks and ranged:
             day = today + timedelta(days=(index - today.weekday()) % 7, weeks=COUNTS.get(weeks) or int(weeks))
         else:
-            if _UNREAD_BEFORE.search(low[:span[0]]) or _UNREAD_AFTER.match(low[span[1]:]):
+            if _UNREAD_AFTER.match(low[span[1]:]):
                 continue
             day = today + timedelta(days=(index - today.weekday()) % 7 or 7)
             if any(word.startswith('übernächste') for word in words):
@@ -212,7 +223,7 @@ def _days_ahead(low, today):
     for match in _AHEAD.finditer(low):
         count = COUNTS.get(match.group('count')) or int(match.group('count'))
         days = count * (7 if match.group('unit').startswith('woche') else 1)
-        yield Day(today + timedelta(days=days), match.span(), 1, None)
+        yield Day(today + timedelta(days=days), match.span(), _PLAIN, None)
 
 
 def _numeric_days(low, today):
@@ -240,6 +251,10 @@ def _numeric_day(low, today, match, refused):
     if not led:
         if not match.group('close') or _NOT_A_DAY_BEFORE.search(before):
             return True
+        if _MAYBE_A_LABEL_BEFORE.search(before):
+            near = _written_day(today, number, int(match.group('m')), int(match.group('y')) if match.group('y') else None)
+            if not near or (near - today).days > NEAR:
+                return True
         if refused and (_LISTED.search(before) or not low[refused[0]:match.start()].strip(' ,;–-')):
             return True
     elif refused and match.group('lead').split()[:1] == ['bis'] and not low[refused[0]:match.start()].strip():
@@ -262,7 +277,7 @@ def _numeric_day(low, today, match, refused):
             return False
     if rank is None and not reaches:
         return not match.group('close')
-    return Day(day, match.span(), 1 if rank is None else rank, None)
+    return Day(day, match.span(), _PLAIN if rank is None else rank, None)
 
 
 def _month_days(low, today):
@@ -276,7 +291,7 @@ def _month_days(low, today):
             start, last = _dated(today.year, month, int(first)), _dated(today.year, month, int(match.group('d')))
             if start and last and start < today <= last:
                 continue
-        yield Day(day, match.span(), 1 if rank is None else rank, None)
+        yield Day(day, match.span(), _PLAIN if rank is None else rank, None)
 
 
 def _outermost(found):
@@ -336,7 +351,13 @@ def _time_of_day(match, part, whole=True):
     return late or groups.get('early') or groups.get('early2') or part
 
 
+def _numbers_something(low, start, end):
+    """True when the number at `start` belongs to what stands before it ("Aufgabe 3", "Seiten 12 bis 15") or to what is handed in after `end`."""
+    return bool(_NUMBERED_BEFORE.search(low[:start]) or _HAND_IN.search(low[end:]))
+
+
 def _clocks(text, low, part):
+    """Every clock time in the text. A stretch of time that is none also yields its span, as a find without a clock, so that its end is not read alone."""
     for match in _SPAN.finditer(low):
         before, lead = low[:match.start()], match.group('lead').strip()
         timed = match.group('u1') or match.group('u2') or ':' in (match.group('sep') or '', match.group('sep2') or '')
@@ -351,8 +372,12 @@ def _clocks(text, low, part):
         if _NOT_A_SPAN_BEFORE.search(before) or last > 24:
             continue
         if not lead and not match.group('u1') and match.group('sep') != ':':
-            # "Protokoll 2 bis 15 Uhr abgeben" has a number and a deadline, "Training 8 bis 10 Uhr" a stretch of time.
-            if first < 6 or not 0 < last - first <= 8 or (match.group('join').startswith('bis') and _HAND_IN.search(low)):
+            # "Protokoll 2 bis 15 Uhr abgeben" has a number and a deadline: the clock behind "bis" is found on its own below.
+            if match.group('join').startswith('bis') and _numbers_something(low, match.start(), match.end()):
+                continue
+            # "Training 8 bis 10 Uhr" is a stretch of time. What is neither stays as it is written.
+            if first >= last or _NUMBERED_BEFORE.search(before):
+                yield Clock(None, match.span())
                 continue
         yield _clock(_later(first, _time_of_day(match, part)), int(match.group('min') or 0), match.span())
 
@@ -402,9 +427,11 @@ def _clocks(text, low, part):
             hour, minute = {'halb': (hour - 1, 30), 'dreiviertel': (hour - 1, 45), 'viertel': (hour - 1, 15)}.get(
                 word, (hour - 1, 45) if word.endswith('vor') else (hour, 15))
         else:
-            # "um 5 vor 8" is a clock. In "Aufgabe 3 vor 8 Uhr" the 3 belongs to the exercise.
-            off = int(match.group('off'))
-            if not 0 < off < 30 or not (match.group('minutes') or set(match.group('lead').split()) & {'um', 'gegen', 'ab', 'bis'}):
+            # "um 5 vor 8" and "Treffen 5 vor 8 Uhr" are a clock. In "Aufgabe 3 vor 8 Uhr abgeben" the 3 belongs to the exercise.
+            off, sure = int(match.group('off')), match.group('minutes') or set(match.group('lead').split()) & {'um', 'gegen'}
+            if not 0 < off < 30 or not (sure or match.group('uhr')):
+                continue
+            if not sure and _numbers_something(low, match.start(), match.end()):
                 continue
             hour, minute = (hour - 1, 60 - off) if match.group('side') == 'vor' else (hour, off)
         yield _clock(_later(hour or 12, _time_of_day(match, part)), minute, match.span())
@@ -439,25 +466,35 @@ def find_clock(text, part=None, other_days=()):
         ours = text[:span[0]].rstrip(' ,').endswith('\x00') or text[span[1]:].lstrip(' ,').startswith('\x00')
         return ours or not _beside(text, span, other_days)
 
-    found = [item for item in _clocks(text, low, part) if item and counts(item.span)]
-    return min(_outermost(found), key=lambda item: item.span[0], default=None)
+    found = [item for item in _outermost(item for item in _clocks(text, low, part) if item) if item.text and counts(item.span)]
+    return min(found, key=lambda item: item.span[0], default=None)
 
 
-def masked(text, found):
-    """The text with the words of a find blotted out, so that nothing else is read into them or across them."""
-    if not found:
-        return text
-    start, end = found.span
-    return text[:start] + '\x00' * (end - start) + text[end:]
+def masked(text, *found):
+    """The text with the words of the finds blotted out, so that nothing else is read into them or across them."""
+    for item in found:
+        if item:
+            start, end = item.span
+            text = text[:start] + '\x00' * (end - start) + text[end:]
+    return text
+
+
+def sorted_out(found, day=None):
+    """The finds that name the day of the entry (the first one, or `day`) and those that name another day."""
+    day = day or (found[0].day if found else None)
+    return [item for item in found if item.day == day], [item for item in found if item.day != day]
+
+
+def time_of_day(found):
+    return next((item.part for item in found if item.part), None)
 
 
 def find(text, today):
     """Day, clock time and where the words of both stand: (date or None, 'HH:MM' or None, [spans])."""
-    found = days(text, today)
-    day = found[0] if found else None
-    clock = find_clock(masked(text, day), day.part if day else None, [other.span for other in found[1:]])
-    spans = sorted(item.span for item in (day, clock) if item)
-    return (day.day if day else None), (clock.text if clock else None), spans
+    ours, others = sorted_out(days(text, today))
+    clock = find_clock(masked(text, *ours), time_of_day(ours), [other.span for other in others])
+    spans = sorted(item.span for item in (*ours, clock) if item)
+    return (ours[0].day if ours else None), (clock.text if clock else None), spans
 
 
 def without(text, spans):

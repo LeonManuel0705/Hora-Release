@@ -1327,8 +1327,9 @@ _CREATE_FORMS = (
     ('remind', re.compile(r'^(?:bitte\s+)?(?:erinner(?:e|n)?\s+mich|remind\s+me)\b(?P<rest>.*)$', re.IGNORECASE | re.DOTALL)),
     ('keep', re.compile(r'^nicht\s+vergessen\s*(?P<rest>:.*)$', re.IGNORECASE | re.DOTALL)),
 )
-_QUOTED = re.compile(
-    r'"(?P<a>[^"]+)"|„(?P<b>[^“”"]+)[“”"]|“(?P<c>[^”"]+)[”"]|«(?P<d>[^»]+)»|»(?P<e>[^«]+)«|\'(?P<f>.+)\'(?!\w)', re.DOTALL)
+_QUOTED_NAME = re.compile(r'"(?P<a>[^"]+)"|„(?P<b>[^“”"]+)[“”"]|“(?P<c>[^”"]+)[”"]|«(?P<d>[^»]+)»|»(?P<e>[^«]+)«')
+# With single quotes only a title that opens after a blank counts: "Hans' Heft zu Jens' Mutter bringen" quotes nothing.
+_QUOTED = re.compile(_QUOTED_NAME.pattern + r"|(?<!\w)'(?P<f>.+)'(?!\w)", re.DOTALL)
 _NAMED_PLAIN = re.compile(r'^(?P<head>.*?)(?<!\w)(?:namens|mit\s+dem\s+titel|mit\s+titel|genannt)\s+(?P<plain>.+)$', re.IGNORECASE | re.DOTALL)
 _FILLER = re.compile(r'(?<!\w)(?:an|ein|hinzu|bitte|mal|doch|kurz|danke|namens|genannt|mit\s+(?:dem\s+)?titel)(?!\w)', re.IGNORECASE)
 _NO_WORDS = frozenset(('', 'bitte', 'mal', 'doch', 'kurz', 'danke', 'an', 'ein', 'hinzu', 'am', 'um', 'für', 'bis'))
@@ -1361,8 +1362,10 @@ _REMIND_QUESTION = re.compile(
     r'^(?:(?:nochmal|noch\s+mal|kurz|bitte|daran|dran|mal)\b[\s,]*)*(?:wie|was|warum|wieso|weshalb|wann|wo|wer|ob|welche[rsn]?)\b', re.IGNORECASE)
 _REMIND_OBJECT = re.compile(r'(?<!\w)(?:an|ans|daran|dran|dass)(?!\w)|[,:]', re.IGNORECASE)
 _REMIND_REFUSED = re.compile(r'(?<!\w)(?:nicht|nie|niemals|kein\w*|bloß)(?!\w)', re.IGNORECASE)
+# "Erinnere mich morgen, wann der Bus fährt" asks for something. "..., was zu trinken mitzunehmen" means "etwas" and asks nothing.
+_REMIND_ASKED = re.compile(r'[,:]\s*(?:wie|warum|wieso|weshalb|wann|wo|wer|ob|welche[rsn]?|was(?!\s+zu\b))\b', re.IGNORECASE)
 _REMIND_RECALL = re.compile(
-    r'(?<!\w)an\s+(?:gar\s+)?nichts(?!\w)|,\s*was\b|\b(?:was|als|wie)\s+wir\b|\bvon\s+(?:heute|gestern|morgen)\b'
+    r'(?<!\w)an\s+(?:gar\s+)?nichts(?!\w)|\b(?:was|als|wie)\s+wir\b|\bvon\s+(?:heute|gestern|morgen)\b'
     r'|(?<!\w)(?:regel|formel|unterschied|definition|bedeutung|merksatz|eselsbrücke)(?!\w)', re.IGNORECASE)
 _URGENT = re.compile(r'(?<!\w)(?:(?:wichtig|dringend)(?:e[rnms]?)?|urgent|important|asap)(?!\w)', re.IGNORECASE)
 _NOT_SO = re.compile(r'(?<!\w)(?:nicht|kein\w*|weniger|wenig)\s+(?:(?:so|ganz|sehr|allzu|besonders)\s+)?$', re.IGNORECASE)
@@ -1408,18 +1411,17 @@ def _moment(head, body):
     the title are a name ("Heute Show") and are not read.
     """
     today = _today()
-    quiet = _QUOTED.sub(lambda found: '\x01' * len(found.group()), body)
-    head_days, body_days = spoken_time.days(head, today), spoken_time.days(quiet, today)
-    first, second = next(iter(head_days), None), next(iter(body_days), None)
-    day = first or second
-    part = day.part if day else None
-    early = spoken_time.find_clock(spoken_time.masked(head, first), part, [found.span for found in head_days[1:]])
-    others = [found.span for found in (body_days if first else body_days[1:])]
-    late = None if early else spoken_time.find_clock(spoken_time.masked(quiet, None if first else second), part, others)
-    if _FILLER.sub(' ', spoken_time.without(head, [found.span for found in (first, early) if found])).strip(' .,;:!?'):
+    quiet = _QUOTED_NAME.sub(lambda found: '\x01' * len(found.group()), body)
+    first, others_first = spoken_time.sorted_out(spoken_time.days(head, today))
+    second, others_second = spoken_time.sorted_out(spoken_time.days(quiet, today), first[0].day if first else None)
+    day = next(iter(first or second), None)
+    part = spoken_time.time_of_day(first or second)
+    early = spoken_time.find_clock(spoken_time.masked(head, *first), part, [found.span for found in others_first])
+    late = None if early else spoken_time.find_clock(spoken_time.masked(quiet, *second), part, [found.span for found in others_second])
+    if _FILLER.sub(' ', spoken_time.without(head, [found.span for found in (*first, early) if found])).strip(' .,;:!?'):
         return None
-    taken = [found.span for found in (None if first else second, late) if found]
     clock = early or late
+    taken = [found.span for found in (*second, late) if found]
     return spoken_time.without(body, taken), (day.day.strftime('%Y-%m-%d') if day else None), (clock.text if clock else None)
 
 
@@ -1442,12 +1444,11 @@ def _reminder(rest):
     said = rest.strip(' ,:')
     about = _REMIND_OBJECT.search(said)
     day, clock, spans = _day_and_time(rest)
-    left = spoken_time.without(rest, spans)
-    if _REMIND_QUESTION.match(said) or _REMIND_QUESTION.match(left.strip(' ,:')):
+    if _REMIND_QUESTION.match(said) or _REMIND_ASKED.search(rest):
         return None
     if _REMIND_REFUSED.search(said[:about.start()] if about else said) or _REMIND_RECALL.search(rest):
         return None
-    return (_title_of(left, reminder=True), day, clock) if day or clock else None
+    return (_title_of(spoken_time.without(rest, spans), reminder=True), day, clock) if day or clock else None
 
 
 def _creation(message):

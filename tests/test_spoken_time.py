@@ -84,6 +84,22 @@ def read(text, today=MONDAY):
     ('Erinnerung 10 Minuten vor 8 Uhr', 'Erinnerung', None, '07:50'),
     ('Kuchen für die Party am Samstag um 15 Uhr backen bis Freitag', 'Kuchen für die Party am Samstag um 15 Uhr backen', '2026-10-09', None),
     ('Bis Freitag 18 Uhr für Montag lernen', 'für Montag lernen', '2026-10-09', '18:00'),
+    ('Zahnarzt Montag 15.30 Uhr', 'Zahnarzt', '2026-10-12', '15:30'),
+    ('Samstag 5.5 km joggen', '5.5 km joggen', '2026-10-10', None),
+    ('Ab Montag 2 Wochen Praktikum', '2 Wochen Praktikum', '2026-10-12', None),
+    ('Arzt am Mittwoch der nächsten Woche', 'Arzt', '2026-10-14', None),
+    ('Zahnarzt am 12.10., Montag um 15 Uhr', 'Zahnarzt', '2026-10-12', '15:00'),
+    ('Mathe Hausaufgaben 12.10.', 'Mathe Hausaufgaben', '2026-10-12', None),
+    ('Lernphase 12.10. bis 16.10.', 'Lernphase', '2026-10-12', None),
+    ('Praktikum 8 bis 17 Uhr', 'Praktikum', None, '08:00'),
+    ('Nachhilfe 4 bis 5 Uhr', 'Nachhilfe', None, '04:00'),
+    ('Proberaum 17 bis 19 Uhr', 'Proberaum', None, '17:00'),
+    ('Bücher abgeben 10 bis 12 Uhr', 'Bücher abgeben', None, '10:00'),
+    ('Musikraum 15-16 Uhr', 'Musikraum', None, '15:00'),
+    ('Aufgaben 1 bis 5 vor 8 Uhr abgeben', 'Aufgaben 1 bis 5 abgeben', None, '08:00'),
+    ('Seiten 12 bis 15 nach 16 Uhr lesen', 'Seiten 12 bis 15 lesen', None, '16:00'),
+    ('Treffen 5 vor 8 Uhr', 'Treffen', None, '07:55'),
+    ('Klausur ist schon am Mittwoch, bis Dienstag lernen', 'Klausur ist schon am Mittwoch, lernen', '2026-10-06', None),
 ])
 def test_the_words_for_when_are_read_and_taken_out(text, rest, day, clock):
     assert read(text) == (rest, day, clock)
@@ -139,6 +155,10 @@ def test_the_words_for_when_are_read_and_taken_out(text, rest, day, clock):
     'Video 12:30 Minuten schneiden',
     'Urlaub 12.10 und 14.10 eintragen',
     'Praktikum 12.10 bis 16.10',
+    'Kapitel 12.10. lesen',
+    'Mathe Hausaufgaben 2.3.',
+    'Versuch 3.2. auswerten',
+    'Training 22 bis 2 Uhr',
 ])
 def test_what_belongs_to_the_content_stays_where_it_is(text):
     assert read(text) == (text, None, None)
@@ -191,3 +211,15 @@ def test_every_find_lies_inside_the_text_and_none_reaches_into_another():
         assert all(0 <= start < end <= len(text) for start, end in spans)
         assert all(first[1] <= second[0] for first, second in zip(spans, spans[1:]))
         assert '\x00' not in spoken_time.without(text, spans)
+
+
+
+@pytest.mark.parametrize('today, text, day', [
+    (date(2026, 10, 5), 'Übungsblatt 4.2. bearbeiten', None),
+    (date(2027, 1, 25), 'Übungsblatt 4.2. bearbeiten', '2027-02-04'),
+    (date(2027, 1, 25), 'Übung 4.2. machen', None),
+    (date(2026, 10, 5), 'Feuerwehrübung 14.10. 18 Uhr', '2026-10-14'),
+    (date(2026, 10, 5), 'Feuerwehrübung 14.11. 18 Uhr', None),
+])
+def test_behind_a_word_that_may_number_something_only_a_near_date_is_a_day(today, text, day):
+    assert read(text, today)[1] == day
