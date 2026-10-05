@@ -175,3 +175,59 @@ def test_old_history_is_cleaned_before_the_model_sees_it(hub, monkeypatch):
     history = hub._llm_history_for_context()
     assert history[0]['content'] == 'Deadlines'
     assert 'ACTION' not in history[1]['content'] and 'create_task' not in history[1]['content']
+
+
+@pytest.fixture
+def local(hub, monkeypatch):
+    from app import assistant_service as ai
+
+    asked = []
+
+    def answer(message, system_prompt, history=None):
+        asked.append((message, system_prompt))
+        return 'Plan vom Modell'
+
+    monkeypatch.setattr(ai, 'get_active_backend', lambda: 'local')
+    monkeypatch.setattr(ai, 'chat_local', answer)
+    monkeypatch.setattr(ai, 'stream_local', lambda *args, **kwargs: iter([answer(*args, **kwargs)]))
+    return asked
+
+
+@pytest.mark.parametrize('send', [chat, stream])
+def test_a_plan_request_reaches_the_local_model_with_the_data(client, local, send):
+    from app import database as db
+
+    db.create_hub_task(title='Referat vorbereiten')
+    result = send(client, 'Kannst du mir erstmal einen Lernplan für den PB-Test geben?')
+    assert (result.get('response') or result.get('cleaned')) == 'Plan vom Modell'
+    assert len(local) == 1
+    assert 'Referat vorbereiten' in local[0][1] and 'LERNPLAN' in local[0][1]
+    assert db.get_hub_tasks('all')[0]['title'] == 'Referat vorbereiten' and len(db.get_hub_tasks('all')) == 1
+
+
+@pytest.mark.parametrize('send', [chat, stream])
+@pytest.mark.parametrize('message,expected', [('Hallo', 'Guten'), ('15% von 200', '30'), ('Offene Aufgaben', 'Aufgaben')])
+def test_plain_lookups_skip_the_local_model(client, local, send, message, expected):
+    result = send(client, message)
+    assert expected in (result.get('response') or result.get('cleaned'))
+    assert local == []
+
+
+@pytest.mark.parametrize('send', [chat, stream])
+def test_a_silent_local_model_falls_back_to_the_stored_answers(client, hub, monkeypatch, send):
+    from app import assistant_service as ai
+
+    monkeypatch.setattr(ai, 'get_active_backend', lambda: 'local')
+    monkeypatch.setattr(ai, 'chat_local', lambda *args, **kwargs: '')
+    monkeypatch.setattr(ai, 'stream_local', lambda *args, **kwargs: iter([]))
+    result = send(client, 'Erkläre mir die Photosynthese ganz genau bitte')
+    assert (result.get('response') or result.get('cleaned')).strip()
+
+
+def test_leaving_the_assistant_page_asks_for_a_release(client, hub, monkeypatch):
+    from app import assistant_service as ai
+
+    asked = []
+    monkeypatch.setattr(ai, 'release_assistant_soon', lambda: asked.append(True))
+    assert client.post('/api/hub/assistant/release').status_code == 204
+    assert asked == [True]

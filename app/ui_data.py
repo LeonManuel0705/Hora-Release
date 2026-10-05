@@ -284,6 +284,138 @@ def custom_subjects(catalog):
     return result
 
 
+def _is_clock(value):
+    return isinstance(value, str) and re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', value) is not None
+
+
+def _block_times(base, saved):
+    def valid(blocks):
+        ordered = sorted(blocks, key=lambda block: block['n'])
+        return all(
+            _is_clock(block.get('start')) and _is_clock(block.get('end')) and block['start'] < block['end']
+            and (not index or ordered[index - 1]['end'] <= block['start'])
+            for index, block in enumerate(ordered)
+        )
+
+    fresh = [dict(block) for block in base]
+    if isinstance(saved, list):
+        merged = []
+        for block in base:
+            own = next((item for item in saved if isinstance(item, dict) and item.get('n') == block['n']), None)
+            fits = own and _is_clock(own.get('start')) and _is_clock(own.get('end'))
+            merged.append({**block, 'start': own['start'], 'end': own['end']} if fits else dict(block))
+        return merged if valid(merged) else fresh
+    blocks = saved.get('blocks') if isinstance(saved, dict) and saved.get('v') == 2 else None
+    if not isinstance(blocks, list) or not blocks or len(blocks) > 8 or not all(isinstance(item, dict) and isinstance(item.get('n'), int) for item in blocks):
+        return fresh
+    ordered = sorted(blocks, key=lambda item: item['n'])
+    result = [{'n': index + 1, 'start': item.get('start'), 'end': item.get('end')} for index, item in enumerate(ordered)]
+    numbers = {item['n'] for item in blocks}
+    return result if all(index + 1 in numbers for index in range(len(result))) and valid(result) else fresh
+
+
+def effective_school(settings=None, store=None):
+    """The school data as the pages show it: the stored plan with the edits from the settings on top."""
+    settings = settings if settings is not None else (db.get_timetable_settings() or {})
+    store = store if store is not None else db.get_ui_store()
+    school = school_setup(settings)
+
+    def saved(key):
+        value = store.get(key)
+        return value if isinstance(value, dict) else {}
+
+    own_subjects = saved('app-subjects')
+    items = own_subjects.get('items') if isinstance(own_subjects.get('items'), dict) else {}
+    removed = set(own_subjects.get('removed')) if isinstance(own_subjects.get('removed'), list) else set()
+    subjects = {}
+    for key, info in school['subjects'].items():
+        own = items.get(key) if isinstance(items.get(key), dict) else {}
+        base_type = school['courses'].get(key, {}).get('type', 'GK')
+        kind = own.get('type') if own.get('type') in COURSE_TYPES else base_type
+        name = own['name'].strip()[:32] if isinstance(own.get('name'), str) else ''
+        if name or kind != base_type:
+            plain = re.sub(r'\s+(LK|GK)$', '', info['name'])
+            label = f"{name or plain}{' LK' if kind == 'LK' else ''}"
+        else:
+            label = info['name']
+        subjects[key] = {'name': label, 'type': kind, 'retired': key in removed}
+    for key, own in items.items():
+        if key in subjects or key in removed or not isinstance(own, dict) or not own.get('custom'):
+            continue
+        name = own['name'].strip()[:32] if isinstance(own.get('name'), str) else ''
+        if not name or own.get('hue') not in HUES:
+            continue
+        kind = own.get('type') if own.get('type') in COURSE_TYPES else 'GK'
+        subjects[key] = {'name': f"{name}{' LK' if kind == 'LK' else ''}", 'type': kind, 'retired': False}
+
+    teachers = saved('app-teachers').get('items')
+    teachers = teachers if isinstance(teachers, dict) else {}
+
+    def teacher_of(key, own=''):
+        chosen = teachers.get(own) if isinstance(teachers.get(own), dict) else None
+        if chosen and isinstance(chosen.get('name'), str) and chosen['name'].strip():
+            return f"{chosen.get('title') or ''} {chosen['name'].strip()}".strip()
+        for days in school['timetable'].values():
+            for entries in days.values():
+                for entry in entries:
+                    if entry['subject'] == key and entry.get('teacher'):
+                        return entry['teacher']
+        return ''
+
+    blocks = _block_times(school['blocks'], store.get('app-block-times'))
+    known = {block['n'] for block in blocks}
+
+    def active(key):
+        return key in subjects and not subjects[key]['retired']
+
+    timetable = {
+        week: {dow: [dict(entry) for entry in entries if active(entry['subject']) and entry['block'] in known] for dow, entries in days.items()}
+        for week, days in school['timetable'].items()
+    }
+    edits = store.get('app-timetable-edits')
+    for key, value in (edits.items() if isinstance(edits, dict) else ()):
+        match = re.fullmatch(r'([AB]):([1-5]):(\d{1,2})', str(key))
+        if not match or int(match.group(3)) not in known:
+            continue
+        if value is not None and not (isinstance(value, dict) and active(value.get('subject'))):
+            continue
+        week, dow, block = match.group(1), match.group(2), int(match.group(3))
+        entries = [entry for entry in timetable.setdefault(week, {}).get(dow, []) if entry['block'] != block]
+        if value:
+            own = value.get('teacher') if isinstance(value.get('teacher'), str) else ''
+            entries.append({'block': block, 'subject': value['subject'], 'room': str(value.get('room') or '').strip()[:12], 'teacher': teacher_of(value['subject'], own)})
+        timetable[week][dow] = sorted(entries, key=lambda entry: entry['block'])
+
+    reference = date.fromisoformat(school['abReference'])
+    if store.get('app-ab-swap') is True:
+        reference += timedelta(days=7)
+    return {
+        'subjects': subjects,
+        'blocks': blocks,
+        'timetable': timetable,
+        'abReference': reference.isoformat(),
+        'abWeeks': school['abWeeks'] and store.get('app-ab-weeks') is not False,
+    }
+
+
+def lessons_on(school, day):
+    if day.weekday() > 4:
+        return []
+    week = week_type(day, school['abReference'], school['abWeeks'])
+    times = {block['n']: block for block in school['blocks']}
+    result = []
+    for entry in school['timetable'].get(week, {}).get(str(day.weekday() + 1), []):
+        block = times.get(entry['block'])
+        if not block:
+            continue
+        result.append({
+            'block': entry['block'], 'start': block['start'], 'end': block['end'], 'week': week,
+            'key': entry['subject'], 'subject': school['subjects'][entry['subject']]['name'],
+            'room': entry.get('room') or '', 'teacher': entry.get('teacher') or '',
+        })
+    return result
+
+
 def lesson_block(school, subject_key, day_iso):
     if not subject_key or not day_iso:
         return None

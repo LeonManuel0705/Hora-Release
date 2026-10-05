@@ -238,3 +238,87 @@ def test_creation_intent():
     assert _detect_creation_intent('Erinnere mich morgen an den Arzttermin')
     assert not _detect_creation_intent('Erkläre mir die Ballade')
     assert not _detect_creation_intent('Wer ist Einstein?')
+
+
+# ---------- only plain lookups and clear commands skip the model ----------
+
+@pytest.mark.parametrize('message', [
+    'Kannst du mir erstmal einen Lernplan für den PB-Test geben?',
+    'Erstelle mir einen Lernplan für Mathe',
+    'Wann ist mein Mathetest?',
+    'Gib mir Tipps für die Klausur',
+    'Ich bin fertig mit Mathe, was soll ich jetzt lernen?',
+    'Wie sind meine Noten in Mathe?',
+    'Welche Hausaufgaben habe ich in Deutsch?',
+    'Hilf mir bei der Interpretation von Faust',
+    'Was ist ein Test auf Signifikanz?',
+    'Ich habe meine Hausaufgaben noch nicht gemacht',
+    'Wie bereite ich mich auf die Prüfung vor?',
+])
+def test_requests_that_need_thought_go_to_the_model(message):
+    assert not is_data_query(message)
+
+
+@pytest.mark.parametrize('message', [
+    'Hallo', 'Guten Abend', 'Was steht heute an?', 'Stundenplan morgen', 'Welche Hausaufgaben habe ich?',
+    'Noten', 'Wann ist die nächste Klausur?', 'Offene Aufgaben', 'Was kannst du?', 'Hilfe',
+    'Neue Aufgabe: Einkaufen morgen um 15 Uhr', 'Erinnere mich morgen an den Arzttermin',
+    'Erledigt: Einkaufen', 'Einkaufen erledigt',
+])
+def test_plain_lookups_and_commands_stay_fast(message):
+    assert is_data_query(message)
+
+
+@pytest.mark.parametrize('message', [
+    'Erstelle mir einen Lernplan für den PB-Test',
+    'Ich muss morgen Mathe lernen, wie fange ich an?',
+    'Kannst du mir eine Zusammenfassung erstellen?',
+])
+def test_a_request_for_help_never_creates_a_task(message):
+    assert not _detect_creation_intent(message)
+
+
+def test_the_title_of_a_created_task_drops_the_command_words():
+    from app.assistant_service import _extract_title_from_nl
+    assert _extract_title_from_nl('Erstelle eine neue Aufgabe Einkaufen morgen') == 'Einkaufen'
+    assert _extract_title_from_nl('Neue Aufgabe: Referat gliedern am Freitag') == 'Referat gliedern'
+    assert _extract_title_from_nl('Erinnere mich an den Arzttermin morgen um 15 Uhr') == 'den Arzttermin'
+    assert _extract_title_from_nl('Trag ein: Zahnarzt') == 'Zahnarzt'
+
+
+def _school_with_a_test():
+    from datetime import date, timedelta
+    soon = (date.today() + timedelta(days=3)).isoformat()
+    subjects = [{'id': 'pb', 'name': 'Politische Bildung'}, {'id': 'ma', 'name': 'Mathe'}]
+    tests = [{'id': 't1', 'subject_id': 'pb', 'title': 'Soziale Ungleichheit', 'date': soon, 'topics': 'Milieus, Gini-Koeffizient'}]
+    return subjects, [], [], tests, []
+
+
+def test_without_a_model_a_plan_request_gets_a_plan_not_the_test_list():
+    answer = offline_response('Kannst du mir einen Lernplan für den PB-Test geben?', _school_with_a_test)
+    assert answer.startswith('**Lernplan: Politische Bildung**')
+    assert 'Milieus' in answer
+    assert 'Anstehende Prüfungen' not in answer
+
+
+def test_quick_answer_is_exact_or_absent():
+    from app.assistant_service import quick_answer
+    assert '30' in quick_answer('15% von 200')
+    assert quick_answer('Kannst du mir erstmal einen Lernplan für den PB-Test geben?', _school_with_a_test) is None
+    assert 'Soziale Ungleichheit' in quick_answer('Wann ist die nächste Klausur?', _school_with_a_test)
+
+
+def test_the_model_sees_what_a_test_covers_and_how_far_away_it_is():
+    from app.assistant_service import build_context
+    context = build_context(_school_with_a_test)
+    assert 'Test: Soziale Ungleichheit [Politische Bildung]' in context
+    assert '(in 3 Tagen)' in context
+    assert 'Lernstoff: Milieus, Gini-Koeffizient' in context
+
+
+def test_grades_reach_the_model_as_points():
+    from app.assistant_service import build_context
+    subjects, homework, exams, tests, _ = _school_with_a_test()
+    grades = [{'subject_id': 'ma', 'points': 11, 'date': '2026-09-20'}]
+    context = build_context(lambda: (subjects, homework, exams, tests, grades))
+    assert 'Mathe: 11' in context

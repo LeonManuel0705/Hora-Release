@@ -1045,6 +1045,29 @@ class Server:
             proc = self._detach()
         _terminate(proc)
 
+    def touch(self):
+        with self._lock:
+            self._last_used = time.monotonic()
+
+    def release_soon(self, delay):
+        with self._lock:
+            proc = self._proc
+            asked = time.monotonic()
+        if proc is None:
+            return False
+
+        def run():
+            time.sleep(delay)
+            with self._lock:
+                if self._proc is not proc or self._active or self._last_used > asked:
+                    return
+                log.info('Assistant page closed, stopping its server')
+                self._detach()
+            _terminate(proc)
+
+        threading.Thread(target=run, name='assistant-release', daemon=True).start()
+        return True
+
     @contextlib.contextmanager
     def _use(self):
         with self._lock:

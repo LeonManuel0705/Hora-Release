@@ -6,9 +6,12 @@ AI assistant service.
 Handles LLM backends (Ollama, Claude API, offline), context building, and action execution.
 """
 
+import contextlib
 import json
 import re
 import logging
+import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -16,6 +19,7 @@ from . import database as db
 from .crypto_utils import encrypt_file, decrypt_file
 from . import brand
 from . import local_ai
+from . import ui_data
 
 import requests as http_requests
 from .paths import DATA_DIR
@@ -36,9 +40,14 @@ OLLAMA_BASE = 'http://localhost:11434'
 OLLAMA_BLOBS = Path.home() / '.ollama' / 'models' / 'blobs'
 OLLAMA_MANIFESTS = Path.home() / '.ollama' / 'models' / 'manifests' / 'registry.ollama.ai' / 'library'
 
+CLAUDE_MODEL = 'claude-sonnet-5-5'
+RELEASE_SECONDS = 60
+
 # ---- Local LLM Singleton ----
 _local_llm = None
 _local_llm_path = None
+_local_lock = threading.Lock()
+_local_state = {'active': 0, 'used': 0.0, 'watching': False}
 
 
 def _find_local_model():
@@ -111,6 +120,7 @@ def _get_local_llm():
         )
         _local_llm_path = model_path
         logging.info(f'Local LLM loaded: {model_name}')
+        _watch_local_llm()
         return _local_llm, model_name
     except ImportError:
         logging.warning('llama-cpp-python not installed')
@@ -128,8 +138,75 @@ def check_local_status():
 
 def release_local_llm():
     global _local_llm, _local_llm_path
-    _local_llm = None
-    _local_llm_path = None
+    llm, _local_llm, _local_llm_path = _local_llm, None, None
+    close = getattr(llm, 'close', None)
+    if callable(close):
+        with contextlib.suppress(Exception):
+            close()
+
+
+@contextlib.contextmanager
+def _local_in_use():
+    with _local_lock:
+        _local_state['active'] += 1
+    try:
+        yield
+    finally:
+        with _local_lock:
+            _local_state['active'] -= 1
+            _local_state['used'] = time.monotonic()
+
+
+def _release_idle_local_llm(idle_for):
+    with _local_lock:
+        if _local_llm is None or _local_state['active'] or time.monotonic() - _local_state['used'] < idle_for:
+            return False
+        release_local_llm()
+        return True
+
+
+def _watch_local_llm():
+    with _local_lock:
+        _local_state['used'] = time.monotonic()
+        if _local_state['watching']:
+            return
+        _local_state['watching'] = True
+
+    def run():
+        while True:
+            time.sleep(30)
+            if _release_idle_local_llm(local_ai.SLEEP_SECONDS):
+                logging.info('Local LLM idle, released from memory')
+            with _local_lock:
+                if _local_llm is None:
+                    _local_state['watching'] = False
+                    return
+
+    threading.Thread(target=run, name='assistant-local-idle', daemon=True).start()
+
+
+def keep_assistant():
+    """The assistant page is open again: a release that was asked for no longer applies."""
+    with _local_lock:
+        _local_state['used'] = time.monotonic()
+    local_ai.server.touch()
+
+
+def release_assistant_soon(delay=RELEASE_SECONDS):
+    """Frees the model a little after the assistant page was left, unless it is used again."""
+    asked = time.monotonic()
+    local_ai.server.release_soon(delay)
+
+    def run():
+        time.sleep(delay)
+        with _local_lock:
+            if _local_llm is None or _local_state['active'] or _local_state['used'] > asked:
+                return
+            release_local_llm()
+        logging.info('Assistant page closed, local LLM released from memory')
+
+    if _local_llm is not None:
+        threading.Thread(target=run, name='assistant-local-release', daemon=True).start()
 
 TOOL_SCHEMAS = [
     {
@@ -198,7 +275,7 @@ def load_config():
         'claude_api_key': '',
         'preferred_backend': 'auto',
         'ollama_model': 'llama3.2:1b',
-        'claude_model': 'claude-sonnet-4-20250514',
+        'claude_model': CLAUDE_MODEL,
     }
 
 
@@ -294,7 +371,7 @@ def get_status():
     if backend == 'ollama':
         model = config.get('ollama_model', 'llama3.2:1b')
     elif backend == 'claude':
-        model = config.get('claude_model', 'claude-sonnet-4-20250514')
+        model = config.get('claude_model', CLAUDE_MODEL)
     elif backend == 'local':
         model = check_local_status().get('model', 'local')
     return {
@@ -349,53 +426,144 @@ def _in_days(days):
     return f'vor {-days} Tagen'
 
 
-def build_context(load_school_fn, message=None):
+def _school_view():
+    try:
+        return ui_data.effective_school()
+    except Exception as ex:
+        logging.debug(f'School view error: {ex}')
+        return None
+
+
+def _subject_names(school, subjects):
+    names = {s.get('id', s.get('name', '')): s.get('name', str(s.get('id', ''))) for s in subjects}
+    if school:
+        names.update({key: info['name'] for key, info in school['subjects'].items()})
+    return names
+
+
+def _points(grade):
+    for key in ('points', 'grade_value', 'value'):
+        value = grade.get(key)
+        if isinstance(value, (int, float)):
+            return value
+    return None
+
+
+def _when(date_str):
+    try:
+        day = datetime.strptime(date_str[:10], '%Y-%m-%d').date()
+    except Exception:
+        return date_str
+    return f'{DAY_NAMES_DE[day.weekday()]}, {day.strftime("%d.%m.%Y")} ({_in_days((day - datetime.now().date()).days)})'
+
+
+def _exam_slot(item, school):
+    try:
+        day = datetime.strptime(item['date'][:10], '%Y-%m-%d').date()
+    except Exception:
+        return ''
+    lesson = next((entry for entry in ui_data.lessons_on(school, day) if entry['key'] == item.get('subject_id')), None) if school else None
+    if lesson:
+        return f', {lesson["block"]}. Block ab {lesson["start"]} Uhr'
+    return f', {item["time"]} Uhr' if item.get('time') else ''
+
+
+def _exam_line(kind, item, names, school=None):
+    subject = names.get(item.get('subject_id', ''), '')
+    line = f'  - {kind}: {item.get("title") or kind}{" [" + subject + "]" if subject else ""} am {_when(item["date"])}{_exam_slot(item, school)}'
+    topics = str(item.get('topics') or '').strip()
+    return f'{line}. Lernstoff: {topics[:400]}' if topics else line
+
+
+_PLAN_REQUEST = re.compile(r'lernplan|lern\w*\s*plan|vorbereit|wie\s+(?:soll\s+ich|lerne\s+ich)|lernen\s+f[üu]r', re.IGNORECASE)
+
+
+def _plan_brief(message, names, exams, tests, homework, follow_up=False):
+    """Fixed dates for a study plan, so a small model does not have to count days itself."""
+    if not message:
+        return ''
+    named = _find_subject(message, names) or re.search(r'\b(?:test|klausur|prüfung)', message, re.IGNORECASE)
+    if not _PLAN_REQUEST.search(message) and not (follow_up and named):
+        return ''
+    today = datetime.now().date()
+    upcoming = []
+    for kind, items in (('Klausur', exams), ('Test', tests)):
+        for item in items:
+            try:
+                day = datetime.strptime(item.get('date', '')[:10], '%Y-%m-%d').date()
+            except ValueError:
+                continue
+            if day >= today:
+                upcoming.append((day, kind, item))
+    if not upcoming:
+        return ''
+    upcoming.sort(key=lambda entry: entry[0])
+    key = _find_subject(message, names)
+    chosen = next((entry for entry in upcoming if entry[2].get('subject_id') == key), None) if key else upcoming[0]
+    if chosen is None:
+        return ''
+    day, kind, item = chosen
+    days = [today + timedelta(days=offset) for offset in range((day - today).days)]
+    subject = names.get(item.get('subject_id', ''), '')
+    lines = [
+        '--- Für den Lernplan ---',
+        f'{kind}: {item.get("title") or kind}{" [" + subject + "]" if subject else ""} am {DAY_NAMES_DE[day.weekday()]}, {day.strftime("%d.%m.%Y")}.',
+    ]
+    if not days:
+        lines.append('Der Termin ist heute. Es bleibt nur eine kurze Wiederholung vor dem Termin.')
+    else:
+        shown = days if len(days) <= 14 else days[-10:]
+        names_of = [f'{DAY_NAMES_DE[entry.weekday()]}, {entry.strftime("%d.%m.")}' + (' (heute)' if entry == today else '') for entry in shown]
+        lines.append('Lerntage, genau diese und kein Tag danach: ' + '; '.join(names_of) + '.')
+        if len(days) > len(shown):
+            lines.append('Davor genügt pro Woche eine kurze Einheit zum Einlesen.')
+    topics = str(item.get('topics') or '').strip()
+    if topics:
+        lines.append(f'Lernstoff: {topics[:400]}')
+    last = day.strftime('%Y-%m-%d')
+    busy = [f'{other_kind} {names.get(other.get("subject_id", ""), "") or other.get("title", "")} am {other_day.strftime("%d.%m.")}' for other_day, other_kind, other in upcoming if other is not item and other_day <= day]
+    busy += [f'Hausaufgabe {entry.get("title", "")} bis {entry["due_date"][8:10]}.{entry["due_date"][5:7]}.' for entry in homework if not entry.get('completed') and today.strftime('%Y-%m-%d') <= str(entry.get('due_date') or '') <= last]
+    if busy:
+        lines.append('In dieser Zeit außerdem: ' + '; '.join(busy[:6]) + '.')
+    return '\n'.join(lines)
+
+
+def build_context(load_school_fn, message=None, history=None):
     now = datetime.now()
     today = now.strftime('%Y-%m-%d')
     weekday = now.weekday()
+    school = _school_view()
 
     lines = [
-        f'=== {brand.NAME.upper()} KONTEXT ===',
+        f'=== ANGABEN AUS {brand.NAME.upper()} ===',
         f'Datum: {DAY_NAMES_DE[weekday]}, {now.strftime("%d.%m.%Y")} ({now.strftime("%H:%M")} Uhr)',
         '',
     ]
+    brief = ''
 
-    # Timetable
-    try:
-        settings = db.get_timetable_settings()
-        has_ab = settings.get('has_ab_weeks', True) if settings else True
-        ref_date = settings.get('reference_date') if settings else None
-
-        week_type = 'both'
-        if has_ab and ref_date:
-            try:
-                ref = datetime.strptime(ref_date, '%Y-%m-%d')
-                diff_weeks = abs((now - ref).days) // 7
-                week_type = 'A' if diff_weeks % 2 == 0 else 'B'
-            except Exception:
-                pass
-
-        db_day = _weekday_to_db_day(weekday)
-        entries = db.get_timetable_entries(day=db_day) if db_day else []
-        if week_type != 'both':
-            entries = [e for e in entries if e.get('week', 'both') in ('both', week_type)]
-        periods = db.get_timetable_periods()
-        period_map = {p['period_number']: p for p in periods}
-
-        if entries:
-            lines.append(f'--- Stundenplan ({DAY_NAMES_DE[weekday]}, Woche {week_type if week_type != "both" else ""}) ---')
-            entries.sort(key=lambda e: e.get('block', 0))
-            for e in entries:
-                block = e.get('block', 0)
-                p = period_map.get(block, {})
-                time_str = f'{p.get("start_time", "?")} - {p.get("end_time", "?")}' if p else f'Block {block}'
-                room = f', Raum {e["room"]}' if e.get('room') else ''
-                teacher = f', {e["teacher"]}' if e.get('teacher') else ''
-                subject_type = f' ({e["subject_type"]})' if e.get('subject_type') else ''
-                lines.append(f'  Block {block} ({time_str}): {e.get("subject", "?")}{subject_type}{room}{teacher}')
-            lines.append('')
-    except Exception as ex:
-        logging.debug(f'Timetable context error: {ex}')
+    if school:
+        try:
+            lessons = ui_data.lessons_on(school, now.date())
+            if lessons:
+                week = f', {lessons[0]["week"]}-Woche' if school['abWeeks'] else ''
+                lines.append(f'--- Stundenplan heute ({DAY_NAMES_DE[weekday]}{week}) ---')
+                for lesson in lessons:
+                    room = f', Raum {lesson["room"]}' if lesson['room'] else ''
+                    teacher = f', {lesson["teacher"]}' if lesson['teacher'] else ''
+                    lines.append(f'  Block {lesson["block"]} ({lesson["start"]} - {lesson["end"]}): {lesson["subject"]}{room}{teacher}')
+                lines.append('')
+            days = []
+            for offset in range(1, 8):
+                day = now.date() + timedelta(days=offset)
+                ahead = ui_data.lessons_on(school, day)
+                if ahead:
+                    days.append(f'  {DAY_NAMES_DE[day.weekday()]}, {day.strftime("%d.%m.")}: ' + ', '.join(f'{lesson["subject"]} ({lesson["start"]})' for lesson in ahead))
+            if days:
+                lines.append('--- Unterricht in den nächsten 7 Tagen ---')
+                lines.extend(days)
+                lines.append('')
+        except Exception as ex:
+            logging.debug(f'Timetable context error: {ex}')
 
     # Tasks
     try:
@@ -405,7 +573,7 @@ def build_context(load_school_fn, message=None):
             lines.append(f'--- Offene Aufgaben ({len(open_tasks)}) ---')
             for t in open_tasks:
                 due = f' [Fällig: {_format_date_de(t["due_date"])}]' if t.get('due_date') else ''
-                prio = f', Priorität: {t["priority"]}' if t.get('priority') else ''
+                prio = ', wichtig' if t.get('priority') == 'high' else ''
                 lines.append(f'  - {t["title"]}{due}{prio}')
             lines.append('')
     except Exception:
@@ -414,48 +582,38 @@ def build_context(load_school_fn, message=None):
     # School data
     try:
         subjects, homework, exams, tests, grades = load_school_fn()
-        subj_map = {s.get('id', s.get('name', '')): s.get('name', str(s.get('id', ''))) for s in subjects}
+        subj_map = _subject_names(school, subjects)
 
-        open_hw = [h for h in homework if not h.get('completed')][:10]
+        open_hw = sorted([h for h in homework if not h.get('completed')], key=lambda h: h.get('due_date') or '9999')[:10]
         if open_hw:
             lines.append(f'--- Hausaufgaben ({len(open_hw)} offen) ---')
             for h in open_hw:
                 subj_name = subj_map.get(h.get('subject_id', ''), '')
                 subj_str = f' [{subj_name}]' if subj_name else ''
-                due = f' Fällig: {_format_date_de(h["due_date"])}' if h.get('due_date') else ''
+                due = f', fällig {_when(h["due_date"])}' if h.get('due_date') else ''
                 lines.append(f'  - {h["title"]}{subj_str}{due}')
             lines.append('')
 
-        upcoming_exams = sorted(
-            [e for e in exams if e.get('date', '') >= today],
-            key=lambda e: e.get('date', '')
-        )[:5]
-        if upcoming_exams:
-            lines.append('--- Klausuren ---')
-            for e in upcoming_exams:
-                subj_name = subj_map.get(e.get('subject_id', ''), '')
-                lines.append(f'  - {e.get("title", "Klausur")} [{subj_name}] am {_format_date_de(e["date"])}')
+        upcoming = sorted(
+            [('Klausur', e) for e in exams if e.get('date', '') >= today] + [('Test', t) for t in tests if t.get('date', '') >= today],
+            key=lambda pair: pair[1].get('date', '')
+        )[:8]
+        if upcoming:
+            lines.append('--- Anstehende Tests und Klausuren ---')
+            lines.extend(_exam_line(kind, item, subj_map, school) for kind, item in upcoming)
             lines.append('')
 
-        upcoming_tests = sorted(
-            [t for t in tests if t.get('date', '') >= today],
-            key=lambda t: t.get('date', '')
-        )[:5]
-        if upcoming_tests:
-            lines.append('--- Tests ---')
-            for t in upcoming_tests:
-                subj_name = subj_map.get(t.get('subject_id', ''), '')
-                lines.append(f'  - {t.get("title", "Test")} [{subj_name}] am {_format_date_de(t["date"])}')
-            lines.append('')
+        follow_up = any(_PLAN_REQUEST.search(str(turn.get('content') or '')) for turn in (history or [])[-2:])
+        brief = _plan_brief(message, subj_map, exams, tests, homework, follow_up)
 
-        if grades:
-            recent = sorted(grades, key=lambda g: g.get('date', ''), reverse=True)[:10]
-            if recent:
-                lines.append('--- Letzte Noten ---')
-                for g in recent:
-                    subj_name = subj_map.get(g.get('subject_id', ''), '')
-                    lines.append(f'  - {subj_name}: {g.get("grade_value", "?")} ({_format_date_de(g.get("date", ""))})')
-                lines.append('')
+        scored = [g for g in grades if _points(g) is not None]
+        if scored:
+            recent = sorted(scored, key=lambda g: g.get('date', ''), reverse=True)[:10]
+            lines.append('--- Letzte Noten (Punkte von 0 bis 15) ---')
+            for g in recent:
+                subj_name = subj_map.get(g.get('subject_id', ''), '')
+                lines.append(f'  - {subj_name}: {_points(g):g} ({_format_date_de(g.get("date", ""))})')
+            lines.append('')
     except Exception as ex:
         logging.debug(f'School context error: {ex}')
 
@@ -491,6 +649,9 @@ def build_context(load_school_fn, message=None):
                 lines.append(subj_ctx)
         except Exception:
             pass
+
+    if brief:
+        lines.append(brief)
 
     return '\n'.join(lines)
 
@@ -553,7 +714,7 @@ def _detect_subject_context(message, subjects):
             matched_subject = s
             break
 
-    ctx = f'\n--- Fach-Kontext: {detected.capitalize()} ---\n'
+    ctx = f'\n--- Zum Fach {detected.capitalize()} ---\n'
     if matched_subject:
         ctx += f'Eingetragenes Fach: {matched_subject.get("name", "")}'
         if matched_subject.get('teacher'):
@@ -584,13 +745,27 @@ REGELN:
 - Antworte IMMER auf Deutsch, freundlich und strukturiert
 - Bei Rechenaufgaben: zeige den Lösungsweg Schritt für Schritt
 - Bei Textaufgaben: erkläre die Methodik und gib Beispiele
-- Beziehe dich auf den {brand.NAME}-Kontext wenn relevant (Noten, Aufgaben, etc.)
+- Nutze die Angaben unten (Stundenplan, Aufgaben, Tests, Noten), wenn sie zur Frage passen
 - Formatiere übersichtlich mit **Fett** für Wichtiges und Aufzählungen
+- Sprich über diese Angaben so, als wüsstest du sie einfach. Schreibe nie „laut den Angaben", „im Kontext" oder „laut Vorgabe" und zitiere keine Überschriften von unten
+- Beantworte genau das, was gefragt ist. Wiederhole nicht ungefragt alle Termine
+- Nenne Uhrzeiten, Räume und Daten nur, wenn sie unten stehen. Rate nichts dazu
+
+LERNPLAN:
+Wenn der Nutzer einen Lernplan möchte, schreibe ihn sofort und konkret:
+- Nimm den Test oder die Klausur, um die es geht. Kürzel wie „PB" meinen das Fach mit diesen Anfangsbuchstaben (PB = Politische Bildung)
+- Stehen unten „Lerntage", dann plane genau diese Tage und keinen Tag danach, ohne das zu erwähnen
+- Sonst plane Tag für Tag von heute bis zum Tag vor dem Termin, mit Wochentag und Datum
+- Jeder Tag bekommt 1 bis 2 Einheiten mit Dauer (25 bis 45 Minuten) und einem klaren Inhalt aus Titel und Lernstoff des Tests
+- Baue Wiederholen und Selbsttest ein, am letzten Lerntag höchstens 30 Minuten Wiederholung
+- Fang direkt mit dem ersten Tag an, kein Schlusssatz über den Plan
+- Achte auf andere Tests, Hausaufgaben und volle Schultage in dieser Zeit
+- Keine allgemeinen Lerntipps, keine Rückfragen, kein Aufzählen anderer Termine
 - Halte Antworten fokussiert; für Mathe-Analysen, Zusammenfassungen, Interpretationen etc. darf die Antwort so lang sein wie nötig
 - Für Mathe nutze LaTeX mit $...$ (inline) oder $$...$$ (Block): z.B. $f(x) = 2e^x - 2$, $$\\lim_{{x \\to \\infty}} f(x)$$
 
 FAKTEN-EHRLICHKEIT (sehr wichtig!):
-Der {brand.NAME}-Kontext unten kann einen Block "RECHERCHE (automatisch von Wikipedia…)" enthalten. Wenn ja:
+Unten kann ein Block "RECHERCHE (automatisch von Wikipedia…)" stehen. Wenn ja:
 → Schreibe eine VOLLSTÄNDIGE, ausführliche Antwort (mind. 200–400 Wörter bei Personen/Themen) direkt aus dem Recherche-Block.
 → Strukturiere die Antwort sinnvoll: Einleitung, Leben/Karriere chronologisch, wichtige Werke/Leistungen, Bedeutung. Nutze **Fett** und Listen.
 → Paraphrasiere die Fakten, erfinde NICHTS dazu (besonders keine Daten/Zahlen die nicht im Block stehen).
@@ -648,7 +823,7 @@ SCHÜLER-INFO:
 
 def _build_local_messages(message, system_prompt, history=None):
     messages = []
-    messages.append({'role': 'user', 'content': f'[Kontext und Anweisungen]\n{system_prompt}\n\nBestätige kurz.'})
+    messages.append({'role': 'user', 'content': f'[Anweisungen]\n{system_prompt}\n\nBestätige kurz.'})
     messages.append({'role': 'assistant', 'content': f'Verstanden. Ich bin der {brand.NAME} Assistent und helfe dir gerne.'})
     if history:
         messages.extend(history[-4:])
@@ -673,23 +848,22 @@ def chat_local(message, system_prompt, history=None):
             logging.error(f'Local assistant server error: {type(e).__name__}')
             if not local_ai.llama_cpp_available():
                 return ''
-    llm, model_name = _get_local_llm()
-    if not llm:
-        return ''
-
     messages = _build_local_messages(message, system_prompt, history)
-
-    try:
-        output = llm.create_chat_completion(
-            messages=messages,
-            max_tokens=4096,
-            temperature=0.7,
-            top_p=0.9,
-        )
-        return output['choices'][0]['message']['content']
-    except Exception as e:
-        logging.error(f'Local LLM error: {e}')
-        return ''
+    with _local_in_use():
+        llm, model_name = _get_local_llm()
+        if not llm:
+            return ''
+        try:
+            output = llm.create_chat_completion(
+                messages=messages,
+                max_tokens=4096,
+                temperature=0.7,
+                top_p=0.9,
+            )
+            return output['choices'][0]['message']['content']
+        except Exception as e:
+            logging.error(f'Local LLM error: {e}')
+            return ''
 
 
 def stream_local(message, system_prompt, history=None):
@@ -705,26 +879,25 @@ def stream_local(message, system_prompt, history=None):
             logging.error(f'Local assistant server error: {type(e).__name__}')
             if answered or not local_ai.llama_cpp_available():
                 return
-    llm, model_name = _get_local_llm()
-    if not llm:
-        return
-
     messages = _build_local_messages(message, system_prompt, history)
-
-    try:
-        for chunk in llm.create_chat_completion(
-            messages=messages,
-            max_tokens=4096,
-            temperature=0.7,
-            top_p=0.9,
-            stream=True,
-        ):
-            delta = chunk['choices'][0].get('delta', {})
-            content = delta.get('content', '')
-            if content:
-                yield content
-    except Exception as e:
-        logging.error(f'Local LLM stream error: {e}')
+    with _local_in_use():
+        llm, model_name = _get_local_llm()
+        if not llm:
+            return
+        try:
+            for chunk in llm.create_chat_completion(
+                messages=messages,
+                max_tokens=4096,
+                temperature=0.7,
+                top_p=0.9,
+                stream=True,
+            ):
+                delta = chunk['choices'][0].get('delta', {})
+                content = delta.get('content', '')
+                if content:
+                    yield content
+        except Exception as e:
+            logging.error(f'Local LLM stream error: {e}')
 
 def chat_ollama(message, system_prompt, model, history=None):
     messages = [{'role': 'system', 'content': system_prompt}]
@@ -781,7 +954,7 @@ def chat_claude(message, system_prompt, history=None, tools=None):
     messages.append({'role': 'user', 'content': message})
 
     kwargs = {
-        'model': config.get('claude_model', 'claude-sonnet-4-20250514'),
+        'model': config.get('claude_model', CLAUDE_MODEL),
         'max_tokens': 8192,
         'system': system_prompt,
         'messages': messages,
@@ -813,7 +986,7 @@ def stream_claude(message, system_prompt, history=None):
     messages.append({'role': 'user', 'content': message})
 
     with client.messages.stream(
-        model=config.get('claude_model', 'claude-sonnet-4-20250514'),
+        model=config.get('claude_model', CLAUDE_MODEL),
         max_tokens=8192,
         system=system_prompt,
         messages=messages,
@@ -1160,22 +1333,34 @@ def _parse_time_nl(text):
     return None
 
 
+_CREATE_OBJECT = r'(?:aufgabe|task|todo|to-do|termin|event|erinnerung|reminder)'
+_CREATE_COMMAND = re.compile(
+    r'^\s*(?:bitte\s+)?(?:'
+    rf'(?:erstell\w*|leg\w*|mach\w*|notier\w*|speicher\w*|create|add|neue[rsn]?)\b[^.?!]{{0,24}}?\b{_CREATE_OBJECT}\b'
+    rf'|{_CREATE_OBJECT}\s*:'
+    r'|trag\w*\s+(?:bitte\s+)?ein\b'
+    r'|erinner\w*\s+mich\b'
+    r'|remind\s+me\b'
+    r'|nicht\s+vergessen\s*:'
+    r')',
+    re.IGNORECASE,
+)
+_CREATE_PREFIX = re.compile(
+    r'^\s*(?:bitte\s+)?(?:'
+    rf'(?:erstell\w*|leg\w*|mach\w*|notier\w*|speicher\w*|create|add)?\s*(?:mir\s+)?(?:bitte\s+)?(?:(?:eine?n?|neue[rsn]?|a|new)\s+)*{_CREATE_OBJECT}\b(?:\s+an\b)?\s*:?'
+    r'|trag\w*\s+(?:bitte\s+)?ein\s*:?'
+    r'|erinner\w*\s+mich\s+(?:bitte\s+)?(?:daran\s*,?\s*|an\s+)?'
+    r'|remind\s+me\s+(?:to\s+|of\s+)?'
+    r'|nicht\s+vergessen\s*:'
+    r')\s*',
+    re.IGNORECASE,
+)
+
+
 def _extract_title_from_nl(text):
     """Extract the task/event title from a natural language creation request."""
-    t = text.strip()
-
-    # Remove common prefixes
-    prefixes = [
-        r'^(erstell|erstelle|create|add|neue?s?)\s+(eine?\s+)?(aufgabe|task|termin|event|erinnerung|reminder)\s*:?\s*',
-        r'^(erinnere?\s+mich\s+(an\s+)?)',
-        r'^(ich\s+muss\s+)',
-        r'^(task|aufgabe|termin)\s*:?\s*',
-        r'^(trag\s+ein\s*:?\s*)',
-        r'^(add\s+)',
-    ]
-    title = t
-    for prefix in prefixes:
-        title = re.sub(prefix, '', title, flags=re.IGNORECASE).strip()
+    title = _CREATE_PREFIX.sub('', text.strip(), count=1).strip()
+    title = re.sub(r'^(ich\s+muss\s+)', '', title, flags=re.IGNORECASE).strip()
 
     # Remove date/time suffixes
     suffixes = [
@@ -1207,15 +1392,7 @@ def _kw_match(msg, keywords, word_boundary=False):
 
 
 def _detect_creation_intent(message):
-    msg = message.lower().strip()
-    creation_keywords = [
-        'erstell', 'erstelle', 'create', 'neue aufgabe', 'neuer termin',
-        'erinnere mich', 'remind me', 'trag ein', 'ich muss', 'nicht vergessen',
-        'aufgabe:', 'task:', 'termin:', 'todo:',
-    ]
-    if any(kw in msg for kw in creation_keywords):
-        return True
-    return bool(re.search(r'(?<!\w)add(?!\w)', msg))
+    return bool(_CREATE_COMMAND.match(message))
 
 
 def try_create_from_nl(message, load_school_fn=None, save_school_fn=None):
@@ -1256,49 +1433,75 @@ def try_create_from_nl(message, load_school_fn=None, save_school_fn=None):
     return True, '\n'.join(parts)
 
 
-def is_data_query(message):
-    msg = message.lower().strip()
+_LOOKUP_WORDS = frozenset((
+    'was wann wie welche welcher welches wo wieviel wieviele viel viele habe hab hat haben ich du mir mich mein meine meinen meiner meinem '
+    'dein deine ist sind steht stehen stand an am im in für fuer der die das den dem des ein eine einen es gibt gibts zeig zeige zeigen '
+    'liste auf alle allen alles offen offene offenen noch denn bitte mal kurz heute morgen übermorgen gestern diese dieser diesem dieses '
+    'nächste nächsten nächster nächstes naechste woche tag tage jetzt gerade aktuell aktuelle aktuellen und so zu zum zur bis von vom mit '
+    'aus los ok okay danke guten abend sieht muss kannst machen tun erledigen '
+    'montag dienstag mittwoch donnerstag freitag samstag sonntag '
+    'hallo hi hey moin servus '
+    'stundenplan unterricht fächer stunden schule tagesübersicht tagesplan überblick übersicht wochenübersicht wochenplan '
+    'aufgabe aufgaben tasks task todo todos überfällig überfällige ueberfaellig '
+    'hausaufgabe hausaufgaben homework ha klausur klausuren prüfung prüfungen test tests exam exams '
+    'note noten durchschnitt schnitt notenübersicht punkte '
+    'deadline deadlines frist fristen countdown statistik stats produktivität pomodoro lernzeit training workout review reviews '
+    'hilfe help funktionen befehle'
+).split())
+_LOOKUP_PATTERNS = (
+    r'\b(?:hallo|hi|hey|moin|servus)\b', r'\bguten\s+(?:morgen|tag|abend)\b',
+    r'\bwas\s+steht\b.*\ban\b', r'\bwas\s+(?:habe?|muss)\s+ich\b', r'\bmein\s+tag\b', r'\bwas\s+kannst\s+du\b',
+    r'\b(?:tagesübersicht|tagesplan|überblick|übersicht|wochenübersicht|wochenplan)\b', r'\bdiese\s+woche\b',
+    r'\b(?:stundenplan|unterricht)\b', r'\bwelche\s+(?:fächer|stunden)\b',
+    r'\b(?:aufgaben?|tasks?|todos?)\b', r'\b(?:überfällige?|ueberfaellig)\b',
+    r'\b(?:hausaufgaben?|homework)\b', r'\b(?:klausur|klausuren|prüfung|prüfungen|tests?|exams?)\b',
+    r'\b(?:noten?|durchschnitt|schnitt|notenübersicht)\b',
+    r'\b(?:deadlines?|frist|fristen|countdown|statistik|stats|produktivität|pomodoro|lernzeit|training|workout|reviews?)\b',
+    r'\b(?:hilfe|help|funktionen|befehle)\b',
+)
+_LOOKUP = re.compile('|'.join(_LOOKUP_PATTERNS))
+_DONE_WORDS = r'(?:erledigt|fertig|done|abhaken|geschafft|abgehakt)'
+_DONE_COMMAND = re.compile(
+    rf'^\s*(?:(?:aufgabe|task|hausaufgabe|ha)\s+)?{_DONE_WORDS}\b\s*:?'
+    rf'|^[^?]*\S\s+{_DONE_WORDS}\s*[.!]?\s*$',
+    re.IGNORECASE,
+)
 
+
+def _is_done_command(message):
+    text = message.strip()
+    return len(text.split()) <= 9 and '?' not in text and bool(_DONE_COMMAND.search(text))
+
+
+def is_data_query(message):
+    """True only for requests the app answers exactly without a model: a plain lookup or a clear command.
+
+    Anything that asks for more than the stored data (a plan, an explanation,
+    a subject, a specific test) contains words outside the small lookup
+    vocabulary and goes to the language model, which gets the same data as
+    context.
+    """
+    msg = message.lower().strip()
     if len(msg) > 400:
         return False
-    if re.search(r'fasse\b[\s\S]+\bzusammen', msg):
+    if _detect_creation_intent(message) or _is_done_command(message):
+        return True
+    words = re.findall(r'[a-zäöüß]+', msg)
+    if not words or len(words) > 10 or any(word not in _LOOKUP_WORDS for word in words):
         return False
+    return bool(_LOOKUP.search(msg))
 
-    substring_patterns = [
-        'was steht an', 'tagesübersicht', 'mein tag', 'tagesplan',
-        'diese woche', 'wochenübersicht',
-        'stundenplan', 'unterricht', 'welche fächer', 'welche stunden',
-        'offene aufgaben', 'tasks', 'todo',
-        'überfällig', 'overdue',
-        'hausaufgabe', 'homework',
-        'klausur', 'prüfung',
-        'noten', 'durchschnitt', 'notenanalyse',
-        'karteikarte', 'flashcard',
-        'deadline', 'countdown',
-        'produktivität', 'statistik',
-        'training', 'pomodoro',
-        'motivation', 'gestresst', 'keine lust',
-        'vorschlag', 'empfehlung',
-        'erledigt', 'fertig', 'abhaken',
-        'ha erledigt', 'ha fertig',
-        'lernplan',
-        'notentipps', 'noten verbessern',
-        'erörterung', 'interpretation', 'zusammenfass', 'aufsatz',
-        'was kannst du',
-    ]
-    boundary_patterns = [
-        'test', 'tests', 'exam', 'exams', 'quiz', 'stats', 'tipp', 'tipps',
-        'tip', 'review', 'hilfe', 'help', 'überblick',
-        'hallo', 'hi', 'hey', 'moin',
-    ]
 
-    if _detect_creation_intent(message):
-        return True
-    if _kw_match(msg, substring_patterns):
-        return True
-    if re.search(r'was\s+steht\s+(?:heute\s+)?an', msg):
-        return True
-    return _kw_match(msg, boundary_patterns, word_boundary=True)
+def quick_answer(message, load_school_fn=None):
+    """An exact answer without the model, or None when the model should answer."""
+    if len(message) <= 160:
+        from . import offline_tools
+        tool_answer = offline_tools.try_offline_tool(message)
+        if tool_answer:
+            return tool_answer
+    if is_data_query(message):
+        return offline_response(message, load_school_fn)
+    return None
 
 
 # ---- Offline Fallback (Data-Driven) ----
@@ -1337,14 +1540,18 @@ def offline_response(message, load_school_fn=None):
         if success:
             return response
 
-    # ---- Task Completion ----
-    if any(w in msg for w in ['erledigt', 'fertig', 'done', 'abhaken', 'geschafft', 'abgehakt']):
-        return _try_complete_task(message)
-
     # ---- Homework Completion ----
     if any(w in msg for w in ['hausaufgabe erledigt', 'ha fertig', 'ha erledigt', 'hausaufgabe fertig',
                                'homework done', 'ha gemacht']):
         return _try_complete_homework(message, load_school_fn)
+
+    # ---- Task Completion ----
+    if _is_done_command(message):
+        return _try_complete_task(message)
+
+    # ---- Lernplan ----
+    if any(w in msg for w in ['lernplan', 'study plan']):
+        return _build_study_plan(load_school_fn, today, msg)
 
     # ---- Flashcards / Karteikarten ----
     if any(w in msg for w in ['karteikarte', 'flashcard', 'lernkarte', 'abfragen', 'quiz']):
@@ -1475,8 +1682,13 @@ def offline_response(message, load_school_fn=None):
         greeting = 'Guten Morgen' if now.hour < 12 else 'Guten Tag' if now.hour < 18 else 'Guten Abend'
         tasks = db.get_hub_tasks('today')
         open_count = len([t for t in tasks if not t.get('completed')])
-        extra = f' Du hast {open_count} offene Aufgaben für heute.' if open_count else ' Keine Aufgaben für heute – entspann dich!'
-        return f'{greeting}!{extra} Frag mich gerne, was du wissen möchtest.'
+        if open_count > 1:
+            extra = f' Für heute sind {open_count} Aufgaben offen.'
+        elif open_count == 1:
+            extra = ' Für heute ist eine Aufgabe offen.'
+        else:
+            extra = ' Für heute ist keine Aufgabe offen.'
+        return f'{greeting}!{extra} Was möchtest du wissen?'
 
     from . import research_service
     if research_service.wants_research(message):
@@ -2028,42 +2240,19 @@ def _build_day_summary(today, weekday, now, load_school_fn=None):
     lines = [f'**{DAY_NAMES_DE[weekday]}, {now.strftime("%d.%m.%Y")}**\n']
 
     # Timetable (only on weekdays)
-    db_day = _weekday_to_db_day(weekday)
-    if db_day is None:
+    if weekday >= 5:
         lines.append('**Wochenende** – kein Unterricht.\n')
     else:
-        try:
-            entries = db.get_timetable_entries(day=db_day)
-            settings = db.get_timetable_settings()
-            has_ab = settings.get('has_ab_weeks', True) if settings else True
-            ref_date = settings.get('reference_date') if settings else None
-            week_type = 'both'
-            if has_ab and ref_date:
-                try:
-                    ref = datetime.strptime(ref_date, '%Y-%m-%d')
-                    diff_weeks = abs((now - ref).days) // 7
-                    week_type = 'A' if diff_weeks % 2 == 0 else 'B'
-                except Exception:
-                    pass
-            if week_type != 'both':
-                entries = [e for e in entries if e.get('week', 'both') in ('both', week_type)]
-            periods = db.get_timetable_periods()
-            period_map = {p['period_number']: p for p in periods}
-
-            if entries:
-                entries.sort(key=lambda e: e.get('block', 0))
-                lines.append('**Unterricht:**')
-                for e in entries:
-                    block = e.get('block', 0)
-                    p = period_map.get(block, {})
-                    time_str = p.get('start_time') or f'Block {block}'
-                    room = f' (R. {e["room"]})' if e.get('room') else ''
-                    lines.append(f'  • {time_str}: {e.get("subject", "?")}{room}')
-                lines.append('')
-            else:
-                lines.append('Kein Unterricht heute.\n')
-        except Exception:
-            pass
+        school = _school_view()
+        lessons = ui_data.lessons_on(school, now.date()) if school else []
+        if lessons:
+            lines.append('**Unterricht:**')
+            for lesson in lessons:
+                room = f' (R. {lesson["room"]})' if lesson['room'] else ''
+                lines.append(f'  • {lesson["start"]}: {lesson["subject"]}{room}')
+            lines.append('')
+        else:
+            lines.append('Kein Unterricht heute.\n')
 
     # Tasks
     tasks = db.get_hub_tasks('today')
@@ -2170,56 +2359,32 @@ def _build_week_summary(today, now, load_school_fn=None):
 
 
 def _build_timetable_response(weekday, now, msg):
-    # Check if asking about a specific day
-    target_day = weekday
+    target = now.date()
     for i, name in enumerate(DAY_NAMES_DE):
         if name.lower() in msg:
-            target_day = i
+            target = now.date() + timedelta(days=(i - weekday) % 7)
             break
-    if 'morgen' in msg:
-        target_day = (weekday + 1) % 7
+    else:
+        if 'übermorgen' in msg:
+            target = now.date() + timedelta(days=2)
+        elif 'morgen' in msg:
+            target = now.date() + timedelta(days=1)
+    day_name = DAY_NAMES_DE[target.weekday()]
 
-    db_day = _weekday_to_db_day(target_day)
-    if db_day is None:
-        return f'Am {DAY_NAMES_DE[target_day]} ist kein Unterricht (Wochenende).'
+    if target.weekday() >= 5:
+        return f'Am {day_name} ist kein Unterricht (Wochenende).'
 
-    entries = db.get_timetable_entries(day=db_day)
-    settings = db.get_timetable_settings()
-    has_ab = settings.get('has_ab_weeks', True) if settings else True
-    ref_date = settings.get('reference_date') if settings else None
+    school = _school_view()
+    lessons = ui_data.lessons_on(school, target) if school else []
+    if not lessons:
+        return f'Kein Unterricht am {day_name}.'
 
-    week_type = 'both'
-    if has_ab and ref_date:
-        try:
-            ref = datetime.strptime(ref_date, '%Y-%m-%d')
-            days_diff = abs((now - ref).days)
-            if target_day != weekday:
-                days_diff += (target_day - weekday)
-            diff_weeks = days_diff // 7
-            week_type = 'A' if diff_weeks % 2 == 0 else 'B'
-        except Exception:
-            pass
-
-    if week_type != 'both':
-        entries = [e for e in entries if e.get('week', 'both') in ('both', week_type)]
-
-    if not entries:
-        return f'Kein Unterricht am {DAY_NAMES_DE[target_day]}.'
-
-    periods = db.get_timetable_periods()
-    period_map = {p['period_number']: p for p in periods}
-    entries.sort(key=lambda e: e.get('block', 0))
-
-    week_label = f' (Woche {week_type})' if week_type != 'both' else ''
-    lines = [f'**Stundenplan {DAY_NAMES_DE[target_day]}{week_label}:**\n']
-    for e in entries:
-        block = e.get('block', 0)
-        p = period_map.get(block, {})
-        time_range = f'{p.get("start_time", "?")} – {p.get("end_time", "?")}' if p.get('start_time') else f'Block {block}'
-        room = f', Raum {e["room"]}' if e.get('room') else ''
-        teacher = f' ({e["teacher"]})' if e.get('teacher') else ''
-        stype = f' {e["subject_type"]}' if e.get('subject_type') else ''
-        lines.append(f'  • {time_range}: **{e.get("subject", "?")}{stype}**{room}{teacher}')
+    week_label = f' (Woche {lessons[0]["week"]})' if school['abWeeks'] else ''
+    lines = [f'**Stundenplan {day_name}{week_label}:**\n']
+    for lesson in lessons:
+        room = f', Raum {lesson["room"]}' if lesson['room'] else ''
+        teacher = f' ({lesson["teacher"]})' if lesson['teacher'] else ''
+        lines.append(f'  • {lesson["start"]} – {lesson["end"]}: **{lesson["subject"]}**{room}{teacher}')
 
     return '\n'.join(lines)
 
@@ -2343,19 +2508,34 @@ def _build_grades_response(load_school_fn):
         return 'Fehler beim Laden der Noten.'
 
 
+def _initials(name):
+    words = re.findall(r'[a-zäöüß]+', re.sub(r'\s+(lk|gk)$', '', name.lower()))
+    return ''.join(word[0] for word in words) if len(words) > 1 else ''
+
+
+def _find_subject(msg, names):
+    words = set(re.findall(r'[a-zäöüß]+', msg.lower()))
+    for key, name in names.items():
+        plain = re.sub(r'\s+(lk|gk)$', '', name.lower()).strip()
+        if plain and plain in msg.lower():
+            return key
+    for key, name in names.items():
+        plain = re.sub(r'\s+(lk|gk)$', '', name.lower()).strip()
+        if _initials(name) in words or any(len(word) >= 4 and plain.startswith(word) for word in words):
+            return key
+    return None
+
+
 def _build_study_plan(load_school_fn, today, msg):
     if not load_school_fn:
         return 'Keine Schuldaten verfügbar für einen Lernplan.'
     try:
         subjects, _, exams, tests, grades = load_school_fn()
-        subj_map = {s.get('id', ''): s.get('name', '') for s in subjects}
+        subj_map = _subject_names(_school_view(), subjects)
 
         # Find which subject user is asking about
-        target_subject = None
-        for s in subjects:
-            if s.get('name', '').lower() in msg:
-                target_subject = s
-                break
+        target_key = _find_subject(msg, subj_map)
+        target_subject = {'id': target_key, 'name': subj_map[target_key]} if target_key else None
 
         # Find upcoming exams
         upcoming = sorted(
@@ -2366,7 +2546,7 @@ def _build_study_plan(load_school_fn, today, msg):
         if target_subject:
             sid = target_subject.get('id', '')
             subj_exams = [e for e in upcoming if e.get('subject_id', '') == sid]
-            subj_grades = [g.get('points', g.get('grade_value', 0)) for g in grades if g.get('subject_id', '') == sid]
+            subj_grades = [_points(g) for g in grades if g.get('subject_id', '') == sid and _points(g) is not None]
             avg = sum(subj_grades) / len(subj_grades) if subj_grades else None
 
             lines = [f'**Lernplan: {target_subject["name"]}**\n']

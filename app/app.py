@@ -3775,9 +3775,17 @@ def assistant_warmup():
     from . import assistant_service as ai
     from . import local_ai
     started = False
+    ai.keep_assistant()
     if ai.load_config().get('preferred_backend', 'auto') in ('auto', 'local'):
         started = local_ai.warm_up()
     return _no_store(jsonify({'started': started, 'server': local_ai.server.state()}))
+
+
+@app.route('/api/hub/assistant/release', methods=['POST'])
+def assistant_release():
+    from . import assistant_service as ai
+    ai.release_assistant_soon()
+    return '', 204
 
 
 @app.route('/api/hub/assistant/models', methods=['GET'])
@@ -3825,6 +3833,15 @@ def _run_model_actions(ai, actions, message, researched):
     return results
 
 
+def _assistant_prompt(ai, message, history=None):
+    context = ai.build_context(lambda: _load_school_data_for_assistant(), message, history)
+    from . import research_service
+    research_block = research_service.research_for_message(message)
+    if research_block:
+        context = f'{context}\n\n{research_block}'
+    return ai.build_system_prompt(context), bool(research_block)
+
+
 @app.route('/api/hub/assistant/chat', methods=['POST'])
 def assistant_chat():
     from . import assistant_service as ai
@@ -3836,51 +3853,44 @@ def assistant_chat():
 
     message = message.strip()[:10000]
     history = _llm_history_for_context()
-
-    context = ai.build_context(lambda: _load_school_data_for_assistant(), message)
-    from . import research_service
-    research_block = research_service.research_for_message(message)
-    if research_block:
-        context = f'{context}\n\n{research_block}'
-    system_prompt = ai.build_system_prompt(context)
     backend = ai.get_active_backend()
+    school = lambda: _load_school_data_for_assistant()
 
     actions_executed = []
 
     try:
         if backend == 'ollama':
+            system_prompt, researched = _assistant_prompt(ai, message, history)
             config = ai.load_config()
             model = data.get('model', config.get('ollama_model', 'llama3.2'))
             response_text = ai.chat_ollama(message, system_prompt, model, history)
             response_text, ollama_actions = ai.extract_ollama_actions(response_text)
-            actions_executed = _run_model_actions(ai, ollama_actions, message, bool(research_block))
+            actions_executed = _run_model_actions(ai, ollama_actions, message, researched)
 
         elif backend == 'claude':
+            system_prompt, researched = _assistant_prompt(ai, message, history)
             response_text, tool_uses = ai.chat_claude(
                 message, system_prompt, history, tools=ai.TOOL_SCHEMAS
             )
-            actions_executed = _run_model_actions(ai, tool_uses, message, bool(research_block))
+            actions_executed = _run_model_actions(ai, tool_uses, message, researched)
 
         elif backend == 'local':
-            offline_result = ai.offline_response(message, lambda: _load_school_data_for_assistant())
-            is_data_query = ai.is_data_query(message)
-
-            if is_data_query:
-                response_text = offline_result
-            else:
+            response_text = ai.quick_answer(message, school)
+            if response_text is None:
+                system_prompt, researched = _assistant_prompt(ai, message, history)
                 response_text = ai.chat_local(message, system_prompt, history)
                 if response_text:
                     response_text, local_actions = ai.extract_ollama_actions(response_text)
-                    actions_executed = _run_model_actions(ai, local_actions, message, bool(research_block))
+                    actions_executed = _run_model_actions(ai, local_actions, message, researched)
                 else:
-                    response_text = offline_result
+                    response_text = ai.offline_response(message, school)
 
         else:
-            response_text = ai.offline_response(message, lambda: _load_school_data_for_assistant())
+            response_text = ai.offline_response(message, school)
 
     except Exception as e:
         logging.error(f'Assistant chat error: {type(e).__name__}')
-        response_text = ai.offline_response(message, lambda: _load_school_data_for_assistant())
+        response_text = ai.offline_response(message, school)
         backend = 'offline'
 
     append_assistant_history('user', message)
@@ -3905,55 +3915,47 @@ def assistant_stream():
 
     message = message.strip()[:10000]
     history = _llm_history_for_context()
-
-    context = ai.build_context(lambda: _load_school_data_for_assistant(), message)
-    from . import research_service
-    research_block = research_service.research_for_message(message)
-    if research_block:
-        context = f'{context}\n\n{research_block}'
-    system_prompt = ai.build_system_prompt(context)
     backend = ai.get_active_backend()
+    school = lambda: _load_school_data_for_assistant()
 
     def generate():
         buffer_parts = []
         from_model = False
+        researched = False
         try:
-            if backend == 'ollama':
-                config = ai.load_config()
-                model = data.get('model', config.get('ollama_model', 'llama3.2'))
-                from_model = True
-                for chunk in ai.stream_ollama(message, system_prompt, model, history):
-                    buffer_parts.append(chunk)
-                    yield f"data: {json.dumps({'token': chunk})}\n\n"
-            elif backend == 'claude':
-                from_model = True
-                for chunk in ai.stream_claude(message, system_prompt, history):
-                    buffer_parts.append(chunk)
-                    yield f"data: {json.dumps({'token': chunk})}\n\n"
-            elif backend == 'local':
-                if ai.is_data_query(message):
-                    response = ai.offline_response(message, lambda: _load_school_data_for_assistant())
-                    buffer_parts.append(response)
-                    yield f"data: {json.dumps({'token': response})}\n\n"
-                else:
-                    from_model = True
-                    for chunk in ai.stream_local(message, system_prompt, history):
-                        buffer_parts.append(chunk)
-                        yield f"data: {json.dumps({'token': chunk})}\n\n"
-            else:
-                response = ai.offline_response(message, lambda: _load_school_data_for_assistant())
+            quick = ai.quick_answer(message, school) if backend == 'local' else None
+            if quick is not None or backend == 'offline':
+                response = quick if quick is not None else ai.offline_response(message, school)
                 buffer_parts.append(response)
                 yield f"data: {json.dumps({'token': response})}\n\n"
+            else:
+                system_prompt, researched = _assistant_prompt(ai, message, history)
+                from_model = True
+                if backend == 'ollama':
+                    config = ai.load_config()
+                    chunks = ai.stream_ollama(message, system_prompt, data.get('model', config.get('ollama_model', 'llama3.2')), history)
+                elif backend == 'claude':
+                    chunks = ai.stream_claude(message, system_prompt, history)
+                else:
+                    chunks = ai.stream_local(message, system_prompt, history)
+                for chunk in chunks:
+                    buffer_parts.append(chunk)
+                    yield f"data: {json.dumps({'token': chunk})}\n\n"
+                if backend == 'local' and not ''.join(buffer_parts).strip():
+                    from_model = False
+                    response = ai.offline_response(message, school)
+                    buffer_parts = [response]
+                    yield f"data: {json.dumps({'token': response})}\n\n"
         except Exception as e:
             logging.error(f'Stream error: {type(e).__name__}')
-            fallback = ai.offline_response(message, lambda: _load_school_data_for_assistant())
+            fallback = ai.offline_response(message, school)
             buffer_parts = [fallback]
             from_model = False
             yield f"data: {json.dumps({'token': fallback})}\n\n"
 
         raw = ''.join(buffer_parts)
         cleaned, actions = ai.extract_ollama_actions(raw)
-        actions_executed = _run_model_actions(ai, actions if from_model else [], message, bool(research_block))
+        actions_executed = _run_model_actions(ai, actions if from_model else [], message, researched)
 
         append_assistant_history('user', message)
         if cleaned.strip():
@@ -3979,7 +3981,7 @@ def assistant_config():
             'claude_api_key_masked': masked,
             'preferred_backend': config.get('preferred_backend', 'auto'),
             'ollama_model': config.get('ollama_model', 'llama3.2:1b'),
-            'claude_model': config.get('claude_model', 'claude-sonnet-4-20250514'),
+            'claude_model': config.get('claude_model', ai.CLAUDE_MODEL),
         })
 
     data = request.get_json()

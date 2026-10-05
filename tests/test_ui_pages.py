@@ -225,6 +225,30 @@ def test_mobile_ui_assets_are_current():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_the_server_sees_the_timetable_with_the_edits_from_the_settings(client):
+    monday = date.today() - timedelta(days=date.today().weekday())
+    client.post("/api/hub/school/timetable/entries", json={"day": 1, "block": 1, "subject": "Mathe", "subject_type": "LK", "room": "R101", "teacher": "Herr Beck"})
+    client.post("/api/hub/school/timetable/entries", json={"day": 1, "block": 2, "subject": "Deutsch", "room": "R204"})
+    client.put("/api/ui/store/app-subjects", json={"items": {"kunst": {"name": "Kunst", "hue": "rose", "custom": True}}})
+    client.put("/api/ui/store/app-timetable-edits", json={"A:1:2": None, "B:1:2": None, "A:1:3": {"subject": "kunst", "room": "Atelier"}, "B:1:3": {"subject": "kunst", "room": "Atelier"}})
+    client.put("/api/ui/store/app-block-times", json={"v": 2, "blocks": [{"n": 1, "start": "07:45", "end": "09:15"}, {"n": 2, "start": "09:35", "end": "11:05"}, {"n": 3, "start": "11:25", "end": "12:55"}]})
+    school = ui_data.effective_school()
+    lessons = ui_data.lessons_on(school, monday)
+    assert [(lesson["block"], lesson["start"], lesson["subject"], lesson["room"]) for lesson in lessons] == [(1, "07:45", "Mathe LK", "R101"), (3, "11:25", "Kunst", "Atelier")]
+    assert ui_data.lessons_on(school, monday + timedelta(days=5)) == []
+
+
+def test_the_assistant_answers_with_the_edited_timetable(client):
+    from app import assistant_service as ai
+
+    client.put("/api/ui/store/app-subjects", json={"items": {"kunst": {"name": "Kunst", "hue": "rose", "custom": True}}})
+    client.put("/api/ui/store/app-timetable-edits", json={f"{week}:{dow}:1": {"subject": "kunst", "room": "Atelier"} for week in "AB" for dow in range(1, 6)})
+    answer = ai.offline_response("Stundenplan Montag")
+    assert "Kunst" in answer and "Atelier" in answer
+    context = ai.build_context(lambda: ([], [], [], [], []))
+    assert "Kunst (08:00)" in context
+
+
 def test_the_substitution_plan_is_served_from_the_cache(client, tmp_path, monkeypatch):
     import base64
 

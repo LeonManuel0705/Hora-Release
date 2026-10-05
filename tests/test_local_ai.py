@@ -144,6 +144,12 @@ class FakeServer:
     def state(self):
         return 'stopped'
 
+    def touch(self):
+        pass
+
+    def release_soon(self, delay):
+        return False
+
     @contextlib.contextmanager
     def blocked(self):
         self.stopped += 1
@@ -1026,3 +1032,68 @@ def test_the_basic_chat_ships_no_personal_timetable_or_training_plan(hub):
     page = hub.get('/hub/assistant?ohne-ki=1').get_data(as_text=True)
     for word in ('TIMETABLE', 'Seminarkurs', 'DLRG', 'Armday', 'getOfflineResponse'):
         assert word not in page
+
+
+def test_the_server_stops_soon_after_the_assistant_page_is_left(monkeypatch):
+    server = local_ai.Server()
+    stopped = []
+    proc = object()
+    server._proc, server._ready = proc, True
+    monkeypatch.setattr(local_ai, '_terminate', stopped.append)
+    monkeypatch.setattr(local_ai.time, 'sleep', lambda seconds: None)
+    monkeypatch.setattr(local_ai.threading, 'Thread', _Inline)
+    assert server.release_soon(60) is True
+    assert stopped == [proc] and server._proc is None
+
+
+def test_the_server_stays_when_the_page_is_opened_again(monkeypatch):
+    server = local_ai.Server()
+    stopped = []
+    server._proc, server._ready = object(), True
+    monkeypatch.setattr(local_ai, '_terminate', stopped.append)
+    monkeypatch.setattr(local_ai.time, 'sleep', lambda seconds: server.touch())
+    monkeypatch.setattr(local_ai.threading, 'Thread', _Inline)
+    assert server.release_soon(60) is True
+    assert stopped == [] and server._proc is not None
+
+
+def test_a_running_answer_keeps_the_server(monkeypatch):
+    server = local_ai.Server()
+    stopped = []
+    server._proc, server._ready, server._active = object(), True, 1
+    monkeypatch.setattr(local_ai, '_terminate', stopped.append)
+    monkeypatch.setattr(local_ai.time, 'sleep', lambda seconds: None)
+    monkeypatch.setattr(local_ai.threading, 'Thread', _Inline)
+    server.release_soon(60)
+    assert stopped == []
+
+
+def test_nothing_to_release_without_a_server():
+    assert local_ai.Server().release_soon(60) is False
+
+
+class _Inline:
+    def __init__(self, target, **_):
+        self._target = target
+
+    def start(self):
+        self._target()
+
+
+def test_the_in_process_model_is_released_when_idle_and_kept_while_answering(monkeypatch):
+    from app import assistant_service as ai
+
+    class Llm:
+        closed = False
+
+        def close(self):
+            Llm.closed = True
+
+    monkeypatch.setattr(ai, '_local_llm', Llm())
+    monkeypatch.setattr(ai, '_local_llm_path', 'x')
+    ai._local_state.update(active=1, used=0.0)
+    assert ai._release_idle_local_llm(0) is False
+    assert ai._local_llm is not None
+    ai._local_state.update(active=0, used=-1000.0)
+    assert ai._release_idle_local_llm(300) is True
+    assert ai._local_llm is None and Llm.closed

@@ -269,6 +269,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkOllamaStatus();
 });
 
+window.addEventListener('pagehide', () => {
+    navigator.sendBeacon('/api/hub/assistant/release');
+});
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted) fetch('/api/hub/assistant/warmup', { method: 'POST' }).catch(() => {});
+});
+
 async function loadChatHistory() {
     try {
         const resp = await fetch('/api/hub/assistant/history', { signal: AbortSignal.timeout(5000) });
