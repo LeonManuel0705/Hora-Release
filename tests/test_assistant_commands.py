@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 # SPDX-License-Identifier: AGPL-3.0-only
 
+import time
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -254,9 +255,12 @@ def test_a_weak_fit_asks_back_instead_of_ticking(tasks, school, message, offered
 
 def test_a_few_words_after_a_question_from_the_assistant_are_its_answer(tasks, school):
     asked = [{'role': 'user', 'content': 'Hilf mir bei Aufgabe 3'}, {'role': 'assistant', 'content': 'Bist du mit Teil a schon fertig?'}]
-    assert ai.quick_answer('Fertig', school, asked) is None
-    assert ai.quick_answer('Test', school, asked) is None
-    assert ai.quick_answer('3/4', school, asked) is None
+    for reply in ('Fertig', 'Test', '3/4', 'Alles fertig', 'Diese Woche', 'Sportfest fertig', 'Stundenplan morgen', 'Ja, fertig'):
+        assert ai.quick_answer(reply, school, asked) is None
+    assert not any(done for done, _, _ in tasks().values())
+    assert 'Wochenübersicht' in ai.quick_answer('Diese Woche', school)
+    for unasked in ('Alles fertig', 'Sportfest fertig'):
+        assert 'Welche Aufgabe' in ai.quick_answer(unasked, school)
     assert 'Offene Hausaufgaben' in ai.quick_answer('Welche Hausaufgaben habe ich?', school, asked)
     assert 'erledigt' in ai.quick_answer('Einkaufen erledigt', school, asked)
     assert 'Bewerbung schreiben' in ai.quick_answer('Erledigt: Bewerbung', school, asked)
@@ -341,6 +345,24 @@ def test_dates_and_times_are_read_as_written():
     assert ai._parse_time_nl('Referat 24.12.') is None
     assert ai._parse_date_nl('Kapitel 3.1 bis 3.4 lesen', monday) is None
     assert ai._parse_date_nl('Abgabe am 15.04.2027', monday) == '2027-04-15'
+    assert ai._parse_date_nl('15. Oktober 2027', monday) == '2027-10-15'
+    assert ai._parse_date_nl('Freitag, 16.10.', monday) == '2026-10-16'
+
+
+def test_an_endless_or_absurd_command_neither_hangs_nor_breaks(tasks, school):
+    for message in ('Erinnere mich' + ' bitte' * 40, 'Erinnere mich' + ' nochmal' * 30, 'Erinnere mich ' + 'daran, ' * 40, 'Neue Aufgabe: ' + '12.10. bis 13.10. - ' * 14):
+        started = time.perf_counter()
+        ai.quick_answer(message, school)
+        assert time.perf_counter() - started < 1
+    assert 'Abgabe in 99999999 Tagen' in ai.quick_answer('Neue Aufgabe: Abgabe in 99999999 Tagen', school)
+    assert tasks()['Abgabe in 99999999 Tagen'] == (False, None, None)
+
+
+def test_without_a_model_a_bare_exercise_line_is_offered_as_a_task(tasks, school):
+    answer = ai.offline_response('Aufgabe: Vokabeln lernen', school)
+    assert answer == 'Soll das eine Aufgabe werden? Dann schreib: "Neue Aufgabe: Vokabeln lernen"'
+    assert set(tasks()) == set(TASKS)
+    assert 'Vokabeln lernen' in ai.offline_response('Neue Aufgabe: Vokabeln lernen', school)
 
 
 def test_the_clock_and_the_calculator_only_answer_what_was_asked():
@@ -370,6 +392,10 @@ def test_a_question_on_how_to_do_something_gets_no_study_plan_brief():
     assert ai._PLAN_REQUEST.search('Wie soll ich für die Klausur lernen?')
     assert ai._PLAN_REQUEST.search('Kannst du mir einen Lernplan für den PB-Test geben?')
     assert ai._PLAN_REQUEST.search('Wie bereite ich mich auf die Klausur vor?')
+    assert ai._PLAN_REQUEST.search('Wie bereite ich mich auf die Arbeit am Freitag vor?')
+    assert ai._PLAN_REQUEST.search('Wie bereite ich mich auf die Arbeit in Mathe vor?')
+    assert not ai._PLAN_REQUEST.search('Wie bereite ich mich auf die Arbeit im Praktikum vor?')
+    assert not ai._PLAN_REQUEST.search('Wie bereite ich mich auf die Arbeit in der Firma vor?')
     assert not ai._PLAN_REQUEST.search('Vorbereitung aufs Vorstellungsgespräch')
 
 
