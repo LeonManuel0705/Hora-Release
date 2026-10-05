@@ -374,6 +374,7 @@ function weekColumn(date, range) {
 
 function ownSource(item) {
   if (sync.source !== "google" || (!item.google && !sync.write)) return `Eigener Termin in ${BRAND}`;
+  if (item.elsewhere) return "Eigener Termin, sein Gegenstück liegt in einem anderen Google-Konto";
   if (item.google && !item.pending) return "Eigener Termin, steht auch im Google-Kalender";
   return sync.write ? "Eigener Termin, wird in den Google-Kalender übertragen" : `Eigener Termin, die Änderung bleibt in ${BRAND}`;
 }

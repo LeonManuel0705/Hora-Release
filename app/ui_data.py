@@ -599,7 +599,8 @@ def event_view(item):
     if item.get('google_id') and not item.get('google_new'):
         view['google'] = True
     if item.get('google_dirty'):
-        view['pending'] = True
+        from . import calendar_cache
+        view['elsewhere' if calendar_cache.waits_elsewhere(item) else 'pending'] = True
     return view
 
 

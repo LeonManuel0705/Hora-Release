@@ -39,7 +39,6 @@ KIND_WORDS = (
     ('school', ('schule', 'school', 'iserv', 'kurs', 'uni', 'klasse')),
 )
 GONE = (404, 410)
-PASSING_LIMITS = frozenset(('rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded', 'dailyLimitExceeded', 'backendError'))
 CONFLICT = object()
 
 log = logging.getLogger(__name__)
@@ -141,7 +140,7 @@ def _status_of(error):
 
 
 def _unreadable(error):
-    """True when the account may not read a calendar or it is gone. A limit that passes is not that."""
+    """True when this one calendar is gone or closed to the account. Limits and refusals of the whole account are not that."""
     status = _status_of(error)
     if status != 403:
         return status in GONE
@@ -149,7 +148,7 @@ def _unreadable(error):
         reasons = {str(entry.get('reason')) for entry in json.loads(getattr(error, 'content', b'') or b'{}')['error']['errors']}
     except Exception:
         reasons = set()
-    return not reasons & PASSING_LIMITS
+    return reasons == {'forbidden'}
 
 
 def _stamp(moment):
@@ -218,18 +217,19 @@ def _pull_full(service, email, today, previous=None):
         ],
         'events': {},
     }
-    failed = set()
+    failed, closed = set(), set()
     for calendar in cache['calendars']:
         try:
             cache['events'][calendar['id']] = _load_calendar(service, cache, calendar)
         except Exception as error:
             log.warning('Google calendar skipped: %s', type(error).__name__)
-            if _unreadable(error):
-                continue
-            failed.add(calendar['id'])
-            kept = ((previous or {}).get('events') or {}).get(calendar['id'])
-            if kept is not None:
-                cache['events'][calendar['id']] = kept
+            (closed if _unreadable(error) else failed).add(calendar['id'])
+    if closed and len(closed) == len(cache['calendars']):
+        failed, closed = closed, set()
+    for name in failed:
+        kept = ((previous or {}).get('events') or {}).get(name)
+        if kept is not None:
+            cache['events'][name] = kept
     if failed:
         cache['partial'] = True
         if previous and previous.get('synced_at'):
@@ -244,16 +244,15 @@ def _pull_changes(service, cache):
     changed = False
     cancelled = set()
     seen = {}
+    closed = []
     for calendar in list(cache['calendars']):
         name = calendar['id']
         try:
             items = google.list_calendar_events(service, name, updatedMin=cache['synced_at'], showDeleted=True, singleEvents=False)
         except Exception as error:
-            if _status_of(error) == 410 or not _unreadable(error):
+            closed.append(calendar)
+            if _status_of(error) == 410 or not _unreadable(error) or len(closed) == len(cache['calendars']):
                 raise
-            cache['calendars'].remove(calendar)
-            cache['events'].pop(name, None)
-            changed = True
             continue
         bucket = cache['events'].setdefault(name, {})
         cancelled.update((name, item['id']) for item in items if item.get('status') == 'cancelled' and item.get('id'))
@@ -277,6 +276,9 @@ def _pull_changes(service, cache):
             elif bucket.get(key) != view:
                 bucket[key] = view
                 changed = True
+    for calendar in closed:
+        cache['calendars'].remove(calendar)
+        changed = cache['events'].pop(calendar['id'], None) is not None or changed
     cache['synced_at'] = _stamp(began - OVERLAP)
     return changed, cancelled, seen
 
@@ -415,11 +417,12 @@ def _send(service, item, target):
     calendar = item.get('google_calendar') or target
     fresh = bool(item.get('google_new')) or not remote
     answer = None if fresh else _patch(service, calendar, remote, body, item.get('google_etag'))
-    if answer is CONFLICT:
+    if answer is CONFLICT or (answer is None and not fresh):
         theirs = _newer_there(service, calendar, remote, item)
         if theirs is not None and _give_way(key, stamp, theirs, {'id': calendar}):
             return None
-        answer = _patch(service, calendar, remote, body)
+        if answer is CONFLICT:
+            answer = _patch(service, calendar, remote, body)
     for _ in range(2):
         if answer is not None:
             break
@@ -508,9 +511,16 @@ def _adopt(cache, cancelled, seen):
                 changed = True
                 continue
             view = seen.get(key) or _lookup(cache, item)
-            if not view or (view.get('updated') or '') <= (item.get('google_seen') or ''):
+            if not view:
                 continue
-            fields = {**_local_fields(view), 'google_seen': view.get('updated') or '', 'google_etag': view.get('etag') or ''}
+            if (view.get('updated') or '') > (item.get('google_seen') or ''):
+                fields = {**_local_fields(view), 'google_seen': view.get('updated') or '', 'google_etag': view.get('etag') or ''}
+            elif view.get('updated') == item.get('google_seen') and view.get('etag') and not item.get('google_etag'):
+                fields = {'google_etag': view['etag']}
+            else:
+                fields = {}
+            if not item.get('google_account') and cache.get('account'):
+                fields['google_account'] = cache['account']
             if any((item.get(name) or '') != value for name, value in fields.items()):
                 item.update(fields)
                 changed = True
@@ -666,6 +676,17 @@ def drop(item):
         return False
     _enqueue_delete(item.get('google_calendar'), remote)
     return True
+
+
+def waits_elsewhere(item):
+    """True for a changed event whose Google twin belongs to an account that is not the connected one."""
+    account = item.get('google_account')
+    if not account or not item.get('google_dirty'):
+        return False
+    try:
+        return account not in _google().load_tokens()
+    except Exception:
+        return False
 
 
 def stand():
