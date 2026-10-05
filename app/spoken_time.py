@@ -17,74 +17,93 @@ from datetime import date, timedelta
 from typing import NamedTuple, Optional
 
 WEEKDAYS = ('montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag', 'samstag', 'sonntag')
-SHORT_WEEKDAYS = ('mo', 'di', 'mi', 'do', 'fr', 'sa')
+# Short names only count with their capital and right in front of a date: "Do 8.10.", but not "so 5.10.".
+SHORT_WEEKDAYS = ('Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So')
 MONTHS = {'januar': 1, 'februar': 2, 'märz': 3, 'april': 4, 'mai': 5, 'juni': 6,
           'juli': 7, 'august': 8, 'september': 9, 'oktober': 10, 'november': 11, 'dezember': 12}
 COUNTS = {'einem': 1, 'einer': 1, 'zwei': 2, 'drei': 3, 'vier': 4}
 
 _NAME = rf'(?:{"|".join(WEEKDAYS)})'
-_PART = r'(?:früh|morgens|vormittags?|mittags?|nachmittags?|abends?|nachts?)'
+_ADVERB = r'(?:früh|morgens|vormittags|mittags|nachmittags|abends|nachts)'
+_NOUN = r'(?:vormittag|mittag|nachmittag|abend|nacht)'
+_PART = rf'(?:{_ADVERB}|{_NOUN})'
 _START = r'(?<![\w.-])'
 _END = r'(?![\w-])'
 _LEAD = (
-    r'(?P<lead>(?:(?:bis|ab|vor|nach|für|spätestens|noch|schon|erst|von|vom|seit|über|am|zum|den|dem'
+    r'(?P<lead>(?:(?:bis|ab|vor|nach|für|spätestens|noch|schon|bereits|erst|von|vom|seit|über|am|zum|den|dem|auf(?=\s+de[nm]\s)'
     r'|übernächsten?|nächsten?|kommenden?|diesen|diesem|letzten?|vergangenen?|jeden|jedem)\s+)*)'
 )
 _OF_THE_CONTENT = frozenset(('von', 'vom', 'seit', 'über', 'letzte', 'letzten', 'vergangene', 'vergangenen', 'jeden', 'jedem'))
-_DEADLINE = frozenset(('bis', 'spätestens', 'vor'))
-# Words that number something: what follows them is no day and no clock.
+_DEADLINE = frozenset(('bis', 'spätestens', 'vor', 'schon', 'bereits'))
+# Words that number something: what follows them is no day and no clock. The first kind also counts at the end of a compound.
 _COUNTED = (
-    r'(?:nr\.?|nummer|s\.|seiten?|aufgaben?|kapitel|abschnitt|teil|übung(?:en)?|lektion|arbeitsblatt|blatt|raum|zimmer|saal'
-    r'|version|klasse|zeilen?|vers|unit|band|punkt|ziffer|note|schnitt|stufe|level|§)'
+    r'(?:\w*(?:blatt|aufgaben?|übung(?:en)?|kapitel|seiten?|abschnitt|lektion|folie|abbildung|tabelle|thema|material|raum|zimmer|saal'
+    r'|paragraph|artikel|ziel|schritt|phase|szene|strophe)'
+    r'|(?<![\w.])(?:nr\.?|s\.|aufg\.?|abb\.?|tab\.?|m|§|nummer|teil|version|klasse|zeilen?|vers|unit|band|punkt|ziffer|note|schnitt|stufe'
+    r'|level|grafik|diagramm|quelle|modul|absatz|station|versuch))'
 )
-_NOT_A_DAY_BEFORE = re.compile(rf'(?<![\w.])(?:{_COUNTED}|auf|um)\s*$')
+_NOT_A_DAY_BEFORE = re.compile(rf'(?:{_COUNTED}|(?<![\w.])(?:auf|um))\s*$')
 _NOT_A_DAY_AFTER = re.compile(r'\s*(?:uhr|stunden?|std|min|minuten|seiten?|punkte?|euro|€|%|prozent)\b')
-_JOINED = re.compile(r'\s*(?:und|oder|sowie|bis|,|-|–)\s*$')
-_NOT_TOMORROW_BEFORE = re.compile(r'(?<!\w)(?:am|jeden|jedem|guten|gestern|frühen|nächsten|das|der|den|dem|diesen|diesem|einen|einem)\s+$')
+_LISTED = re.compile(r'\b(?:und|oder|sowie)\s*$')
+_NOT_TOMORROW_BEFORE = re.compile(
+    rf'(?<!\w)(?:am|jeden|jedem|guten|gestern|heute|frühen|nächsten|das|der|den|dem|diesen|diesem|einen|einem|{_NAME})\s+$')
+_UNREAD_BEFORE = re.compile(r'\bwochen?\s+(?:am\s+)?$')
+_UNREAD_AFTER = re.compile(rf'\s*[,(–-]?\s*(?:de[nmr]\s+)?\d{{1,2}}\.\s?(?:\d|{"|".join(MONTHS)})|\s+(?:in\s+(?:der\s+)?)?\S+\s+wochen?\b')
 _UNIT = (
     r'(?:tage?n?|wochen?|monate?n?|jahre?n?|stunden?|std|minuten?|min|sekunden?|euro|€|cent|%|prozent|punkte?n?|noten?|stufen?|grad|seiten?'
-    r'|zeilen?|wörter|worte|meter|cm|km|kg|gramm|stück|mal|plätze?|klassen?|runden?|sätze?|aufgaben?|vokabeln?|kapitel)'
+    r'|zeilen?|wörter|worte|meter|cm|km|kg|kilo|kilogramm|gramm|liter|ml|stück|mal|plätze?|klassen?|runden?|sätze?|aufgaben?|vokabeln?|kapitel)'
 )
-_AMOUNT_VERB = re.compile(r'\b(?:erhöh|senk|verbesser|verschlechter|reduzier|verringer|verlänger|verkürz|steiger|kürz|vergrößer|verkleiner)\w*', re.IGNORECASE)
-_RATIO_BEFORE = re.compile(r'(?<![\w.])(?:maßstab|verhältnis|stand|spielstand|ergebnis|quote|vers|kapitel|seite|s\.)\s*$')
-_NOT_A_SPAN_BEFORE = re.compile(rf'(?<![\w.])(?:{_COUNTED}|vom|am|den|zum)\s*$')
-_NOT_PM_BEFORE = re.compile(rf'(?<![\w.])(?:{_COUNTED}|und|oder|zwischen|bis)\s*$')
+_AMOUNT_VERB = re.compile(
+    r'\b(?:erhöh|senk|verbesser|verschlechter|reduzier|verringer|verlänger|verkürz|steiger|kürz|vergrößer|verkleiner|ergänz|erweiter|aufstock)\w*')
+_HAND_IN = re.compile(r'\b(?:abgeb|abzugeb|abgabe|hochlad|hochzulad|einreich|einzureich|einsend|abschick|korrigier)\w*')
+_RATIO_BEFORE = re.compile(r'(?<![\w.])(?:maßstab|verhältnis|stand|spielstand|ergebnis|quote|vers|kapitel|seite|s\.|bestzeit|rekord|pace|tempo|laufzeit|dauer)\s*$')
+_NOT_A_SPAN_BEFORE = re.compile(rf'(?:{_COUNTED}|(?<![\w.])(?:vom|am|den|zum))\s*$')
+_NOT_PM_BEFORE = re.compile(rf'(?:{_COUNTED}|(?<![\w.])(?:und|oder|zwischen|bis))\s*$')
 
 _RELATIVE = re.compile(
-    rf'{_START}(?P<lead>(?:(?:bis|ab|vor|für|spätestens|noch|schon|erst|von|vom|seit)\s+)*)'
+    rf'{_START}(?P<lead>(?:(?:bis|ab|vor|für|spätestens|noch|schon|bereits|erst|von|vom|seit)\s+)*)'
     rf'(?P<word>heute|today|übermorgen|morgen|tomorrow)(?:\s+(?P<part>{_PART}|morgen))?(?:\s+noch)?{_END}'
 )
+_WEEK = r'(?:in\s+der\s+)?(?:übernächsten?|nächsten?|kommenden?|diese[rn]?)\s+woche'
 _WEEKDAY = re.compile(
-    rf'{_START}{_LEAD}(?:(?P<next>nächste\s+woche)\s+)?(?P<name>{_NAME})(?:\s+(?P<part>{_PART}))?'
-    rf'(?:\s+bis\s+(?:(?:zum|einschließlich)\s+)?(?P<last>{_NAME}))?'
-    rf'(?:\s+(?:in\s+(?P<weeks>einer|\d|zwei|drei|vier)\s+wochen?|(?P<after>nächste\s+woche)))?{_END}'
+    rf'{_START}{_LEAD}(?:(?P<week>{_WEEK})\s+(?:am\s+)?)?(?P<name>{_NAME})(?:\s+(?P<part>{_PART}|morgen))?'
+    rf'(?P<range>\s+bis\s+(?:(?:zum|einschließlich)\s+)?(?P<last>{_NAME}))?'
+    rf'(?:\s+(?:in\s+(?P<weeks>einer|\d|zwei|drei|vier)\s+wochen?|(?P<after>{_WEEK})))?{_END}'
 )
 _AHEAD = re.compile(rf'{_START}(?:(?:heute|bis)\s+)?in\s+(?P<count>\d{{1,3}}|einem|einer|zwei|drei|vier)\s+(?P<unit>tag(?:en)?|wochen?){_END}')
-_NAMED_DAY = rf'(?:(?P<name>{_NAME}|{"|".join(SHORT_WEEKDAYS)})\.?,?\s+(?:den\s+)?)?'
+_SHORT_DAY = re.compile(rf'(?<![\w.])(?:{"|".join(SHORT_WEEKDAYS)})(?=\.?,?\s+(?:den\s+)?\d{{1,2}}\.)')
+_NAMED_DAY = (
+    rf'(?:(?P<name>{_NAME}|{"|".join(SHORT_WEEKDAYS)})\.?(?:\s*,\s*|\s*[–-]\s+|\s*(?P<open>\()\s*|\s+)(?:de[nmr]\s+)?)?'
+)
+_NAMED_AFTER = rf'(?(open)\s*\))(?:\s*(?:,\s*|\(\s*){_NAME}\s*\)?(?=\s*(?:$|[,.;!?])))?'
 _NUMERIC = re.compile(
     rf'(?<![\w.,:]){_LEAD}{_NAMED_DAY}(?:(?P<first>\d{{1,2}})\.\s*(?:-|–|bis)\s*)?'
     r'(?P<d>\d{1,2})\.\s?(?P<m>\d{1,2})(?P<close>\.(?P<y>\d{4}|\d{2})?)?(?![\d:])'
     r'(?P<range>\s*(?:bis(?:\s+zum)?|-|–)\s*(?P<d2>\d{1,2})\.\s?(?P<m2>\d{1,2})\.(?:\d{4}|\d{2})?(?![\d:]))?'
+    rf'{_NAMED_AFTER}'
 )
 _MONTH = re.compile(
-    rf'(?<![\w.,:]){_LEAD}{_NAMED_DAY}(?P<d>\d{{1,2}})\.\s*(?P<month>{"|".join(MONTHS)})(?:\s+(?P<y>\d{{4}}))?{_END}'
+    rf'(?<![\w.,:]){_LEAD}{_NAMED_DAY}(?:(?P<first>\d{{1,2}})\.\s*(?:-|–|bis(?:\s+zum)?)\s*)?'
+    rf'(?P<d>\d{{1,2}})\.\s*(?P<month>{"|".join(MONTHS)})(?:\s+(?P<y>\d{{4}}))?{_END}{_NAMED_AFTER}'
 )
 
 _CLOCK_LEAD = r'(?P<lead>(?:(?:um|bis|gegen|ab|vor|nach|von|at|spätestens|kurz|ca\.?|circa|etwa|so)\s+)*)'
-_BEFORE = rf'(?:(?:(?:gegen|am|bis)\s+)?(?P<early>{_PART})\s+)?'
-_AFTER = rf'(?:\s+(?P<late>{_PART})(?!\w))?'
+# "abends um 8" and "gegen Abend 19 Uhr" name the time of day, the noun alone ("Bunter Abend 19 Uhr") does not.
+_BEFORE = rf'(?:(?:(?:gegen|am|bis)\s+(?P<early>{_PART})|(?P<early2>{_ADVERB}))\s+)?'
+_AFTER = rf'(?:\s+(?:am\s+(?P<late>{_NOUN})|(?P<late2>{_ADVERB}))(?!\w))?'
 _SPAN = re.compile(
     rf'{_START}(?P<lead>(?:(?:von|ab|zwischen|um)\s+)?)(?P<h>\d{{1,2}})(?:(?P<sep>[:.])(?P<min>\d{{2}}))?(?P<u1>\s*uhr)?'
     rf'\s*(?P<join>bis(?:\s+um)?|-|–|und)\s*(?P<h2>\d{{1,2}})(?:(?P<sep2>[:.])\d{{2}})?(?P<u2>\s*uhr)?{_END}{_AFTER}'
 )
 _WITH_UHR = re.compile(
-    rf'{_START}{_BEFORE}{_CLOCK_LEAD}(?P<h>\d{{1,2}})(?:[:.](?P<min>\d{{2}}))?\s*(?P<uhr>uhr)(?:\s+(?P<past>\d{{2}})(?!\d))?{_END}{_AFTER}'
+    rf'{_START}{_BEFORE}{_CLOCK_LEAD}(?P<h>\d{{1,2}})(?:[:.](?P<min>\d{{2}}))?\s*(?P<uhr>uhr)(?:\s+(?P<past>\d{{1,2}})(?!\d|\.\s*\S))?{_END}{_AFTER}'
 )
 _COLON = re.compile(rf'{_START}{_BEFORE}{_CLOCK_LEAD}(?P<h>\d{{1,2}}):(?P<min>\d{{2}})(?!\d|:\d)(?:\s*(?P<half>am|pm)(?!\w))?{_AFTER}')
 _DOTTED = re.compile(rf'{_START}{_BEFORE}(?P<lead>(?:(?:um|gegen)\s+)+)(?P<h>\d{{1,2}})\.(?P<min>\d{{2}})(?!\d|\.\d){_AFTER}')
 _BARE = re.compile(rf'{_START}{_BEFORE}(?P<lead>(?:(?:um|gegen)\s+)+)(?P<h>\d{{1,2}})(?:\s?h)?(?!\w|:|\.\d|\s*(?:-|–)\s*\d){_AFTER}')
 _SPOKEN = re.compile(
-    rf'{_START}{_BEFORE}{_CLOCK_LEAD}(?:(?P<word>halb|dreiviertel|viertel\s+vor|viertel\s+nach|viertel)|(?P<off>\d{{1,2}})(?:\s+minuten)?\s+(?P<side>vor|nach))'
+    rf'{_START}{_BEFORE}{_CLOCK_LEAD}'
+    r'(?:(?P<word>halb|dreiviertel|viertel\s+vor|viertel\s+nach|viertel)|(?P<off>\d{1,2})(?P<minutes>\s+minuten)?\s+(?P<side>vor|nach))'
     rf'\s+(?P<h>\d{{1,2}})(?P<uhr>\s*uhr)?{_END}{_AFTER}'
 )
 _ENGLISH = re.compile(rf'{_START}(?P<lead>(?:(?:at|um|bis|ab|gegen)\s+)?)(?P<h>\d{{1,2}})\s*(?P<half>am|pm)(?!\w)')
@@ -105,6 +124,13 @@ class Clock(NamedTuple):
 def _low(text):
     """Lower case that keeps every character in its place."""
     return ''.join(char.lower() if len(char.lower()) == 1 else char for char in text)
+
+
+def _low_but_short_days(text):
+    low = _low(text)
+    for match in _SHORT_DAY.finditer(text):
+        low = low[:match.start()] + match.group() + low[match.end():]
+    return low
 
 
 def _rank(lead):
@@ -144,21 +170,42 @@ def _relative_days(low, today):
 
 
 def _weekdays(low, today):
-    for match in _WEEKDAY.finditer(low):
-        lead = match.group('lead').split()
-        rank = _rank(match.group('lead'))
-        if rank is None and not match.group('last'):
+    position = 0
+    while True:
+        match = _WEEKDAY.search(low, position)
+        if not match:
+            return
+        position = match.end()
+        words = set(match.group('lead').split())
+        rank, span = _rank(match.group('lead')), match.span()
+        if match.group('range'):
+            if (words - {'von'}) & (_OF_THE_CONTENT | {'für'}):
+                # "für Freitag bis Mittwoch" is no stretch of days: the second one is a deadline of its own.
+                span = (match.start(), match.start('range'))
+                position = match.start('range')
+            else:
+                rank = 1
+        if rank is None:
             continue
         index = WEEKDAYS.index(match.group('name'))
-        weeks = match.group('weeks')
-        if weeks or match.group('next') or match.group('after'):
-            ahead = COUNTS.get(weeks) or int(weeks or 1)
+        week, weeks = match.group('week') or match.group('after'), match.group('weeks')
+        ranged = span == match.span()
+        if week and ranged:
+            words_of_week = week.split()[-2]
+            ahead = 2 if words_of_week.startswith('über') else 0 if words_of_week.startswith('diese') else 1
             day = today - timedelta(days=today.weekday()) + timedelta(weeks=ahead, days=index)
+            if day < today:
+                continue
+        elif weeks and ranged:
+            day = today + timedelta(days=(index - today.weekday()) % 7, weeks=COUNTS.get(weeks) or int(weeks))
         else:
+            if _UNREAD_BEFORE.search(low[:span[0]]) or _UNREAD_AFTER.match(low[span[1]:]):
+                continue
             day = today + timedelta(days=(index - today.weekday()) % 7 or 7)
-            if any(word.startswith('übernächste') for word in lead):
+            if any(word.startswith('übernächste') for word in words):
                 day += timedelta(days=7)
-        yield Day(day, match.span(), 1 if rank is None else rank, match.group('part'))
+        part = match.group('part')
+        yield Day(day, span, rank, 'früh' if part == 'morgen' else part)
 
 
 def _days_ahead(low, today):
@@ -169,54 +216,67 @@ def _days_ahead(low, today):
 
 
 def _numeric_days(low, today):
+    """Dates written with numbers. A number that turns out to be none is remembered: what is listed after it is none either."""
     position, refused = 0, None
     while True:
         match = _NUMERIC.search(low, position)
         if not match:
             return
         found = _numeric_day(low, today, match, refused)
-        if found:
+        if isinstance(found, Day):
             yield found
-            position = match.end()
+            position, refused = match.end(), None
         else:
-            refused = match.end('close') if match.group('close') else match.end('m')
-            position = refused
+            position = match.end('close') if match.group('close') else match.end('m')
+            refused = (position, int(match.group('first') or match.group('d'))) if found else None
 
 
 def _numeric_day(low, today, match, refused):
+    """The day of one written date, True when it is the number of something instead, False when it is no day for another reason."""
     rank = _rank(match.group('lead'))
     led = bool(match.group('lead') or match.group('name'))
     before, after = low[:match.start()], low[match.end():]
+    number = int(match.group('first') or match.group('d'))
     if not led:
         if not match.group('close') or _NOT_A_DAY_BEFORE.search(before):
-            return None
-        if refused is not None and _JOINED.fullmatch(low[refused:match.start()] or ' '):
-            return None
-    if _NOT_A_DAY_AFTER.match(after) or (match.group('lead').startswith('bis') and re.search(r'\d\.\d+\s*$', before)):
-        return None
+            return True
+        if refused and (_LISTED.search(before) or not low[refused[0]:match.start()].strip(' ,;–-')):
+            return True
+    elif refused and match.group('lead').split()[:1] == ['bis'] and not low[refused[0]:match.start()].strip():
+        # "Kapitel 3.1. bis 3.4." goes on in the same or the next chapter, a deadline behind it ("... bis 12.10.") does not.
+        # Without a closing dot on either side ("12.10 bis 16.10") nothing says whether these are days at all.
+        if number in (refused[1], refused[1] + 1) or not match.group('close'):
+            return True
+    if _NOT_A_DAY_AFTER.match(after):
+        return False
     year = int(match.group('y')) if match.group('y') else None
     first = match.group('first')
-    day = _written_day(today, int(first or match.group('d')), int(match.group('m')), year)
+    day = _written_day(today, number, int(match.group('m')), year)
     if not day:
-        return None
+        return False
     reaches = match.group('range') or first
     if reaches and year is None:
-        start = _dated(today.year, int(match.group('m')), int(first or match.group('d')))
+        start = _dated(today.year, int(match.group('m')), number)
         last = _dated(today.year, int(match.group('m2') or match.group('m')), int(match.group('d2') or match.group('d')))
         if start and last and start < today <= last:
-            return None
+            return False
     if rank is None and not reaches:
-        return None
+        return not match.group('close')
     return Day(day, match.span(), 1 if rank is None else rank, None)
 
 
 def _month_days(low, today):
     for match in _MONTH.finditer(low):
-        rank = _rank(match.group('lead'))
+        rank, first, month = _rank(match.group('lead')), match.group('first'), MONTHS[match.group('month')]
         year = int(match.group('y')) if match.group('y') else None
-        day = _written_day(today, int(match.group('d')), MONTHS[match.group('month')], year)
-        if rank is not None and day:
-            yield Day(day, match.span(), rank, None)
+        day = _written_day(today, int(first or match.group('d')), month, year)
+        if not day or (rank is None and not first):
+            continue
+        if first and year is None:
+            start, last = _dated(today.year, month, int(first)), _dated(today.year, month, int(match.group('d')))
+            if start and last and start < today <= last:
+                continue
+        yield Day(day, match.span(), 1 if rank is None else rank, None)
 
 
 def _outermost(found):
@@ -228,15 +288,21 @@ def _outermost(found):
     return kept
 
 
-def find_day(text, today):
-    """The day a text names for an entry: Day(day, span, rank, part), or None.
+def days(text, today):
+    """Every day a text names, the one that counts for the entry first.
 
-    A deadline ("bis Freitag") wins over a plain day, a plain day over one that
-    something is meant for ("für Montag"); among equals the first one counts.
+    A deadline ("bis Freitag", "schon am Mittwoch") wins over a plain day, a
+    plain day over one that something is meant for ("für Montag"); among equals
+    the first one counts.
     """
-    low = _low(text)
+    low = _low_but_short_days(text)
     found = [*_relative_days(low, today), *_weekdays(low, today), *_days_ahead(low, today), *_numeric_days(low, today), *_month_days(low, today)]
-    return min(_outermost(found), key=lambda item: (item.rank, item.span[0]), default=None)
+    return sorted(_outermost(found), key=lambda item: (item.rank, item.span[0]))
+
+
+def find_day(text, today):
+    """The day a text names for an entry: Day(day, span, rank, part), or None."""
+    return next(iter(days(text, today)), None)
 
 
 def _later(hour, part):
@@ -264,21 +330,31 @@ def _counts_a_noun(text, number, position):
     return number % 15 != 0 and bool(re.match(r'\s+[A-ZÄÖÜ]', rest))
 
 
+def _time_of_day(match, part, whole=True):
+    groups = match.groupdict()
+    late = (groups.get('late') or groups.get('late2')) if whole else None
+    return late or groups.get('early') or groups.get('early2') or part
+
+
 def _clocks(text, low, part):
     for match in _SPAN.finditer(low):
-        before = low[:match.start()]
+        before, lead = low[:match.start()], match.group('lead').strip()
         timed = match.group('u1') or match.group('u2') or ':' in (match.group('sep') or '', match.group('sep2') or '')
         if not timed:
             # "Morgen von 8 bis 10 lernen": without "Uhr" only right beside the day, and not when it counts something.
             beside = before.rstrip().endswith('\x00') or low[match.end():].lstrip().startswith('\x00')
-            if match.group('lead').strip() != 'von' or not beside or re.match(rf'\s*{_UNIT}\b', low[match.end():]):
+            if lead != 'von' or not beside or re.match(rf'\s*{_UNIT}\b', low[match.end():]):
                 continue
-        if (match.group('join') == 'und') != (match.group('lead').strip() == 'zwischen'):
+        if (match.group('join') == 'und') != (lead == 'zwischen'):
             continue
-        if _NOT_A_SPAN_BEFORE.search(before) or int(match.group('h2')) > 24:
+        first, last = int(match.group('h')), int(match.group('h2'))
+        if _NOT_A_SPAN_BEFORE.search(before) or last > 24:
             continue
-        hour = _later(int(match.group('h')), match.group('late') or part)
-        yield _clock(hour, int(match.group('min') or 0), match.span())
+        if not lead and not match.group('u1') and match.group('sep') != ':':
+            # "Protokoll 2 bis 15 Uhr abgeben" has a number and a deadline, "Training 8 bis 10 Uhr" a stretch of time.
+            if first < 6 or not 0 < last - first <= 8 or (match.group('join').startswith('bis') and _HAND_IN.search(low)):
+                continue
+        yield _clock(_later(first, _time_of_day(match, part)), int(match.group('min') or 0), match.span())
 
     for match in _WITH_UHR.finditer(low):
         minute, end = int(match.group('min') or 0), match.end()
@@ -287,21 +363,21 @@ def _clocks(text, low, part):
                 end = match.end('uhr')
             else:
                 minute = int(match.group('past'))
-        late = match.group('late') if end == match.end() else None
-        yield _clock(_later(int(match.group('h')), late or match.group('early') or part), minute, (match.start(), end))
+        yield _clock(_later(int(match.group('h')), _time_of_day(match, part, end == match.end())), minute, (match.start(), end))
 
     for match in _COLON.finditer(low):
         hour, end, half = int(match.group('h')), match.end(), match.group('half')
         if half == 'am' and low[match.end('half'):].strip(' .!,;'):
             half, end = None, match.end('min')
-        if not match.group('lead') and not match.group('early') and not half:
+        if re.match(rf'\s*(?:{_UNIT}|pro)\b', low[match.end('min'):]):
+            continue
+        if not match.group('lead') and not match.group('early') and not match.group('early2') and not half:
             # "Maßstab 1:25" and "Johannes 3:16" are no clock; on its own a small hour only counts when written "03:16".
             if _RATIO_BEFORE.search(low[:match.start()]) or (hour < 5 and len(match.group('h')) == 1):
                 continue
         if half:
             hour = hour % 12 + (12 if half == 'pm' else 0)
-        late = match.group('late') if end == match.end() else None
-        yield _clock(_later(hour, None if half else late or match.group('early') or part), int(match.group('min')), (match.start(), end))
+        yield _clock(_later(hour, None if half else _time_of_day(match, part, end == match.end())), int(match.group('min')), (match.start(), end))
 
     amount = bool(_AMOUNT_VERB.search(low))
     for form in (_DOTTED, _BARE):
@@ -309,26 +385,29 @@ def _clocks(text, low, part):
             position = match.end('h') if form is _BARE else match.end('min')
             if amount or re.match(rf'\s*{_UNIT}\b', low[position:]):
                 continue
-            # "gegen 3 Gegner spielen" names no hour, "um 7 Brötchen holen" does.
-            if 'gegen' in match.group('lead') and re.match(r'\s+[A-ZÄÖÜ]', text[position:]):
+            # "gegen 3 Gegner spielen" and "um 4 Häuser drehen" name no hour, "um 7 Brötchen holen" and "nachmittags um 4 Zahnarzt" do.
+            small = int(match.group('h')) < 6 and not _time_of_day(match, part)
+            if ('gegen' in match.group('lead') or small) and re.match(r'\s+[A-ZÄÖÜ]', text[position:]):
                 continue
             minute = int(match.group('min')) if form is _DOTTED else 0
-            yield _clock(_later(int(match.group('h')), match.group('late') or match.group('early') or part), minute, match.span())
+            yield _clock(_later(int(match.group('h')), _time_of_day(match, part)), minute, match.span())
 
     for match in _SPOKEN.finditer(low):
         word, hour = match.group('word'), int(match.group('h'))
-        led = bool(match.group('lead') or match.group('uhr'))
-        if not 1 <= hour <= 24 or (not led and word != 'halb') or re.match(rf'\s*{_UNIT}\b', low[match.end('h'):]):
+        if not 1 <= hour <= 24 or re.match(rf'\s*{_UNIT}\b', low[match.end('h'):]):
             continue
         if word:
+            if not (match.group('lead') or match.group('uhr') or word == 'halb'):
+                continue
             hour, minute = {'halb': (hour - 1, 30), 'dreiviertel': (hour - 1, 45), 'viertel': (hour - 1, 15)}.get(
                 word, (hour - 1, 45) if word.endswith('vor') else (hour, 15))
         else:
+            # "um 5 vor 8" is a clock. In "Aufgabe 3 vor 8 Uhr" the 3 belongs to the exercise.
             off = int(match.group('off'))
-            if not 0 < off < 30:
+            if not 0 < off < 30 or not (match.group('minutes') or set(match.group('lead').split()) & {'um', 'gegen', 'ab', 'bis'}):
                 continue
             hour, minute = (hour - 1, 60 - off) if match.group('side') == 'vor' else (hour, off)
-        yield _clock(_later(hour or 12, match.group('late') or match.group('early') or part), minute, match.span())
+        yield _clock(_later(hour or 12, _time_of_day(match, part)), minute, match.span())
 
     for match in _ENGLISH.finditer(low):
         hour, half = int(match.group('h')), match.group('half')
@@ -339,10 +418,28 @@ def _clocks(text, low, part):
         yield _clock(hour % 12 + (12 if half == 'pm' else 0), 0, match.span())
 
 
-def find_clock(text, part=None):
-    """The clock time a text names: Clock('HH:MM', span), or None. Of several the first one counts."""
+def _beside(text, span, others):
+    """True when a find stands right next to one of the other spans, with nothing but a comma between."""
+    return any(not text[other[1]:span[0]].strip(' ,') if other[1] <= span[0] else not text[span[1]:other[0]].strip(' ,')
+               for other in others if other[1] <= span[0] or span[1] <= other[0])
+
+
+def find_clock(text, part=None, other_days=()):
+    """The clock time a text names: Clock('HH:MM', span), or None. Of several the first one counts.
+
+    The day of the entry is expected blotted out (see masked). A clock right
+    beside another day belongs to that day ("für die Party am Samstag um 15
+    Uhr") and is left alone, unless it also stands beside the day of the entry.
+    """
+    for start, end in other_days:
+        text = text[:start] + '\x02' * (end - start) + text[end:]
     low = _low(text)
-    found = [item for item in _clocks(text, low, part) if item]
+
+    def counts(span):
+        ours = text[:span[0]].rstrip(' ,').endswith('\x00') or text[span[1]:].lstrip(' ,').startswith('\x00')
+        return ours or not _beside(text, span, other_days)
+
+    found = [item for item in _clocks(text, low, part) if item and counts(item.span)]
     return min(_outermost(found), key=lambda item: item.span[0], default=None)
 
 
@@ -356,8 +453,9 @@ def masked(text, found):
 
 def find(text, today):
     """Day, clock time and where the words of both stand: (date or None, 'HH:MM' or None, [spans])."""
-    day = find_day(text, today)
-    clock = find_clock(masked(text, day), day.part if day else None)
+    found = days(text, today)
+    day = found[0] if found else None
+    clock = find_clock(masked(text, day), day.part if day else None, [other.span for other in found[1:]])
     spans = sorted(item.span for item in (day, clock) if item)
     return (day.day if day else None), (clock.text if clock else None), spans
 
@@ -369,7 +467,7 @@ def without(text, spans):
     opens = not text[:min(start for start, _ in spans)].strip()
     for start, end in sorted(spans, reverse=True):
         text = text[:start] + ' ' + text[end:]
-    text = re.sub(r'[(\[]\s*[)\]]', ' ', text)
+    text = re.sub(r'[(\[][\s,;:.–-]*[)\]]', ' ', text)
     text = re.sub(r'\s+([,.;:!?])', r'\1', ' '.join(text.split()))
     text = re.sub(r'^[\s,;:.!?/@–-]+' if opens else r'^[\s,;:/@–-]+', '', text)
     return re.sub(r'(?:\s+[/@–-]|[\s,;:/@])+$', '', text)

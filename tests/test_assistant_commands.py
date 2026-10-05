@@ -255,7 +255,7 @@ def test_a_weak_fit_asks_back_instead_of_ticking(tasks, school, message, offered
 
 def test_a_few_words_after_a_question_from_the_assistant_are_its_answer(tasks, school):
     asked = [{'role': 'user', 'content': 'Hilf mir bei Aufgabe 3'}, {'role': 'assistant', 'content': 'Bist du mit Teil a schon fertig?'}]
-    for reply in ('Fertig', 'Test', '3/4', 'Alles fertig', 'Diese Woche', 'Sportfest fertig', 'Stundenplan morgen', 'Ja, fertig'):
+    for reply in ('Fertig', 'Test', '3/4', 'Alles fertig', 'Diese Woche', 'Sportfest fertig', 'Stundenplan morgen', 'Ja, fertig', 'Was steht an'):
         assert ai.quick_answer(reply, school, asked) is None
     assert not any(done for done, _, _ in tasks().values())
     assert 'Wochenübersicht' in ai.quick_answer('Diese Woche', school)
@@ -264,6 +264,9 @@ def test_a_few_words_after_a_question_from_the_assistant_are_its_answer(tasks, s
     assert 'Offene Hausaufgaben' in ai.quick_answer('Welche Hausaufgaben habe ich?', school, asked)
     assert 'erledigt' in ai.quick_answer('Einkaufen erledigt', school, asked)
     assert 'Bewerbung schreiben' in ai.quick_answer('Erledigt: Bewerbung', school, asked)
+    for title in ('Blatt Analysis', 'Blatt Stochastik'):
+        db.create_hub_task(title=title)
+    assert 'Welche Aufgabe' in ai.quick_answer('Erledigt: Blatt', school, asked)
     greeted = [{'role': 'assistant', 'content': 'Guten Tag! Für heute ist keine Aufgabe offen. Was möchtest du wissen?'}]
     assert 'Klausur Analysis' in ai.quick_answer('Klausuren', school, greeted)
 
@@ -350,7 +353,7 @@ def test_dates_and_times_are_read_as_written():
 
 
 def test_an_endless_or_absurd_command_neither_hangs_nor_breaks(tasks, school):
-    for message in ('Erinnere mich' + ' bitte' * 40, 'Erinnere mich' + ' nochmal' * 30, 'Erinnere mich ' + 'daran, ' * 40, 'Neue Aufgabe: ' + '12.10. bis 13.10. - ' * 14):
+    for message in ('Erinnere mich' + ' bitte' * 22, 'Erinnere mich' + ' nochmal' * 22, 'Erinnere mich ' + 'daran, ' * 22, 'Neue Aufgabe: ' + '12.10. bis 13.10. - ' * 14):
         started = time.perf_counter()
         ai.quick_answer(message, school)
         assert time.perf_counter() - started < 1

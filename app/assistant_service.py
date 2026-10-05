@@ -1375,7 +1375,9 @@ def _title_of(text, reminder=False):
         title = re.sub(r'^[\s,:]*(?:(?:bitte|nochmal|noch\s+mal|noch\s+einmal|auch|dann)\s+)*(?:(?:daran|dran)\s*,?\s*)?', '', title, flags=re.IGNORECASE)
         title = re.sub(r'^dass\s+ich\s+(.+?)\s+(?:muss|soll|will|möchte)$', r'\1', title, flags=re.IGNORECASE)
         title = re.sub(r'^(?:dass\s+|ans\s+|an\s+(?:(?:den|die|das|dem|der|meine[nmrs]?|mein)\s+)?)', '', title, flags=re.IGNORECASE)
-    title = title.strip(' .,;:!?"„“”\'')
+    title = title.strip(' .,;:!?')
+    if len(title) > 1 and title[0] in '"„“\'' and title[-1] in '"“”\'' and not any(mark in title[1:-1] for mark in '"„“”'):
+        title = title[1:-1].strip(' .,;:!?')
     return '' if title.lower() in _NO_WORDS else title
 
 
@@ -1401,14 +1403,19 @@ def _moment(head, body):
     """Title, day and clock time of a command, or None when the words before its colon say more than when.
 
     What stands before the colon counts first. The title only gives what is
-    still missing and loses just those words, so a second day in it stays.
+    still missing and loses just those words, so a second day in it stays, and
+    so does a clock that belongs to that day. Words in quotation marks inside
+    the title are a name ("Heute Show") and are not read.
     """
     today = _today()
-    first, second = spoken_time.find_day(head, today), spoken_time.find_day(body, today)
+    quiet = _QUOTED.sub(lambda found: '\x01' * len(found.group()), body)
+    head_days, body_days = spoken_time.days(head, today), spoken_time.days(quiet, today)
+    first, second = next(iter(head_days), None), next(iter(body_days), None)
     day = first or second
     part = day.part if day else None
-    early = spoken_time.find_clock(spoken_time.masked(head, first), part)
-    late = None if early else spoken_time.find_clock(spoken_time.masked(body, second), part)
+    early = spoken_time.find_clock(spoken_time.masked(head, first), part, [found.span for found in head_days[1:]])
+    others = [found.span for found in (body_days if first else body_days[1:])]
+    late = None if early else spoken_time.find_clock(spoken_time.masked(quiet, None if first else second), part, others)
     if _FILLER.sub(' ', spoken_time.without(head, [found.span for found in (first, early) if found])).strip(' .,;:!?'):
         return None
     taken = [found.span for found in (None if first else second, late) if found]
@@ -1435,9 +1442,12 @@ def _reminder(rest):
     said = rest.strip(' ,:')
     about = _REMIND_OBJECT.search(said)
     day, clock, spans = _day_and_time(rest)
-    if _REMIND_QUESTION.match(said) or _REMIND_REFUSED.search(said[:about.start()] if about else said) or _REMIND_RECALL.search(rest):
+    left = spoken_time.without(rest, spans)
+    if _REMIND_QUESTION.match(said) or _REMIND_QUESTION.match(left.strip(' ,:')):
         return None
-    return (_title_of(spoken_time.without(rest, spans), reminder=True), day, clock) if day or clock else None
+    if _REMIND_REFUSED.search(said[:about.start()] if about else said) or _REMIND_RECALL.search(rest):
+        return None
+    return (_title_of(left, reminder=True), day, clock) if day or clock else None
 
 
 def _creation(message):
