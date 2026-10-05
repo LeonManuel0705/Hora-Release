@@ -378,16 +378,20 @@ def _insert(service, calendar, key, body):
     return _patch(service, calendar, key, body)
 
 
-def _newer_there(service, calendar, key, item):
-    """After a conflict: the event as Google has it now, if its change is newer than the one waiting here."""
+def _there(service, calendar, key):
+    """The event as Google has it now, a deleted one included. None when it has none under this id."""
     try:
-        event = service.events().get(calendarId=calendar, eventId=key).execute()
+        return service.events().get(calendarId=calendar, eventId=key).execute()
     except Exception as error:
         if _status_of(error) not in GONE:
             raise
         return None
+
+
+def _newer(event, item):
+    """True when the change Google has is newer than the one waiting here."""
     here, there = _moment(item.get('updated_at') or item.get('created_at')), _moment(event.get('updated'))
-    return event if here and there and there > here else None
+    return bool(here and there and there > here)
 
 
 def _give_way(item_id, stamp, event, calendar):
@@ -410,19 +414,31 @@ def _give_way(item_id, stamp, event, calendar):
 
 
 def _send(service, item, target):
-    """Brings one changed event to Google. Returns (id, calendar, event), or None when the newer change was Google's."""
+    """Brings one changed event to Google. Returns (id, calendar, event), or None when nothing was written there.
+
+    An event Google already has is only overwritten in the state that was
+    compared: the one of the last sync, or else the one Google names when it is
+    asked. A link from before the etag was kept is asked about first. If the
+    event changes there in that very moment, the edit waits for the next round.
+    """
     key, stamp = str(item.get('id')), item.get('updated_at') or item.get('created_at')
     body = _body(item)
     remote = item.get('google_id')
     calendar = item.get('google_calendar') or target
     fresh = bool(item.get('google_new')) or not remote
-    answer = None if fresh else _patch(service, calendar, remote, body, item.get('google_etag'))
+    answer = None
+    if not fresh:
+        etag = item.get('google_etag')
+        answer = _patch(service, calendar, remote, body, etag) if etag else CONFLICT
     if answer is CONFLICT or (answer is None and not fresh):
-        theirs = _newer_there(service, calendar, remote, item)
-        if theirs is not None and _give_way(key, stamp, theirs, {'id': calendar}):
+        theirs = _there(service, calendar, remote)
+        if theirs is not None and _newer(theirs, item) and _give_way(key, stamp, theirs, {'id': calendar}):
             return None
-        if answer is CONFLICT:
-            answer = _patch(service, calendar, remote, body)
+        answer = None
+        if theirs is not None and theirs.get('status') != 'cancelled':
+            answer = _patch(service, calendar, remote, body, theirs.get('etag'))
+            if answer is CONFLICT:
+                return None
     for _ in range(2):
         if answer is not None:
             break
@@ -519,7 +535,7 @@ def _adopt(cache, cancelled, seen):
                 fields = {'google_etag': view['etag']}
             else:
                 fields = {}
-            if not item.get('google_account') and cache.get('account'):
+            if not item.get('google_account') and cache.get('account') and key[0] == _primary(cache):
                 fields['google_account'] = cache['account']
             if any((item.get(name) or '') != value for name, value in fields.items()):
                 item.update(fields)
@@ -679,12 +695,12 @@ def drop(item):
 
 
 def waits_elsewhere(item):
-    """True for a changed event whose Google twin belongs to an account that is not the connected one."""
+    """True for a changed event whose Google twin belongs to an account other than the one the calendar uses, the first stored one."""
     account = item.get('google_account')
     if not account or not item.get('google_dirty'):
         return False
     try:
-        return account not in _google().load_tokens()
+        return account != next(iter(_google().load_tokens()), None)
     except Exception:
         return False
 

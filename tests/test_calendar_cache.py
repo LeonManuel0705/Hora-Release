@@ -741,7 +741,9 @@ def test_a_new_event_for_a_deleted_one_is_not_made_twice(google, client):
     assert 'google_dirty' not in local_events()[0] and 'google_new' not in local_events()[0]
 
 
-@pytest.mark.parametrize('reason, kept', [('rateLimitExceeded', True), ('accessNotConfigured', True), (None, True), ('forbidden', False)])
+@pytest.mark.parametrize('reason, kept', [
+    ('rateLimitExceeded', True), ('accessNotConfigured', True), (None, True), (('forbidden', 'rateLimitExceeded'), True), ('forbidden', False),
+])
 def test_a_limit_that_passes_is_not_a_calendar_that_went_away(google, reason, kept):
     google.add_calendar('team@example.org', 'Verein')
     google.put('team@example.org', 'Punktspiel', day(4), '10:00', '12:00')
@@ -1036,4 +1038,126 @@ def test_an_edit_whose_twin_lies_in_another_account_says_so(google, client, monk
     monkeypatch.setattr(google_oauth, 'calendar_service', lambda account_email=None: (FakeGoogle('zweit@example.org'), 'zweit@example.org'))
     changed = client.patch(f'/api/ui/events/{ref}', json={'title': 'Fahrstunde Autobahn'}).get_json()['event']
     assert changed.get('elsewhere') is True and 'pending' not in changed
+
+
+def test_a_waiting_edit_lies_elsewhere_only_when_the_calendar_uses_another_account(google, client, monkeypatch):
+    ref, _ = own_event(client)
+    calendar_cache.sync()
+    write_to_google(client, False)
+    changed = client.patch(f'/api/ui/events/{ref}', json={'title': 'Fahrstunde Autobahn'}).get_json()['event']
+    assert changed.get('pending') is True and 'elsewhere' not in changed
+    monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {'zweit@example.org': {'token': 'y'}, google.primary: {'token': 'x'}})
+    view = ui_data.event_view(local_events()[0])
+    assert view.get('elsewhere') is True and 'pending' not in view
+
+
+def test_a_twin_google_no_longer_knows_at_all_is_made_anew(google, client):
+    ref, remote = own_event(client)
+    calendar_cache.sync()
+    del google.store[google.primary][remote]
+    client.patch(f'/api/ui/events/{ref}', json={'title': 'Fahrstunde Autobahn'})
+    due_again()
+    calendar_cache.refresh()
+    item = local_events()[0]
+    assert [event['summary'] for event in google.live()] == ['Fahrstunde Autobahn']
+    assert item['google_id'] != remote and 'google_dirty' not in item and google.count('events.insert') == 2
+
+
+def test_a_gone_that_google_takes_back_makes_no_second_event(google, client):
+    ref, remote = own_event(client)
+    calendar_cache.sync()
+    write_to_google(client, False)
+    client.patch(f'/api/ui/events/{ref}', json={'title': 'Fahrstunde Autobahn'})
+    write_to_google(client, True)
+
+    def gone_once(details):
+        del google.hooks['events.patch']
+        raise FakeHttpError(410)
+
+    google.hooks['events.patch'] = gone_once
+    due_again()
+    calendar_cache.refresh()
+    assert [event['summary'] for event in google.live()] == ['Fahrstunde Autobahn']
+    assert local_events()[0]['google_id'] == remote and google.count('events.insert') == 1
+
+
+def test_a_link_from_before_is_compared_first_even_when_its_twin_lies_outside_the_copy(google, client):
+    ref, remote = own_event(client, date=day(200))
+    calendar_cache.sync()
+    ui_data.modify_list('calendar', lambda items: [items[0].pop(key) for key in ('google_etag', 'google_account')])
+    write_to_google(client, False)
+    client.patch(f'/api/ui/events/{ref}', json={'title': 'Fahrstunde Autobahn'})
+    google.change('primary', remote, summary='Fahrstunde verlegt')
+    write_to_google(client, True)
+    due_again()
+    calendar_cache.refresh()
+    assert local_events()[0]['title'] == 'Fahrstunde verlegt' and google.store[google.primary][remote]['summary'] == 'Fahrstunde verlegt'
+
+
+def test_an_edit_after_a_deletion_in_google_makes_the_event_anew_also_for_a_link_from_before(google, client):
+    ref, remote = own_event(client)
+    calendar_cache.sync()
+    ui_data.modify_list('calendar', lambda items: [items[0].pop('google_etag')])
+    write_to_google(client, False)
+    client.patch(f'/api/ui/events/{ref}', json={'title': 'Fahrstunde Autobahn'})
+    google.quiet_patch = True
+    google.cancel('primary', remote, age=120)
+    write_to_google(client, True)
+    google.calls.clear()
+    due_again()
+    calendar_cache.refresh()
+    item = local_events()[0]
+    assert item['title'] == 'Fahrstunde Autobahn' and item['google_id'] != remote and 'google_dirty' not in item
+    assert [event['summary'] for event in google.live()] == ['Fahrstunde Autobahn']
+    assert (google.count('events.patch'), google.count('events.insert')) == (0, 1)
+
+
+def test_a_change_in_google_between_asking_and_writing_is_not_overwritten(google, client):
+    ref, remote = own_event(client)
+    calendar_cache.sync()
+    ui_data.modify_list('calendar', lambda items: [items[0].pop('google_etag')])
+    write_to_google(client, False)
+    client.patch(f'/api/ui/events/{ref}', json={'title': 'Fahrstunde Autobahn'})
+    write_to_google(client, True)
+
+    def changed_meanwhile(details):
+        del google.hooks['events.patch']
+        google.change('primary', remote, summary='Fahrstunde verlegt')
+
+    google.hooks['events.patch'] = changed_meanwhile
+    due_again()
+    calendar_cache.refresh()
+    assert google.store[google.primary][remote]['summary'] == 'Fahrstunde verlegt'
+    assert local_events()[0]['title'] == 'Fahrstunde Autobahn' and local_events()[0].get('google_dirty') is True
+    due_again()
+    calendar_cache.refresh()
+    assert local_events()[0]['title'] == 'Fahrstunde verlegt' and 'google_dirty' not in local_events()[0]
+
+
+def test_a_link_from_before_is_not_pinned_to_an_account_that_only_sees_its_calendar(google, client, monkeypatch):
+    _, remote = own_event(client)
+    calendar_cache.sync()
+    ui_data.modify_list('calendar', lambda items: [items[0].pop('google_account')])
+    other = FakeGoogle('zweit@example.org')
+    other.add_calendar(google.primary, 'Geteilt')
+    other.store[google.primary][remote] = dict(google.store[google.primary][remote])
+    monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {other.primary: {'token': 'y'}})
+    monkeypatch.setattr(google_oauth, 'calendar_service', lambda account_email=None: (other, other.primary))
+    calendar_cache.sync(full=True)
+    assert 'google_account' not in local_events()[0] and local_events()[0]['google_id'] == remote
+
+
+def test_giving_way_keeps_what_it_takes_to_notice_the_next_conflict(google, client):
+    ref, remote = own_event(client)
+    calendar_cache.sync()
+    write_to_google(client, False)
+    client.patch(f'/api/ui/events/{ref}', json={'title': 'Fahrstunde Autobahn'})
+    google.change('primary', remote, summary='Fahrstunde verlegt')
+    write_to_google(client, True)
+    google.calls.clear()
+    due_again()
+    calendar_cache.refresh()
+    item = local_events()[0]
+    assert item['title'] == 'Fahrstunde verlegt' and item['google_etag'] == google.store[google.primary][remote]['etag']
+    assert google.count('events.list') == 1
 

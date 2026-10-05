@@ -20,7 +20,8 @@ class FakeHttpError(Exception):
     def __init__(self, status, reason=None):
         super().__init__(f'HTTP {status}')
         self.resp = SimpleNamespace(status=status)
-        self.content = json.dumps({'error': {'errors': [{'reason': reason}] if reason else []}}).encode()
+        reasons = [reason] if isinstance(reason, str) else list(reason or [])
+        self.content = json.dumps({'error': {'errors': [{'reason': item} for item in reasons]}}).encode()
 
 
 class _Call:
@@ -35,11 +36,12 @@ class _Call:
 class FakeGoogle:
     """Stands in for the Calendar API as far as the sync uses it.
 
-    Like the real service it merges a patch into the stored event, refuses an
-    event that has both a day and a time, only takes ids made of a-v and 0-9,
-    answers 409 for an id that is taken and 412 for a patch whose If-Match no
-    longer fits, keeps deleted events as cancelled ones and only lists them
-    when asked to.
+    Like the real service it merges a patch into the stored event at every
+    depth, refuses an event that has both a day and a time, only takes ids made
+    of a-v and 0-9, answers 409 for an id that is taken and 412 for a patch
+    whose If-Match no longer fits, keeps deleted events as cancelled ones and
+    only lists them when asked to. With quiet_patch it takes a patch of a
+    deleted event without complaint and stamps it, the worst the real one may do.
     """
 
     def __init__(self, primary='me@example.org'):
@@ -127,15 +129,18 @@ class FakeGoogle:
 
     @staticmethod
     def _merged(event, body):
-        result = dict(event)
-        for key, value in body.items():
-            if isinstance(value, dict):
-                mixed = {**(result.get(key) if isinstance(result.get(key), dict) else {}), **value}
-                result[key] = {name: item for name, item in mixed.items() if item is not None}
-            elif value is None:
-                result.pop(key, None)
-            else:
-                result[key] = value
+        def merge(old, new):
+            result = dict(old)
+            for key, value in new.items():
+                if value is None:
+                    result.pop(key, None)
+                elif isinstance(value, dict):
+                    result[key] = merge(result[key] if isinstance(result.get(key), dict) else {}, value)
+                else:
+                    result[key] = value
+            return result
+
+        result = merge(event, body)
         for side in ('start', 'end'):
             if 'date' in result.get(side, {}) and 'dateTime' in result.get(side, {}):
                 raise FakeHttpError(400)
@@ -212,7 +217,7 @@ class FakeGoogle:
                 if bucket[eventId]['status'] == 'cancelled':
                     if not self.quiet_patch:
                         raise FakeHttpError(404)
-                    return dict(bucket[eventId])
+                    return dict(self._stamped(bucket[eventId]))
                 bucket[eventId] = self._stamped(self._merged(bucket[eventId], body))
                 return self._answer('events.patch', dict(bucket[eventId]))
             return _Call(run)
