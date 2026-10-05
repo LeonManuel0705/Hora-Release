@@ -272,12 +272,7 @@ const savedId = (task) => String(serverId(task.id) || task.id);
 
 function restoreSaved(task) {
   const before = savedId(task);
-  const link = followLinks.get(before);
-  taskApi.restore(task).then(() => {
-    if (!link || savedId(task) === before) return;
-    followLinks.drop(before);
-    followLinks.set(savedId(task), link);
-  }, () => {});
+  taskApi.restore(task).then(() => followLinks.rename(before, savedId(task)), () => {});
 }
 
 function dropFollow(task) {
@@ -294,7 +289,11 @@ function dropFollow(task) {
 // it may belong to a second copy of the task or was entered by hand. Only what this tick created is.
 function followUp(task, date, extra = {}) {
   const twin = state.tasks.find((item) => item !== task && item.title === task.title && (item.subject || null) === (task.subject || null) && item.repeat === task.repeat && item.date === date);
-  if (twin) return twin;
+  if (twin) {
+    task.follow = null;
+    followLinks.drop(savedId(task));
+    return twin;
+  }
   const follow = { ...task, ...extra, id: `${task.id}-${Date.now()}`, done: false, follow: null, date };
   state.tasks.push(follow);
   task.follow = follow.id;

@@ -217,25 +217,28 @@ export function nextRepeatDate(iso, repeat, after = isoDate(now())) {
 }
 
 const FOLLOW_KEY = "app-task-follow";
-const followMap = () => {
+// Kept as a list of pairs, oldest first. An object would sort number-like ids, and the cap would drop the wrong links.
+const followPairs = () => {
   const value = storage.get(FOLLOW_KEY);
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const pairs = Array.isArray(value) ? value : value && typeof value === "object" ? Object.entries(value) : [];
+  return pairs.filter((pair) => Array.isArray(pair) && pair.length === 2).map(([id, follow]) => [String(id), String(follow)]);
 };
+const keepFollowPairs = (pairs) => storage.set(FOLLOW_KEY, pairs.slice(-60));
 
 export const followLinks = {
-  get: (id) => followMap()[String(id)] || null,
+  get: (id) => followPairs().find(([key]) => key === String(id))?.[1] || null,
   set(id, follow) {
-    const map = followMap();
-    map[String(id)] = String(follow);
-    const keys = Object.keys(map);
-    keys.slice(0, Math.max(0, keys.length - 60)).forEach((key) => delete map[key]);
-    storage.set(FOLLOW_KEY, map);
+    keepFollowPairs([...followPairs().filter(([key]) => key !== String(id)), [String(id), String(follow)]]);
   },
   drop(id) {
-    const map = followMap();
-    if (!(String(id) in map)) return;
-    delete map[String(id)];
-    storage.set(FOLLOW_KEY, map);
+    const pairs = followPairs();
+    const kept = pairs.filter(([key]) => key !== String(id));
+    if (kept.length !== pairs.length) keepFollowPairs(kept);
+  },
+  rename(from, to) {
+    const pairs = followPairs();
+    const renamed = pairs.map((pair) => pair.map((id) => (id === String(from) ? String(to) : id)));
+    if (String(from) !== String(to) && pairs.some((pair) => pair.includes(String(from)))) keepFollowPairs(renamed);
   },
 };
 

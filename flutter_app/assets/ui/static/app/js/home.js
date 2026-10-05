@@ -1146,12 +1146,7 @@ const savedId = (task) => String(serverId(task.id) || task.id);
 
 function restoreSaved(task) {
   const before = savedId(task);
-  const link = followLinks.get(before);
-  taskApi.restore(task).then(() => {
-    if (!link || savedId(task) === before) return;
-    followLinks.drop(before);
-    followLinks.set(savedId(task), link);
-  }, () => {});
+  taskApi.restore(task).then(() => followLinks.rename(before, savedId(task)), () => {});
 }
 
 function dropFollow(task) {
@@ -1168,7 +1163,11 @@ function dropFollow(task) {
 // it may belong to a second copy of the task or was entered by hand. Only what this tick created is.
 function followUp(task, date, extra = {}) {
   const twin = state.tasks.find((item) => item !== task && item.title === task.title && (item.subject || null) === (task.subject || null) && item.repeat === task.repeat && item.date === date);
-  if (twin) return twin;
+  if (twin) {
+    task.follow = null;
+    followLinks.drop(savedId(task));
+    return twin;
+  }
   const follow = { ...task, ...extra, id: `${task.id}-${Date.now()}`, done: false, follow: null, date };
   state.tasks.push(follow);
   task.follow = follow.id;
@@ -1227,8 +1226,10 @@ function removeTask(id, kind, { refocus = false } = {}) {
   const rowIndex = row ? [...$("taskList").querySelectorAll(".task")].indexOf(row) : -1;
   const hadFocus = refocus || row?.contains(document.activeElement) || document.activeElement === row;
   const before = task.date || null;
+  const beforeSomeday = !!task.someday;
   if (kind === "later") {
     task.date = isoDate(addDays(state.day.date, 1));
+    task.someday = false;
     taskApi.update(id, { date: task.date, someday: false });
   } else {
     state.tasks.splice(index, 1);
@@ -1242,17 +1243,18 @@ function removeTask(id, kind, { refocus = false } = {}) {
   exitInPlace(row).then(finish);
   toast(kind === "later" ? `Auf morgen verschoben: „${esc(task.title)}“` : `Gelöscht: „${esc(task.title)}“`, {
     icon: kind === "later" ? "calendar-plus" : "trash-2",
-    action: { label: "Rückgängig", undo: true, run: () => restoreTask(id, kind, before) },
+    action: { label: "Rückgängig", undo: true, run: () => restoreTask(id, kind, before, beforeSomeday) },
     returnFocus: () => focusTaskAt(0),
   });
 }
 
-function restoreTask(id, kind, before = null) {
+function restoreTask(id, kind, before = null, someday = false) {
   if (kind === "later") {
     const task = state.tasks.find((item) => item.id === id);
     if (task) {
       task.date = before;
-      taskApi.update(id, { date: before, someday: false });
+      task.someday = someday;
+      taskApi.update(id, { date: before, someday });
     }
   } else {
     const at = state.deleted.findIndex((entry) => entry.task.id === id);
