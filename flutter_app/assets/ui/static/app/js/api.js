@@ -48,6 +48,8 @@ function create(key, url, body, pick) {
   return queue(key, () => job);
 }
 
+export const serverId = (id) => serverIds.get(id) || null;
+
 const clean = (value) => (value === undefined ? null : value);
 
 function taskBody(task) {

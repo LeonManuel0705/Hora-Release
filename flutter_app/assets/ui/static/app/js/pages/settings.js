@@ -1295,6 +1295,11 @@ function renderGoogle() {
       label: `Google-Kalender <span class="status is-ok">${icon("circle-check")}Verbunden</span>`,
       desc: `${shown} von ${plural(calendars.length, "Kalender", "Kalendern")} erscheinen im Kalender von ${BRAND}.`,
       control: `<button class="btn btn-quiet" type="button" id="googleDisconnect">Trennen</button>`,
+    }) + row({
+      id: "rowGoogleWrite",
+      label: "Eigene Termine eintragen",
+      desc: `Was du in ${BRAND} anlegst, änderst oder löschst, steht auch in deinem Google-Kalender.`,
+      control: switchHtml("googleWrite", prefs.google.write !== false, "rowGoogleWriteLabel", { describedBy: "rowGoogleWriteDesc" }),
     }) + `<div class="set-sub" role="group" aria-label="Kalender">${calendars.map((item) => `<div class="set-row"><span class="cal-swatch" style="--k:${KIND_COLORS[item.kind] || "var(--line-strong)"}" aria-hidden="true"></span><span class="set-row-label" id="gcal-${item.id}-label">${esc(item.name)}</span>${switchHtml(`gcal-${item.id}`, prefs.google.calendars[item.id] !== false, `gcal-${item.id}-label`)}</div>`).join("")}</div>`;
   }
   keepFocus(card, () => (card.innerHTML = html));
@@ -1516,6 +1521,12 @@ function bindAccounts() {
     else if (event.target.closest("#googleCancel")) cancelGoogle();
     else if (event.target.closest("#googleDisconnect")) {
       if (confirmTwice("google", event.target.closest("#googleDisconnect"))) disconnectGoogle();
+    } else if (event.target.closest("#googleWrite")) {
+      prefs.google.write = prefs.google.write === false;
+      savePrefs();
+      renderGoogle();
+      $("googleWrite")?.focus({ preventScroll: true });
+      say(prefs.google.write ? "Eigene Termine werden in Google eingetragen" : "Eigene Termine bleiben in der App");
     } else {
       const toggle = event.target.closest('[role="switch"][id^="gcal-"]');
       if (!toggle) return;

@@ -1,10 +1,10 @@
 import {
   data, flags, params, esc, icon, tinte, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
-  weekType, abWeeks, isoWeek, subject, hueVar, blockOf, lessonsFor, inDays, duration, shortDate, longDate, storage,
+  weekType, abWeeks, isoWeek, subject, hueVar, blockOf, lessonsFor, inDays, duration, shortDate, longDate, storage, isOverdue,
   WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "../core.js";
 import { animates, travels, flipKeyed, exitInPlace, crossfade, token, ms } from "../motion.js";
 import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen, registerSearch, syncTime, pageUrl } from "../shell.js";
-import { events as eventApi, debounced } from "../api.js";
+import { events as eventApi, debounced, serverId } from "../api.js";
 
 const saveText = debounced(700, (key, id, changes) => eventApi.update(id, changes));
 
@@ -56,15 +56,18 @@ const state = {
   fresh: null,
 };
 
+const sync = { source: extra.sync?.source || null, write: !!extra.sync?.write, window: extra.sync?.window || null, ranges: [], busy: false };
+const removed = new Set();
+const sourceWord = () => (sync.source === "google" ? "dem Google-Kalender" : "dem verbundenen Kalender");
+
 function load() {
   const notes = extra.notes || {};
   const seen = new Set();
   const source = flags.empty ? [] : [...data.events, ...(extra.events || [])];
   state.events = source
     .filter((item) => {
-      const key = `${item.title}|${item.date}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
       return true;
     })
     .map((item) => ({ ...item, kind: KINDS[item.kind] ? item.kind : "private", notes: item.notes || notes[item.id] || "", synced: !!item.synced }));
@@ -257,7 +260,7 @@ function dueIcon(item) {
 }
 
 function dueTone(item) {
-  const overdue = item.date < todayIso();
+  const overdue = isOverdue(item, todayIso());
   if (overdue) return " is-overdue";
   return isTest(item) ? " is-test" : " is-due";
 }
@@ -276,7 +279,7 @@ function chipHtml(entry, isos) {
     return `<button type="button" class="cw-chip is-holiday${selected}" style="grid-column:${column}" data-id="${esc(item.id)}" data-key="chip:${esc(item.id)}"${tip} ${order} aria-label="${esc(label)}">${icon("sun")}<span class="cw-chip-text">${esc(item.title)}</span></button>`;
   }
   if (type === "due") {
-    const overdue = item.date < todayIso();
+    const overdue = isOverdue(item, todayIso());
     const label = `${dueLabel(item, { long: true })}, ${dueTime(item)}${overdue ? ", überfällig" : ""}`;
     const text = state.narrow ? `<span class="cw-chip-text">${esc(item.kind)} ${esc(subjectName(item.subject))}: ${esc(item.title)}</span>` : `<span class="cw-chip-text">${dueLabel(item)}</span>`;
     return `<button type="button" class="cw-chip${dueTone(item)}${selected}" style="grid-column:${column};--hue:${hueVar(item.subject)}" data-id="${esc(item.id)}" data-key="chip:${esc(item.id)}" data-tip="${esc(`<b>${esc(item.kind)} ${esc(subjectName(item.subject))}</b>: ${esc(item.title)}${item.block ? `, ${item.block}. Block` : ""}${overdue ? "<br>überfällig" : ""}`)}" ${order} aria-label="${esc(label)}">${icon(dueIcon(item))}${text}</button>`;
@@ -369,8 +372,13 @@ function weekColumn(date, range) {
   </div>`;
 }
 
+function ownSource(item) {
+  if (sync.source !== "google" || (!item.google && !sync.write)) return `Eigener Termin in ${BRAND}`;
+  return item.google && !item.pending ? "Eigener Termin, steht auch im Google-Kalender" : "Eigener Termin, wird in den Google-Kalender übertragen";
+}
+
 function loadingHtml(inline = false) {
-  return `<div class="loading-card cal-loading${inline ? " is-inline" : ""}" role="status">${tinte("laedt", 96)}<div><p class="empty-title">Hole Termine aus dem Google-Kalender</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
+  return `<div class="loading-card cal-loading${inline ? " is-inline" : ""}" role="status">${tinte("laedt", 96)}<div><p class="empty-title">Hole Termine aus ${sourceWord()}</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
 }
 
 function nextEntryAfter(iso) {
@@ -524,7 +532,7 @@ function listRow({ type, item }) {
   }
   if (type === "due") {
     const block = item.block ? blockOf(item.block) : null;
-    const overdue = item.date < todayIso();
+    const overdue = isOverdue(item, todayIso());
     const lesson = item.block ? lessonsFor(parseDate(item.date)).find((entry) => entry.block === item.block) : null;
     const meta = [`<i class="subject-dot" style="--hue:${hueVar(item.subject)}"></i>${esc(subject(item.subject).label)}`, block ? `${block.n}. Block` : "", lesson ? esc(lesson.room) : "", overdue ? `<span class="cl-urgent">überfällig</span>` : ""].filter(Boolean).join(", ");
     return `<li><button type="button" class="cl-row is-due${isTest(item) ? " is-test" : ""}${selected}" ${base}>
@@ -674,7 +682,7 @@ function panelEvent(item) {
         <div class="field-body" role="group" aria-labelledby="calKindLabel">${Object.entries(KINDS).map(([key, kind]) => `<button type="button" class="pill cal-kind" data-kind="${key}"${locked} aria-pressed="${item.kind === key}" style="--k:${kindVar(key)}"><i class="cal-dot"></i>${kind.label}</button>`).join("")}</div>
       </div>
       <label class="field"><span class="field-label">Notizen</span><textarea class="field-control" id="calPanelNotes"${locked} rows="3" placeholder="Was du mitbringen oder vorbereiten willst">${esc(item.notes || "")}</textarea></label>
-      <p class="panel-source">${icon("calendar-days")}${item.synced ? `Aus ${esc(item.source || "einem verbundenen Kalender")}, dort änderbar` : `Eigener Termin in ${BRAND}`}</p>
+      <p class="panel-source">${icon("calendar-days")}${item.synced ? `Aus ${esc(item.source || "einem verbundenen Kalender")}, dort änderbar` : ownSource(item)}</p>
     </div>`;
 }
 
@@ -682,7 +690,7 @@ function panelDue(item) {
   const date = parseDate(item.date);
   const lesson = item.block ? lessonsFor(date).find((entry) => entry.block === item.block) : null;
   const open = prepTasks(item.id);
-  const overdue = item.date < todayIso();
+  const overdue = isOverdue(item, todayIso());
   const tone = overdue || isTest(item) ? " is-urgent" : "";
   const facts = [
     ["Art", `<i class="subject-dot" style="--hue:${hueVar(item.subject)}"></i>${esc(item.kind)}, ${esc(subject(item.subject).name)}`],
@@ -833,6 +841,7 @@ function render({ slide = 0, fade = false, flip = false } = {}) {
   if (slide) slideIn(slide);
   else if (fade) crossfade($("calView"), 160);
   popFresh();
+  ensureRange();
 }
 
 function announce() {
@@ -1070,6 +1079,7 @@ function removeEvent(id, { silent = false } = {}) {
     return;
   }
   const [item] = state.events.splice(index, 1);
+  removed.add(serverId(id) || id);
   eventApi.remove(id);
   const nodes = [...document.querySelectorAll(`#calView [data-id="${CSS.escape(id)}"], #calView [data-item="${CSS.escape(id)}"], #calOverview [data-id="${CSS.escape(id)}"]`)];
   const hadFocus = nodes.some((node) => node.contains(document.activeElement)) || $("calPanel").contains(document.activeElement);
@@ -1190,36 +1200,97 @@ function bindPanel() {
   });
 }
 
-async function startSync({ first = false } = {}) {
-  if (state.loading) return;
-  state.loading = true;
+const syncKey = (item) => `${item.title}|${item.date}|${item.start || ""}`;
+const shaped = (item, synced) => ({ ...item, kind: KINDS[item.kind] ? item.kind : "private", notes: item.notes || "", synced });
+
+function mergeOwn(list) {
+  const current = state.events.filter((item) => !item.synced);
+  if (!Array.isArray(list)) return current;
+  const fresh = new Map(list.filter((item) => !removed.has(item.id)).map((item) => [item.id, item]));
+  const result = [];
+  current.forEach((item) => {
+    const id = serverId(item.id) || item.id;
+    const server = fresh.get(id);
+    fresh.delete(id);
+    if (item.id === state.selected || (!server && item.id.startsWith("neu-"))) result.push(item);
+    else if (server) result.push({ ...shaped(server, false), id: item.id });
+  });
+  fresh.forEach((item) => result.push(shaped(item, false)));
+  return result;
+}
+
+function applySynced(payload, span = null) {
+  const before = JSON.stringify(state.events);
+  if (payload.window) sync.window = payload.window;
+  if ("source" in payload) sync.source = payload.source;
+  const own = mergeOwn(payload.own);
+  const taken = new Set(own.map(syncKey));
+  const fresh = (payload.events || []).filter((item) => !taken.has(syncKey(item))).map((item) => shaped(item, true));
+  const range = span || (sync.source === "google" ? sync.window : null);
+  const ids = new Set(fresh.map((item) => item.id));
+  const others = state.events.filter((item) => item.synced && range && (item.date < range.start || item.date > range.end) && !ids.has(item.id));
+  state.events = [...own, ...others, ...fresh];
+  return JSON.stringify(state.events) !== before;
+}
+
+async function fetchSynced(query) {
+  const response = await fetch(`/api/ui/events/synced?${new URLSearchParams(query)}`, { credentials: "same-origin", cache: "no-store" });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.error || "");
+  return payload;
+}
+
+function ensureRange() {
+  if (sync.source !== "google" || !sync.window || sync.busy) return;
+  const span = period();
+  const start = isoDate(span.start);
+  const end = isoDate(span.end);
+  if (start >= sync.window.start && end <= sync.window.end) return;
+  const key = `${start}:${end}`;
+  if (sync.ranges.includes(key)) return;
+  sync.ranges.push(key);
+  fetchSynced({ start, end })
+    .then((payload) => {
+      if (applySynced(payload, { start, end })) render();
+    })
+    .catch(() => {
+      sync.ranges = sync.ranges.filter((item) => item !== key);
+    });
+}
+
+async function startSync({ first = false, manual = false } = {}) {
+  if (sync.busy) return;
+  sync.busy = true;
+  state.loading = sync.source === "google" && !state.events.some((item) => item.synced) && !extra.sync?.stand;
   const button = $("calSync");
   button.classList.add("is-spinning");
   button.setAttribute("aria-busy", "true");
-  render();
-  const start = isoDate(addDays(startOfDay(now()), -42));
-  const end = isoDate(addDays(startOfDay(now()), 120));
-  let fresh = null;
+  if (state.loading) render();
+  let payload = null;
   try {
-    const response = await fetch(`/api/ui/events/synced?start=${start}&end=${end}`, { credentials: "same-origin" });
-    const payload = await response.json();
-    if (response.ok && payload.success) fresh = payload.events || [];
+    payload = await fetchSynced({ frisch: manual ? "alles" : "1" });
   } catch {}
   const finish = () => {
+    let changed = state.loading;
+    sync.busy = false;
     state.loading = false;
     button.classList.remove("is-spinning");
     button.removeAttribute("aria-busy");
-    if (fresh) {
-      const own = state.events.filter((item) => !item.synced);
-      const seen = new Set(own.map((item) => `${item.title}|${item.date}|${item.start || ""}`));
-      const synced = fresh.filter((item) => !seen.has(`${item.title}|${item.date}|${item.start || ""}`))
-        .map((item) => ({ ...item, kind: KINDS[item.kind] ? item.kind : "private", notes: item.notes || "", synced: true }));
-      state.events = [...own, ...synced];
+    if (payload) {
+      changed = applySynced(payload) || changed;
+      if (payload.problem === "login") {
+        toast(esc(payload.message), { icon: "circle-alert", action: { label: "Einstellungen", run: () => location.assign(pageUrl("settings", "/hub/settings#konten")) } });
+      } else if (payload.problem && manual) {
+        toast(esc(payload.message), { icon: "wifi-off" });
+      }
     } else if (!first) {
       toast("Die verbundenen Kalender sind gerade nicht erreichbar.", { icon: "wifi-off" });
     }
-    render();
-    revealSynced();
+    if (changed) {
+      render();
+      revealSynced();
+    }
+    ensureRange();
   };
   const card = document.querySelector("#calView .cal-loading");
   if (card) exitInPlace(card).then(finish);
@@ -1297,7 +1368,7 @@ function bind() {
   $("calPrev").addEventListener("click", () => step(-1));
   $("calNext").addEventListener("click", () => step(1));
   $("calToday").addEventListener("click", goToday);
-  $("calSync").addEventListener("click", () => startSync());
+  $("calSync").addEventListener("click", () => startSync({ manual: true }));
   $("calNew").addEventListener("click", () => $("calQuickInput").focus());
   $("calQuickInput").addEventListener("input", renderQuickChips);
   $("calQuickInput").addEventListener("keydown", (event) => {

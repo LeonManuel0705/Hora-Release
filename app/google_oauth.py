@@ -262,6 +262,8 @@ def remove_google_account(email: str) -> bool:
     if email in tokens:
         del tokens[email]
         save_tokens(tokens)
+        from . import calendar_cache
+        calendar_cache.forget()
         return True
     return False
 
@@ -438,6 +440,73 @@ def send_gmail(from_email: str, to_email: str, subject: str, body: str) -> Dict:
         logging.error(f"Gmail send error: {e}")
         return {"success": False, "error": "Failed to send email"}
 
+def calendar_service(account_email: str = None):
+    tokens = load_tokens()
+    if not tokens:
+        return None, None
+    email = account_email if account_email in tokens else list(tokens.keys())[0]
+    creds = get_credentials(email)
+    if not creds:
+        return None, email
+    return build('calendar', 'v3', credentials=creds), email
+
+
+def _local_day_and_time(value: str):
+    """Google answers in the calendar's time zone; the app shows this computer's local time."""
+    if not value:
+        return '', ''
+    try:
+        moment = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return value[:10], value[11:16]
+    if moment.tzinfo is not None:
+        moment = moment.astimezone()
+    return moment.strftime('%Y-%m-%d'), moment.strftime('%H:%M')
+
+
+def calendar_event_view(event: Dict, calendar: Dict) -> Dict:
+    start = event.get('start', {})
+    end = event.get('end', {})
+    if 'date' in start:
+        start_date = start['date']
+        start_time = None
+        end_date = end.get('date', start_date)
+        end_time = None
+        all_day = True
+    else:
+        start_date, start_time = _local_day_and_time(start.get('dateTime', ''))
+        end_date, end_time = _local_day_and_time(end.get('dateTime', ''))
+        end_date = end_date or start_date
+        all_day = False
+    return {
+        "id": event.get('id', ''),
+        "title": event.get('summary', '(No title)'),
+        "start_date": start_date,
+        "start_time": start_time,
+        "end_date": end_date,
+        "end_time": end_time,
+        "all_day": all_day,
+        "location": event.get('location', ''),
+        "description": event.get('description', ''),
+        "calendar": calendar.get('summary', 'Calendar'),
+        "calendar_id": calendar.get('id'),
+        "calendar_color": calendar.get('backgroundColor', '#4285f4'),
+        "source": "google",
+        "recurring_event_id": event.get('recurringEventId', None)
+    }
+
+
+def list_calendar_events(service, calendar_id: str, **params) -> List[Dict]:
+    items = []
+    token = None
+    while True:
+        page = service.events().list(calendarId=calendar_id, maxResults=250, pageToken=token, **params).execute()
+        items.extend(page.get('items', []))
+        token = page.get('nextPageToken')
+        if not token:
+            return items
+
+
 def fetch_google_calendar_events(days_ahead: int = 30, account_email: str = None,
                                   start_date: str = None, end_date: str = None) -> Dict:
     tokens = load_tokens()
@@ -483,57 +552,9 @@ def fetch_google_calendar_events(days_ahead: int = 30, account_email: str = None
         all_events = []
 
         for cal in calendars:
-            cal_id = cal.get('id')
-            cal_name = cal.get('summary', 'Calendar')
-            cal_color = cal.get('backgroundColor', '#4285f4')
-
             try:
-                events_result = service.events().list(
-                    calendarId=cal_id,
-                    timeMin=time_min,
-                    timeMax=time_max,
-                    maxResults=100,
-                    singleEvents=True,
-                    orderBy='startTime'
-                ).execute()
-
-                for event in events_result.get('items', []):
-                    start = event.get('start', {})
-                    end = event.get('end', {})
-
-                    if 'date' in start:
-
-                        start_date = start['date']
-                        start_time = None
-                        end_date = end.get('date', start_date)
-                        end_time = None
-                        all_day = True
-                    else:
-
-                        start_dt = start.get('dateTime', '')
-                        end_dt = end.get('dateTime', '')
-                        start_date = start_dt[:10] if start_dt else ''
-                        start_time = start_dt[11:16] if len(start_dt) > 11 else ''
-                        end_date = end_dt[:10] if end_dt else start_date
-                        end_time = end_dt[11:16] if len(end_dt) > 11 else ''
-                        all_day = False
-
-                    all_events.append({
-                        "id": event.get('id', ''),
-                        "title": event.get('summary', '(No title)'),
-                        "start_date": start_date,
-                        "start_time": start_time,
-                        "end_date": end_date,
-                        "end_time": end_time,
-                        "all_day": all_day,
-                        "location": event.get('location', ''),
-                        "description": event.get('description', ''),
-                        "calendar": cal_name,
-                        "calendar_id": cal_id,
-                        "calendar_color": cal_color,
-                        "source": "google",
-                        "recurring_event_id": event.get('recurringEventId', None)
-                    })
+                for event in list_calendar_events(service, cal.get('id'), timeMin=time_min, timeMax=time_max, singleEvents=True, orderBy='startTime'):
+                    all_events.append(calendar_event_view(event, cal))
             except Exception:
 
                 continue

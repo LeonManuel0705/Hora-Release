@@ -2,11 +2,13 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 import json
+import re
 import time
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, current_app, g, jsonify, render_template, request
+from flask import Blueprint, current_app, g, jsonify, render_template, request, send_file
 
+from . import calendar_cache
 from . import database as db
 from . import transit_service
 from . import ui_assets
@@ -415,10 +417,13 @@ def create_event():
         _event_payload(payload, item, creating=True)
     except ValueError as error:
         return _error(str(error))
+    send = calendar_cache.touch(item)
     try:
         ui_data.modify_list('calendar', lambda items: items.append(item))
     except ui_data.StoreError:
         return _error('Der Kalender ließ sich nicht lesen', 500)
+    if send:
+        calendar_cache.push_soon()
     return jsonify({'success': True, 'event': ui_data.event_view(item)})
 
 
@@ -433,14 +438,17 @@ def change_event(ref):
         if payload is None:
             return _error('JSON erwartet')
 
+    sending = []
+
     def change(items):
         for index, item in enumerate(items):
             if str(item.get('id')) == event_id:
                 if payload is None:
-                    items.pop(index)
+                    sending.append(calendar_cache.drop(items.pop(index)))
                     return {}
                 _event_payload(payload, item, creating=False)
                 item['updated_at'] = datetime.now().isoformat()
+                sending.append(calendar_cache.touch(item))
                 return item
         return None
 
@@ -452,6 +460,8 @@ def change_event(ref):
         return _error(str(error))
     if found is None:
         return _error('Termin nicht gefunden', 404)
+    if any(sending):
+        calendar_cache.push_soon()
     if payload is None:
         return jsonify({'success': True})
     return jsonify({'success': True, 'event': ui_data.event_view(found)})
@@ -479,52 +489,6 @@ def create_note():
     return jsonify({'success': True, 'note': {'id': note['id']}})
 
 
-SYNCED_KIND_WORDS = (
-    ('training', ('training', 'sport', 'gym', 'fitness', 'schwimm', 'verein')),
-    ('school', ('schule', 'school', 'iserv', 'kurs', 'uni', 'klasse')),
-)
-
-
-def _synced_kind(*texts):
-    text = ' '.join(str(item or '') for item in texts).casefold()
-    for kind, words in SYNCED_KIND_WORDS:
-        if any(word in text for word in words):
-            return kind
-    return 'private'
-
-
-def _synced_google(start, end):
-    from .google_oauth import fetch_google_calendar_events, load_tokens
-    if not load_tokens():
-        return None
-    result = fetch_google_calendar_events(start_date=start, end_date=end, days_ahead=180)
-    if not result.get('success'):
-        return None
-    events = []
-    for item in result.get('events', []):
-        day = ui_data.iso_day(item.get('start_date'))
-        if not day:
-            continue
-        last = ui_data.iso_day(item.get('end_date'))
-        if item.get('all_day') and last:
-            last = (date.fromisoformat(last) - timedelta(days=1)).isoformat()
-        view = {
-            'id': f"g-{item.get('calendar_id', '')}-{item.get('id', '')}",
-            'date': day,
-            'start': None if item.get('all_day') else ui_data.clock(item.get('start_time')),
-            'end': None if item.get('all_day') else ui_data.clock(item.get('end_time')),
-            'title': str(item.get('title') or 'Termin'),
-            'place': str(item.get('location') or ''),
-            'kind': _synced_kind(item.get('calendar'), item.get('title')),
-            'notes': str(item.get('description') or '')[:2000],
-            'source': 'dem Google-Kalender',
-        }
-        if last and last > day:
-            view['endDate'] = last
-        events.append(view)
-    return events
-
-
 def _synced_macos(start, end):
     from .calendar_service import get_macos_calendar_events
     days = max(1, min(365, (date.fromisoformat(end) - date.today()).days))
@@ -543,30 +507,70 @@ def _synced_macos(start, end):
             'end': None,
             'title': str(item.get('title') or 'Termin'),
             'place': str(item.get('location') or ''),
-            'kind': _synced_kind(item.get('calendar'), item.get('title')),
+            'kind': calendar_cache.kind_of(item.get('calendar'), item.get('title')),
             'notes': str(item.get('description') or '')[:2000],
             'source': 'dem Mac-Kalender',
+            'synced': True,
         })
     return events
+
+
+SYNC_PROBLEMS = {
+    'login': 'Die Anmeldung bei Google ist abgelaufen. Verbinde Google in den Einstellungen neu.',
+    'offline': 'Google ist gerade nicht erreichbar.',
+}
+
+
+def _google_range(start, end):
+    from .google_oauth import fetch_google_calendar_events
+    result = fetch_google_calendar_events(start_date=start, end_date=end)
+    if not result.get('success'):
+        return None
+    hidden = calendar_cache.hidden_calendars()
+    linked = {item.get('google_id') for item in ui_data.load_list('calendar') if item.get('google_id')}
+    views = [calendar_cache.view(item) for item in result.get('events', []) if item.get('calendar_id') not in hidden and item.get('id') not in linked]
+    return [view for view in views if view]
 
 
 @bp.route('/api/ui/events/synced')
 def synced_events():
     today = date.today()
-    start = ui_data.iso_day(request.args.get('start')) or (today - timedelta(days=42)).isoformat()
-    end = ui_data.iso_day(request.args.get('end')) or (today + timedelta(days=120)).isoformat()
+    first, last = calendar_cache.window(today)
+    start = ui_data.iso_day(request.args.get('start')) or first.isoformat()
+    end = ui_data.iso_day(request.args.get('end')) or last.isoformat()
     if end < start or (date.fromisoformat(end) - date.fromisoformat(start)).days > 400:
         return _error('Zeitraum ungültig')
-    for loader in (_synced_google, _synced_macos):
-        try:
-            events = loader(start, end)
-        except Exception:
-            events = None
-        if events is not None:
-            for item in events:
-                item['synced'] = True
-            return jsonify({'success': True, 'events': events})
-    return jsonify({'success': True, 'events': []})
+    if calendar_cache.connected():
+        mode = request.args.get('frisch')
+        problem = None
+        if mode in ('1', 'alles') or calendar_cache.due():
+            problem = calendar_cache.refresh(force=mode == 'alles')
+        if calendar_cache.covers(start, end) or request.args.get('start') is None:
+            events = calendar_cache.events(start, end)
+        else:
+            try:
+                events = _google_range(start, end)
+            except Exception:
+                events = None
+            if events is None:
+                events, problem = calendar_cache.events(start, end), problem or 'offline'
+        own = [view for view in (ui_data.event_view(item) for item in ui_data.load_list('calendar')) if view]
+        first, last = calendar_cache.window(today)
+        return jsonify({
+            'success': True,
+            'events': events,
+            'own': own,
+            'source': 'google',
+            'stand': calendar_cache.stand(),
+            'window': {'start': first.isoformat(), 'end': last.isoformat()},
+            'problem': problem,
+            'message': SYNC_PROBLEMS.get(problem, ''),
+        })
+    try:
+        events = _synced_macos(start, end)
+    except Exception:
+        events = None
+    return jsonify({'success': True, 'events': events or [], 'source': 'mac' if events is not None else None})
 
 
 @bp.route('/api/ui/places/<key>', methods=['PUT', 'DELETE'])

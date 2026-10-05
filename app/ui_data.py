@@ -430,17 +430,33 @@ def event_view(item):
     }
     if end_day and end_day > when:
         view['endDate'] = end_day
+    if item.get('google_id'):
+        view['google'] = True
+    if item.get('google_dirty'):
+        view['pending'] = True
     return view
 
 
 def events(today):
-    start = (today - timedelta(days=42)).isoformat()
-    end = (today + timedelta(days=120)).isoformat()
+    start = (today - timedelta(days=400)).isoformat()
+    end = (today + timedelta(days=400)).isoformat()
     result = []
     for item in load_list('calendar'):
         view = event_view(item)
         if view and (view.get('endDate') or view['date']) >= start and view['date'] <= end:
             result.append(view)
+    return _with_synced(result, today)
+
+
+def _with_synced(own, today):
+    from . import calendar_cache
+    try:
+        first, last = calendar_cache.window(today)
+        synced = calendar_cache.events(first.isoformat(), last.isoformat()) if calendar_cache.connected() else []
+    except Exception:
+        synced = []
+    seen = {(item['title'], item['date'], item['start'] or '') for item in own}
+    result = own + [item for item in synced if (item['title'], item['date'], item['start'] or '') not in seen]
     result.sort(key=lambda item: (item['date'], item['start'] or ''))
     return result
 
@@ -654,8 +670,17 @@ def page_assistant(data, school, settings, today, iserv):
 
 
 def page_calendar(data, school, settings, today, iserv):
+    from . import calendar_cache
     code = settings.get('bundesland') or ''
-    return {'region': dict(STATES).get(code, ''), 'events': [], 'holidays': data['holidays'], 'notes': {}}
+    first, last = calendar_cache.window(today)
+    google = calendar_cache.connected()
+    sync = {
+        'source': 'google' if google else None,
+        'write': google and calendar_cache.write_enabled(),
+        'stand': calendar_cache.stand() if google else None,
+        'window': {'start': first.isoformat(), 'end': last.isoformat()},
+    }
+    return {'region': dict(STATES).get(code, ''), 'events': [], 'holidays': data['holidays'], 'notes': {}, 'sync': sync}
 
 
 def semester_for(today, level):
