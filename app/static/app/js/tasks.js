@@ -270,6 +270,16 @@ function flushSettle() {
 
 const savedId = (task) => String(serverId(task.id) || task.id);
 
+function restoreSaved(task) {
+  const before = savedId(task);
+  const link = followLinks.get(before);
+  taskApi.restore(task).then(() => {
+    if (!link || savedId(task) === before) return;
+    followLinks.drop(before);
+    followLinks.set(savedId(task), link);
+  }, () => {});
+}
+
 function dropFollow(task) {
   const linked = task.follow || followLinks.get(savedId(task));
   task.follow = null;
@@ -280,15 +290,11 @@ function dropFollow(task) {
   taskApi.remove(follow.id);
 }
 
+// An occurrence that is already there is used as it is and never taken back by undo:
+// it may belong to a second copy of the task or was entered by hand. Only what this tick created is.
 function followUp(task, date, extra = {}) {
-  const alike = (item) => item !== task && item.title === task.title && (item.subject || null) === (task.subject || null) && item.repeat === task.repeat;
-  const twin = state.tasks.find((item) => alike(item) && item.date === date);
-  if (twin) {
-    const taken = twin.done || followLinks.leadsTo(savedId(twin))
-      || state.tasks.some((other) => other !== task && (other.follow === twin.id || (other.done && alike(other) && other.date && other.date < date)));
-    if (!taken) task.follow = twin.id;
-    return twin;
-  }
+  const twin = state.tasks.find((item) => item !== task && item.title === task.title && (item.subject || null) === (task.subject || null) && item.repeat === task.repeat && item.date === date);
+  if (twin) return twin;
   const follow = { ...task, ...extra, id: `${task.id}-${Date.now()}`, done: false, follow: null, date };
   state.tasks.push(follow);
   task.follow = follow.id;
@@ -365,7 +371,7 @@ function removeTask(id, kind) {
     if (state.selected === id) closePanel();
     toast(`Gelöscht: „${esc(task.title)}“`, { icon: "trash-2", action: { label: "Rückgängig", undo: true, run: () => {
       state.tasks.splice(Math.min(index, state.tasks.length), 0, task);
-      taskApi.restore(task);
+      restoreSaved(task);
       render({ flip: true });
       enterInPlace(rowOf(id));
     } } });

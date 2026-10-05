@@ -224,7 +224,6 @@ const followMap = () => {
 
 export const followLinks = {
   get: (id) => followMap()[String(id)] || null,
-  leadsTo: (follow) => Object.values(followMap()).includes(String(follow)),
   set(id, follow) {
     const map = followMap();
     map[String(id)] = String(follow);

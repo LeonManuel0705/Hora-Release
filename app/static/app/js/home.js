@@ -1144,6 +1144,16 @@ function celebrateIfDone() {
 
 const savedId = (task) => String(serverId(task.id) || task.id);
 
+function restoreSaved(task) {
+  const before = savedId(task);
+  const link = followLinks.get(before);
+  taskApi.restore(task).then(() => {
+    if (!link || savedId(task) === before) return;
+    followLinks.drop(before);
+    followLinks.set(savedId(task), link);
+  }, () => {});
+}
+
 function dropFollow(task) {
   const linked = task.follow || followLinks.get(savedId(task));
   task.follow = null;
@@ -1154,15 +1164,11 @@ function dropFollow(task) {
   taskApi.remove(follow.id);
 }
 
+// An occurrence that is already there is used as it is and never taken back by undo:
+// it may belong to a second copy of the task or was entered by hand. Only what this tick created is.
 function followUp(task, date, extra = {}) {
-  const alike = (item) => item !== task && item.title === task.title && (item.subject || null) === (task.subject || null) && item.repeat === task.repeat;
-  const twin = state.tasks.find((item) => alike(item) && item.date === date);
-  if (twin) {
-    const taken = twin.done || followLinks.leadsTo(savedId(twin))
-      || state.tasks.some((other) => other !== task && (other.follow === twin.id || (other.done && alike(other) && other.date && other.date < date)));
-    if (!taken) task.follow = twin.id;
-    return twin;
-  }
+  const twin = state.tasks.find((item) => item !== task && item.title === task.title && (item.subject || null) === (task.subject || null) && item.repeat === task.repeat && item.date === date);
+  if (twin) return twin;
   const follow = { ...task, ...extra, id: `${task.id}-${Date.now()}`, done: false, follow: null, date };
   state.tasks.push(follow);
   task.follow = follow.id;
@@ -1186,7 +1192,7 @@ function toggleTask(id, { restoreFocus = false, via = "keyboard" } = {}) {
   state.celebrationDue = task.done && !openTasks().length && storage.get("app-celebrated") !== todayIso();
   if (task.done) {
     let follow = null;
-    const next = task.repeat ? nextRepeatDate(task.date || todayIso(), task.repeat) : null;
+    const next = task.repeat && !task.someday ? nextRepeatDate(task.date || todayIso(), task.repeat) : null;
     if (next) follow = followUp(task, next, { doneAt: null, doneDay: null });
     toast(follow ? `Erledigt. Nächste am ${esc(shortDate(parseDate(follow.date)))}` : `Erledigt: „${esc(task.title)}“`, {
       icon: "check",
@@ -1253,7 +1259,7 @@ function restoreTask(id, kind, before = null) {
     if (at < 0) return;
     const [entry] = state.deleted.splice(at, 1);
     state.tasks.splice(Math.min(entry.index, state.tasks.length), 0, entry.task);
-    taskApi.restore(entry.task);
+    restoreSaved(entry.task);
   }
   settleLists();
   const back = rowFor(id);
