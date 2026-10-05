@@ -1,0 +1,245 @@
+# SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+# SPDX-License-Identifier: AGPL-3.0-only
+
+from datetime import date, datetime, timedelta
+
+import pytest
+
+from app import assistant_service as ai
+from app import database as db
+from app import offline_tools
+from app import research_service
+
+TASKS = ('Mathe', 'Referat', 'Einkaufen', 'Wäsche waschen', 'Klausur', 'Bewerbung schreiben')
+
+
+def day(offset):
+    return (date.today() + timedelta(days=offset)).isoformat()
+
+
+def next_weekday(number):
+    ahead = (number - date.today().weekday()) % 7 or 7
+    return day(ahead)
+
+
+@pytest.fixture
+def tasks(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, 'DATABASE_PATH', str(tmp_path / 'hub.db'))
+    db.init_db()
+    for title in TASKS:
+        db.create_hub_task(title=title)
+    return lambda: {task['title']: (bool(task['completed']), task.get('due_date'), task.get('due_time')) for task in db.get_hub_tasks('all')}
+
+
+@pytest.fixture
+def school():
+    homework = [
+        {'id': 'h1', 'title': 'S. 45 Nr. 3 und 4', 'subject_id': 'ma', 'due_date': day(1), 'completed': False},
+        {'id': 'h2', 'title': 'Mathe Arbeitsblatt Vektoren', 'subject_id': 'ma', 'due_date': day(3), 'completed': False},
+        {'id': 'h3', 'title': 'Gedichtanalyse Rilke', 'subject_id': 'de', 'due_date': day(2), 'completed': False},
+    ]
+    subjects = [{'id': 'ma', 'name': 'Mathe'}, {'id': 'de', 'name': 'Deutsch'}, {'id': 'pb', 'name': 'Politische Bildung'}]
+    exams = [{'id': 'e1', 'title': 'Klausur Analysis', 'subject_id': 'ma', 'date': day(9), 'topics': 'Ableitungen'}]
+    tests = [{'id': 't1', 'title': 'Soziale Ungleichheit', 'subject_id': 'pb', 'date': day(3), 'topics': 'Milieus'}]
+    load = lambda: (subjects, homework, exams, tests, [{'subject_id': 'ma', 'points': 11, 'date': day(-10)}])
+    load.homework = homework
+    return load
+
+
+@pytest.mark.parametrize('message', [
+    'Mach Aufgabe 3 für mich',
+    'Mach mir bitte Aufgabe 4b',
+    'Machen wir Aufgabe 5 zusammen?',
+    'Mache gerade Aufgabe 3 und komme nicht weiter',
+    'Macht die Aufgabe 2 überhaupt Sinn?',
+    'Mache ich die Aufgabe so richtig?',
+    'Machst du mir eine Aufgabe?',
+    'Mach die Aufgabe fertig',
+    'Leg los mit Aufgabe 2',
+    'Macht der Termin am Freitag Sinn?',
+    'Mach einen Termin mit dem Lehrer aus, wie formuliere ich das?',
+    'Erstelle einen Lernplan für den Termin am Freitag',
+    'Erstelle mir eine Aufgabe zur Integralrechnung zum Üben',
+    'Erstelle eine Aufgabe zum Thema Lyrik',
+    'Erstelle mir eine Übungsaufgabe zur Kurvendiskussion',
+    'Aufgabe: Berechne die Nullstellen von f(x) = x^2 - 4',
+    'Aufgabe: Analysiere das Gedicht im Hinblick auf die Epoche',
+    'Aufgabe 3: Bestimme die Ableitung',
+    'Speicher das als Aufgabe',
+    'Mach mal ne Aufgabe draus',
+    'Erinnere mich nochmal, wie die pq-Formel geht',
+    'Erinnerst du mich morgen an Mathe?',
+    'Soll ich eine Aufgabe erstellen?',
+    'Neue Aufgabe?',
+    'Bin mit Mathe noch nicht fertig',
+    'Ich bin mit dem Referat noch nicht fertig',
+    'Das Referat ist noch lange nicht fertig',
+    'Mit dem Referat werde ich nie fertig',
+    'Ist das Referat schon fertig',
+    'Wäsche waschen nicht geschafft',
+    'Mathe Hausaufgabe nicht fertig',
+    'Wann bin ich mit Mathe fertig',
+    'Wie werde ich schneller mit Mathe fertig',
+    'Nach Mathe bin ich immer fix und fertig',
+    'Hab ich die Bewerbung schreiben schon erledigt',
+    'Ich bin fertig',
+    'Endlich geschafft',
+    'Ich habe die Hausaufgabe erledigt, kannst du sie prüfen?',
+])
+def test_a_message_that_is_no_command_changes_nothing(tasks, school, message):
+    before = tasks()
+    assert ai.quick_answer(message, school) is None
+    ai.offline_response(message, school)
+    assert tasks() == before
+    assert not any(item['completed'] for item in school.homework)
+
+
+@pytest.mark.parametrize('message, title, due, clock', [
+    ('Neue Aufgabe: Einkaufen gehen morgen um 15 Uhr', 'Einkaufen gehen', day(1), '15:00'),
+    ('Neue Aufgabe: Referat abgeben übermorgen', 'Referat abgeben', day(2), None),
+    ('Neue Aufgabe: Vokabeln lernen um 8.10 Uhr', 'Vokabeln lernen', None, '08:10'),
+    ('Erstelle eine Aufgabe: Vokabeln lernen', 'Vokabeln lernen', None, None),
+    ('Erstell mir bitte ne Aufgabe für morgen: Deutsch Aufsatz', 'Deutsch Aufsatz', day(1), None),
+    ('Bitte erstelle einen Termin für Freitag: Nachhilfe', 'Nachhilfe', next_weekday(4), None),
+    ('Leg eine Aufgabe an: Bio Referat vorbereiten bis Montag', 'Bio Referat vorbereiten', next_weekday(0), None),
+    ('Notier dir den Termin: Elternabend 12.10.', 'Elternabend', None, None),
+    ('Termin: Zahnarzt Montag 15:00', 'Zahnarzt', next_weekday(0), '15:00'),
+    ('Trag ein: Zahnarzt am Freitag um 14 Uhr', 'Zahnarzt', next_weekday(4), '14:00'),
+    ('Erinnere mich morgen an den Arzttermin', 'Arzttermin', day(1), None),
+    ('Erinnere mich übermorgen an das Geschenk', 'Geschenk', day(2), None),
+    ('Todo: Zimmer aufräumen', 'Zimmer aufräumen', None, None),
+    ('Nicht vergessen: Sportzeug einpacken', 'Sportzeug einpacken', None, None),
+])
+def test_a_creation_command_makes_the_task_it_names(tasks, school, message, title, due, clock):
+    answer = ai.quick_answer(message, school)
+    assert title in answer
+    created = {name: entry for name, entry in tasks().items() if name not in TASKS}
+    assert list(created) == [title]
+    done, when, time = created[title]
+    assert not done and time == clock
+    if due is not None:
+        assert when == due
+
+
+@pytest.mark.parametrize('message', ['Erstelle eine Aufgabe', 'Neue Aufgabe', 'Erinnere mich'])
+def test_a_creation_command_without_a_title_asks_for_one(tasks, school, message):
+    before = tasks()
+    assert 'Schreib zum Beispiel' in ai.quick_answer(message, school)
+    assert tasks() == before
+
+
+@pytest.mark.parametrize('message, title', [
+    ('Erledigt: Einkaufen', 'Einkaufen'),
+    ('Einkaufen erledigt', 'Einkaufen'),
+    ('Hab Einkaufen erledigt', 'Einkaufen'),
+    ('Mathe ist erledigt', 'Mathe'),
+    ('Referat geschafft!', 'Referat'),
+    ('Aufgabe erledigt: Wäsche waschen', 'Wäsche waschen'),
+    ('Erledigt: Bewerbung', 'Bewerbung schreiben'),
+])
+def test_a_done_command_ticks_the_one_task_it_names(tasks, school, message, title):
+    ai.quick_answer(message, school)
+    assert [name for name, entry in tasks().items() if entry[0]] == [title]
+
+
+def test_a_done_command_that_fits_several_tasks_asks_which(tasks, school):
+    db.create_hub_task(title='Bewerbung abschicken')
+    answer = ai.quick_answer('Bewerbung erledigt', school)
+    assert 'Welche Aufgabe' in answer and 'Bewerbung abschicken' in answer and 'Wäsche waschen' not in answer
+    assert not any(entry[0] for entry in tasks().values())
+    db.create_hub_task(title='Mathe lernen')
+    ai.quick_answer('Mathe erledigt', school)
+    assert [name for name, entry in tasks().items() if entry[0]] == ['Mathe']
+
+
+def test_homework_is_ticked_only_when_one_fits(tasks, school):
+    answer = ai.quick_answer('HA erledigt: Mathe', school)
+    assert 'Welche Hausaufgabe' in answer and 'Rilke' not in answer
+    assert not any(item['completed'] for item in school.homework)
+    ai.quick_answer('Hausaufgabe erledigt: Rilke', school)
+    assert [item['id'] for item in school.homework if item['completed']] == ['h3']
+
+
+@pytest.mark.parametrize('message, expected', [
+    ('Welche Hausaufgaben habe ich?', 'Offene Hausaufgaben (3)'),
+    ('Habe ich heute Hausaufgaben auf?', 'Offene Hausaufgaben (3)'),
+    ('Offene Aufgaben', 'Offene Aufgaben (6)'),
+    ('Überfällige Aufgaben', 'überfällig'),
+    ('Wann ist die nächste Klausur?', 'Klausur Analysis'),
+    ('Kannst du mir meine Noten zeigen?', 'Notenübersicht'),
+    ('Servus', 'Was möchtest du wissen?'),
+    ('Erledigt', 'Welche Aufgabe möchtest du abhaken?'),
+])
+def test_plain_lookups_are_answered_from_the_stored_data(tasks, school, message, expected):
+    before = tasks()
+    assert expected in ai.quick_answer(message, school)
+    assert tasks() == before
+
+
+def test_a_greeting_in_front_does_not_move_the_timetable_to_tomorrow(tasks, school):
+    answer = ai.quick_answer('Guten Morgen, wie sieht mein Stundenplan aus?', school)
+    assert ai.DAY_NAMES_DE[date.today().weekday()] in answer
+
+
+@pytest.mark.parametrize('message', [
+    'Was steht morgen an?',
+    'Was habe ich am Donnerstag?',
+    'Was muss ich bis morgen erledigen?',
+    'Was steht nächste Woche an?',
+    'Stundenplan nächste Woche',
+    'Stundenplan am 14.10.',
+    'Welche Hausaufgaben habe ich bis morgen?',
+    'Welche Aufgaben habe ich heute?',
+    'Was muss ich für die Klausur machen?',
+    'Ich habe morgen eine Klausur',
+    'Wie spät fängt morgen die Schule an?',
+    '3 mal 4 Stunden lernen reicht das für die Klausur?',
+    'Aufgabe',
+    'Übungsaufgabe',
+])
+def test_questions_beyond_a_stored_view_go_to_the_model(tasks, school, message):
+    assert ai.quick_answer(message, school) is None
+
+
+def test_dates_and_times_are_read_as_written():
+    monday = datetime(2026, 10, 5, 9, 0)
+    assert ai._parse_date_nl('Referat abgeben übermorgen', monday) == '2026-10-07'
+    assert ai._parse_date_nl('Referat abgeben morgen', monday) == '2026-10-06'
+    assert ai._parse_date_nl('Vokabeln lernen um 8.10 Uhr', monday) is None
+    assert ai._parse_date_nl('Elternabend 12.10.', monday) == '2026-10-12'
+    assert ai._parse_time_nl('Vokabeln lernen um 8.10 Uhr') == '08:10'
+    assert ai._parse_time_nl('Zahnarzt Montag 15:00') == '15:00'
+    assert ai._parse_time_nl('Elternabend 12.10.') is None
+
+
+def test_the_clock_and_the_calculator_only_answer_what_was_asked():
+    assert offline_tools.try_offline_tool('Wie spät ist es?')
+    assert offline_tools.try_offline_tool('Wie viel Uhr ist es?')
+    assert offline_tools.try_offline_tool('Bis wie spät hat die Bibliothek offen?') is None
+    assert offline_tools.try_offline_tool('3 mal 4 Stunden lernen reicht das?') is None
+    assert '12' in offline_tools.try_offline_tool('Was ist 3 mal 4?')
+
+
+@pytest.mark.parametrize('message', [
+    'Was sind meine Noten in Mathe?',
+    'Wer ist mein Mathelehrer?',
+    'Was ist morgen in der ersten Stunde?',
+    'Was ist heute in Mathe dran?',
+])
+def test_questions_about_the_own_day_are_not_looked_up_on_wikipedia(message):
+    assert not research_service.wants_research(message)
+    assert research_service.wants_research('Wer war Goethe?')
+
+
+def test_a_question_on_how_to_do_something_gets_no_study_plan_brief():
+    assert not ai._PLAN_REQUEST.search('Wie soll ich das Gedicht von Rilke interpretieren?')
+    assert ai._PLAN_REQUEST.search('Wie soll ich für die Klausur lernen?')
+    assert ai._PLAN_REQUEST.search('Kannst du mir einen Lernplan für den PB-Test geben?')
+
+
+def test_grades_given_as_marks_are_not_read_as_zero_points(tasks, school):
+    marks = [{'subject_id': 'ma', 'points': 0, 'value': 2.0, 'grade_system': 'marks', 'date': day(-3)}]
+    load = lambda: (school()[0], [], [], [], marks)
+    context = ai.build_context(load)
+    assert 'Mathe: Note 2' in context and 'Mathe: 0' not in context
+    assert 'Ø 2.0' in ai.quick_answer('Noten', load)

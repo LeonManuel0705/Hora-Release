@@ -104,16 +104,16 @@ def try_calc(message: str) -> Optional[str]:
         return None
 
     # Percentage: "15% von 200", "wie viel sind 15 prozent von 200"
-    pct = re.match(r'(\d+(?:[.,]\d+)?)\s*(?:%|prozent)\s+von\s+(\d+(?:[.,]\d+)?)', m, re.IGNORECASE)
+    pct = re.fullmatch(r'(\d+(?:[.,]\d+)?)\s*(?:%|prozent)\s+von\s+(\d+(?:[.,]\d+)?)', m, re.IGNORECASE)
     if pct:
         a = float(pct.group(1).replace(',', '.'))
         b = float(pct.group(2).replace(',', '.'))
         return f'{_fmt_num(a)} % von {_fmt_num(b)} = **{_fmt_num(a * b / 100)}**'
 
     # Square root: "wurzel aus 16", "sqrt(144)", "sqrt 25"
-    root = re.match(r'(?:die\s+)?wurzel\s+(?:aus\s+)?(\d+(?:[.,]\d+)?)', m, re.IGNORECASE)
+    root = re.fullmatch(r'(?:die\s+)?wurzel\s+(?:aus\s+)?(\d+(?:[.,]\d+)?)', m, re.IGNORECASE)
     if not root:
-        root = re.match(r'sqrt\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?', m, re.IGNORECASE)
+        root = re.fullmatch(r'sqrt\s*\(?\s*(\d+(?:[.,]\d+)?)\s*\)?', m, re.IGNORECASE)
     if root:
         n = float(root.group(1).replace(',', '.'))
         if n < 0:
@@ -121,7 +121,7 @@ def try_calc(message: str) -> Optional[str]:
         return f'√{_fmt_num(n)} = **{_fmt_num(math.sqrt(n))}**'
 
     # "2 mal 8", "7 plus 3", "20 minus 5", "50 durch 4", "3 hoch 4"
-    word_op = re.match(r'(\-?\d+(?:[.,]\d+)?)\s+(mal|plus|minus|durch|geteilt durch|hoch)\s+(\-?\d+(?:[.,]\d+)?)', m, re.IGNORECASE)
+    word_op = re.fullmatch(r'(\-?\d+(?:[.,]\d+)?)\s+(mal|plus|minus|durch|geteilt durch|hoch)\s+(\-?\d+(?:[.,]\d+)?)', m, re.IGNORECASE)
     if word_op:
         a = float(word_op.group(1).replace(',', '.'))
         b = float(word_op.group(3).replace(',', '.'))
@@ -246,7 +246,10 @@ def try_date_math(message: str) -> Optional[str]:
         return f'In {n} {unit} ist **{DAY_NAMES_DE[dt.weekday()]}**, der {dt.strftime("%d.%m.%Y")}.'
 
     # "wie spät", "Uhrzeit?", "welche uhrzeit haben wir", "sag mir die uhrzeit"
-    if re.search(r'wie\s+sp[äa]t(\s+ist(\s+es)?)?|(?:was\s+ist\s+die|welche)\s+uhrzeit|^uhrzeit$|uhrzeit\s+bitte|sag\s+mir\s+die\s+uhrzeit', m):
+    if re.fullmatch(
+            r'(?:wie\s+sp[äa]t|wie\s*viel\s+uhr)(?:\s+(?:ist|haben))?(?:\s+(?:es|wir))?(?:\s+(?:gerade|jetzt|denn))*'
+            r'|(?:was\s+ist\s+die|welche)\s+uhrzeit(?:\s+(?:haben\s+wir|ist\s+es))?(?:\s+(?:gerade|jetzt))?'
+            r'|uhrzeit(?:\s+bitte)?|sag\s+mir\s+(?:bitte\s+)?die\s+uhrzeit', m):
         return f'Es ist **{now.strftime("%H:%M")}** Uhr.'
 
     return None

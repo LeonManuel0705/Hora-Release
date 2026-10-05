@@ -68,12 +68,17 @@ _FACT_PATTERNS = [
 
 
 _MATH_HINTS = re.compile(r'[+\-*/=^]|\\frac|\\sqrt|\\int|\blöse\b|\bberechne\b|\bableiten?\b|\bintegriere\b', re.IGNORECASE)
+_OWN_DATA = re.compile(
+    r'\b(?:mein\w*|unser\w*|heute|morgen|übermorgen|gestern|jetzt|gerade|dran|stundenplan|unterricht|hausaufgaben?|klausur(?:en)?|'
+    r'noten?|aufgaben?|(?:diese|nächste)[rnms]?\s+(?:woche|stunde)|(?:ersten?|zweiten?|dritten?|vierten?|nächsten?|letzten?)\s+(?:stunde|block))\b',
+    re.IGNORECASE,
+)
 
 
 def wants_research(message: str) -> bool:
     if not message or len(message) > 400:
         return False
-    if _MATH_HINTS.search(message):
+    if _MATH_HINTS.search(message) or _OWN_DATA.search(message):
         return False
     return any(p.search(message) for p in _FACT_PATTERNS)
 

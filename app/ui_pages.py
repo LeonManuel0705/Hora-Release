@@ -4,7 +4,7 @@
 import json
 import re
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from flask import Blueprint, current_app, g, jsonify, render_template, request, send_file
 
@@ -585,6 +585,8 @@ PLAN_PROBLEMS = {
 def _plan_problem(result):
     if result.get('success') and not result.get('from_cache'):
         return None
+    if result.get('cause') in PLAN_PROBLEMS:
+        return result['cause']
     if result.get('needs_setup'):
         return 'setup'
     if result.get('needs_reconnect'):

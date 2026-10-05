@@ -875,6 +875,7 @@ class Server:
         self._starting = False
         self._active = 0
         self._last_used = 0.0
+        self._leaving = None
         self._reaped = False
         self._blocked = False
         self._failure = None
@@ -984,6 +985,9 @@ class Server:
                 raise ServerError('stopped')
             self._ready = True
             self._last_used = time.monotonic()
+            leaving = self._leaving if not self._active else None
+        if leaving is not None:
+            self._release_later(leaving)
         return proc, base, key
 
     def _spawn(self, exe, model, cpu_only=False):
@@ -1048,8 +1052,15 @@ class Server:
     def touch(self):
         with self._lock:
             self._last_used = time.monotonic()
+            self._leaving = None
 
     def release_soon(self, delay):
+        """The page was left: stop the server once nothing uses it, also if it is still starting or answering now."""
+        with self._lock:
+            self._leaving = delay
+        return self._release_later(delay)
+
+    def _release_later(self, delay):
         with self._lock:
             proc = self._proc
             asked = time.monotonic()
@@ -1059,7 +1070,7 @@ class Server:
         def run():
             time.sleep(delay)
             with self._lock:
-                if self._proc is not proc or self._active or self._last_used > asked:
+                if self._proc is not proc or self._leaving is None or self._active or self._last_used > asked:
                     return
                 log.info('Assistant page closed, stopping its server')
                 self._detach()
@@ -1072,12 +1083,16 @@ class Server:
     def _use(self):
         with self._lock:
             self._active += 1
+            self._leaving = None
         try:
             yield
         finally:
             with self._lock:
                 self._active -= 1
                 self._last_used = time.monotonic()
+                leaving = self._leaving if not self._active else None
+            if leaving is not None:
+                self._release_later(leaving)
 
     def stream(self, messages, max_tokens=4096, temperature=0.7, top_p=0.9):
         body = {'messages': messages, 'stream': True, 'max_tokens': max_tokens,

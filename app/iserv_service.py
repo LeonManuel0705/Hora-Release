@@ -42,6 +42,14 @@ _PLAN_KINDS = (
 _PLAN_CACHE_VERSION = 2
 
 
+def _is_login_page(response):
+    if re.search(r'/iserv/(?:auth|app)/login', urlparse(str(getattr(response, 'url', '') or '')).path):
+        return True
+    if 'text/html' not in str(response.headers.get('Content-Type', '')):
+        return False
+    return bool(re.search(r'name=["\']_(?:username|password)["\']', str(getattr(response, 'text', '') or '')[:20000]))
+
+
 def _plan_kind(content: bytes):
     for magic, kind, mime, suffix in _PLAN_KINDS:
         if content.startswith(magic):
@@ -741,32 +749,48 @@ class IServService:
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_meta_file = cache_dir / 'cache_meta.json'
 
+        cause = None
+        login = None
         if not self.is_connected():
             creds = self.load_credentials()
             if creds:
                 logging.info("Auto-connecting to IServ for Vertretungsplan...")
-                self.connect()
+                login = self.connect()
 
         if self.is_connected():
             try:
                 result = self._fetch_vertretungsplan_pdfs(display_id)
+                if result.get('expired'):
+                    logging.info("IServ session expired, signing in again for Vertretungsplan...")
+                    login = self.connect()
+                    if self.is_connected():
+                        result = self._fetch_vertretungsplan_pdfs(display_id)
                 if result.get('success') and result.get('pdfs'):
 
                     self._cache_vertretungsplan_pdfs(result['pdfs'], cache_dir, cache_meta_file)
                     return result
                 elif not result.get('success'):
+                    cause = 'login' if result.get('expired') else 'empty' if result.get('error') == 'Keine PDFs gefunden' else 'offline'
 
                     cached = self._get_cached_vertretungsplan(cache_dir, cache_meta_file)
                     if cached.get('success'):
                         cached['fetch_error'] = result.get('error')
+                        cached['cause'] = cause
                         return cached
 
                     result['iserv_connected'] = True
+                    result['cause'] = cause
                     return result
+                else:
+                    cause = 'empty'
             except Exception as e:
                 logging.error(f"Error fetching Vertretungsplan: {e}")
+                cause = 'offline'
 
         cached = self._get_cached_vertretungsplan(cache_dir, cache_meta_file)
+        if cause is None and self.load_credentials():
+            cause = 'login' if (login or {}).get('error') == 'Falscher Benutzername oder Passwort' else 'offline'
+        cached['cause'] = cause or 'setup'
         if not cached.get('success'):
 
             creds = self.load_credentials()
@@ -796,6 +820,9 @@ class IServService:
         response = _request_on_host(session, 'GET', infodisplay_url, base_url, timeout=10)
         if response is None:
             return {'success': False, 'error': 'Umleitung außerhalb von IServ abgelehnt'}
+
+        if response.status_code in (401, 403) or _is_login_page(response):
+            return {'success': False, 'error': 'Sitzung abgelaufen', 'expired': True}
 
         if response.status_code != 200:
             return {'success': False, 'error': f'HTTP {response.status_code}'}

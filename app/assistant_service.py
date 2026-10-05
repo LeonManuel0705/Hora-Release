@@ -47,7 +47,8 @@ RELEASE_SECONDS = 60
 _local_llm = None
 _local_llm_path = None
 _local_lock = threading.Lock()
-_local_state = {'active': 0, 'used': 0.0, 'watching': False}
+_local_run = threading.Lock()
+_local_state = {'active': 0, 'used': 0.0, 'watching': False, 'leaving': None}
 
 
 def _find_local_model():
@@ -137,32 +138,43 @@ def check_local_status():
 
 
 def release_local_llm():
+    """Frees the in-process model, unless it is loading or answering at this moment."""
     global _local_llm, _local_llm_path
-    llm, _local_llm, _local_llm_path = _local_llm, None, None
+    if not _local_run.acquire(blocking=False):
+        return False
+    try:
+        llm, _local_llm, _local_llm_path = _local_llm, None, None
+    finally:
+        _local_run.release()
     close = getattr(llm, 'close', None)
     if callable(close):
         with contextlib.suppress(Exception):
             close()
+    return True
 
 
 @contextlib.contextmanager
 def _local_in_use():
     with _local_lock:
         _local_state['active'] += 1
+        _local_state['leaving'] = None
     try:
-        yield
+        with _local_run:
+            yield
     finally:
         with _local_lock:
             _local_state['active'] -= 1
             _local_state['used'] = time.monotonic()
+            leaving = _local_state['leaving'] if not _local_state['active'] else None
+        if leaving is not None:
+            _release_local_later(leaving)
 
 
 def _release_idle_local_llm(idle_for):
     with _local_lock:
         if _local_llm is None or _local_state['active'] or time.monotonic() - _local_state['used'] < idle_for:
             return False
-        release_local_llm()
-        return True
+        return release_local_llm()
 
 
 def _watch_local_llm():
@@ -189,24 +201,31 @@ def keep_assistant():
     """The assistant page is open again: a release that was asked for no longer applies."""
     with _local_lock:
         _local_state['used'] = time.monotonic()
+        _local_state['leaving'] = None
     local_ai.server.touch()
 
 
-def release_assistant_soon(delay=RELEASE_SECONDS):
-    """Frees the model a little after the assistant page was left, unless it is used again."""
+def _release_local_later(delay):
     asked = time.monotonic()
-    local_ai.server.release_soon(delay)
 
     def run():
         time.sleep(delay)
         with _local_lock:
-            if _local_llm is None or _local_state['active'] or _local_state['used'] > asked:
+            if _local_llm is None or _local_state['leaving'] is None or _local_state['active'] or _local_state['used'] > asked:
                 return
-            release_local_llm()
-        logging.info('Assistant page closed, local LLM released from memory')
+            if release_local_llm():
+                logging.info('Assistant page closed, local LLM released from memory')
 
     if _local_llm is not None:
         threading.Thread(target=run, name='assistant-local-release', daemon=True).start()
+
+
+def release_assistant_soon(delay=RELEASE_SECONDS):
+    """Frees the model a little after the assistant page was left, unless it is used again."""
+    with _local_lock:
+        _local_state['leaving'] = delay
+    local_ai.server.release_soon(delay)
+    _release_local_later(delay)
 
 TOOL_SCHEMAS = [
     {
@@ -442,11 +461,21 @@ def _subject_names(school, subjects):
 
 
 def _points(grade):
+    if grade.get('grade_system') == 'marks':
+        return None
     for key in ('points', 'grade_value', 'value'):
         value = grade.get(key)
-        if isinstance(value, (int, float)):
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
             return value
     return None
+
+
+def _grade_text(grade):
+    if grade.get('grade_system') == 'marks':
+        mark = grade.get('value')
+        return f'Note {mark:g}' if isinstance(mark, (int, float)) and not isinstance(mark, bool) else ''
+    points = _points(grade)
+    return '' if points is None else f'{points:g} Punkte'
 
 
 def _when(date_str):
@@ -475,7 +504,8 @@ def _exam_line(kind, item, names, school=None):
     return f'{line}. Lernstoff: {topics[:400]}' if topics else line
 
 
-_PLAN_REQUEST = re.compile(r'lernplan|lern\w*\s*plan|vorbereit|wie\s+(?:soll\s+ich|lerne\s+ich)|lernen\s+f[üu]r', re.IGNORECASE)
+_PLAN_REQUEST = re.compile(
+    r'lernplan|lern\w*\s*plan|vorbereit|wie\s+lerne\s+ich|wie\s+(?:soll|kann|muss)\s+ich\b[^.?!]{0,60}\blernen\b|lernen\s+f[üu]r', re.IGNORECASE)
 
 
 def _plan_brief(message, names, exams, tests, homework, follow_up=False):
@@ -543,6 +573,9 @@ def build_context(load_school_fn, message=None, history=None):
 
     if school:
         try:
+            free = ui_data.holiday_on(school, now.date())
+            if free and weekday < 5:
+                lines.extend([f'Heute ist schulfrei: {free}', ''])
             lessons = ui_data.lessons_on(school, now.date())
             if lessons:
                 week = f', {lessons[0]["week"]}-Woche' if school['abWeeks'] else ''
@@ -556,8 +589,11 @@ def build_context(load_school_fn, message=None, history=None):
             for offset in range(1, 8):
                 day = now.date() + timedelta(days=offset)
                 ahead = ui_data.lessons_on(school, day)
+                free = ui_data.holiday_on(school, day) if day.weekday() < 5 else None
                 if ahead:
                     days.append(f'  {DAY_NAMES_DE[day.weekday()]}, {day.strftime("%d.%m.")}: ' + ', '.join(f'{lesson["subject"]} ({lesson["start"]})' for lesson in ahead))
+                elif free:
+                    days.append(f'  {DAY_NAMES_DE[day.weekday()]}, {day.strftime("%d.%m.")}: schulfrei ({free})')
             if days:
                 lines.append('--- Unterricht in den nächsten 7 Tagen ---')
                 lines.extend(days)
@@ -606,13 +642,13 @@ def build_context(load_school_fn, message=None, history=None):
         follow_up = any(_PLAN_REQUEST.search(str(turn.get('content') or '')) for turn in (history or [])[-2:])
         brief = _plan_brief(message, subj_map, exams, tests, homework, follow_up)
 
-        scored = [g for g in grades if _points(g) is not None]
+        scored = [g for g in grades if _grade_text(g)]
         if scored:
             recent = sorted(scored, key=lambda g: g.get('date', ''), reverse=True)[:10]
-            lines.append('--- Letzte Noten (Punkte von 0 bis 15) ---')
+            lines.append('--- Letzte Noten (Punkte von 0 bis 15, Noten von 1 bis 6) ---')
             for g in recent:
                 subj_name = subj_map.get(g.get('subject_id', ''), '')
-                lines.append(f'  - {subj_name}: {_points(g):g} ({_format_date_de(g.get("date", ""))})')
+                lines.append(f'  - {subj_name}: {_grade_text(g)} ({_format_date_de(g.get("date", ""))})')
             lines.append('')
     except Exception as ex:
         logging.debug(f'School context error: {ex}')
@@ -1252,12 +1288,12 @@ def _parse_date_nl(text, reference_date=None):
     today = now.date()
     t = text.lower()
 
-    if 'heute' in t or 'today' in t:
+    if re.search(r'\b(?:heute|today)\b', t):
         return today.strftime('%Y-%m-%d')
-    if 'morgen' in t or 'tomorrow' in t:
-        return (today + timedelta(days=1)).strftime('%Y-%m-%d')
-    if 'übermorgen' in t:
+    if re.search(r'\bübermorgen\b', t):
         return (today + timedelta(days=2)).strftime('%Y-%m-%d')
+    if re.search(r'\b(?:morgen|tomorrow)\b', t):
+        return (today + timedelta(days=1)).strftime('%Y-%m-%d')
 
     # "am Montag", "nächsten Dienstag", etc.
     for i, name in enumerate(DAY_NAMES_DE):
@@ -1276,8 +1312,9 @@ def _parse_date_nl(text, reference_date=None):
     # Explicit dates: "am 15.4", "15.04.", "15. April"
     month_names = {'januar': 1, 'februar': 2, 'märz': 3, 'april': 4, 'mai': 5, 'juni': 6,
                    'juli': 7, 'august': 8, 'september': 9, 'oktober': 10, 'november': 11, 'dezember': 12}
-    m = re.search(r'(\d{1,2})\.\s*(\d{1,2})\.?', t)
-    if m:
+    for m in re.finditer(r'(?<![\d.:])(\d{1,2})\.\s*(\d{1,2})\.?(?![\d:])', t):
+        if re.search(r'\bum\s*$', t[:m.start()]) or re.match(r'\s*uhr\b', t[m.end():]):
+            continue
         day, month = int(m.group(1)), int(m.group(2))
         year = today.year
         try:
@@ -1330,56 +1367,96 @@ def _parse_time_nl(text):
     if m:
         return f'{int(m.group(1)):02d}:{m.group(2)}'
 
+    m = re.search(r'(?<![\d.:])(\d{1,2}):(\d{2})(?![\d:])', t)
+    if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
+        return f'{int(m.group(1)):02d}:{m.group(2)}'
+
     return None
 
 
-_CREATE_OBJECT = r'(?:aufgabe|task|todo|to-do|termin|event|erinnerung|reminder)'
-_CREATE_COMMAND = re.compile(
-    r'^\s*(?:bitte\s+)?(?:'
-    rf'(?:erstell\w*|leg\w*|mach\w*|notier\w*|speicher\w*|create|add|neue[rsn]?)\b[^.?!]{{0,24}}?\b{_CREATE_OBJECT}\b'
-    rf'|{_CREATE_OBJECT}\s*:'
-    r'|trag\w*\s+(?:bitte\s+)?ein\b'
-    r'|erinner\w*\s+mich\b'
-    r'|remind\s+me\b'
-    r'|nicht\s+vergessen\s*:'
-    r')',
+_CREATE_NOUN = r'(?:aufgabe|task|todo|to-do|termin|event|erinnerung|reminder)'
+_CREATE_FORMS = (
+    re.compile(
+        r'^(?:bitte\s+)?(?P<verb>erstell(?:e|en)?|leg(?:e|en)?|mach(?:e|en)?|notier(?:e|en)?|speicher(?:e|n)?|schreib(?:e|en)?|create|add)\s+'
+        r'(?:(?:mir|dir|uns|bitte|mal|doch|kurz|noch|schnell)\s+)*'
+        r'(?:(?:eine?[nmrs]?|ne[nmrs]?|neue[nmrs]?|den|die|das|an?|new)\s+)*'
+        rf'(?P<noun>{_CREATE_NOUN})\b(?:\s+(?P<particle>an|ein|hinzu)\b)?(?P<rest>.*)$',
+        re.IGNORECASE | re.DOTALL,
+    ),
+    re.compile(rf'^(?:bitte\s+)?(?P<fresh>neue[nmrs]?|new)\s+(?P<noun>{_CREATE_NOUN})\b(?P<rest>.*)$', re.IGNORECASE | re.DOTALL),
+    re.compile(rf'^(?:bitte\s+)?(?P<noun>{_CREATE_NOUN})\s*(?P<rest>:.*)$', re.IGNORECASE | re.DOTALL),
+    re.compile(r'^(?:bitte\s+)?trag(?:e|en)?\s+(?:(?:mir|bitte|mal|das)\s+)*(?P<particle>ein)\b(?P<rest>.*)$', re.IGNORECASE | re.DOTALL),
+    re.compile(r'^(?:bitte\s+)?(?P<remind>erinner(?:e|n)?\s+mich|remind\s+me)\b(?P<rest>.*)$', re.IGNORECASE | re.DOTALL),
+    re.compile(r'^(?P<keep>nicht\s+vergessen)\s*(?P<rest>:.*)$', re.IGNORECASE | re.DOTALL),
+)
+_WEEKDAY = r'(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)'
+_EXERCISE = re.compile(
+    r'^(?:\d|[a-z]\)|berechne|bestimme|ermittle|analysiere|erläutere|erkläre|beschreibe|begründe|beweise|zeige|untersuche|vergleiche|nenne|'
+    r'interpretiere|diskutiere|erörtere|skizziere|zeichne|löse|leite|gib\b|stelle\b|beurteile|bewerte|fasse|ordne|prüfe|überprüfe|'
+    r'definiere|charakterisiere|übersetze|formuliere|entwickle|entwirf|werte)',
     re.IGNORECASE,
 )
-_CREATE_PREFIX = re.compile(
-    r'^\s*(?:bitte\s+)?(?:'
-    rf'(?:erstell\w*|leg\w*|mach\w*|notier\w*|speicher\w*|create|add)?\s*(?:mir\s+)?(?:bitte\s+)?(?:(?:eine?n?|neue[rsn]?|a|new)\s+)*{_CREATE_OBJECT}\b(?:\s+an\b)?\s*:?'
-    r'|trag\w*\s+(?:bitte\s+)?ein\s*:?'
-    r'|erinner\w*\s+mich\s+(?:bitte\s+)?(?:daran\s*,?\s*|an\s+)?'
-    r'|remind\s+me\s+(?:to\s+|of\s+)?'
-    r'|nicht\s+vergessen\s*:'
-    r')\s*',
-    re.IGNORECASE,
+_NO_TITLE = re.compile(r'^(?:\d|zu[mr]?\b|über\b|für\b|mit\b|aus\b|von\b|draus\b|daraus\b|fertig\b|so\b|wie\b|ob\b|und\b|oder\b|[,.;])', re.IGNORECASE)
+_WHEN_PART = re.compile(rf'^(?:für|am|bis|um|ab|zum|heute|morgen|übermorgen|nächste[nrs]?|{_WEEKDAY})\b', re.IGNORECASE)
+_REMIND_QUESTION = re.compile(
+    r'^(?:(?:nochmal|noch\s+mal|kurz|bitte|daran)\s*,?\s*)*(?:wie|was|warum|wieso|weshalb|wann|wo|wer|ob|welche[rsn]?)\b', re.IGNORECASE)
+_TITLE_SUFFIXES = (
+    r'\s+(?:heute|morgen|übermorgen|tomorrow|today)\b.*$',
+    r'\s+(?:am|bis|bis\s+zum)\s+\d{1,2}\.\s*\d{1,2}\.?.*$',
+    rf'\s+(?:(?:am|bis|nächsten?)\s+)?{_WEEKDAY}\b.*$',
+    r'\s+um\s+\d{1,2}(?:[:.]\d{2})?(?:\s*uhr)?\b.*$',
+    r'\s+\d{1,2}:\d{2}\b.*$',
+    r'\s+\d{1,2}\.\s*\d{1,2}\.(?:\d{2,4})?\s*$',
+    r'\s+at\s+\d{1,2}.*$',
+    r'\s+in\s+\d+\s+tag.*$',
 )
+
+
+def _title_of(text, reminder=False):
+    title = re.sub(r'^ich\s+muss\s+', '', text.strip(), flags=re.IGNORECASE)
+    if reminder:
+        title = re.sub(r'^(?:bitte\s+)?(?:daran\s*,?\s*)?', '', title, flags=re.IGNORECASE)
+        title = re.sub(
+            rf'^(?:heute|morgen|übermorgen|(?:am\s+)?{_WEEKDAY})\s+(?:um\s+\d{{1,2}}(?:[:.]\d{{2}})?(?:\s*uhr)?\s+)?', '', title, flags=re.IGNORECASE)
+        title = re.sub(r'^(?:daran\s*,?\s*)?(?:an\s+(?:(?:den|die|das|dem|der|meine[nmrs]?|mein)\s+)?)?', '', title, flags=re.IGNORECASE)
+    for suffix in _TITLE_SUFFIXES:
+        title = re.sub(suffix, '', title, flags=re.IGNORECASE).strip()
+    return title.strip(' .,;:!?')
+
+
+def _creation_request(message):
+    """The title a creation command names, '' when it names none, None when the message is no such command."""
+    text = ' '.join(message.split())
+    if not text or len(text) > 300 or text.endswith('?'):
+        return None
+    match = next((found for found in (form.match(text) for form in _CREATE_FORMS) if found), None)
+    if not match:
+        return None
+    parts = match.groupdict()
+    rest = parts['rest'].strip()
+    if parts.get('remind'):
+        return None if _REMIND_QUESTION.match(rest) else _title_of(rest, reminder=True)
+    if rest.startswith(':'):
+        body = rest[1:].strip()
+        bare = not (parts.get('verb') or parts.get('fresh') or parts.get('particle') or parts.get('keep'))
+        if bare and (len(body) > 140 or _EXERCISE.match(body) or re.search(r'[=^√∫]|\bf\s*\(', body)):
+            return None
+        return _title_of(body)
+    if not rest:
+        return ''
+    if ':' in rest:
+        when, body = (part.strip() for part in rest.split(':', 1))
+        return _title_of(body) if _WHEN_PART.match(when) else None
+    verb = (parts.get('verb') or '').lower()
+    commanding = bool(parts.get('fresh') or parts.get('particle')) or verb.startswith(('erstell', 'leg', 'create', 'add'))
+    if not commanding or _NO_TITLE.match(rest):
+        return None
+    return _title_of(rest)
 
 
 def _extract_title_from_nl(text):
     """Extract the task/event title from a natural language creation request."""
-    title = _CREATE_PREFIX.sub('', text.strip(), count=1).strip()
-    title = re.sub(r'^(ich\s+muss\s+)', '', title, flags=re.IGNORECASE).strip()
-
-    # Remove date/time suffixes
-    suffixes = [
-        r'\s+(heute|morgen|übermorgen|tomorrow|today).*$',
-        r'\s+am\s+\d{1,2}\.\s*\d{1,2}\.?.*$',
-        r'\s+am\s+(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag).*$',
-        r'\s+um\s+\d{1,2}[:.]\d{2}.*$',
-        r'\s+um\s+\d{1,2}\s*uhr.*$',
-        r'\s+at\s+\d{1,2}.*$',
-        r'\s+in\s+\d+\s+tag.*$',
-        r'\s+bis\s+(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag).*$',
-        r'\s+bis\s+\d{1,2}\.\s*\d{1,2}\.?.*$',
-    ]
-    for suffix in suffixes:
-        title = re.sub(suffix, '', title, flags=re.IGNORECASE).strip()
-
-    # Clean up
-    title = title.strip(' .,;:!?')
-    return title if title else None
+    return _creation_request(text) or None
 
 
 def _kw_match(msg, keywords, word_boundary=False):
@@ -1392,12 +1469,12 @@ def _kw_match(msg, keywords, word_boundary=False):
 
 
 def _detect_creation_intent(message):
-    return bool(_CREATE_COMMAND.match(message))
+    return _creation_request(message) is not None
 
 
 def try_create_from_nl(message, load_school_fn=None, save_school_fn=None):
     """Try to parse and create a task from natural language. Returns (success, response_text)."""
-    title = _extract_title_from_nl(message)
+    title = _creation_request(message)
     if not title or len(title) < 2:
         return False, None
 
@@ -1433,75 +1510,178 @@ def try_create_from_nl(message, load_school_fn=None, save_school_fn=None):
     return True, '\n'.join(parts)
 
 
-_LOOKUP_WORDS = frozenset((
-    'was wann wie welche welcher welches wo wieviel wieviele viel viele habe hab hat haben ich du mir mich mein meine meinen meiner meinem '
-    'dein deine ist sind steht stehen stand an am im in für fuer der die das den dem des ein eine einen es gibt gibts zeig zeige zeigen '
-    'liste auf alle allen alles offen offene offenen noch denn bitte mal kurz heute morgen übermorgen gestern diese dieser diesem dieses '
-    'nächste nächsten nächster nächstes naechste woche tag tage jetzt gerade aktuell aktuelle aktuellen und so zu zum zur bis von vom mit '
-    'aus los ok okay danke guten abend sieht muss kannst machen tun erledigen '
-    'montag dienstag mittwoch donnerstag freitag samstag sonntag '
-    'hallo hi hey moin servus '
-    'stundenplan unterricht fächer stunden schule tagesübersicht tagesplan überblick übersicht wochenübersicht wochenplan '
-    'aufgabe aufgaben tasks task todo todos überfällig überfällige ueberfaellig '
-    'hausaufgabe hausaufgaben homework ha klausur klausuren prüfung prüfungen test tests exam exams '
-    'note noten durchschnitt schnitt notenübersicht punkte '
-    'deadline deadlines frist fristen countdown statistik stats produktivität pomodoro lernzeit training workout review reviews '
-    'hilfe help funktionen befehle'
-).split())
-_LOOKUP_PATTERNS = (
-    r'\b(?:hallo|hi|hey|moin|servus)\b', r'\bguten\s+(?:morgen|tag|abend)\b',
-    r'\bwas\s+steht\b.*\ban\b', r'\bwas\s+(?:habe?|muss)\s+ich\b', r'\bmein\s+tag\b', r'\bwas\s+kannst\s+du\b',
-    r'\b(?:tagesübersicht|tagesplan|überblick|übersicht|wochenübersicht|wochenplan)\b', r'\bdiese\s+woche\b',
-    r'\b(?:stundenplan|unterricht)\b', r'\bwelche\s+(?:fächer|stunden)\b',
-    r'\b(?:aufgaben?|tasks?|todos?)\b', r'\b(?:überfällige?|ueberfaellig)\b',
-    r'\b(?:hausaufgaben?|homework)\b', r'\b(?:klausur|klausuren|prüfung|prüfungen|tests?|exams?)\b',
-    r'\b(?:noten?|durchschnitt|schnitt|notenübersicht)\b',
-    r'\b(?:deadlines?|frist|fristen|countdown|statistik|stats|produktivität|pomodoro|lernzeit|training|workout|reviews?)\b',
-    r'\b(?:hilfe|help|funktionen|befehle)\b',
-)
-_LOOKUP = re.compile('|'.join(_LOOKUP_PATTERNS))
-_DONE_WORDS = r'(?:erledigt|fertig|done|abhaken|geschafft|abgehakt)'
-_DONE_COMMAND = re.compile(
-    rf'^\s*(?:(?:aufgabe|task|hausaufgabe|ha)\s+)?{_DONE_WORDS}\b\s*:?'
-    rf'|^[^?]*\S\s+{_DONE_WORDS}\s*[.!]?\s*$',
-    re.IGNORECASE,
-)
+def _create_from_command(message):
+    """Carries out a creation command; None when the message is not one."""
+    title = _creation_request(message)
+    if title is None:
+        return None
+    created, answer = try_create_from_nl(message)
+    if created:
+        return answer
+    if re.match(r'^(?:bitte\s+)?(?:erinner|remind)', message.strip(), re.IGNORECASE):
+        return 'Woran soll ich dich erinnern? Schreib zum Beispiel: "Erinnere mich morgen an den Arzttermin"'
+    return 'Wie soll der Eintrag heißen? Schreib zum Beispiel: "Neue Aufgabe: Vokabeln lernen morgen"'
+
+
+_DONE_WORD = r'(?:erledigt|fertig|done|abgehakt|geschafft|abhaken)'
+_DONE_HEAD = re.compile(rf'^(?:(?P<kind>aufgabe|task|hausaufgabe|ha)\s+)?{_DONE_WORD}\s*:\s*(?P<title>.+)$', re.IGNORECASE)
+_DONE_TAIL = re.compile(
+    rf'^(?:(?:ich\s+)?(?:hab|habe)\s+)?(?:(?:die|den|das|meine[nmrs]?)\s+)?(?P<title>.+?)\s+(?:(?:ist|sind)\s+)?{_DONE_WORD}\s*[.!]?$', re.IGNORECASE)
+_DONE_BARE = re.compile(rf'^(?:alles\s+)?{_DONE_WORD}\s*[.!]?$', re.IGNORECASE)
+_DONE_DOUBT = re.compile(r'\b(?:nicht|nie|niemals|kein\w*|noch|kaum|fast|bald|wann|wie|warum|wieso|ob|wenn|falls)\b', re.IGNORECASE)
+_HOMEWORK_WORD = re.compile(r'\b(?:ha|hausaufgaben?)\b', re.IGNORECASE)
+
+
+def _done_shape(message):
+    text = ' '.join(message.split())
+    if not text or '?' in text or len(text.split()) > 9:
+        return None
+    if _DONE_BARE.match(text):
+        return 'bare', ''
+    head = _DONE_HEAD.match(text)
+    if head:
+        return ('homework' if (head.group('kind') or '').lower() in ('hausaufgabe', 'ha') else 'named'), head.group('title')
+    tail = None if _DONE_DOUBT.search(text) else _DONE_TAIL.match(text)
+    if tail:
+        title = tail.group('title')
+        return ('homework', _HOMEWORK_WORD.sub(' ', title)) if _HOMEWORK_WORD.search(title) else ('said', title)
+    return None
 
 
 def _is_done_command(message):
-    text = message.strip()
-    return len(text.split()) <= 9 and '?' not in text and bool(_DONE_COMMAND.search(text))
+    return _done_shape(message) is not None
+
+
+def _complete_from_command(message, load_school_fn=None):
+    """Carries out a done command; None when the message is not one or names no open task."""
+    shape = _done_shape(message)
+    if not shape:
+        return None
+    kind, title = shape
+    if kind == 'homework':
+        return _try_complete_homework(title, load_school_fn)
+    return _try_complete_task(title, ask=kind != 'said')
+
+
+_GREETING = r'(?:hallo|hi|hey|moin|servus|guten (?:morgen|tag|abend))'
+_DAY = rf'(?:heute|morgen|übermorgen|(?:am )?{_WEEKDAY})'
+_HAVE = r'(?:habe|hab)'
+_QUICK = tuple((name, re.compile(pattern)) for name, pattern in (
+    ('greeting', _GREETING),
+    ('help', r'hilfe|help|was kannst du(?: alles)?|funktionen|befehle'),
+    ('timetable', rf'(?:mein(?:en)? )?stundenplan(?: (?:für |von )?{_DAY})?'),
+    ('timetable', rf'wie sieht mein stundenplan(?: (?:für )?{_DAY})? aus'),
+    ('timetable', rf'welche (?:fächer|stunden) {_HAVE} ich(?: {_DAY})?'),
+    ('timetable', rf'{_HAVE} ich {_DAY} unterricht'),
+    ('timetable', rf'was {_HAVE} ich {_DAY} für unterricht'),
+    ('timetable', rf'unterricht(?: {_DAY})?'),
+    ('day', r'was steht(?: denn)?(?: heute)?(?: noch)?(?: alles)? an'),
+    ('day', rf'was {_HAVE} ich heute(?: noch)?(?: alles)?(?: vor| zu tun)?'),
+    ('day', r'was muss ich(?: heute)?(?: noch)?(?: alles)? (?:machen|tun|erledigen)'),
+    ('day', r'wie sieht mein tag aus|mein tag|tagesübersicht|tagesplan|überblick|übersicht'),
+    ('week', rf'was steht diese woche(?: noch)?(?: alles)? an|was {_HAVE} ich diese woche|wochenübersicht|wochenplan|diese woche'),
+    ('tasks', r'(?:meine )?(?:offenen? )?(?:aufgaben|tasks|todos)'),
+    ('tasks', rf'welche aufgaben {_HAVE} ich(?: noch)?(?: offen)?|wie viele aufgaben {_HAVE} ich(?: noch)?(?: offen)?|was sind meine aufgaben'),
+    ('overdue', r'(?:was ist )?überfällig|überfällige(?: aufgaben)?'),
+    ('homework', rf'(?:meine )?hausaufgaben|was sind meine hausaufgaben|welche hausaufgaben {_HAVE} ich(?: noch)?(?: auf| offen)?'),
+    ('homework', rf'{_HAVE} ich(?: heute)?(?: noch)? hausaufgaben(?: auf)?|was {_HAVE} ich auf'),
+    ('exams', r'(?:meine )?(?:klausuren|tests|prüfungen)|klausur|test'),
+    ('exams', r'welche (?:klausuren|tests|prüfungen) stehen an|wann sind (?:die|meine) nächsten (?:klausuren|tests|prüfungen)'),
+    ('exams', r'(?:was|wann) ist (?:meine|die|mein|der) nächste[rs]? (?:klausur|test|prüfung)'),
+    ('grades', r'(?:meine )?noten(?:übersicht)?|(?:wie|was) ist mein (?:schnitt|durchschnitt|notenschnitt)|(?:mein )?(?:schnitt|durchschnitt)'),
+    ('deadlines', r'deadlines?|fristen|countdown'),
+    ('pomodoro', r'pomodoro|lernzeit'),
+    ('stats', r'statistik|stats|produktivität'),
+    ('training', r'training|workout'),
+    ('reviews', r'reviews?'),
+))
+
+
+def _lookup_text(message):
+    text = ' '.join(message.lower().split()).strip(' ?!.')
+    text = re.sub(rf'^{_GREETING}\s*[,!.]?\s+(?=\S)', '', text)
+    text = re.sub(r'^bitte\s+|\s+bitte$', '', text)
+    asked = re.fullmatch(r'(?:kannst|könntest) du (?:mir )?(?:bitte )?(?:mal )?(.+?) (?:zeigen|anzeigen|sagen|nennen|auflisten)', text)
+    if asked:
+        text = asked.group(1)
+    told = re.fullmatch(r'(?:zeig|zeige|nenn|nenne|sag|sage) (?:mir )?(?:bitte )?(?:mal )?(.+)', text)
+    if told:
+        text = told.group(1)
+    return text
+
+
+def _lookup_intent(message):
+    """Which stored view a plain question asks for, with the question in its plain form."""
+    if len(message) > 200:
+        return None
+    text = _lookup_text(message)
+    return next(((name, text) for name, pattern in _QUICK if pattern.fullmatch(text)), None)
+
+
+def _lookup_answer(message, load_school_fn=None):
+    found = _lookup_intent(message)
+    if not found:
+        return None
+    intent, text = found
+    now = datetime.now()
+    today = now.strftime('%Y-%m-%d')
+    weekday = now.weekday()
+    if intent == 'greeting':
+        return _greeting_response(now)
+    if intent == 'help':
+        return _help_response()
+    if intent == 'timetable':
+        return _build_timetable_response(weekday, now, text)
+    if intent == 'day':
+        return _build_day_summary(today, weekday, now, load_school_fn)
+    if intent == 'week':
+        return _build_week_summary(today, now, load_school_fn)
+    if intent == 'tasks':
+        return _build_tasks_response()
+    if intent == 'overdue':
+        return _build_overdue_response()
+    if intent == 'homework':
+        return _build_homework_response(load_school_fn, today)
+    if intent == 'exams':
+        return _build_exams_response(load_school_fn, today)
+    if intent == 'grades':
+        return _build_grades_response(load_school_fn)
+    if intent == 'deadlines':
+        return _build_deadline_countdown(load_school_fn, today)
+    if intent == 'pomodoro':
+        return _build_pomodoro_response()
+    if intent == 'stats':
+        return _build_productivity_stats()
+    if intent == 'training':
+        return _build_training_response()
+    return _build_review_response()
 
 
 def is_data_query(message):
-    """True only for requests the app answers exactly without a model: a plain lookup or a clear command.
+    """True only for what the app answers exactly without a model: a plain lookup or a clear command.
 
-    Anything that asks for more than the stored data (a plan, an explanation,
-    a subject, a specific test) contains words outside the small lookup
-    vocabulary and goes to the language model, which gets the same data as
-    context.
+    Anything that asks for more than a stored view (a plan, an explanation,
+    another day, one subject) goes to the language model, which gets the same
+    data as context.
     """
-    msg = message.lower().strip()
-    if len(msg) > 400:
+    if len(message) > 400:
         return False
-    if _detect_creation_intent(message) or _is_done_command(message):
-        return True
-    words = re.findall(r'[a-zäöüß]+', msg)
-    if not words or len(words) > 10 or any(word not in _LOOKUP_WORDS for word in words):
-        return False
-    return bool(_LOOKUP.search(msg))
+    return _detect_creation_intent(message) or _is_done_command(message) or _lookup_intent(message) is not None
 
 
 def quick_answer(message, load_school_fn=None):
     """An exact answer without the model, or None when the model should answer."""
+    if len(message) > 400:
+        return None
     if len(message) <= 160:
         from . import offline_tools
         tool_answer = offline_tools.try_offline_tool(message)
         if tool_answer:
             return tool_answer
-    if is_data_query(message):
-        return offline_response(message, load_school_fn)
-    return None
+    answer = _create_from_command(message)
+    if answer is None:
+        answer = _complete_from_command(message, load_school_fn)
+    return answer if answer is not None else _lookup_answer(message, load_school_fn)
 
 
 # ---- Offline Fallback (Data-Driven) ----
@@ -1534,20 +1714,13 @@ def offline_response(message, load_school_fn=None):
     if re.search(r'fasse\b[\s\S]+\bzusammen', msg) or 'zusammenfass' in msg:
         return _build_text_help(msg, message)
 
-    # ---- Task/Event Creation ----
-    if _detect_creation_intent(message):
-        success, response = try_create_from_nl(message)
-        if success:
-            return response
-
-    # ---- Homework Completion ----
-    if any(w in msg for w in ['hausaufgabe erledigt', 'ha fertig', 'ha erledigt', 'hausaufgabe fertig',
-                               'homework done', 'ha gemacht']):
-        return _try_complete_homework(message, load_school_fn)
-
-    # ---- Task Completion ----
-    if _is_done_command(message):
-        return _try_complete_task(message)
+    answer = _create_from_command(message)
+    if answer is None:
+        answer = _complete_from_command(message, load_school_fn)
+    if answer is None:
+        answer = _lookup_answer(message, load_school_fn)
+    if answer is not None:
+        return answer
 
     # ---- Lernplan ----
     if any(w in msg for w in ['lernplan', 'study plan']):
@@ -1601,24 +1774,17 @@ def offline_response(message, load_school_fn=None):
     if any(w in msg for w in ['stundenplan', 'unterricht', 'welche fächer', 'welche stunden', 'schule heute']):
         return _build_timetable_response(weekday, now, msg)
 
-    # ---- Aufgaben / Tasks ----
-    if ('aufgaben' in msg or 'offene aufgaben' in msg
-            or _kw_match(msg, ['tasks', 'todo', 'to-do', 'todos'], word_boundary=True)):
-        return _build_tasks_response()
+    # ---- Hausaufgaben ----
+    if any(w in msg for w in ['hausaufgabe', 'homework', 'aufgegeben']) or re.search(r'\bha\b', msg):
+        return _build_homework_response(load_school_fn, today)
 
     if any(w in msg for w in ['überfällig', 'overdue', 'verpasst']):
-        tasks = db.get_hub_tasks('overdue')
-        if not tasks:
-            return 'Keine überfälligen Aufgaben – alles im grünen Bereich!'
-        lines = ['⚠ **Überfällige Aufgaben:**']
-        for t in tasks[:10]:
-            due = _format_date_de(t['due_date']) if t.get('due_date') else ''
-            lines.append(f'  • {t["title"]} (fällig: {due})')
-        return '\n'.join(lines)
+        return _build_overdue_response()
 
-    # ---- Hausaufgaben ----
-    if any(w in msg for w in ['hausaufgabe', 'homework', 'ha ', 'aufgegeben']):
-        return _build_homework_response(load_school_fn, today)
+    # ---- Aufgaben / Tasks ----
+    if (re.search(r'\baufgaben\b', msg)
+            or _kw_match(msg, ['tasks', 'todo', 'to-do', 'todos'], word_boundary=True)):
+        return _build_tasks_response()
 
     # ---- Klausuren / Tests ----
     if ('klausur' in msg or 'prüfung' in msg or 'arbeit schreib' in msg
@@ -1647,48 +1813,12 @@ def offline_response(message, load_school_fn=None):
 
     # ---- Hilfe ----
     if any(w in msg for w in ['hilfe', 'was kannst du', 'help', 'funktionen', 'befehle']):
-        return (f'Ich bin der **{brand.NAME} Assistent**! Hier ist alles, was ich kann:\n\n'
-                '**Organisation:**\n'
-                '  • "Was steht heute an?" – Tagesübersicht\n'
-                '  • "Wochenübersicht" – Die ganze Woche\n'
-                '  • "Stundenplan" / "Stundenplan Montag" – Unterricht\n'
-                '  • "Deadlines" – Countdown aller Fristen\n\n'
-                '**Aufgaben:**\n'
-                '  • "Neue Aufgabe: Einkaufen morgen um 15 Uhr" – Erstellen\n'
-                '  • "Erledigt: Einkaufen" – Aufgabe abhaken\n'
-                '  • "Offene Aufgaben" – Alle Tasks nach Priorität\n'
-                '  • "Überfällige" – Verpasste Aufgaben\n\n'
-                '**Schule:**\n'
-                '  • "Hausaufgaben" / "HA erledigt: Mathe" – Anzeigen/Abhaken\n'
-                '  • "Klausuren" – Alle Prüfungen mit Countdown\n'
-                '  • "Noten" – Übersicht pro Fach\n'
-                '  • "Notenanalyse" – Detaillierte Tipps zur Verbesserung\n'
-                '  • "Lernplan für Mathe" – Personalisierter Plan\n\n'
-                '**Lernen:**\n'
-                '  • "Karteikarten Physik" – Lernkarten generieren\n'
-                '  • "Erörterung" – Textform-Anleitungen\n'
-                '  • "Interpretation" – Gedichtanalyse-Guide\n'
-                '  • Jede Frage zu Schulfächern (Mathe, Physik, Deutsch...)\n\n'
-                '**Insights:**\n'
-                '  • "Statistik" / "Produktivität" – Dein Dashboard\n'
-                '  • "Tipp" – Smarte Empfehlungen\n'
-                '  • "Motivation" – Aufmunterung & Tipps\n\n'
-                '**Sonstiges:**\n'
-                '  • "Training" / "Pomodoro" / "Reviews"')
+        return _help_response()
 
     # ---- Greeting / Smalltalk ----
-    if (_kw_match(msg, ['hallo', 'hi', 'hey', 'moin'], word_boundary=True)
+    if (_kw_match(msg, ['hallo', 'hi', 'hey', 'moin', 'servus'], word_boundary=True)
             or 'guten morgen' in msg or 'guten tag' in msg or 'guten abend' in msg):
-        greeting = 'Guten Morgen' if now.hour < 12 else 'Guten Tag' if now.hour < 18 else 'Guten Abend'
-        tasks = db.get_hub_tasks('today')
-        open_count = len([t for t in tasks if not t.get('completed')])
-        if open_count > 1:
-            extra = f' Für heute sind {open_count} Aufgaben offen.'
-        elif open_count == 1:
-            extra = ' Für heute ist eine Aufgabe offen.'
-        else:
-            extra = ' Für heute ist keine Aufgabe offen.'
-        return f'{greeting}!{extra} Was möchtest du wissen?'
+        return _greeting_response(now)
 
     from . import research_service
     if research_service.wants_research(message):
@@ -1712,70 +1842,110 @@ def offline_response(message, load_school_fn=None):
 
 # ---- New Feature Handlers ----
 
-def _try_complete_task(message):
-    """Try to mark a task as complete from natural language."""
-    msg = message.lower()
-    tasks = db.get_hub_tasks('all')
-    open_tasks = [t for t in tasks if not t.get('completed')]
+def _help_response():
+    return (f'Ich bin der **{brand.NAME} Assistent**! Hier ist alles, was ich kann:\n\n'
+            '**Organisation:**\n'
+            '  • "Was steht heute an?" – Tagesübersicht\n'
+            '  • "Wochenübersicht" – Die ganze Woche\n'
+            '  • "Stundenplan" / "Stundenplan Montag" – Unterricht\n'
+            '  • "Deadlines" – Countdown aller Fristen\n\n'
+            '**Aufgaben:**\n'
+            '  • "Neue Aufgabe: Einkaufen morgen um 15 Uhr" – Erstellen\n'
+            '  • "Erledigt: Einkaufen" – Aufgabe abhaken\n'
+            '  • "Offene Aufgaben" – Alle Tasks nach Priorität\n'
+            '  • "Überfällige" – Verpasste Aufgaben\n\n'
+            '**Schule:**\n'
+            '  • "Hausaufgaben" / "HA erledigt: Mathe" – Anzeigen/Abhaken\n'
+            '  • "Klausuren" – Alle Prüfungen mit Countdown\n'
+            '  • "Noten" – Übersicht pro Fach\n'
+            '  • "Notenanalyse" – Detaillierte Tipps zur Verbesserung\n'
+            '  • "Lernplan für Mathe" – Personalisierter Plan\n\n'
+            '**Lernen:**\n'
+            '  • "Karteikarten Physik" – Lernkarten generieren\n'
+            '  • "Erörterung" – Textform-Anleitungen\n'
+            '  • "Interpretation" – Gedichtanalyse-Guide\n'
+            '  • Jede Frage zu Schulfächern (Mathe, Physik, Deutsch...)\n\n'
+            '**Insights:**\n'
+            '  • "Statistik" / "Produktivität" – Dein Dashboard\n'
+            '  • "Tipp" – Smarte Empfehlungen\n'
+            '  • "Motivation" – Aufmunterung & Tipps\n\n'
+            '**Sonstiges:**\n'
+            '  • "Training" / "Pomodoro" / "Reviews"')
 
+
+def _greeting_response(now):
+    greeting = 'Guten Morgen' if now.hour < 12 else 'Guten Tag' if now.hour < 18 else 'Guten Abend'
+    tasks = db.get_hub_tasks('today')
+    open_count = len([t for t in tasks if not t.get('completed')])
+    if open_count > 1:
+        extra = f' Für heute sind {open_count} Aufgaben offen.'
+    elif open_count == 1:
+        extra = ' Für heute ist eine Aufgabe offen.'
+    else:
+        extra = ' Für heute ist keine Aufgabe offen.'
+    return f'{greeting}!{extra} Was möchtest du wissen?'
+
+
+def _build_overdue_response():
+    tasks = db.get_hub_tasks('overdue')
+    if not tasks:
+        return 'Keine überfälligen Aufgaben – alles im grünen Bereich!'
+    lines = ['⚠ **Überfällige Aufgaben:**']
+    for t in tasks[:10]:
+        due = _format_date_de(t['due_date']) if t.get('due_date') else ''
+        lines.append(f'  • {t["title"]} (fällig: {due})')
+    return '\n'.join(lines)
+
+
+def _try_complete_task(wanted, ask=True):
+    """Marks the one open task the words name as done. Asks back when they fit several, or none and ask is set."""
+    open_tasks = [t for t in db.get_hub_tasks('all') if not t.get('completed')]
+    clean = ' '.join(str(wanted or '').lower().split()).strip(' .,;:!"„“\'')
+    found = []
+    if len(clean) >= 3:
+        found = [t for t in open_tasks if t['title'].lower() == clean]
+        found = found or [t for t in open_tasks if t['title'].lower().startswith(clean)]
+        if ask:
+            found = found or [t for t in open_tasks if clean in t['title'].lower()]
+    if len(found) == 1:
+        db.toggle_hub_task(found[0]['id'])
+        return f'**Aufgabe erledigt** ✓\n"{found[0]["title"]}" wurde als erledigt markiert.'
+    if not found and not ask:
+        return None
     if not open_tasks:
         return 'Keine offenen Aufgaben zum Abhaken.'
 
-    # Try to find the task by name match
-    best_match = None
-    best_score = 0
-    # Remove common prefixes
-    clean = re.sub(r'^(aufgabe\s+|task\s+)?(erledigt|fertig|done|abhaken|geschafft)\s*:?\s*', '', msg).strip()
-    clean = re.sub(r'\s+(erledigt|fertig|done|abhaken|geschafft)$', '', clean).strip()
-
-    for t in open_tasks:
-        title_lower = t['title'].lower()
-        if clean and clean in title_lower:
-            score = len(clean) / len(title_lower)
-            if score > best_score:
-                best_score = score
-                best_match = t
-        elif title_lower in msg:
-            best_match = t
-            best_score = 1.0
-
-    if best_match and best_score > 0.3:
-        db.toggle_hub_task(best_match['id'])
-        return f'**Aufgabe erledigt** ✓\n"{best_match["title"]}" wurde als erledigt markiert.'
-
-    # Show list to pick from
     lines = ['Welche Aufgabe möchtest du abhaken?\n']
-    for i, t in enumerate(open_tasks[:10], 1):
+    for i, t in enumerate((found or open_tasks)[:10], 1):
         due = f' ({_format_date_de(t["due_date"])})' if t.get('due_date') else ''
         lines.append(f'  {i}. {t["title"]}{due}')
     lines.append('\nSag z.B. "Erledigt: Einkaufen"')
     return '\n'.join(lines)
 
 
-def _try_complete_homework(message, load_school_fn):
-    """Try to mark homework as complete."""
+def _try_complete_homework(wanted, load_school_fn):
+    """Marks the one open homework the words name as done, otherwise asks which one is meant."""
     if not load_school_fn:
         return 'Keine Schuldaten verfügbar.'
     try:
         subjects, homework, _, _, _ = load_school_fn()
-        subj_map = {s.get('id', ''): s.get('name', '') for s in subjects}
+        subj_map = _subject_names(_school_view(), subjects)
         open_hw = [h for h in homework if not h.get('completed')]
         if not open_hw:
             return 'Keine offenen Hausaufgaben – alles erledigt!'
 
-        msg = message.lower()
-        clean = re.sub(r'^(hausaufgabe|ha)\s*(erledigt|fertig|done|gemacht)\s*:?\s*', '', msg).strip()
-
-        for h in open_hw:
-            if clean and clean in h.get('title', '').lower():
-                h['completed'] = True
-                from .crypto_utils import encrypt_file
-                SCHOOL_HOMEWORK_FILE = DATA_DIR / 'school_homework.json'
-                encrypt_file(homework, SCHOOL_HOMEWORK_FILE)
-                return f'**Hausaufgabe erledigt** ✓\n"{h["title"]}" abgehakt.'
+        clean = ' '.join(str(wanted or '').lower().split()).strip(' .,;:!"„“\'')
+        subject = _find_subject(clean, subj_map) if clean else None
+        found = [h for h in open_hw if clean and (clean in h.get('title', '').lower() or (subject and h.get('subject_id') == subject))]
+        if len(found) == 1:
+            found[0]['completed'] = True
+            from .crypto_utils import encrypt_file
+            SCHOOL_HOMEWORK_FILE = DATA_DIR / 'school_homework.json'
+            encrypt_file(homework, SCHOOL_HOMEWORK_FILE)
+            return f'**Hausaufgabe erledigt** ✓\n"{found[0]["title"]}" abgehakt.'
 
         lines = ['Welche Hausaufgabe ist erledigt?\n']
-        for h in open_hw[:8]:
+        for h in (found or open_hw)[:8]:
             subj = subj_map.get(h.get('subject_id', ''), '')
             lines.append(f'  • {h["title"]}{" [" + subj + "]" if subj else ""}')
         lines.append('\nSag z.B. "HA erledigt: Mathe S.45"')
@@ -2073,7 +2243,7 @@ def _build_deadline_countdown(load_school_fn, today):
     if load_school_fn:
         try:
             subjects, homework, exams, tests, _ = load_school_fn()
-            subj_map = {s.get('id', ''): s.get('name', '') for s in subjects}
+            subj_map = _subject_names(_school_view(), subjects)
 
             for h in homework:
                 if not h.get('completed') and h.get('due_date'):
@@ -2245,12 +2415,15 @@ def _build_day_summary(today, weekday, now, load_school_fn=None):
     else:
         school = _school_view()
         lessons = ui_data.lessons_on(school, now.date()) if school else []
+        free = ui_data.holiday_on(school, now.date()) if school else None
         if lessons:
             lines.append('**Unterricht:**')
             for lesson in lessons:
                 room = f' (R. {lesson["room"]})' if lesson['room'] else ''
                 lines.append(f'  • {lesson["start"]}: {lesson["subject"]}{room}')
             lines.append('')
+        elif free:
+            lines.append(f'Heute ist schulfrei ({free}).\n')
         else:
             lines.append('Kein Unterricht heute.\n')
 
@@ -2271,7 +2444,7 @@ def _build_day_summary(today, weekday, now, load_school_fn=None):
     if load_school_fn:
         try:
             subjects, homework, exams, tests, _ = load_school_fn()
-            subj_map = {s.get('id', ''): s.get('name', '') for s in subjects}
+            subj_map = _subject_names(_school_view(), subjects)
             open_hw = [h for h in homework if not h.get('completed') and h.get('due_date', '') <= today]
             if open_hw:
                 lines.append(f'**Hausaufgaben fällig ({len(open_hw)}):**')
@@ -2319,7 +2492,7 @@ def _build_week_summary(today, now, load_school_fn=None):
     if load_school_fn:
         try:
             subjects, homework, exams, tests, grades = load_school_fn()
-            subj_map = {s.get('id', ''): s.get('name', '') for s in subjects}
+            subj_map = _subject_names(_school_view(), subjects)
 
             week_hw = [h for h in homework if not h.get('completed') and today <= h.get('due_date', '') <= end_of_week]
             if week_hw:
@@ -2376,6 +2549,9 @@ def _build_timetable_response(weekday, now, msg):
 
     school = _school_view()
     lessons = ui_data.lessons_on(school, target) if school else []
+    free = ui_data.holiday_on(school, target) if school else None
+    if free:
+        return f'Am {day_name} ist schulfrei ({free}).'
     if not lessons:
         return f'Kein Unterricht am {day_name}.'
 
@@ -2416,7 +2592,7 @@ def _build_homework_response(load_school_fn, today):
         return 'Keine Schuldaten verfügbar.'
     try:
         subjects, homework, _, _, _ = load_school_fn()
-        subj_map = {s.get('id', ''): s.get('name', '') for s in subjects}
+        subj_map = _subject_names(_school_view(), subjects)
         open_hw = [h for h in homework if not h.get('completed')]
         if not open_hw:
             return 'Keine offenen Hausaufgaben!'
@@ -2437,7 +2613,7 @@ def _build_exams_response(load_school_fn, today):
         return 'Keine Schuldaten verfügbar.'
     try:
         subjects, _, exams, tests, _ = load_school_fn()
-        subj_map = {s.get('id', ''): s.get('name', '') for s in subjects}
+        subj_map = _subject_names(_school_view(), subjects)
         upcoming_exams = sorted([e for e in exams if e.get('date', '') >= today], key=lambda e: e['date'])
         upcoming_tests = sorted([t for t in tests if t.get('date', '') >= today], key=lambda t: t['date'])
 
@@ -2473,17 +2649,18 @@ def _build_grades_response(load_school_fn):
         subjects, _, _, _, grades = load_school_fn()
         if not grades:
             return 'Noch keine Noten eingetragen.'
-        subj_map = {s.get('id', ''): s.get('name', '') for s in subjects}
+        subj_map = _subject_names(_school_view(), subjects)
 
-        # Group by subject
+        marks = all(g.get('grade_system') == 'marks' for g in grades)
         by_subj = {}
         for g in grades:
-            sid = g.get('subject_id', '')
-            if sid not in by_subj:
-                by_subj[sid] = []
-            by_subj[sid].append(g.get('points', g.get('grade_value', 0)))
+            value = g.get('value') if marks else _points(g)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                by_subj.setdefault(g.get('subject_id', ''), []).append(value)
+        if not by_subj:
+            return 'Noch keine Noten eingetragen.'
 
-        lines = [f'**Notenübersicht ({len(grades)} Noten):**\n']
+        lines = [f'**Notenübersicht ({sum(len(values) for values in by_subj.values())} Noten):**\n']
         overall_sum, overall_count = 0, 0
         for sid, values in sorted(by_subj.items(), key=lambda x: subj_map.get(x[0], x[0])):
             name = subj_map.get(sid, sid)
@@ -2492,10 +2669,8 @@ def _build_grades_response(load_school_fn):
             if len(values) >= 3:
                 recent = sum(values[-2:]) / 2
                 older = sum(values[:-2]) / max(len(values) - 2, 1)
-                if recent > older + 0.5:
-                    trend = ' ↑'
-                elif recent < older - 0.5:
-                    trend = ' ↓'
+                better, worse = (recent < older - 0.5, recent > older + 0.5) if marks else (recent > older + 0.5, recent < older - 0.5)
+                trend = ' ↑' if better else ' ↓' if worse else ''
             lines.append(f'  • **{name}**: Ø {avg:.1f} ({len(values)} Noten){trend}')
             overall_sum += sum(values)
             overall_count += len(values)

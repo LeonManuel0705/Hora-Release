@@ -314,6 +314,35 @@ def _block_times(base, saved):
     return result if all(index + 1 in numbers for index in range(len(result))) and valid(result) else fresh
 
 
+def _slug(text):
+    text = str(text).lower()
+    for letter, plain in (('ä', 'ae'), ('ö', 'oe'), ('ü', 'ue'), ('ß', 'ss')):
+        text = text.replace(letter, plain)
+    return re.sub(r'[^a-z0-9]+', '-', text).strip('-')
+
+
+def _teachers(stored, saved):
+    """The teachers as the settings list them, by the id the pages use, each with the name to show."""
+    own = saved.get('items') if isinstance(saved.get('items'), dict) else {}
+    removed = {key for key in saved.get('removed', ()) if isinstance(key, str)} if isinstance(saved.get('removed'), list) else set()
+    teachers = {}
+    for entry in stored:
+        name = entry.get('teacher')
+        key = f't-{_slug(name)}' if name else ''
+        if not key or key in teachers or key in removed:
+            continue
+        match = re.fullmatch(r'(Frau|Herr)\s+(.+)', name)
+        teachers[key] = f'{match.group(1)} {match.group(2)}' if match else name
+    for key, value in own.items():
+        if key in removed or not isinstance(value, dict) or not isinstance(value.get('name'), str) or not value['name'].strip():
+            continue
+        if key not in teachers and not value.get('custom'):
+            continue
+        title = value.get('title') if value.get('title') in ('Frau', 'Herr') else ''
+        teachers[key] = f"{title} {value['name'].strip()[:40]}".strip()
+    return teachers
+
+
 def effective_school(settings=None, store=None):
     """The school data as the pages show it: the stored plan with the edits from the settings on top."""
     settings = settings if settings is not None else (db.get_timetable_settings() or {})
@@ -348,19 +377,16 @@ def effective_school(settings=None, store=None):
         kind = own.get('type') if own.get('type') in COURSE_TYPES else 'GK'
         subjects[key] = {'name': f"{name}{' LK' if kind == 'LK' else ''}", 'type': kind, 'retired': False}
 
-    teachers = saved('app-teachers').get('items')
-    teachers = teachers if isinstance(teachers, dict) else {}
+    stored = [entry for days in school['timetable'].values() for entries in days.values() for entry in entries]
+    teachers = _teachers(stored, saved('app-teachers'))
+    for key, info in subjects.items():
+        own = items.get(key) if isinstance(items.get(key), dict) else {}
+        first = next((entry['teacher'] for entry in stored if entry['subject'] == key and entry.get('teacher')), '')
+        chosen = own['teacher'] if isinstance(own.get('teacher'), str) else (f't-{_slug(first)}' if first else '')
+        info['teacher'] = teachers.get(chosen, '')
 
     def teacher_of(key, own=''):
-        chosen = teachers.get(own) if isinstance(teachers.get(own), dict) else None
-        if chosen and isinstance(chosen.get('name'), str) and chosen['name'].strip():
-            return f"{chosen.get('title') or ''} {chosen['name'].strip()}".strip()
-        for days in school['timetable'].values():
-            for entries in days.values():
-                for entry in entries:
-                    if entry['subject'] == key and entry.get('teacher'):
-                        return entry['teacher']
-        return ''
+        return (teachers.get(own) if isinstance(own, str) else None) or subjects[key]['teacher']
 
     blocks = _block_times(school['blocks'], store.get('app-block-times'))
     known = {block['n'] for block in blocks}
@@ -369,7 +395,10 @@ def effective_school(settings=None, store=None):
         return key in subjects and not subjects[key]['retired']
 
     timetable = {
-        week: {dow: [dict(entry) for entry in entries if active(entry['subject']) and entry['block'] in known] for dow, entries in days.items()}
+        week: {
+            dow: [{**entry, 'teacher': teacher_of(entry['subject'])} for entry in entries if active(entry['subject']) and entry['block'] in known]
+            for dow, entries in days.items()
+        }
         for week, days in school['timetable'].items()
     }
     edits = store.get('app-timetable-edits')
@@ -382,8 +411,7 @@ def effective_school(settings=None, store=None):
         week, dow, block = match.group(1), match.group(2), int(match.group(3))
         entries = [entry for entry in timetable.setdefault(week, {}).get(dow, []) if entry['block'] != block]
         if value:
-            own = value.get('teacher') if isinstance(value.get('teacher'), str) else ''
-            entries.append({'block': block, 'subject': value['subject'], 'room': str(value.get('room') or '').strip()[:12], 'teacher': teacher_of(value['subject'], own)})
+            entries.append({'block': block, 'subject': value['subject'], 'room': str(value.get('room') or '').strip()[:12], 'teacher': teacher_of(value['subject'], value.get('teacher'))})
         timetable[week][dow] = sorted(entries, key=lambda entry: entry['block'])
 
     reference = date.fromisoformat(school['abReference'])
@@ -395,11 +423,17 @@ def effective_school(settings=None, store=None):
         'timetable': timetable,
         'abReference': reference.isoformat(),
         'abWeeks': school['abWeeks'] and store.get('app-ab-weeks') is not False,
+        'holidays': [(item['date'], item['endDate'] or item['date'], item['title']) for item in holidays(date.today())],
     }
 
 
+def holiday_on(school, day):
+    iso = day.isoformat()
+    return next((title or 'Schulfrei' for first, last, title in school.get('holidays', ()) if first <= iso <= last), None)
+
+
 def lessons_on(school, day):
-    if day.weekday() > 4:
+    if day.weekday() > 4 or holiday_on(school, day):
         return []
     week = week_type(day, school['abReference'], school['abWeeks'])
     times = {block['n']: block for block in school['blocks']}

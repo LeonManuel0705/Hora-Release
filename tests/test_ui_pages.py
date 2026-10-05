@@ -395,3 +395,97 @@ def test_plan_pages_keep_their_address_until_their_content_changes(client, tmp_p
     changed = addresses(b"monday", b"wednesday")
     assert changed[0] == first[0] and changed[1] != first[1]
     assert client.get(changed[1]).data.endswith(b"wednesday")
+
+
+def test_the_server_names_the_teacher_the_settings_name(client):
+    monday = date.today() - timedelta(days=date.today().weekday())
+    client.post("/api/hub/school/timetable/entries", json={"day": 1, "block": 1, "subject": "Mathe", "subject_type": "LK", "room": "R101", "teacher": "Herr Beck"})
+    client.post("/api/hub/school/timetable/entries", json={"day": 1, "block": 2, "subject": "Deutsch", "room": "R204", "teacher": "Frau Busch"})
+
+    def teachers():
+        return {lesson["subject"]: lesson["teacher"] for lesson in ui_data.lessons_on(ui_data.effective_school(), monday)}
+
+    assert teachers() == {"Mathe LK": "Herr Beck", "Deutsch": "Frau Busch"}
+    math = next(key for key, info in ui_data.effective_school()["subjects"].items() if info["name"] == "Mathe LK")
+    client.put("/api/ui/store/app-teachers", json={"items": {"t-herr-beck": {"title": "Herr", "name": "Becker"}}})
+    assert teachers()["Mathe LK"] == "Herr Becker"
+    client.put("/api/ui/store/app-subjects", json={"items": {math: {"teacher": "t-frau-busch"}}})
+    assert teachers()["Mathe LK"] == "Frau Busch"
+    client.put("/api/ui/store/app-timetable-edits", json={"A:1:1": {"subject": math, "room": "R101", "teacher": "t-herr-beck"}, "B:1:1": {"subject": math, "room": "R101", "teacher": "t-herr-beck"}})
+    assert teachers()["Mathe LK"] == "Herr Becker"
+    client.put("/api/ui/store/app-teachers", json={"items": {}, "removed": ["t-frau-busch", "t-herr-beck"]})
+    assert teachers() == {"Mathe LK": "", "Deutsch": ""}
+
+
+def test_school_free_days_have_no_lessons(client):
+    from app import assistant_service as ai
+
+    monday = date.today() - timedelta(days=date.today().weekday())
+    for dow in range(1, 6):
+        client.post("/api/hub/school/timetable/entries", json={"day": dow, "block": 1, "subject": "Mathe", "room": "R101"})
+    assert len(ui_data.lessons_on(ui_data.effective_school(), monday)) == 1
+    db.create_holiday(monday.isoformat(), "Herbstferien", "BB", monday.year, end_date=(monday + timedelta(days=13)).isoformat(), holiday_type="schulferien")
+    school = ui_data.effective_school()
+    assert ui_data.lessons_on(school, monday) == [] and ui_data.holiday_on(school, monday) == "Herbstferien"
+    assert ui_data.lessons_on(school, monday + timedelta(days=11)) == []
+    assert len(ui_data.lessons_on(school, monday + timedelta(days=14))) == 1
+    assert "Herbstferien" in ai.offline_response("Stundenplan Montag")
+    context = ai.build_context(lambda: ([], [], [], [], []))
+    assert "schulfrei (Herbstferien)" in context and "--- Stundenplan heute" not in context
+
+
+def test_an_expired_iserv_session_is_renewed_once(client, tmp_path, monkeypatch):
+    import base64
+
+    from app import iserv_service
+
+    cache = tmp_path / "plan"
+    monkeypatch.setattr(iserv_service.IServService, "VERTRETUNGSPLAN_CACHE_DIR", cache)
+    service = iserv_service.get_iserv_service()
+    png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"plan").decode()
+    answers = [{"success": False, "error": "Sitzung abgelaufen", "expired": True}, {"success": True, "pdfs": [{"data": png, "filename": "a.png"}]}]
+    logins = []
+    monkeypatch.setattr(service, "is_connected", lambda: True)
+    monkeypatch.setattr(service, "load_credentials", lambda: {"username": "u", "password": "p", "iserv_url": "schule.example"})
+    monkeypatch.setattr(service, "connect", lambda *args, **kwargs: logins.append(1) or {"success": True})
+    monkeypatch.setattr(service, "_fetch_vertretungsplan_pdfs", lambda display_id=3: answers.pop(0))
+    payload = client.get("/api/ui/vplan?frisch=1").get_json()
+    assert len(logins) == 1 and payload["problem"] is None and len(payload["files"]) == 1
+
+    answers[:] = [{"success": False, "error": "Sitzung abgelaufen", "expired": True}] * 2
+    payload = client.get("/api/ui/vplan?frisch=1").get_json()
+    assert len(logins) == 2 and payload["problem"] == "login" and len(payload["files"]) == 1
+
+
+@pytest.mark.parametrize("state, problem", [
+    ({"fetch": {"success": False, "error": "Keine PDFs gefunden"}}, "empty"),
+    ({"fetch": {"success": False, "error": "HTTP 503"}}, "offline"),
+    ({"connected": False, "login": {"success": False, "error": "Server nicht erreichbar. Bitte URL überprüfen."}}, "offline"),
+    ({"connected": False, "login": {"success": False, "error": "Falscher Benutzername oder Passwort"}}, "login"),
+    ({"connected": False, "credentials": None}, "setup"),
+])
+def test_the_plan_names_the_real_reason_it_is_missing(client, tmp_path, monkeypatch, state, problem):
+    from app import iserv_service
+
+    monkeypatch.setattr(iserv_service.IServService, "VERTRETUNGSPLAN_CACHE_DIR", tmp_path / "plan")
+    service = iserv_service.get_iserv_service()
+    monkeypatch.setattr(service, "is_connected", lambda: state.get("connected", True))
+    monkeypatch.setattr(service, "load_credentials", lambda: state.get("credentials", {"username": "u", "password": "p", "iserv_url": "schule.example"}))
+    monkeypatch.setattr(service, "connect", lambda *args, **kwargs: state.get("login", {"success": True}))
+    monkeypatch.setattr(service, "_fetch_vertretungsplan_pdfs", lambda display_id=3: state["fetch"])
+    assert client.get("/api/ui/vplan?frisch=1").get_json()["problem"] == problem
+
+
+def test_the_iserv_login_page_is_told_from_a_plan():
+    from types import SimpleNamespace
+
+    from app import iserv_service
+
+    def page(url, body="", kind="text/html; charset=utf-8"):
+        return SimpleNamespace(url=url, text=body, headers={"Content-Type": kind})
+
+    assert iserv_service._is_login_page(page("https://schule.example/iserv/auth/login?_target_path=x"))
+    assert iserv_service._is_login_page(page("https://schule.example/iserv/infodisplay/show/3", '<input name="_username"><input name="_password">'))
+    assert not iserv_service._is_login_page(page("https://schule.example/iserv/infodisplay/show/3", "<img src='/iserv/infodisplay/file/3/1'>"))
+    assert not iserv_service._is_login_page(page("https://schule.example/iserv/infodisplay/file/3/1", "", "image/png"))
+

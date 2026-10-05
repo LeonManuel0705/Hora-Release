@@ -1742,7 +1742,7 @@ def import_training_schedule_template(entries: List[Dict[str, Any]], user_id: st
 POMODORO_MAX_AGE = 14 * 86400
 
 def pomodoro_end_stamp(milliseconds) -> Optional[str]:
-    if isinstance(milliseconds, bool) or not isinstance(milliseconds, (int, float)):
+    if isinstance(milliseconds, bool) or not isinstance(milliseconds, (int, float)) or not -1e15 < milliseconds < 1e15:
         return None
     seconds = milliseconds / 1000
     now = time.time()
