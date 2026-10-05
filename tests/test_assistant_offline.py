@@ -280,7 +280,8 @@ def test_a_request_for_help_never_creates_a_task(message):
 
 def test_the_title_of_a_created_task_drops_the_command_words():
     from app.assistant_service import _extract_title_from_nl
-    assert _extract_title_from_nl('Erstelle eine neue Aufgabe Einkaufen morgen') == 'Einkaufen'
+    assert _extract_title_from_nl('Erstelle eine neue Aufgabe: Einkaufen morgen') == 'Einkaufen'
+    assert _extract_title_from_nl('Erstelle eine neue Aufgabe Einkaufen morgen') is None
     assert _extract_title_from_nl('Neue Aufgabe: Referat gliedern am Freitag') == 'Referat gliedern'
     assert _extract_title_from_nl('Erinnere mich an den Arzttermin morgen um 15 Uhr') == 'Arzttermin'
     assert _extract_title_from_nl('Trag ein: Zahnarzt') == 'Zahnarzt'

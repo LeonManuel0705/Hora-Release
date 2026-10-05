@@ -103,6 +103,14 @@ def _expiry_of(token_data: Dict) -> Optional[datetime]:
         return None
 
 
+def _change_account(email: str, change) -> None:
+    """Rewrites one stored account as it is now, so accounts added or removed in the meantime stay as they are."""
+    tokens = load_tokens()
+    if email in tokens:
+        tokens[email] = change(tokens[email])
+        save_tokens(tokens)
+
+
 def login_expired(email: str = None) -> bool:
     """True when Google no longer accepts the stored sign-in and the account has to be connected again."""
     tokens = load_tokens()
@@ -133,20 +141,19 @@ def get_credentials(email: str) -> Optional[Credentials]:
         try:
             creds.refresh(Request())
         except Exception as e:
-            if 'invalid_grant' in str(e) or 'revoked' in str(e).lower():
-                tokens[email] = {**token_data, 'expired': True}
-                save_tokens(tokens)
+            reason = str(e).lower()
+            if any(word in reason for word in ('invalid_grant', 'revoked', 'invalid_client', 'unauthorized_client')):
+                _change_account(email, lambda entry: {**entry, 'expired': True})
             return None
-        tokens[email] = {
-            **token_data,
+        _change_account(email, lambda entry: {
+            **entry,
             'token': creds.token,
             'refresh_token': creds.refresh_token,
             'token_uri': creds.token_uri,
             'client_id': creds.client_id,
             'client_secret': creds.client_secret,
             'expiry': creds.expiry.isoformat() if creds.expiry else None,
-        }
-        save_tokens(tokens)
+        })
 
     return creds
 

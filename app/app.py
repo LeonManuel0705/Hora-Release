@@ -3893,7 +3893,7 @@ def assistant_chat():
             actions_executed = _run_model_actions(ai, tool_uses, message, researched)
 
         elif backend == 'local':
-            response_text = ai.quick_answer(message, school)
+            response_text = ai.quick_answer(message, school, history)
             if response_text is None:
                 system_prompt, researched = _assistant_prompt(ai, message, history)
                 response_text = ai.chat_local(message, system_prompt, history)
@@ -3941,7 +3941,7 @@ def assistant_stream():
         from_model = False
         researched = False
         try:
-            quick = ai.quick_answer(message, school) if backend == 'local' else None
+            quick = ai.quick_answer(message, school, history) if backend == 'local' else None
             if quick is not None or backend == 'offline':
                 response = quick if quick is not None else ai.offline_response(message, school)
                 buffer_parts.append(response)

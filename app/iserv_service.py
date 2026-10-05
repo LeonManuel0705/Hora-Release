@@ -770,7 +770,11 @@ class IServService:
                     self._cache_vertretungsplan_pdfs(result['pdfs'], cache_dir, cache_meta_file)
                     return result
                 elif not result.get('success'):
-                    cause = 'login' if result.get('expired') else 'empty' if result.get('error') == 'Keine PDFs gefunden' else 'offline'
+                    if result.get('expired'):
+                        refused = (login or {}).get('error') == 'Falscher Benutzername oder Passwort'
+                        cause = 'login' if refused or self.is_connected() else 'offline'
+                    else:
+                        cause = 'empty' if result.get('denied') or result.get('error') == 'Keine PDFs gefunden' else 'offline'
 
                     cached = self._get_cached_vertretungsplan(cache_dir, cache_meta_file)
                     if cached.get('success'):
@@ -821,8 +825,11 @@ class IServService:
         if response is None:
             return {'success': False, 'error': 'Umleitung außerhalb von IServ abgelehnt'}
 
-        if response.status_code in (401, 403) or _is_login_page(response):
+        if response.status_code == 401 or _is_login_page(response):
             return {'success': False, 'error': 'Sitzung abgelaufen', 'expired': True}
+
+        if response.status_code == 403:
+            return {'success': False, 'error': 'Kein Zugriff auf die Anzeige', 'denied': True}
 
         if response.status_code != 200:
             return {'success': False, 'error': f'HTTP {response.status_code}'}

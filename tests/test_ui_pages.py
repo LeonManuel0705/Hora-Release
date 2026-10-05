@@ -460,6 +460,9 @@ def test_an_expired_iserv_session_is_renewed_once(client, tmp_path, monkeypatch)
 @pytest.mark.parametrize("state, problem", [
     ({"fetch": {"success": False, "error": "Keine PDFs gefunden"}}, "empty"),
     ({"fetch": {"success": False, "error": "HTTP 503"}}, "offline"),
+    ({"fetch": {"success": False, "error": "Kein Zugriff auf die Anzeige", "denied": True}}, "empty"),
+    ({"fetch": {"success": False, "error": "Sitzung abgelaufen", "expired": True}, "after": False, "login": {"success": False, "error": "Server nicht erreichbar. Bitte URL überprüfen."}}, "offline"),
+    ({"fetch": {"success": False, "error": "Sitzung abgelaufen", "expired": True}, "after": False, "login": {"success": False, "error": "Falscher Benutzername oder Passwort"}}, "login"),
     ({"connected": False, "login": {"success": False, "error": "Server nicht erreichbar. Bitte URL überprüfen."}}, "offline"),
     ({"connected": False, "login": {"success": False, "error": "Falscher Benutzername oder Passwort"}}, "login"),
     ({"connected": False, "credentials": None}, "setup"),
@@ -469,9 +472,15 @@ def test_the_plan_names_the_real_reason_it_is_missing(client, tmp_path, monkeypa
 
     monkeypatch.setattr(iserv_service.IServService, "VERTRETUNGSPLAN_CACHE_DIR", tmp_path / "plan")
     service = iserv_service.get_iserv_service()
-    monkeypatch.setattr(service, "is_connected", lambda: state.get("connected", True))
+    online = {"now": state.get("connected", True)}
+
+    def sign_in(*args, **kwargs):
+        online["now"] = state.get("after", online["now"])
+        return state.get("login", {"success": True})
+
+    monkeypatch.setattr(service, "is_connected", lambda: online["now"])
     monkeypatch.setattr(service, "load_credentials", lambda: state.get("credentials", {"username": "u", "password": "p", "iserv_url": "schule.example"}))
-    monkeypatch.setattr(service, "connect", lambda *args, **kwargs: state.get("login", {"success": True}))
+    monkeypatch.setattr(service, "connect", sign_in)
     monkeypatch.setattr(service, "_fetch_vertretungsplan_pdfs", lambda display_id=3: state["fetch"])
     assert client.get("/api/ui/vplan?frisch=1").get_json()["problem"] == problem
 

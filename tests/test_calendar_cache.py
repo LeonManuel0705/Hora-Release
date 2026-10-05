@@ -582,3 +582,27 @@ def test_a_renewed_login_is_stored_and_used_until_it_runs_out(google, monkeypatc
     calendar_cache.refresh()
     assert len(renewed) == 2 and tokens[google.primary]['token'] == 'neu-2'
 
+
+def test_renewing_one_login_leaves_the_other_accounts_as_they_are(google, monkeypatch):
+    tokens = {google.primary: {'token': 'x', 'refresh_token': 'r', 'client_id': 'c', 'client_secret': 's'}}
+    _real_login(monkeypatch, google, tokens)
+
+    def renew(self, request):
+        tokens['zweit@example.org'] = {'token': 'z'}
+        self.token = 'neu'
+        self.expiry = datetime.utcnow() + timedelta(hours=1)
+
+    monkeypatch.setattr(google_oauth.Credentials, 'refresh', renew)
+    assert google_oauth.get_credentials(google.primary).token == 'neu'
+    assert tokens['zweit@example.org'] == {'token': 'z'} and tokens[google.primary]['token'] == 'neu'
+
+    def renew_while_removed(self, request):
+        tokens.pop(google.primary)
+        self.token = 'spaet'
+        self.expiry = datetime.utcnow() + timedelta(hours=1)
+
+    tokens[google.primary]['expiry'] = (datetime.utcnow() - timedelta(minutes=5)).isoformat()
+    monkeypatch.setattr(google_oauth.Credentials, 'refresh', renew_while_removed)
+    google_oauth.get_credentials(google.primary)
+    assert list(tokens) == ['zweit@example.org']
+

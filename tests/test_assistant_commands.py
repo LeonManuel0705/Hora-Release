@@ -10,7 +10,7 @@ from app import database as db
 from app import offline_tools
 from app import research_service
 
-TASKS = ('Mathe', 'Referat', 'Einkaufen', 'Wäsche waschen', 'Klausur', 'Bewerbung schreiben')
+TASKS = ('Mathe', 'Referat', 'Einkaufen', 'Wäsche waschen', 'Klausur', 'Bewerbung schreiben', 'Binomialverteilung üben', 'Sportfest Punktesystem bauen', 'Biologie Protokoll')
 
 
 def day(offset):
@@ -20,6 +20,11 @@ def day(offset):
 def next_weekday(number):
     ahead = (number - date.today().weekday()) % 7 or 7
     return day(ahead)
+
+
+def coming(number, month):
+    this_year = date(date.today().year, month, number)
+    return (this_year if this_year >= date.today() else date(this_year.year + 1, month, number)).isoformat()
 
 
 @pytest.fixture
@@ -85,6 +90,40 @@ def school():
     'Ich bin fertig',
     'Endlich geschafft',
     'Ich habe die Hausaufgabe erledigt, kannst du sie prüfen?',
+    'Erstelle mir eine Aufgabe in Mathe',
+    'Erstelle mir eine Aufgabe dazu',
+    'Erstelle noch eine Aufgabe aber schwerer',
+    'Erstelle eine Aufgabe zum Thema Analysis: Kurvendiskussion',
+    'Erstelle eine neue Aufgabe Einkaufen morgen',
+    'Mach die Aufgabe',
+    'Mach die Aufgabe ein bisschen schwerer',
+    'Mach den Termin an einem anderen Tag',
+    'Mach mir die Aufgabe: Bestimme die Nullstellen von x hoch 2 minus 4',
+    'Neue Aufgabe verstehe ich nicht',
+    'Neuer Termin steht fest',
+    'Aufgabe: Erläutern Sie den Begriff der Gewaltenteilung',
+    'Aufgabe: Ein Auto fährt mit 50 km/h, wie lange braucht es für 120 km',
+    'Aufgabe: Gegeben sind die Punkte A(1|2|3) und B(4|5|6)',
+    'Aufgabe: Wie lautet die Ableitung von sin x',
+    'Termin: Wann schreiben wir eigentlich Mathe',
+    'Trag mir ein Gedicht vor',
+    'Trag mir bitte ein paar Fakten zu Goethe zusammen',
+    'Erinnere mich nochmal an die Formel',
+    'Erinnere mich an die binomischen Formeln',
+    'Erinnere mich daran wie man Brüche kürzt',
+    'Bin fertig',
+    'Sport geschafft!',
+    'Bio geschafft',
+    'Erledigt: plan',
+    'Fertig: jetzt erklär mir bitte Aufgabe 3',
+    'Mach bitte meine Deutsch Hausaufgabe fertig',
+    'Ist die Deutsch Hausaufgabe fertig',
+    'Hat Ben die Deutsch Hausaufgabe fertig',
+    'Deutsch Hausaufgabe halb fertig',
+    'Deutsch Hausaufgabe morgen fertig',
+    'Deutsch Hausaufgabe muss bis morgen fertig',
+    'Wegen Deutsch Hausaufgabe fix und fertig',
+    'Ha, endlich fertig',
 ])
 def test_a_message_that_is_no_command_changes_nothing(tasks, school, message):
     before = tasks()
@@ -102,7 +141,18 @@ def test_a_message_that_is_no_command_changes_nothing(tasks, school, message):
     ('Erstell mir bitte ne Aufgabe für morgen: Deutsch Aufsatz', 'Deutsch Aufsatz', day(1), None),
     ('Bitte erstelle einen Termin für Freitag: Nachhilfe', 'Nachhilfe', next_weekday(4), None),
     ('Leg eine Aufgabe an: Bio Referat vorbereiten bis Montag', 'Bio Referat vorbereiten', next_weekday(0), None),
-    ('Notier dir den Termin: Elternabend 12.10.', 'Elternabend', None, None),
+    ('Notier dir den Termin: Elternabend 12.10.', 'Elternabend', coming(12, 10), None),
+    ('Neue Aufgabe: Bis Freitag Referat fertig machen', 'Referat fertig machen', next_weekday(4), None),
+    ('Neue Aufgabe: Am Montag Bio lernen', 'Bio lernen', next_weekday(0), None),
+    ('Neue Aufgabe: Für morgen Vokabeln lernen', 'Vokabeln lernen', day(1), None),
+    ('Neue Aufgabe: Mathe Nr. 2.3 und 2.4', 'Mathe Nr. 2.3 und 2.4', None, None),
+    ('Neue Aufgabe: 1.5 Stunden Mathe üben', '1.5 Stunden Mathe üben', None, None),
+    ('Neue Aufgabe: Montagsmaler vorbereiten', 'Montagsmaler vorbereiten', None, None),
+    ('Neue Aufgabe: Guten Morgen Karte schreiben', 'Guten Morgen Karte schreiben', None, None),
+    ('Erstelle eine Aufgabe "Mathe lernen"', 'Mathe lernen', None, None),
+    ('Erstelle eine Aufgabe namens Mathe lernen', 'Mathe lernen', None, None),
+    ('Erinnere mich morgen früh um 7 an Sport', 'Sport', day(1), '07:00'),
+    ('Erinnere mich heute Abend an die Wäsche', 'Wäsche', day(0), None),
     ('Termin: Zahnarzt Montag 15:00', 'Zahnarzt', next_weekday(0), '15:00'),
     ('Trag ein: Zahnarzt am Freitag um 14 Uhr', 'Zahnarzt', next_weekday(4), '14:00'),
     ('Erinnere mich morgen an den Arzttermin', 'Arzttermin', day(1), None),
@@ -115,10 +165,7 @@ def test_a_creation_command_makes_the_task_it_names(tasks, school, message, titl
     assert title in answer
     created = {name: entry for name, entry in tasks().items() if name not in TASKS}
     assert list(created) == [title]
-    done, when, time = created[title]
-    assert not done and time == clock
-    if due is not None:
-        assert when == due
+    assert created[title] == (False, due, clock)
 
 
 @pytest.mark.parametrize('message', ['Erstelle eine Aufgabe', 'Neue Aufgabe', 'Erinnere mich'])
@@ -136,6 +183,8 @@ def test_a_creation_command_without_a_title_asks_for_one(tasks, school, message)
     ('Referat geschafft!', 'Referat'),
     ('Aufgabe erledigt: Wäsche waschen', 'Wäsche waschen'),
     ('Erledigt: Bewerbung', 'Bewerbung schreiben'),
+    ('Die Bewerbung ist fertig!', 'Bewerbung schreiben'),
+    ('Biologie Protokoll abgehakt', 'Biologie Protokoll'),
 ])
 def test_a_done_command_ticks_the_one_task_it_names(tasks, school, message, title):
     ai.quick_answer(message, school)
@@ -152,6 +201,26 @@ def test_a_done_command_that_fits_several_tasks_asks_which(tasks, school):
     assert [name for name, entry in tasks().items() if entry[0]] == ['Mathe']
 
 
+def test_a_weak_fit_asks_back_instead_of_ticking(tasks, school):
+    answer = ai.quick_answer('Sportfest erledigt', school)
+    assert 'Welche Aufgabe' in answer and 'Sportfest Punktesystem bauen' in answer and 'Einkaufen' not in answer.split('Sag z.B.')[0]
+    assert not any(entry[0] for entry in tasks().values())
+
+
+def test_a_few_words_after_a_question_from_the_assistant_are_its_answer(tasks, school):
+    asked = [{'role': 'user', 'content': 'Hilf mir bei Aufgabe 3'}, {'role': 'assistant', 'content': 'Bist du mit Teil a schon fertig?'}]
+    assert ai.quick_answer('Fertig', school, asked) is None
+    assert ai.quick_answer('Test', school, asked) is None
+    assert 'Bewerbung schreiben' in ai.quick_answer('Erledigt: Bewerbung', school, asked)
+    greeted = [{'role': 'assistant', 'content': 'Guten Tag! Für heute ist keine Aufgabe offen. Was möchtest du wissen?'}]
+    assert 'Klausur Analysis' in ai.quick_answer('Klausuren', school, greeted)
+
+
+def test_one_subject_with_one_open_homework_is_enough_to_tick_it(tasks, school):
+    ai.quick_answer('Deutsch Hausaufgabe fertig', school)
+    assert [item['id'] for item in school.homework if item['completed']] == ['h3']
+
+
 def test_homework_is_ticked_only_when_one_fits(tasks, school):
     answer = ai.quick_answer('HA erledigt: Mathe', school)
     assert 'Welche Hausaufgabe' in answer and 'Rilke' not in answer
@@ -163,7 +232,7 @@ def test_homework_is_ticked_only_when_one_fits(tasks, school):
 @pytest.mark.parametrize('message, expected', [
     ('Welche Hausaufgaben habe ich?', 'Offene Hausaufgaben (3)'),
     ('Habe ich heute Hausaufgaben auf?', 'Offene Hausaufgaben (3)'),
-    ('Offene Aufgaben', 'Offene Aufgaben (6)'),
+    ('Offene Aufgaben', 'Offene Aufgaben (9)'),
     ('Überfällige Aufgaben', 'überfällig'),
     ('Wann ist die nächste Klausur?', 'Klausur Analysis'),
     ('Kannst du mir meine Noten zeigen?', 'Notenübersicht'),
@@ -238,13 +307,16 @@ def test_the_clock_and_the_calculator_only_answer_what_was_asked():
 ])
 def test_questions_about_the_own_day_are_not_looked_up_on_wikipedia(message):
     assert not research_service.wants_research(message)
-    assert research_service.wants_research('Wer war Goethe?')
+    for question in ('Wer war Goethe?', 'Was ist Meinungsfreiheit?', 'Was sind die Aufgaben des Bundestags?'):
+        assert research_service.wants_research(question)
 
 
 def test_a_question_on_how_to_do_something_gets_no_study_plan_brief():
     assert not ai._PLAN_REQUEST.search('Wie soll ich das Gedicht von Rilke interpretieren?')
     assert ai._PLAN_REQUEST.search('Wie soll ich für die Klausur lernen?')
     assert ai._PLAN_REQUEST.search('Kannst du mir einen Lernplan für den PB-Test geben?')
+    assert ai._PLAN_REQUEST.search('Wie bereite ich mich auf die Klausur vor?')
+    assert not ai._PLAN_REQUEST.search('Vorbereitung aufs Vorstellungsgespräch')
 
 
 def test_grades_given_as_marks_are_not_read_as_zero_points(tasks, school):
