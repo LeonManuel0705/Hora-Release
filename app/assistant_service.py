@@ -567,6 +567,7 @@ def build_context(load_school_fn, message=None, history=None):
     lines = [
         f'=== ANGABEN AUS {brand.NAME.upper()} ===',
         f'Datum: {DAY_NAMES_DE[weekday]}, {now.strftime("%d.%m.%Y")} ({now.strftime("%H:%M")} Uhr)',
+        f'Morgen ist {DAY_NAMES_DE[(weekday + 1) % 7]}, der {(now + timedelta(days=1)).strftime("%d.%m.")}',
         '',
     ]
     brief = ''
@@ -590,10 +591,11 @@ def build_context(load_school_fn, message=None, history=None):
                 day = now.date() + timedelta(days=offset)
                 ahead = ui_data.lessons_on(school, day)
                 free = ui_data.holiday_on(school, day) if day.weekday() < 5 else None
+                name = f'{DAY_NAMES_DE[day.weekday()]}, {day.strftime("%d.%m.")}{" (morgen)" if offset == 1 else " (übermorgen)" if offset == 2 else ""}'
                 if ahead:
-                    days.append(f'  {DAY_NAMES_DE[day.weekday()]}, {day.strftime("%d.%m.")}: ' + ', '.join(f'{lesson["subject"]} ({lesson["start"]})' for lesson in ahead))
+                    days.append(f'  {name}: ' + ', '.join(f'{lesson["subject"]} ({lesson["start"]})' for lesson in ahead))
                 elif free:
-                    days.append(f'  {DAY_NAMES_DE[day.weekday()]}, {day.strftime("%d.%m.")}: schulfrei ({free})')
+                    days.append(f'  {name}: schulfrei ({free})')
             if days:
                 lines.append('--- Unterricht in den nächsten 7 Tagen ---')
                 lines.extend(days)
@@ -1575,9 +1577,9 @@ _QUICK = tuple((name, re.compile(pattern)) for name, pattern in (
     ('timetable', rf'{_HAVE} ich {_DAY} unterricht'),
     ('timetable', rf'was {_HAVE} ich {_DAY} für unterricht'),
     ('timetable', rf'unterricht(?: {_DAY})?'),
-    ('day', r'was steht(?: denn)?(?: heute)?(?: noch)?(?: alles)? an'),
-    ('day', rf'was {_HAVE} ich heute(?: noch)?(?: alles)?(?: vor| zu tun)?'),
-    ('day', r'was muss ich(?: heute)?(?: noch)?(?: alles)? (?:machen|tun|erledigen)'),
+    ('day', rf'was steht(?: denn)?(?: {_DAY})?(?: noch)?(?: alles)? an'),
+    ('day', rf'was {_HAVE} ich {_DAY}(?: noch)?(?: alles)?(?: vor| zu tun)?'),
+    ('day', rf'was muss ich(?: {_DAY})?(?: noch)?(?: alles)? (?:machen|tun|erledigen)'),
     ('day', r'wie sieht mein tag aus|mein tag|tagesübersicht|tagesplan|überblick|übersicht'),
     ('week', rf'was steht diese woche(?: noch)?(?: alles)? an|was {_HAVE} ich diese woche|wochenübersicht|wochenplan|diese woche'),
     ('tasks', r'(?:meine )?(?:offenen? )?(?:aufgaben|tasks|todos)'),
@@ -1633,7 +1635,8 @@ def _lookup_answer(message, load_school_fn=None):
     if intent == 'timetable':
         return _build_timetable_response(weekday, now, text)
     if intent == 'day':
-        return _build_day_summary(today, weekday, now, load_school_fn)
+        target = _target_day(now, text)
+        return _build_day_summary(today, weekday, now, load_school_fn) if target == now.date() else _build_day_ahead(target, load_school_fn)
     if intent == 'week':
         return _build_week_summary(today, now, load_school_fn)
     if intent == 'tasks':
@@ -2531,17 +2534,69 @@ def _build_week_summary(today, now, load_school_fn=None):
     return '\n'.join(lines)
 
 
-def _build_timetable_response(weekday, now, msg):
-    target = now.date()
+def _target_day(now, msg):
+    """The day a plain question names: today, tomorrow, the day after or the coming weekday of that name."""
     for i, name in enumerate(DAY_NAMES_DE):
         if name.lower() in msg:
-            target = now.date() + timedelta(days=(i - weekday) % 7)
-            break
+            return now.date() + timedelta(days=(i - now.weekday()) % 7)
+    if 'übermorgen' in msg:
+        return now.date() + timedelta(days=2)
+    if 'morgen' in msg:
+        return now.date() + timedelta(days=1)
+    return now.date()
+
+
+def _build_day_ahead(target, load_school_fn=None):
+    day = target.strftime('%Y-%m-%d')
+    lines = [f'**{DAY_NAMES_DE[target.weekday()]}, {target.strftime("%d.%m.%Y")}**\n']
+    school = _school_view()
+    lessons = ui_data.lessons_on(school, target) if school else []
+    free = ui_data.holiday_on(school, target) if school else None
+    if target.weekday() >= 5:
+        lines.append('**Wochenende** – kein Unterricht.\n')
+    elif lessons:
+        lines.append('**Unterricht:**')
+        for lesson in lessons:
+            room = f' (R. {lesson["room"]})' if lesson['room'] else ''
+            lines.append(f'  • {lesson["start"]}: {lesson["subject"]}{room}')
+        lines.append('')
     else:
-        if 'übermorgen' in msg:
-            target = now.date() + timedelta(days=2)
-        elif 'morgen' in msg:
-            target = now.date() + timedelta(days=1)
+        lines.append(f'Schulfrei ({free}).\n' if free else 'Kein Unterricht.\n')
+
+    tasks = [t for t in db.get_hub_tasks('all') if not t.get('completed') and str(t.get('due_date') or '')[:10] == day]
+    if tasks:
+        lines.append(f'**Aufgaben ({len(tasks)}):**')
+        for t in tasks[:8]:
+            time_str = f' um {t["due_time"]}' if t.get('due_time') else ''
+            lines.append(f'  • {t["title"]}{time_str}')
+        lines.append('')
+    else:
+        lines.append('**Aufgaben:** Keine für diesen Tag.\n')
+
+    if load_school_fn:
+        try:
+            subjects, homework, exams, tests, _ = load_school_fn()
+            subj_map = _subject_names(school, subjects)
+            due = [h for h in homework if not h.get('completed') and str(h.get('due_date') or '')[:10] == day]
+            if due:
+                lines.append(f'**Hausaufgaben fällig ({len(due)}):**')
+                for h in due[:5]:
+                    subj = subj_map.get(h.get('subject_id', ''), '')
+                    lines.append(f'  • {h["title"]}{" [" + subj + "]" if subj else ""}')
+                lines.append('')
+            for kind, items in (('Klausur', exams), ('Test', tests)):
+                for item in items:
+                    if str(item.get('date') or '')[:10] == day:
+                        subj = subj_map.get(item.get('subject_id', ''), '')
+                        lines.append(f'**{kind}:** {item.get("title") or kind}{" [" + subj + "]" if subj else ""}{_exam_slot(item, school)}')
+        except Exception:
+            pass
+
+    return '\n'.join(lines).rstrip()
+
+
+def _build_timetable_response(weekday, now, msg):
+    target = _target_day(now, msg)
     day_name = DAY_NAMES_DE[target.weekday()]
 
     if target.weekday() >= 5:

@@ -181,9 +181,19 @@ def test_a_greeting_in_front_does_not_move_the_timetable_to_tomorrow(tasks, scho
     assert ai.DAY_NAMES_DE[date.today().weekday()] in answer
 
 
+def test_another_day_gets_its_own_summary(tasks, school):
+    db.create_hub_task(title='Sportzeug packen', due_date=day(1))
+    db.create_hub_task(title='Geschenk kaufen', due_date=day(3))
+    answer = ai.quick_answer('Was steht morgen an?', school)
+    tomorrow = date.today() + timedelta(days=1)
+    assert answer.startswith(f'**{ai.DAY_NAMES_DE[tomorrow.weekday()]}, {tomorrow.strftime("%d.%m.%Y")}**')
+    assert 'Sportzeug packen' in answer and 'S. 45 Nr. 3 und 4' in answer
+    assert 'Geschenk kaufen' not in answer and 'Rilke' not in answer and 'Soziale Ungleichheit' not in answer
+    later = ai.quick_answer(f'Was habe ich am {ai.DAY_NAMES_DE[(date.today() + timedelta(days=3)).weekday()]}?', school)
+    assert 'Geschenk kaufen' in later and 'Test:** Soziale Ungleichheit [Politische Bildung]' in later and 'Mathe Arbeitsblatt Vektoren' in later
+
+
 @pytest.mark.parametrize('message', [
-    'Was steht morgen an?',
-    'Was habe ich am Donnerstag?',
     'Was muss ich bis morgen erledigen?',
     'Was steht nächste Woche an?',
     'Stundenplan nächste Woche',
