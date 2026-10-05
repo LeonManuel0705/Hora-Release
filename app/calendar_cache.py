@@ -470,9 +470,12 @@ def _push(service, cache, account=None):
             continue
         remote, calendar, answer = result
         values = {
-            'google_id': remote, 'google_calendar': calendar, 'google_account': account, 'google_new': None,
+            'google_id': remote, 'google_calendar': calendar, 'google_new': None,
             'google_seen': answer.get('updated') or '', 'google_etag': answer.get('etag'),
         }
+        # Only its own calendar ties a link to the account. One that it may merely write to belongs to someone else.
+        if calendar in ('primary', target):
+            values['google_account'] = account
         if not _mark(str(item.get('id')), stamp, values):
             _enqueue_delete(calendar, remote)
     return sent
