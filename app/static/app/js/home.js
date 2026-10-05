@@ -247,7 +247,7 @@ function heroNext(day) {
   }
   const upcoming = state.deadlines
     .map((item) => ({ ...item, diff: dayDiff(day.date, item.date) }))
-    .filter((item) => item.diff >= 1 && !item.pinned)
+    .filter((item) => item.diff >= 1 && !item.pinned && item.status !== "abgegeben")
     .sort((a, b) => a.diff - b.diff || Number(isTest(b)) - Number(isTest(a)))[0];
   if (upcoming) {
     const target = parseDate(upcoming.date);
@@ -858,7 +858,7 @@ function dueItems(date) {
   const overdue = deadlines.filter((item) => isOverdue(item, today)).sort((a, b) => a.diff - b.diff);
   const written = deadlines.filter((item) => item.diff < 0 && item.diff >= -WRITTEN_DAYS && isAssessment(item)).sort((a, b) => b.diff - a.diff);
   const soon = [
-    ...deadlines.filter((item) => item.diff >= 0 && item.diff <= 14 && !item.pinned && !(item.diff === 0 && linked.has(item.id))),
+    ...deadlines.filter((item) => item.diff >= 0 && item.diff <= 14 && !item.pinned && item.status !== "abgegeben" && !(item.diff === 0 && linked.has(item.id))),
     ...own.filter((item) => item.diff <= 14),
   ].sort((a, b) => a.diff - b.diff || Number(isTest(b)) - Number(isTest(a)));
   const pinned = deadlines.filter((item) => item.pinned && item.diff >= 0);
@@ -939,7 +939,7 @@ function renderWeek(day) {
     if (past && !isToday) {
       overdueHere.forEach((item) => markers.push({ order: 0, text: `${item.kind} ${subject(item.subject).name.replace(/ LK$/, "")}, überfällig`, html: `<p class="marker is-overdue">${icon("triangle-alert")}<span>${esc(item.kind)} ${esc(subject(item.subject).name.replace(/ LK$/, ""))}, überfällig</span></p>` }));
     } else {
-      state.deadlines.filter((item) => item.date === iso && !item.pinned).forEach((item) => {
+      state.deadlines.filter((item) => item.date === iso && !item.pinned && item.status !== "abgegeben").forEach((item) => {
         const name = subject(item.subject).name.replace(/ LK$/, "");
         const block = item.block ? `, ${item.block}. Block` : "";
         const test = isTest(item);
@@ -1021,6 +1021,12 @@ function interactiveRows() {
   if ($("writtenList") && !$("writtenList").hidden) lists.push($("writtenList"));
   return lists.flatMap((list) => [...list.querySelectorAll(".row.is-interactive")]);
 }
+
+let keyRow = null;
+
+document.addEventListener("pointerdown", () => {
+  keyRow = null;
+}, true);
 
 function focusRow(row) {
   if (!row) return;
@@ -1136,6 +1142,14 @@ function celebrateIfDone() {
   if (box.bottom < 80 || box.top > innerHeight - 80) toast("Alles für heute erledigt.", { icon: "circle-check" });
 }
 
+function dropFollow(task) {
+  const follow = task.follow && state.tasks.find((item) => item.id === task.follow && !item.done);
+  task.follow = null;
+  if (!follow) return;
+  state.tasks = state.tasks.filter((item) => item !== follow);
+  taskApi.remove(follow.id);
+}
+
 function toggleTask(id, { restoreFocus = false, via = "keyboard" } = {}) {
   const task = state.tasks.find((item) => item.id === id);
   if (!task) return;
@@ -1143,6 +1157,7 @@ function toggleTask(id, { restoreFocus = false, via = "keyboard" } = {}) {
   task.done = !task.done;
   task.doneAt = task.done ? clock(minutesOf(now())) : null;
   taskApi.done(id, task.done);
+  if (!task.done) dropFollow(task);
   if (row) {
     row.classList.toggle("is-done", task.done);
     row.querySelector(".check").setAttribute("aria-checked", String(task.done));
@@ -1152,18 +1167,15 @@ function toggleTask(id, { restoreFocus = false, via = "keyboard" } = {}) {
   if (task.done) {
     let follow = null;
     if (task.repeat) {
-      follow = { ...task, id: `${task.id}-${Date.now()}`, done: false, doneAt: null, doneDay: null, date: nextRepeatDate(task.date || todayIso(), task.repeat) };
+      follow = { ...task, id: `${task.id}-${Date.now()}`, done: false, doneAt: null, doneDay: null, follow: null, date: nextRepeatDate(task.date || todayIso(), task.repeat) };
       state.tasks.push(follow);
       taskApi.create(follow);
+      task.follow = follow.id;
     }
     toast(follow ? `Erledigt. Nächste am ${esc(shortDate(parseDate(follow.date)))}` : `Erledigt: „${esc(task.title)}“`, {
       icon: "check",
       action: { label: "Rückgängig", undo: true, run: () => {
-        if (follow) {
-          state.tasks = state.tasks.filter((item) => item.id !== follow.id);
-          taskApi.remove(follow.id);
-        }
-        toggleTask(id, { restoreFocus: true });
+        if (task.done) toggleTask(id, { restoreFocus: true });
       } },
       returnFocus: () => focusTaskAt(0),
     });
@@ -1432,18 +1444,17 @@ function bindKeys() {
     const rows = interactiveRows();
     const current = document.activeElement?.closest?.(".row.is-interactive");
     const index = rows.indexOf(current);
-    if (key === "j") {
+    if (key === "j" || key === "k") {
       event.preventDefault();
-      focusRow(rows[Math.min(rows.length - 1, index + 1)] || rows[0]);
-    } else if (key === "k") {
-      event.preventDefault();
-      focusRow(rows[Math.max(0, index - 1)] || rows[0]);
+      const target = rows[key === "j" ? Math.min(rows.length - 1, index + 1) : Math.max(0, index - 1)] || rows[0];
+      focusRow(target);
+      keyRow = target?.dataset.id || null;
     } else if (key === "x" && current?.classList.contains("task") && current.contains(event.target)) {
       event.preventDefault();
       toggleTask(current.dataset.id, { restoreFocus: true });
     } else if ((key === "backspace" || key === "delete") && current?.classList.contains("task") && event.target === current) {
       event.preventDefault();
-      removeTask(current.dataset.id, "delete", { refocus: true });
+      if (!event.shiftKey && !event.repeat && keyRow === current.dataset.id) removeTask(current.dataset.id, "delete", { refocus: true });
     } else if (key === "enter" && event.target === current) {
       event.preventDefault();
       current.querySelector(".row-link")?.click();

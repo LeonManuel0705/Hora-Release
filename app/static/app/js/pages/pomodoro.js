@@ -466,6 +466,10 @@ let warned = false;
 function handle(event) {
   if (event.type === "end") onEnd(event.finished);
   else if (event.type === "saved") refreshStats();
+  else if (event.type === "refused") {
+    refreshStats();
+    toast("Eine Sitzung ließ sich nicht speichern.", { icon: "circle-alert" });
+  }
   else if (event.type === "unsaved" && !warned) {
     warned = true;
     toast("Die Sitzung ist noch nicht gespeichert. Die App versucht es gleich noch einmal.", { icon: "circle-alert" });
@@ -514,6 +518,9 @@ function bind() {
     actions.reset();
     say(state.phase === "break" ? "Pause übersprungen." : "Zurückgesetzt.");
     $("pomoMain").focus({ preventScroll: true });
+    if (state.phase === "work" && state.status !== "idle") {
+      toast("Arbeitsphase zurückgesetzt.", { icon: "rotate-ccw", action: { label: "Rückgängig", undo: true, run: () => actions.restore(state) } });
+    }
   });
   $("pomoSubject").addEventListener("change", (event) => actions.subject(event.target.value));
   document.querySelectorAll(".stepper").forEach((group) => {

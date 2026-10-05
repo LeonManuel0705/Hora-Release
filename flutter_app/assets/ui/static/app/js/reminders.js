@@ -120,13 +120,15 @@ function pomodoroReminders(date) {
 export function dueReminders(prefs, date) {
   const day = startOfDay(date);
   const minute = minutesOf(date);
-  if (!prefs.enabled || isQuiet(minute, prefs.quiet)) return [];
+  if (!prefs.enabled) return [];
+  const timer = prefs.categories.pomodoro.on ? pomodoroReminders(date) : [];
+  if (isQuiet(minute, prefs.quiet)) return timer;
   return [
     ...(prefs.categories.lessons.on ? lessonReminders(prefs, day, minute) : []),
     ...deadlineReminders(prefs, day),
     ...(prefs.categories.events.on ? eventReminders(prefs, day, minute) : []),
     ...(prefs.categories.tasks.on ? taskReminders(day, minute) : []),
-    ...(prefs.categories.pomodoro.on ? pomodoroReminders(date) : []),
+    ...timer,
   ];
 }
 

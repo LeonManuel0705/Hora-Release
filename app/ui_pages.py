@@ -607,7 +607,7 @@ def substitution_plan():
     cache = service.plan_cache() or {'files': [], 'cached_at': None}
     stamp = re.sub(r'\D', '', str(cache['cached_at'] or ''))[:14]
     files = [
-        {'page': index, 'type': 'pdf' if entry['type'] == 'pdf' else 'image', 'url': f'/api/ui/vplan/datei/{index}?v={stamp}'}
+        {'page': index, 'type': 'pdf' if entry['type'] == 'pdf' else 'image', 'url': f"/api/ui/vplan/datei/{index}?v={entry.get('digest') or stamp}"}
         for index, entry in enumerate(cache['files'], start=1)
     ]
     return jsonify({
@@ -642,8 +642,18 @@ def save_place(key):
     from .vbb_service import get_vbb_service
     service = get_vbb_service()
     if request.method == 'DELETE':
+        known = (service.get_known_locations().get('locations') or {}).get(key)
         service.delete_known_location(key)
-        return jsonify({'success': True})
+        removed = None
+        if isinstance(known, dict) and known.get('name') and known.get('latitude') is not None and known.get('longitude') is not None:
+            removed = {
+                'name': known['name'],
+                'area': known.get('address') or '',
+                'lat': known['latitude'],
+                'lon': known['longitude'],
+                'stop': (known.get('id') or '') if known.get('type') == 'stop' else '',
+            }
+        return jsonify({'success': True, 'removed': removed})
     payload = _payload()
     if payload is None:
         return _error('JSON erwartet')

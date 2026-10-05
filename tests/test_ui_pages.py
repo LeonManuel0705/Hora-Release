@@ -348,3 +348,50 @@ def test_the_automatic_colour_scheme_survives_a_reload(client):
     assert 'data-theme-mode="dark"' in client.get("/hub").get_data(as_text=True)
     client.put("/api/ui/store/app-theme-choice", json="auto")
     assert 'data-theme-mode="auto"' in client.get("/hub").get_data(as_text=True)
+
+
+def test_a_removed_place_can_be_put_back(client, monkeypatch):
+    saved = {}
+
+    class Places:
+        def save_known_location(self, key, location):
+            saved[key] = location
+
+        def get_known_locations(self):
+            return {"locations": saved}
+
+        def delete_known_location(self, key):
+            saved.pop(key, None)
+
+    from app import vbb_service
+    monkeypatch.setattr(vbb_service, "get_vbb_service", lambda: Places())
+    place = {"name": "Hauptbahnhof", "area": "", "lat": 52.525, "lon": 13.369, "stop": "de:11000:900003201"}
+    assert client.put("/api/ui/places/school", json=place).status_code == 200
+    before = dict(saved["school"])
+    removed = client.delete("/api/ui/places/school").get_json()["removed"]
+    assert removed == place and "school" not in saved
+    assert client.put("/api/ui/places/school", json=removed).status_code == 200
+    assert saved["school"] == before
+    assert client.delete("/api/ui/places/home").get_json()["removed"] is None
+
+
+def test_plan_pages_keep_their_address_until_their_content_changes(client, tmp_path, monkeypatch):
+    import base64
+
+    from app import iserv_service
+
+    cache = tmp_path / "plan"
+    cache.mkdir()
+    monkeypatch.setattr(iserv_service.IServService, "VERTRETUNGSPLAN_CACHE_DIR", cache)
+    service = iserv_service.get_iserv_service()
+
+    def addresses(*pages):
+        files = [{"data": base64.b64encode(b"\x89PNG\r\n\x1a\n" + page).decode(), "filename": "x.png"} for page in pages]
+        service._cache_vertretungsplan_pdfs(files, cache, cache / "cache_meta.json")
+        return [item["url"] for item in client.get("/api/ui/vplan").get_json()["files"]]
+
+    first = addresses(b"monday", b"tuesday")
+    assert addresses(b"monday", b"tuesday") == first
+    changed = addresses(b"monday", b"wednesday")
+    assert changed[0] == first[0] and changed[1] != first[1]
+    assert client.get(changed[1]).data.endswith(b"wednesday")

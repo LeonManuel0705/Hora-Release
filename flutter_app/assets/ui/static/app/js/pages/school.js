@@ -320,7 +320,7 @@ function sortedSubjects(rows) {
 
 function focusKeyOf(node) {
   if (!node || node === document.body) return null;
-  for (const attr of ["data-cell", "data-open-item", "data-open-lesson", "data-open-subject", "data-open-grades", "data-week", "data-semester", "data-slot", "data-kind", "data-calc-tool", "data-calc-system", "data-calc", "data-calc-for"]) {
+  for (const attr of ["data-cell", "data-open-item", "data-open-lesson", "data-open-subject", "data-open-grades", "data-edit-item", "data-delete-item", "data-done-item", "data-delete-grade", "data-week", "data-semester", "data-slot", "data-kind", "data-calc-tool", "data-calc-system", "data-calc", "data-calc-for"]) {
     if (node.hasAttribute?.(attr)) return `[${attr}="${CSS.escape(node.getAttribute(attr))}"]`;
   }
   return node.id ? `#${CSS.escape(node.id)}` : null;
@@ -331,7 +331,7 @@ function keepFocus(container, paint) {
   const key = active && container.contains(active) ? focusKeyOf(active) : null;
   paint();
   if (!key || container.contains(document.activeElement)) return;
-  container.querySelector(key)?.focus({ preventScroll: true });
+  (container.querySelector(key) || container.querySelector("#panelTitle"))?.focus({ preventScroll: true });
 }
 
 function say(text) {
@@ -671,6 +671,7 @@ function vplanHtml() {
 
 function renderPlanViewer() {
   const plan = state.vplan;
+  plan.page = Math.max(0, Math.min(plan.page, plan.files.length - 1));
   const file = plan.files[plan.page];
   const stage = $("planStage");
   if (!file || !stage) return;
@@ -891,7 +892,9 @@ function panelHead(title, sub = "", key = null) {
   </div>`;
 }
 
+const remote = (item) => item.origin === "iserv";
 const editable = (item) => !item.pinned && /^(hw|test|exam|new)-/.test(item.id);
+const changeable = (item) => editable(item) && !remote(item);
 
 function itemTools(item) {
   if (!editable(item)) return "";
@@ -899,7 +902,7 @@ function itemTools(item) {
   const done = isHomework(item) && item.status !== "abgegeben"
     ? `<button class="icon-button" type="button" data-done-item="${esc(item.id)}" aria-label="Erledigt: ${title}" data-tip="Erledigt">${icon("check")}</button>`
     : "";
-  const edit = item.origin === "iserv"
+  const edit = !changeable(item)
     ? ""
     : `<button class="icon-button" type="button" data-edit-item="${esc(item.id)}" aria-label="Bearbeiten: ${title}" data-tip="Bearbeiten">${icon("pencil")}</button>`;
   return `<span class="note-tools">${done}${edit}<button class="icon-button is-danger" type="button" data-delete-item="${esc(item.id)}" aria-label="Löschen: ${title}" data-tip="Löschen">${icon("trash-2")}</button></span>`;
@@ -1046,7 +1049,7 @@ function gradesPanelHtml() {
   const scored = sortedSubjects(rows.filter((row) => row.value != null));
   const missing = sortedSubjects(rows.filter((row) => row.value == null && !retiredKey(row.key)));
   const switcher = SEMESTERS.length > 1
-    ? `<div class="segmented grade-switch" role="group" aria-label="Halbjahr">${SEMESTERS.map((item) => `<button type="button" data-semester="${item}" aria-pressed="${item === semester}">${item}</button>`).join("")}</div>`
+    ? `<div class="segmented grade-switch" role="group" aria-label="Halbjahr">${SEMESTERS.map((item) => `<button type="button" data-semester="${esc(item)}" aria-pressed="${item === semester}">${esc(item)}</button>`).join("")}</div>`
     : "";
   const bars = scored.map((row) => {
     const info = subject(row.key);
@@ -1068,7 +1071,7 @@ function gradesPanelHtml() {
   }
   return `${panelHead("Noten", "Punkte, Leistungskurse zählen doppelt")}
     ${switcher}
-    ${value != null ? `<p class="grades-total"><b class="grades-number num">${decimal(value)}</b><span>Punkte im Schnitt${semester === SEMESTER ? `, ${plural(rows.reduce((sum, row) => sum + row.count, 0), "Note", "Noten")} bisher` : ""}</span></p>` : `<p class="field-empty">Für ${semester} sind noch keine Noten eingetragen.</p>`}
+    ${value != null ? `<p class="grades-total"><b class="grades-number num">${decimal(value)}</b><span>Punkte im Schnitt${semester === SEMESTER ? `, ${plural(rows.reduce((sum, row) => sum + row.count, 0), "Note", "Noten")} bisher` : ""}</span></p>` : `<p class="field-empty">Für ${esc(semester)} sind noch keine Noten eingetragen.</p>`}
     ${entry}
     ${bars ? `<ol class="grade-bars" aria-label="Schnitt je Fach">${bars}</ol>` : ""}
     ${note ? `<p class="side-hint">${note}</p>` : ""}
@@ -1395,7 +1398,7 @@ function openPanel(selection, { trigger = null, form = false } = {}) {
   const same = !opening && state.selection.type === selection.type && JSON.stringify(state.selection) === JSON.stringify(selection);
   state.selection = selection;
   state.gradeForm = form;
-  if (trigger) state.returnTo = focusKeyOf(trigger);
+  if (trigger && !panel.contains(trigger)) state.returnTo = focusKeyOf(trigger);
   renderPanel();
   panel.hidden = false;
   $("schoolPage").classList.add("has-panel");
@@ -1477,7 +1480,7 @@ function openItem(id, trigger) {
   const item = state.items.find((entry) => entry.id === id);
   if (!item) return;
   if (!item.subject || !activeKey(item.subject)) {
-    if (editable(item)) openEditForm(id, trigger);
+    if (changeable(item)) openEditForm(id, trigger);
     return;
   }
   const block = itemBlock(item);
@@ -1508,7 +1511,7 @@ function openTestForm(key, trigger) {
 
 function openEditForm(id, trigger) {
   const item = state.items.find((entry) => entry.id === id);
-  if (!item || !editable(item)) return;
+  if (!item || !changeable(item)) return;
   state.draft = { id, subject: item.subject || "", date: item.date, block: itemBlock(item), kind: item.kind, title: item.title, detail: item.detail || "" };
   openPanel({ type: "test", item: id }, { trigger });
   requestAnimationFrame(() => $("testTitle")?.focus({ preventScroll: true }));
@@ -1575,18 +1578,32 @@ function updateItem(draft, title, detail) {
   const index = state.items.findIndex((entry) => entry.id === draft.id);
   if (index < 0) return;
   const item = state.items[index];
+  if (remote(item)) return;
   const changes = { title, subject: draft.subject || null, date: draft.date, detail };
   state.draft = null;
   if (draft.kind !== item.kind) {
     const moved = { ...item, ...changes, id: `new-${Date.now()}`, kind: draft.kind, status: "offen" };
     if (draft.block) moved.block = draft.block;
     else delete moved.block;
-    state.items.splice(index, 1, moved);
-    deadlineApi.remove(item.id);
-    deadlineApi.create(moved);
-    renderAll();
+    const swap = (from, to) => {
+      const at = state.items.findIndex((entry) => entry.id === from.id);
+      if (at < 0) return false;
+      state.items.splice(at, 1, to);
+      deadlineApi.remove(from.id);
+      deadlineApi.create(to);
+      renderAll();
+      return true;
+    };
+    swap(item, moved);
     showItem(moved);
-    toast(`Gespeichert: ${esc(moved.kind)} „${esc(moved.title)}“`, { icon: "check" });
+    $("panelTitle")?.focus({ preventScroll: true });
+    toast(`Gespeichert: ${esc(moved.kind)} „${esc(moved.title)}“`, {
+      icon: "check",
+      action: { label: "Rückgängig", undo: true, run: () => {
+        const back = { ...item, id: `new-${Date.now()}` };
+        if (swap(moved, back) && state.selection?.type !== "test") showItem(back);
+      } },
+    });
     return;
   }
   const before = { title: item.title, subject: item.subject || null, date: item.date, detail: item.detail || "" };
@@ -1598,6 +1615,7 @@ function updateItem(draft, title, detail) {
   };
   apply(changes);
   showItem(item);
+  $("panelTitle")?.focus({ preventScroll: true });
   toast(`Gespeichert: ${esc(item.kind)} „${esc(item.title)}“`, {
     icon: "check",
     action: { label: "Rückgängig", undo: true, run: () => {
@@ -1625,10 +1643,14 @@ function deleteItem(id) {
   toast(`Gelöscht: ${esc(item.kind)} „${esc(item.title)}“`, {
     icon: "trash-2",
     action: { label: "Rückgängig", undo: true, run: () => {
-      const back = { ...item, id: `new-${Date.now()}` };
+      const back = remote(item) ? item : { ...item, id: `new-${Date.now()}` };
       state.items.push(back);
-      deadlineApi.create(back);
-      if (back.status === "abgegeben") deadlineApi.update(back.id, { status: "abgegeben" });
+      if (remote(item)) {
+        deadlineApi.update(item.id, { hidden: false, status: item.status === "abgegeben" ? "abgegeben" : "offen" });
+      } else {
+        deadlineApi.create(back);
+        if (back.status === "abgegeben") deadlineApi.update(back.id, { status: "abgegeben" });
+      }
       renderAll();
       if (state.selection) renderPanel();
       flashRow(back.id);
@@ -1872,7 +1894,7 @@ function onBoardClick(event) {
       const chosen = $("schoolPanel").querySelector('[data-slot][aria-pressed="true"]');
       if (chosen && travels()) chosen.animate([{ transform: "scale(0.92)" }, { transform: "none" }], { duration: ms("--spring-tactile-dur") || 340, easing: token("--spring-tactile") });
     } else {
-      toast("Für einen Test nur kommende Stunden wählen.", { icon: "info", duration: 3000 });
+      toast(isHomework(state.draft) ? "Wähle eine kommende Stunde." : "Für einen Test nur kommende Stunden wählen.", { icon: "info", duration: 3000 });
     }
     return;
   }
@@ -2011,6 +2033,8 @@ async function startVplan({ manual = false } = {}) {
   }
   plan.loading = true;
   renderOverview();
+  const pages = () => plan.files.map((file) => file.url).join(" ");
+  let shown = pages();
   try {
     let body = manual ? null : await fetchPlan(false);
     if (!manual && body === null) {
@@ -2020,6 +2044,7 @@ async function startVplan({ manual = false } = {}) {
     if (body) {
       applyPlan(body);
       renderOverview();
+      shown = pages();
     }
     const age = body?.cachedAt ? Date.now() - new Date(body.cachedAt).getTime() : Infinity;
     if (manual || !body.files.length || !(age < PLAN_FRESH)) {
@@ -2034,7 +2059,10 @@ async function startVplan({ manual = false } = {}) {
     plan.loading = false;
     plan.loaded = true;
     renderOverview();
-    if ($("planViewer")?.open) renderPlanViewer();
+    const viewer = $("planViewer");
+    if (viewer?.open && !plan.files.length) viewer.close();
+    else if (viewer?.open && pages() !== shown) renderPlanViewer();
+    else if (viewer?.open) $("planViewerMeta").textContent = planStand();
   }
 }
 

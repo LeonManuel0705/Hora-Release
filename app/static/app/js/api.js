@@ -100,9 +100,13 @@ export const tasks = {
   restore(task) {
     const ref = homeworkRef(task.id);
     if (ref) {
+      const status = task.done ? "abgegeben" : "offen";
+      if (task.source === "iserv") return deadlines.update(ref, { hidden: false, status });
       serverIds.delete(ref);
       creations.delete(ref);
-      return deadlines.create({ id: ref, kind: "Hausaufgabe", title: task.title, subject: task.subject, date: task.date, detail: task.detail || "" });
+      const saved = deadlines.create({ id: ref, kind: "Hausaufgabe", title: task.title, subject: task.subject, date: task.date, detail: task.notes ?? task.detail ?? "" });
+      if (task.done) deadlines.update(ref, { status });
+      return saved;
     }
     serverIds.delete(task.id);
     creations.delete(task.id);
@@ -182,7 +186,7 @@ export function debounced(delay, run) {
     waiting.clear();
   };
   flushers.add(flush);
-  return (key, ...args) => {
+  const schedule = (key, ...args) => {
     clearTimeout(waiting.get(key)?.timer);
     const timer = setTimeout(() => {
       waiting.delete(key);
@@ -190,4 +194,9 @@ export function debounced(delay, run) {
     }, delay);
     waiting.set(key, { timer, args });
   };
+  schedule.cancel = (key) => {
+    clearTimeout(waiting.get(key)?.timer);
+    waiting.delete(key);
+  };
+  return schedule;
 }

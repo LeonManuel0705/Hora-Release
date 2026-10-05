@@ -159,12 +159,16 @@ export function nextSchoolDay(from) {
 }
 
 export function homeworkDate(subjectKey, from = now()) {
-  for (let offset = 1; offset <= 14; offset += 1) {
-    const date = addDays(startOfDay(from), offset);
+  const start = startOfDay(from);
+  let schoolDay = null;
+  for (let offset = 1; offset <= 70; offset += 1) {
+    const date = addDays(start, offset);
     const lessons = activeLessons(lessonsFor(date));
-    if (subjectKey ? lessons.some((lesson) => lesson.subject === subjectKey) : lessons.length) return isoDate(date);
+    if (!lessons.length) continue;
+    if (!subjectKey || lessons.some((lesson) => lesson.subject === subjectKey)) return isoDate(date);
+    schoolDay = schoolDay || date;
   }
-  return isoDate(addDays(startOfDay(from), 1));
+  return isoDate(schoolDay || addDays(start, 1));
 }
 
 export function relativeDay(offset, date) {
@@ -194,7 +198,7 @@ export function pastText(offset, date, kind) {
   return `am ${date.getDate()}.${date.getMonth() + 1}. ${word}`;
 }
 
-export function nextRepeatDate(iso, repeat) {
+function repeatStep(iso, repeat) {
   const date = parseDate(iso);
   if (repeat === "daily") return isoDate(addDays(date, 1));
   if (repeat === "weekly") return isoDate(addDays(date, 7));
@@ -203,6 +207,12 @@ export function nextRepeatDate(iso, repeat) {
   const last = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
   next.setDate(Math.min(date.getDate(), last));
   return isoDate(next);
+}
+
+export function nextRepeatDate(iso, repeat, after = isoDate(now())) {
+  let next = repeatStep(iso, repeat);
+  for (let turn = 0; next && next <= after && turn < 800; turn += 1) next = repeatStep(next, repeat);
+  return next;
 }
 
 export function duration(min) {

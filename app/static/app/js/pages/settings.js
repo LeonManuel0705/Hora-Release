@@ -1825,7 +1825,7 @@ function bindLook() {
   }).observe(root, { attributes: true, attributeFilter: ["data-theme-mode"] });
 }
 
-const placeState = { editing: false, place: null, query: "", results: [], searching: false, failed: false, timer: 0, ticket: 0 };
+const placeState = { editing: false, place: null, query: "", results: [], searching: false, stale: false, failed: false, timer: 0, ticket: 0 };
 const PLACE_WORDS = { home: "Zuhause", school: "Schule" };
 const placesCard = () => $("placesCard");
 const placeLine = (item) => (item.area && !item.name.includes(item.area) ? `${item.name}, ${item.area}` : item.name);
@@ -1842,7 +1842,11 @@ function placeResultsHtml() {
 
 function renderPlaceResults() {
   const host = $("placeResults");
-  if (host) host.innerHTML = placeResultsHtml();
+  if (!host) return;
+  const active = document.activeElement?.closest?.("[data-place-pick]");
+  const index = active && host.contains(active) ? active.dataset.placePick : null;
+  host.innerHTML = placeResultsHtml();
+  if (index !== null) (host.querySelector(`[data-place-pick="${index}"]`) || $("placeInput"))?.focus({ preventScroll: true });
 }
 
 function renderPlaces() {
@@ -1910,6 +1914,7 @@ async function searchPlaces(query) {
   }
   if (ticket !== placeState.ticket) return;
   placeState.searching = false;
+  placeState.stale = false;
   placeState.failed = failed;
   placeState.results = results;
   renderPlaceResults();
@@ -1922,6 +1927,7 @@ function closePlaceForm(key) {
   placeState.results = [];
   placeState.query = "";
   placeState.searching = false;
+  placeState.stale = false;
   renderPlaces();
   placesCard().querySelector(`[data-place-edit="${key}"]`)?.focus({ preventScroll: true });
 }
@@ -1938,11 +1944,24 @@ async function pickPlace(key, item) {
 }
 
 async function removePlace(key) {
+  const before = (page.places || {})[key] || "";
   try {
-    await request("DELETE", `/api/ui/places/${key}`);
+    const result = await request("DELETE", `/api/ui/places/${key}`);
     page.places = { ...(page.places || {}), [key]: "" };
     closePlaceForm(key);
-    toast(`${PLACE_WORDS[key]} entfernt`, { icon: "map-pin" });
+    const removed = result?.removed;
+    toast(`${PLACE_WORDS[key]} entfernt`, {
+      icon: "map-pin",
+      action: removed && before ? { label: "Rückgängig", undo: true, run: async () => {
+        try {
+          await request("PUT", `/api/ui/places/${key}`, removed);
+          page.places = { ...(page.places || {}), [key]: before };
+          renderPlaces();
+        } catch {
+          toast("Der Ort ließ sich gerade nicht zurückholen.", { icon: "circle-alert" });
+        }
+      } } : undefined,
+    });
   } catch {
     toast("Der Ort ließ sich gerade nicht entfernen.", { icon: "circle-alert" });
   }
@@ -1958,9 +1977,11 @@ function bindPlaces() {
       placeState.ticket += 1;
       placeState.results = [];
       placeState.searching = false;
+      placeState.stale = false;
       renderPlaceResults();
       return;
     }
+    placeState.stale = true;
     placeState.timer = setTimeout(() => searchPlaces(placeState.query.trim()), 280);
   });
   host.addEventListener("click", (event) => {
@@ -1972,6 +1993,7 @@ function bindPlaces() {
       placeState.query = "";
       placeState.results = [];
       placeState.searching = false;
+      placeState.stale = false;
       renderPlaces();
       $("placeInput")?.focus();
       return;
@@ -2003,7 +2025,7 @@ function bindPlaces() {
   host.addEventListener("submit", (event) => {
     event.preventDefault();
     if (event.target.id === "placeForm") {
-      if (placeState.results.length) pickPlace(placeState.place, placeState.results[0]);
+      if (placeState.results.length && !placeState.stale) pickPlace(placeState.place, placeState.results[0]);
       return;
     }
     if (event.target.id !== "weatherForm") return;

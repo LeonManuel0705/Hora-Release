@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 # SPDX-License-Identifier: AGPL-3.0-only
 
+import hashlib
 import logging
 import re
 import socket
@@ -1013,7 +1014,13 @@ class IServService:
                 file_type, content_type, suffix = kind
                 filename = f'plan_{index}{suffix}'
                 (cache_dir / filename).write_bytes(content)
-                files.append({'filename': filename, 'page': index, 'content_type': content_type, 'type': file_type})
+                files.append({
+                    'filename': filename,
+                    'page': index,
+                    'content_type': content_type,
+                    'type': file_type,
+                    'digest': hashlib.sha256(content).hexdigest()[:16],
+                })
             if not files:
                 return
 
@@ -1044,7 +1051,14 @@ class IServService:
             path = cache_dir / str(entry.get('filename') or '')
             if path.resolve().parent != cache_dir.resolve() or not path.is_file():
                 continue
-            files.append({'page': entry.get('page'), 'type': entry.get('type'), 'content_type': entry.get('content_type'), 'path': path})
+            digest = entry.get('digest')
+            files.append({
+                'page': entry.get('page'),
+                'type': entry.get('type'),
+                'content_type': entry.get('content_type'),
+                'path': path,
+                'digest': digest if isinstance(digest, str) and re.fullmatch(r'[0-9a-f]{16}', digest) else None,
+            })
         if not files:
             return None
         return {'files': files, 'cached_at': meta.get('cached_at')}

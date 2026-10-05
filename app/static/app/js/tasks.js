@@ -121,7 +121,7 @@ function rowHtml(task) {
     </div>
     <div class="row-trailing">
       <div class="row-actions">
-        ${task.done ? "" : `<button class="icon-button" type="button" data-act="later" aria-label="Auf morgen: ${title}" data-tip="Auf morgen">${icon("calendar-plus")}</button>`}
+        ${task.done || task.source === "iserv" ? "" : `<button class="icon-button" type="button" data-act="later" aria-label="Auf morgen: ${title}" data-tip="Auf morgen">${icon("calendar-plus")}</button>`}
         <button class="icon-button" type="button" data-act="delete" aria-label="Löschen: ${title}" data-tip="Löschen">${icon("trash-2")}</button>
       </div>
       ${task.priority && !task.done ? `<span class="flag" data-tip="Wichtig" role="img" aria-label="Wichtig">${icon("flag")}</span>` : ""}
@@ -268,11 +268,20 @@ function flushSettle() {
   render({ flip: true });
 }
 
+function dropFollow(task) {
+  const follow = task.follow && state.tasks.find((item) => item.id === task.follow && !item.done);
+  task.follow = null;
+  if (!follow) return;
+  state.tasks = state.tasks.filter((item) => item !== follow);
+  taskApi.remove(follow.id);
+}
+
 function toggleTask(id, { via = "keyboard" } = {}) {
   const task = findTask(id);
   if (!task) return;
   task.done = !task.done;
   taskApi.done(id, task.done);
+  if (!task.done) dropFollow(task);
   const row = rowOf(id);
   if (row) {
     row.classList.toggle("is-done", task.done);
@@ -284,18 +293,15 @@ function toggleTask(id, { via = "keyboard" } = {}) {
     if (via === "mouse") settle.pointerInside = true;
     let follow = null;
     if (task.repeat && task.date) {
-      follow = { ...task, id: `${task.id}-${Date.now()}`, done: false, date: nextRepeatDate(task.date, task.repeat) };
+      follow = { ...task, id: `${task.id}-${Date.now()}`, done: false, follow: null, date: nextRepeatDate(task.date, task.repeat) };
       state.tasks.push(follow);
       taskApi.create(follow);
+      task.follow = follow.id;
     }
     toast(follow ? `Erledigt. Nächste am ${esc(shortDate(parseDate(follow.date)))}` : `Erledigt: „${esc(task.title)}“`, {
       icon: "check",
       action: { label: "Rückgängig", undo: true, run: () => {
-        if (follow) {
-          state.tasks = state.tasks.filter((item) => item.id !== follow.id);
-          taskApi.remove(follow.id);
-        }
-        toggleTask(id);
+        if (task.done) toggleTask(id);
       } },
     });
     clearTimeout(settle.timer);
@@ -320,6 +326,7 @@ function removeTask(id, kind) {
   const index = state.tasks.findIndex((task) => task.id === id);
   if (index < 0) return;
   const task = state.tasks[index];
+  if (kind === "later" && task.source === "iserv") return;
   const row = rowOf(id);
   const hadFocus = row?.contains(document.activeElement);
   if (kind === "later") {
@@ -336,6 +343,8 @@ function removeTask(id, kind) {
     } } });
   } else {
     state.tasks.splice(index, 1);
+    saveText.cancel(`${id}:notes`);
+    saveText.cancel(`${id}:title`);
     taskApi.remove(id);
     if (state.selected === id) closePanel();
     toast(`Gelöscht: „${esc(task.title)}“`, { icon: "trash-2", action: { label: "Rückgängig", undo: true, run: () => {
@@ -414,22 +423,23 @@ function renderPanel() {
     ["none", "Ohne Datum", null],
   ];
   const homework = !!task.synced;
+  const fixed = task.source === "iserv" ? " disabled" : "";
   if (homework) dates.pop();
   const custom = !!task.date && !dates.some(([, , value]) => value === task.date);
   panel.innerHTML = `<div class="panel-head">
       <button class="check" type="button" role="checkbox" aria-checked="${task.done}" aria-label="Erledigt: ${esc(task.title)}" data-panel-check>${icon("check")}</button>
-      <textarea class="panel-title" id="panelTitle" rows="2" aria-label="Titel">${esc(task.title)}</textarea>
+      <textarea class="panel-title" id="panelTitle" rows="2" aria-label="Titel"${fixed ? " readonly" : ""}>${esc(task.title)}</textarea>
       <div class="panel-tools">
         <button class="icon-button is-danger" type="button" data-panel-delete aria-label="Aufgabe löschen" data-tip="Löschen">${icon("trash-2")}</button>
         <button class="icon-button" type="button" data-panel-close aria-label="Details schließen" data-tip="Schließen">${icon("x")}</button>
       </div>
     </div>
     <div class="panel-fields">
-      <label class="field"><span class="field-label">Fach</span><select class="field-control" id="panelSubject">${subjectOptions(task.subject)}</select></label>
+      <label class="field"><span class="field-label">Fach</span><select class="field-control" id="panelSubject"${fixed}>${subjectOptions(task.subject)}</select></label>
       <div class="field"><span class="field-label" id="panelDateLabel">Fällig</span>
         <div class="field-body" role="group" aria-labelledby="panelDateLabel">
-          ${dates.map(([key, text, value]) => `<button type="button" class="pill" data-date="${key}" aria-pressed="${task.date === value}">${text}</button>`).join("")}
-          <button type="button" class="pill" data-date="pick" aria-pressed="${custom}">${icon("calendar-days")}${custom ? esc(shortDate(parseDate(task.date))) : "Datum wählen"}</button>
+          ${dates.map(([key, text, value]) => `<button type="button" class="pill" data-date="${key}" aria-pressed="${task.date === value}"${fixed}>${text}</button>`).join("")}
+          <button type="button" class="pill" data-date="pick" aria-pressed="${custom}"${fixed}>${icon("calendar-days")}${custom ? esc(shortDate(parseDate(task.date))) : "Datum wählen"}</button>
           <input class="date-proxy" type="date" id="panelDate" value="${esc(task.date || "")}" tabindex="-1" aria-hidden="true">
         </div>
       </div>
@@ -468,7 +478,7 @@ function closePanel({ refocus = false } = {}) {
 
 function updateTask(changes) {
   const task = findTask(state.selected);
-  if (!task) return;
+  if (!task || task.source === "iserv") return;
   Object.assign(task, changes);
   taskApi.update(task.id, changes);
   render({ flip: true });
@@ -509,7 +519,7 @@ function bindPanel() {
   });
   panel.addEventListener("input", (event) => {
     const task = findTask(state.selected);
-    if (!task) return;
+    if (!task || task.source === "iserv") return;
     if (event.target.id === "panelNotes") {
       task.notes = event.target.value;
       saveText(`${task.id}:notes`, task.id, { notes: task.notes });
@@ -539,6 +549,12 @@ function startSync() {
 function interactiveRows() {
   return [...document.querySelectorAll("#taskGroups .row.is-interactive, #tasksDoneList:not([hidden]) .row.is-interactive")];
 }
+
+let keyRow = null;
+
+document.addEventListener("pointerdown", () => {
+  keyRow = null;
+}, true);
 
 function focusRow(row) {
   if (!row) return;
@@ -636,18 +652,17 @@ function bind() {
     const rows = interactiveRows();
     const current = document.activeElement?.closest?.(".row.is-interactive");
     const index = rows.indexOf(current);
-    if (key === "j") {
+    if (key === "j" || key === "k") {
       event.preventDefault();
-      focusRow(rows[Math.min(rows.length - 1, index + 1)] || rows[0]);
-    } else if (key === "k") {
-      event.preventDefault();
-      focusRow(rows[Math.max(0, index - 1)] || rows[0]);
+      const target = rows[key === "j" ? Math.min(rows.length - 1, index + 1) : Math.max(0, index - 1)] || rows[0];
+      focusRow(target);
+      keyRow = target?.dataset.id || null;
     } else if (key === "x" && current) {
       event.preventDefault();
       toggleTask(current.dataset.id);
     } else if ((key === "backspace" || key === "delete") && event.target === current) {
       event.preventDefault();
-      removeTask(current.dataset.id, "delete");
+      if (!event.shiftKey && !event.repeat && keyRow === current.dataset.id) removeTask(current.dataset.id, "delete");
     } else if (key === "enter" && event.target === current) {
       event.preventDefault();
       openPanel(current.dataset.id);

@@ -199,9 +199,10 @@ export function flush() {
   flushing = (async () => {
     const done = new Set();
     let failed = false;
+    let saved = 0;
     for (const item of queued()) {
       try {
-        await post(item);
+        if (await post(item)) saved += 1;
         done.add(item.id);
       } catch {
         failed = true;
@@ -215,8 +216,9 @@ export function flush() {
       retry = setTimeout(flush, RETRY);
       notify({ type: "unsaved", waiting: queued().length });
     }
-    if (done.size) notify({ type: "saved", count: done.size });
-    return done.size;
+    if (saved) notify({ type: "saved", count: saved });
+    if (done.size > saved) notify({ type: "refused", count: done.size - saved });
+    return saved;
   })().finally(() => {
     flushing = null;
   });
@@ -260,6 +262,7 @@ export const actions = {
   start: () => act(start),
   pause: () => act(pause),
   reset: () => act(reset),
+  restore: (earlier) => act(() => normalize(earlier)),
   minutes: (kind, value) => act((state) => setMinutes(state, kind, value)),
   subject: (key) => act((state) => setSubject(state, key)),
 };

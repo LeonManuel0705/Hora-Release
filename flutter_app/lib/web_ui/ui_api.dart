@@ -311,6 +311,10 @@ class UiApi {
     }
     if (request.method != 'PATCH') return UiReply.error('Nicht erlaubt', 405);
     final payload = _needPayload(request);
+    if (payload['hidden'] == false) {
+      await UiDb.changeIdSet(db, UiDb.iservHiddenKey, id, false);
+      _changed('school');
+    }
     if (payload.containsKey('status')) {
       await UiDb.changeIdSet(db, UiDb.iservDoneKey, id, payload['status'] == 'abgegeben');
       _changed('school');
@@ -535,8 +539,21 @@ class UiApi {
   Future<UiReply> _place(Database db, UiRequest request, String key) async {
     if (key != 'home' && key != 'school') return UiReply.error('Unbekannter Ort', 404);
     if (request.method == 'DELETE') {
+      final rows = await db.query('vbb_known_locations', where: 'key = ?', whereArgs: [key], limit: 1);
       await db.delete('vbb_known_locations', where: 'key = ?', whereArgs: [key]);
-      return UiReply.ok();
+      final known = rows.isEmpty ? null : rows.first;
+      final usable = known != null && text(known['name']).isNotEmpty && known['latitude'] != null && known['longitude'] != null;
+      return UiReply.ok({
+        'removed': usable
+            ? {
+                'name': text(known['name'], 200),
+                'area': '',
+                'lat': known['latitude'],
+                'lon': known['longitude'],
+                'stop': known['type'] == 'stop' ? text(known['vbb_id'], 120) : '',
+              }
+            : null,
+      });
     }
     if (request.method != 'PUT') return UiReply.error('Nicht erlaubt', 405);
     final payload = _needPayload(request);

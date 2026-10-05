@@ -100,19 +100,23 @@ export function toast(message, options = {}) {
   node.querySelector(".toast-text").append(safeMarkup(message));
   const hold = options.action ? 10000 : options.duration || 5000;
   const action = options.action;
+  let used = false;
+  const run = () => {
+    if (used) return;
+    used = true;
+    if (undoAction === run) setUndo(null);
+    action.run();
+    dismiss();
+  };
   if (action) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "toast-action";
     button.innerHTML = `${esc(action.label)}${action.undo ? `<span class="toast-key" aria-hidden="true">${modWord}Z</span>` : ""}`;
     if (action.undo) button.setAttribute("aria-keyshortcuts", platform.mac ? "Meta+Z" : "Control+Z");
-    button.addEventListener("click", () => {
-      if (undoAction === action.run) setUndo(null);
-      action.run();
-      dismiss();
-    });
+    button.addEventListener("click", run);
     node.append(button);
-    setUndo(action.undo ? action.run : null);
+    setUndo(action.undo ? run : null);
   }
   host.replaceChildren(node);
   syncToastSpace();
@@ -134,7 +138,7 @@ export function toast(message, options = {}) {
   function dismiss() {
     clearTimeout(timer);
     if (!node.isConnected) return;
-    if (action && undoAction === action.run) setUndo(null);
+    if (undoAction === run) setUndo(null);
     const hadFocus = node.contains(document.activeElement);
     const finish = () => {
       node.remove();
@@ -891,6 +895,8 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (typing(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+  // WebKit views go back a page on Backspace outside of a field
+  if (event.key === "Backspace") event.preventDefault();
   if (!shortcutsEnabled() || overlayOpen()) return;
   if (event.key === "?") {
     event.preventDefault();
