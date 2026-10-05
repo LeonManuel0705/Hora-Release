@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 import itertools
+import json
+import re
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -15,25 +17,29 @@ def _moment(stamp):
 
 
 class FakeHttpError(Exception):
-    def __init__(self, status):
+    def __init__(self, status, reason=None):
         super().__init__(f'HTTP {status}')
         self.resp = SimpleNamespace(status=status)
+        self.content = json.dumps({'error': {'errors': [{'reason': reason}] if reason else []}}).encode()
 
 
 class _Call:
     def __init__(self, run):
         self._run = run
+        self.headers = {}
 
     def execute(self):
-        return self._run()
+        return self._run(self)
 
 
 class FakeGoogle:
     """Stands in for the Calendar API as far as the sync uses it.
 
     Like the real service it merges a patch into the stored event, refuses an
-    event that has both a day and a time, answers 409 for an id that is taken,
-    keeps deleted events as cancelled ones and only lists them when asked to.
+    event that has both a day and a time, only takes ids made of a-v and 0-9,
+    answers 409 for an id that is taken and 412 for a patch whose If-Match no
+    longer fits, keeps deleted events as cancelled ones and only lists them
+    when asked to.
     """
 
     def __init__(self, primary='me@example.org'):
@@ -62,6 +68,19 @@ class FakeGoogle:
             raise FakeHttpError(404)
         return key
 
+    def _readable(self, calendar):
+        if calendar in self.broken:
+            status = self.broken[calendar]
+            if isinstance(status, tuple):
+                raise FakeHttpError(*status)
+            raise FakeHttpError(status) if status else OSError('connection reset')
+        return self.store[calendar]
+
+    def _stamped(self, event, age=0):
+        stamp = self._now(age)
+        event.update(updated=stamp, etag=f'"{stamp}"')
+        return event
+
     def add_calendar(self, key, name):
         self.calendars[key] = {'id': key, 'summary': name, 'primary': False, 'backgroundColor': '#0b8043'}
         self.store[key] = {}
@@ -78,11 +97,13 @@ class FakeGoogle:
         else:
             last = extra.pop('end_day', day)
             when = {'start': {'date': day}, 'end': {'date': last}}
-        self.store[calendar][key] = {'id': key, 'summary': title, 'status': 'confirmed', 'updated': self._now(age), **when, **extra}
+        self.store[calendar][key] = self._stamped({'id': key, 'summary': title, 'status': 'confirmed', **when, **extra}, age)
         return key
 
     def change(self, calendar, key, age=0, **values):
-        self.store[self._calendar(calendar)][key].update(values, updated=self._now(age))
+        event = self.store[self._calendar(calendar)][key]
+        event.update(values)
+        self._stamped(event, age)
 
     def cancel(self, calendar, key, age=0):
         self.change(calendar, key, age, status='cancelled')
@@ -122,7 +143,7 @@ class FakeGoogle:
 
     def calendarList(self):
         def listing(pageToken=None):
-            def run():
+            def run(call):
                 self._guard('calendarList.list')
                 return {'items': list(self.calendars.values())}
             return _Call(run)
@@ -138,13 +159,9 @@ class FakeGoogle:
             return (end.get('date') or end.get('dateTime'))[:10]
 
         def listing(calendarId, maxResults=250, pageToken=None, **params):
-            def run():
+            def run(call):
                 self._guard('events.list', calendar=calendarId, **params)
-                calendar = self._calendar(calendarId)
-                if calendar in self.broken:
-                    status = self.broken[calendar]
-                    raise FakeHttpError(status) if status else OSError('connection reset')
-                items = list(self.store[calendar].values())
+                items = list(self._readable(self._calendar(calendarId)).values())
                 if params.get('singleEvents'):
                     items = [event for event in items if not event.get('recurrence')]
                 else:
@@ -161,48 +178,55 @@ class FakeGoogle:
             return _Call(run)
 
         def get(calendarId, eventId):
-            def run():
+            def run(call):
                 self._guard('events.get', calendar=calendarId, event=eventId)
-                bucket = self.store[self._calendar(calendarId)]
+                bucket = self._readable(self._calendar(calendarId))
                 if eventId not in bucket:
                     raise FakeHttpError(404)
                 return dict(bucket[eventId])
             return _Call(run)
 
         def insert(calendarId, body):
-            def run():
+            def run(call):
                 self._guard('events.insert', calendar=calendarId, body=body)
                 bucket = self.store[self._calendar(calendarId)]
                 key = body.get('id') or f'ev{next(self._ids)}'
+                if 'id' in body and not re.fullmatch(r'[a-v0-9]{5,1024}', key):
+                    raise FakeHttpError(400)
+                if any(value is None for part in (body, *(item for item in body.values() if isinstance(item, dict))) for value in part.values()):
+                    raise FakeHttpError(400)
                 if key in bucket:
                     raise FakeHttpError(409)
-                bucket[key] = {**self._merged({'status': 'confirmed'}, body), 'id': key, 'updated': self._now()}
+                bucket[key] = self._stamped({**self._merged({'status': 'confirmed'}, body), 'id': key})
                 return self._answer('events.insert', dict(bucket[key]))
             return _Call(run)
 
         def patch(calendarId, eventId, body):
-            def run():
+            def run(call):
                 self._guard('events.patch', calendar=calendarId, event=eventId, body=body)
                 bucket = self.store[self._calendar(calendarId)]
                 if eventId not in bucket:
                     raise FakeHttpError(404)
+                if call.headers.get('If-Match') not in (None, bucket[eventId].get('etag')):
+                    raise FakeHttpError(412)
                 if bucket[eventId]['status'] == 'cancelled':
                     if not self.quiet_patch:
                         raise FakeHttpError(404)
                     return dict(bucket[eventId])
-                bucket[eventId] = {**self._merged(bucket[eventId], body), 'updated': self._now()}
+                bucket[eventId] = self._stamped(self._merged(bucket[eventId], body))
                 return self._answer('events.patch', dict(bucket[eventId]))
             return _Call(run)
 
         def delete(calendarId, eventId):
-            def run():
+            def run(call):
                 self._guard('events.delete', calendar=calendarId, event=eventId)
                 bucket = self.store[self._calendar(calendarId)]
                 if eventId not in bucket:
                     raise FakeHttpError(404)
                 if bucket[eventId]['status'] == 'cancelled':
                     raise FakeHttpError(410)
-                bucket[eventId].update(status='cancelled', updated=self._now())
+                bucket[eventId]['status'] = 'cancelled'
+                self._stamped(bucket[eventId])
                 return ''
             return _Call(run)
 

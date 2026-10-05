@@ -489,6 +489,7 @@ def _local_day_and_time(value: str):
 def calendar_event_view(event: Dict, calendar: Dict) -> Dict:
     start = event.get('start', {})
     end = event.get('end', {})
+    private = (event.get('extendedProperties') or {}).get('private') or {}
     if 'date' in start:
         start_date = start['date']
         start_time = None
@@ -516,7 +517,8 @@ def calendar_event_view(event: Dict, calendar: Dict) -> Dict:
         "source": "google",
         "recurring_event_id": event.get('recurringEventId', None),
         "updated": event.get('updated', ''),
-        "open_end": bool(event.get('endTimeUnspecified')),
+        "etag": event.get('etag', ''),
+        "open_end": bool(event.get('endTimeUnspecified')) or private.get('horaOpenEnd') == '1',
     }
 
 
