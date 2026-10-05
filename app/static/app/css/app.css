@@ -1620,6 +1620,8 @@ label.switch { position: relative; display: flex; align-items: flex-start; gap: 
 .icon-button.is-danger { color: var(--urgent-ink); }
 .panel-title { width: 100%; padding: 4px 8px; border: 0; border-radius: 10px; background: none; resize: none; font: inherit; font-size: var(--text-lg); font-weight: var(--weight-strong); line-height: 1.3; color: var(--ink); field-sizing: content; }
 .panel-title:focus { outline: none; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.panel-title[readonly] { color: var(--ink-soft); cursor: default; }
+.panel-title[readonly]:focus { background: none; box-shadow: none; }
 .panel-fields { display: grid; margin-top: 12px; }
 .field { display: grid; gap: 7px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
 .field.is-inline { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
@@ -1634,6 +1636,7 @@ textarea.field-control { min-height: 74px; resize: vertical; line-height: 1.45; 
 .pill .icon { --s: 14; flex: none; }
 .pill { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 12px; border-radius: 99px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--text-sm); color: var(--ink-soft); transition: background-color var(--dur-state) var(--ease-out), color var(--dur-state) var(--ease-out); }
 .pill[aria-pressed="true"] { background: var(--ink); box-shadow: none; color: var(--on-inverse); }
+.pill:disabled { opacity: 0.5; cursor: not-allowed; }
 .switch[role="switch"] { position: relative; width: 46px; height: 28px; border-radius: 99px; background: var(--line-strong); transition: background-color var(--dur-state) var(--ease-out); }
 .switch[role="switch"] span { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 3px rgb(0 0 0 / 0.2); transition: transform var(--spring-tactile-dur) var(--spring-tactile); }
 .switch[aria-checked="true"] { background: var(--ink); }

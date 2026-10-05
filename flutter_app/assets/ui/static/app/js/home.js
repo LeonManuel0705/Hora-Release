@@ -1,12 +1,12 @@
 import {
   data, flags, esc, icon, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, abWeeks, isoWeek, subject, hueVar, glue, lessonsFor, activeLessons, nextSchoolDay, relativeDay, inDays, duration, shortDate,
-  longDate, eventsOn, nextDeparture, schoolDeparture, weatherAt, rainFrom, hourIcon, hasWeather, storage, changesFor, isAssessment, isOverdue, pastText, nextRepeatDate, homeworkDate,
+  longDate, eventsOn, nextDeparture, schoolDeparture, weatherAt, rainFrom, hourIcon, hasWeather, storage, changesFor, isAssessment, isOverdue, pastText, nextRepeatDate, followLinks, homeworkDate,
   WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "./core.js";
 import { animates, travels, rich, level, flipKeyed, exitInPlace, enterInPlace, setDigits, pop, crossfade, swapText, breath, chalkCheck, bezier, token, ms } from "./motion.js";
 import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
 import { toast, openPage, registerSearch, typing, shortcutsEnabled, overlayOpen, placeNear, clampSheet, parseNote, cleanTitle, syncTime } from "./shell.js";
-import { tasks as taskApi, deadlines as deadlineApi, notes as noteApi } from "./api.js";
+import { tasks as taskApi, deadlines as deadlineApi, notes as noteApi, serverId } from "./api.js";
 
 const $ = (id) => document.getElementById(id);
 const DAY_START = data.blocks?.length ? Math.min(...data.blocks.map((block) => toMin(block.start))) : 480;
@@ -1142,12 +1142,29 @@ function celebrateIfDone() {
   if (box.bottom < 80 || box.top > innerHeight - 80) toast("Alles für heute erledigt.", { icon: "circle-check" });
 }
 
+const savedId = (task) => String(serverId(task.id) || task.id);
+
 function dropFollow(task) {
-  const follow = task.follow && state.tasks.find((item) => item.id === task.follow && !item.done);
+  const linked = task.follow || followLinks.get(savedId(task));
   task.follow = null;
+  followLinks.drop(savedId(task));
+  const follow = linked && state.tasks.find((item) => !item.done && (item.id === linked || savedId(item) === String(linked)));
   if (!follow) return;
   state.tasks = state.tasks.filter((item) => item !== follow);
   taskApi.remove(follow.id);
+}
+
+function followUp(task, date, extra = {}) {
+  const twin = state.tasks.find((item) => item !== task && !item.done && item.title === task.title && (item.subject || null) === (task.subject || null) && item.repeat === task.repeat && item.date === date);
+  if (twin) {
+    task.follow = twin.id;
+    return twin;
+  }
+  const follow = { ...task, ...extra, id: `${task.id}-${Date.now()}`, done: false, follow: null, date };
+  state.tasks.push(follow);
+  task.follow = follow.id;
+  taskApi.create(follow).then((saved) => followLinks.set(savedId(task), saved.id), () => {});
+  return follow;
 }
 
 function toggleTask(id, { restoreFocus = false, via = "keyboard" } = {}) {
@@ -1166,12 +1183,8 @@ function toggleTask(id, { restoreFocus = false, via = "keyboard" } = {}) {
   state.celebrationDue = task.done && !openTasks().length && storage.get("app-celebrated") !== todayIso();
   if (task.done) {
     let follow = null;
-    if (task.repeat) {
-      follow = { ...task, id: `${task.id}-${Date.now()}`, done: false, doneAt: null, doneDay: null, follow: null, date: nextRepeatDate(task.date || todayIso(), task.repeat) };
-      state.tasks.push(follow);
-      taskApi.create(follow);
-      task.follow = follow.id;
-    }
+    const next = task.repeat ? nextRepeatDate(task.date || todayIso(), task.repeat) : null;
+    if (next) follow = followUp(task, next, { doneAt: null, doneDay: null });
     toast(follow ? `Erledigt. Nächste am ${esc(shortDate(parseDate(follow.date)))}` : `Erledigt: „${esc(task.title)}“`, {
       icon: "check",
       action: { label: "Rückgängig", undo: true, run: () => {

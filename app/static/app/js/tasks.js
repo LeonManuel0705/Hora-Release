@@ -1,7 +1,7 @@
-import { data, esc, icon, tinte, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, relativeDay, now, minutesOf, subject, hueVar, glue, nextRepeatDate, homeworkDate, WEEKDAYS, WEEKDAYS_SHORT, storage } from "./core.js";
+import { data, esc, icon, tinte, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, relativeDay, now, minutesOf, subject, hueVar, glue, nextRepeatDate, homeworkDate, followLinks, WEEKDAYS, WEEKDAYS_SHORT, storage } from "./core.js";
 import { animates, travels, flipKeyed, exitInPlace, enterInPlace, token } from "./motion.js";
 import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen } from "./shell.js";
-import { tasks as taskApi, deadlines as deadlineApi, debounced } from "./api.js";
+import { tasks as taskApi, deadlines as deadlineApi, debounced, serverId } from "./api.js";
 
 const saveText = debounced(700, (key, id, changes) => taskApi.update(id, changes));
 
@@ -268,12 +268,29 @@ function flushSettle() {
   render({ flip: true });
 }
 
+const savedId = (task) => String(serverId(task.id) || task.id);
+
 function dropFollow(task) {
-  const follow = task.follow && state.tasks.find((item) => item.id === task.follow && !item.done);
+  const linked = task.follow || followLinks.get(savedId(task));
   task.follow = null;
+  followLinks.drop(savedId(task));
+  const follow = linked && state.tasks.find((item) => !item.done && (item.id === linked || savedId(item) === String(linked)));
   if (!follow) return;
   state.tasks = state.tasks.filter((item) => item !== follow);
   taskApi.remove(follow.id);
+}
+
+function followUp(task, date, extra = {}) {
+  const twin = state.tasks.find((item) => item !== task && !item.done && item.title === task.title && (item.subject || null) === (task.subject || null) && item.repeat === task.repeat && item.date === date);
+  if (twin) {
+    task.follow = twin.id;
+    return twin;
+  }
+  const follow = { ...task, ...extra, id: `${task.id}-${Date.now()}`, done: false, follow: null, date };
+  state.tasks.push(follow);
+  task.follow = follow.id;
+  taskApi.create(follow).then((saved) => followLinks.set(savedId(task), saved.id), () => {});
+  return follow;
 }
 
 function toggleTask(id, { via = "keyboard" } = {}) {
@@ -292,12 +309,8 @@ function toggleTask(id, { via = "keyboard" } = {}) {
     settle.lastCheck = performance.now();
     if (via === "mouse") settle.pointerInside = true;
     let follow = null;
-    if (task.repeat && task.date) {
-      follow = { ...task, id: `${task.id}-${Date.now()}`, done: false, follow: null, date: nextRepeatDate(task.date, task.repeat) };
-      state.tasks.push(follow);
-      taskApi.create(follow);
-      task.follow = follow.id;
-    }
+    const next = task.repeat && task.date ? nextRepeatDate(task.date, task.repeat) : null;
+    if (next) follow = followUp(task, next);
     toast(follow ? `Erledigt. Nächste am ${esc(shortDate(parseDate(follow.date)))}` : `Erledigt: „${esc(task.title)}“`, {
       icon: "check",
       action: { label: "Rückgängig", undo: true, run: () => {

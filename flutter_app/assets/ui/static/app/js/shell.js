@@ -874,6 +874,15 @@ $("shortcuts")?.addEventListener("click", (event) => {
 
 export const typing = (target) => target.closest?.("input, textarea, select, [contenteditable='true']");
 
+const NO_TEXT = ["checkbox", "radio", "range", "button", "submit", "reset", "file", "color", "image"];
+
+function takesText(target) {
+  const field = target.closest?.("input, textarea, [contenteditable='true']");
+  if (!field) return false;
+  if (field.isContentEditable) return true;
+  return !field.readOnly && !field.disabled && !NO_TEXT.includes(field.type);
+}
+
 export const overlayOpen = () => !!document.querySelector("dialog[open], [popover]:popover-open:not(.variant-menu)");
 
 document.addEventListener("keydown", (event) => {
@@ -894,9 +903,9 @@ document.addEventListener("keydown", (event) => {
     if (runUndo()) event.preventDefault();
     return;
   }
+  // WebKit views go back a page on Backspace wherever it does not delete text
+  if (event.key === "Backspace" && !event.ctrlKey && !event.metaKey && !event.altKey && !takesText(event.target)) event.preventDefault();
   if (typing(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
-  // WebKit views go back a page on Backspace outside of a field
-  if (event.key === "Backspace") event.preventDefault();
   if (!shortcutsEnabled() || overlayOpen()) return;
   if (event.key === "?") {
     event.preventDefault();

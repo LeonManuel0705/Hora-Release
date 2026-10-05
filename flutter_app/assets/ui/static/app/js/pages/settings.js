@@ -1982,6 +1982,7 @@ function bindPlaces() {
       return;
     }
     placeState.stale = true;
+    placeState.ticket += 1;
     placeState.timer = setTimeout(() => searchPlaces(placeState.query.trim()), 280);
   });
   host.addEventListener("click", (event) => {

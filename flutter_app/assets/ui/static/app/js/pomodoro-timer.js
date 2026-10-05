@@ -262,7 +262,7 @@ export const actions = {
   start: () => act(start),
   pause: () => act(pause),
   reset: () => act(reset),
-  restore: (earlier) => act(() => normalize(earlier)),
+  restore: (earlier) => act((state) => (state.status === "idle" ? normalize(earlier) : state)),
   minutes: (kind, value) => act((state) => setMinutes(state, kind, value)),
   subject: (key) => act((state) => setSubject(state, key)),
 };

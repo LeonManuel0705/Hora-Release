@@ -1379,6 +1379,9 @@ function renderPanel() {
       panel.innerHTML = gradesPanelHtml();
     } else if (selection.type === "test" && state.draft) {
       panel.innerHTML = testFormHtml();
+    } else if (selection.type === "item") {
+      const item = state.items.find((entry) => entry.id === selection.item);
+      panel.innerHTML = item ? `${panelHead(item.kind)}${itemBox(item, clockState())}` : "";
     }
   });
   panel.setAttribute("aria-labelledby", "panelTitle");
@@ -1481,6 +1484,7 @@ function openItem(id, trigger) {
   if (!item) return;
   if (!item.subject || !activeKey(item.subject)) {
     if (changeable(item)) openEditForm(id, trigger);
+    else openPanel({ type: "item", item: id }, { trigger });
     return;
   }
   const block = itemBlock(item);
@@ -1539,7 +1543,7 @@ function popCell(iso, block) {
 
 function showItem(item) {
   const block = itemBlock(item);
-  if (!item.subject || !activeKey(item.subject)) closePanel();
+  if (!item.subject || !activeKey(item.subject)) openPanel({ type: "item", item: item.id });
   else if (block && lessonAt(item.date, block)) openPanel({ type: "lesson", iso: item.date, block, item: item.id });
   else openPanel({ type: "subject", key: item.subject, item: item.id });
   markSelection();
@@ -1630,6 +1634,7 @@ function removeItem(id) {
   if (index < 0) return;
   state.items.splice(index, 1);
   deadlineApi.remove(id);
+  if (state.selection?.type === "item" && state.selection.item === id) closePanel({ refocus: true });
   if (state.selection?.item === id) delete state.selection.item;
   renderAll();
   if (state.selection) renderPanel();
@@ -1638,7 +1643,7 @@ function removeItem(id) {
 function deleteItem(id) {
   const item = state.items.find((entry) => entry.id === id);
   if (!item) return;
-  if (state.selection?.type === "test" && state.draft?.id === id) closePanel();
+  if (state.selection?.type === "test" && state.draft?.id === id) closePanel({ refocus: true });
   removeItem(id);
   toast(`Gelöscht: ${esc(item.kind)} „${esc(item.title)}“`, {
     icon: "trash-2",
@@ -1966,6 +1971,7 @@ function bind() {
     if (grades) openGrades(grades);
   });
   bindPanel();
+  $("planViewer")?.addEventListener("close", () => document.querySelector("#schoolOverview [data-plan-open], [data-plan-open]")?.focus({ preventScroll: true }));
   $("planViewer")?.addEventListener("click", (event) => {
     const dialog = event.currentTarget;
     const tab = event.target.closest("[data-plan-page]");

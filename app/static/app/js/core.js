@@ -198,22 +198,46 @@ export function pastText(offset, date, kind) {
   return `am ${date.getDate()}.${date.getMonth() + 1}. ${word}`;
 }
 
-function repeatStep(iso, repeat) {
-  const date = parseDate(iso);
-  if (repeat === "daily") return isoDate(addDays(date, 1));
-  if (repeat === "weekly") return isoDate(addDays(date, 7));
-  if (repeat !== "monthly") return null;
-  const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+function monthsOn(date, count) {
+  const next = new Date(date.getFullYear(), date.getMonth() + count, 1);
   const last = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
   next.setDate(Math.min(date.getDate(), last));
-  return isoDate(next);
+  return next;
 }
 
 export function nextRepeatDate(iso, repeat, after = isoDate(now())) {
-  let next = repeatStep(iso, repeat);
-  for (let turn = 0; next && next <= after && turn < 800; turn += 1) next = repeatStep(next, repeat);
-  return next;
+  const days = { daily: 1, weekly: 7 }[repeat];
+  if (!days && repeat !== "monthly") return null;
+  const date = parseDate(iso);
+  for (let turn = 1; turn <= 800; turn += 1) {
+    const next = isoDate(days ? addDays(date, days * turn) : monthsOn(date, turn));
+    if (next > after) return next;
+  }
+  return null;
 }
+
+const FOLLOW_KEY = "app-task-follow";
+const followMap = () => {
+  const value = storage.get(FOLLOW_KEY);
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+};
+
+export const followLinks = {
+  get: (id) => followMap()[String(id)] || null,
+  set(id, follow) {
+    const map = followMap();
+    map[String(id)] = String(follow);
+    const keys = Object.keys(map);
+    keys.slice(0, Math.max(0, keys.length - 60)).forEach((key) => delete map[key]);
+    storage.set(FOLLOW_KEY, map);
+  },
+  drop(id) {
+    const map = followMap();
+    if (!(String(id) in map)) return;
+    delete map[String(id)];
+    storage.set(FOLLOW_KEY, map);
+  },
+};
 
 export function duration(min) {
   if (min < 60) return `${min}\u00a0Min.`;
