@@ -506,8 +506,8 @@ def _exam_line(kind, item, names, school=None):
 
 _PLAN_REQUEST = re.compile(
     r'lernplan|lern\w*\s*plan|wie\s+lerne\s+ich|wie\s+(?:soll|kann|muss)\s+ich\b[^.?!]{0,60}\blernen\b|lernen\s+f[üu]r'
-    r'|(?:vorbereit\w*|bereite\w*\s+(?:ich\s+)?mich)\b[^.?!]{0,60}\b(?:klausur|\w*test|prüfung|arbeit|abi|abitur|lk)\b'
-    r'|\b(?:klausur|\w*test|prüfung|arbeit|abi|abitur)\b[^.?!]{0,40}\bvorbereit', re.IGNORECASE)
+    r'|(?:vorbereit\w*|bereite\w*\s+(?:ich\s+)?mich)\b[^.?!]{0,60}\b(?:klausur|\w*test|prüfung|klassenarbeit|abi|abitur|lk)\b'
+    r'|\b(?:klausur|\w*test|prüfung|klassenarbeit|abi|abitur)\b[^.?!]{0,40}\bvorbereit', re.IGNORECASE)
 
 
 def _plan_brief(message, names, exams, tests, homework, follow_up=False):
@@ -1286,161 +1286,185 @@ def extract_ollama_actions(response_text):
 
 # ---- Natural Language Task/Event Parsing ----
 
-def _parse_date_nl(text, reference_date=None):
-    """Parse natural language date references into YYYY-MM-DD."""
-    now = reference_date or datetime.now()
-    today = now.date()
+_WEEKDAY = r'(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)'
+_DAY_PART = r'(?:\s+(?:früh|morgens|vormittags?|mittags?|nachmittags?|abends?|nachts?))?'
+_MONTHS = {'januar': 1, 'februar': 2, 'märz': 3, 'april': 4, 'mai': 5, 'juni': 6,
+           'juli': 7, 'august': 8, 'september': 9, 'oktober': 10, 'november': 11, 'dezember': 12}
+_NOT_A_DAY_BEFORE = re.compile(r'(?:\bum|\bnr\.?|\bs\.?|\bseite|\baufgaben?|\bkapitel|\bnummer|\babschnitt|\bteil)\s*$')
+_NOT_A_DAY_AFTER = re.compile(r'\s*(?:uhr|stunden?|std|min|minuten|seiten?|punkte?|euro|€|%|prozent)\b')
+_NOT_MINUTES = r'(?!\s*(?:seiten?|minuten|min|euro|€|%|prozent|punkte?|aufgaben?|stück))'
+
+
+def _find_date(text, reference_date=None):
+    """The day a text names and where its words stand: (YYYY-MM-DD, (start, end)), or (None, None)."""
+    today = (reference_date or datetime.now()).date()
     t = text.lower()
+    lead = r'(?<![\w.])(?:(?:für|bis|ab|am|seit)\s+)?'
 
-    if re.search(r'\b(?:heute|today)\b', t):
-        return today.strftime('%Y-%m-%d')
-    if re.search(r'\bübermorgen\b', t):
-        return (today + timedelta(days=2)).strftime('%Y-%m-%d')
-    if re.search(r'(?<!guten\s)\b(?:morgen|tomorrow)\b', t):
-        return (today + timedelta(days=1)).strftime('%Y-%m-%d')
+    def found(match, day):
+        return day.strftime('%Y-%m-%d'), match.span()
 
-    # "am Montag", "nächsten Dienstag", etc.
+    for words, ahead in ((r'(?:heute|today)', 0), (r'übermorgen', 2), (r'(?<!guten\s)(?:morgen|tomorrow)', 1)):
+        m = re.search(rf'{lead}{words}{_DAY_PART}(?!\w)', t)
+        if m:
+            return found(m, today + timedelta(days=ahead))
+
     for i, name in enumerate(DAY_NAMES_DE):
-        if re.search(rf'(?<!\w){name.lower()}(?!\w)', t):
-            current_weekday = today.weekday()
-            diff = (i - current_weekday) % 7
-            if diff == 0:
-                diff = 7  # next week if same day
-            return (today + timedelta(days=diff)).strftime('%Y-%m-%d')
+        m = re.search(rf'(?<![\w.])(?:(?:am|bis|für|ab|von|nächsten?|kommenden?|diesen)\s+)?{name.lower()}{_DAY_PART}(?:\s+bis\s+{_WEEKDAY})?(?!\w)', t)
+        if m:
+            return found(m, today + timedelta(days=(i - today.weekday()) % 7 or 7))
 
-    # "in X Tagen"
-    m = re.search(r'\bin\s+(\d+)\s+tag', t)
+    m = re.search(r'(?<![\w.])in\s+(\d+)\s+tag(?:en)?(?!\w)', t)
     if m:
-        return (today + timedelta(days=int(m.group(1)))).strftime('%Y-%m-%d')
+        return found(m, today + timedelta(days=int(m.group(1))))
 
-    # Explicit dates: "am 15.4", "15.04.", "15. April". A bare "2.3" is a number, not a day.
-    month_names = {'januar': 1, 'februar': 2, 'märz': 3, 'april': 4, 'mai': 5, 'juni': 6,
-                   'juli': 7, 'august': 8, 'september': 9, 'oktober': 10, 'november': 11, 'dezember': 12}
-    for m in re.finditer(r'(?<![\w.,:])(\d{1,2})\.\s?(\d{1,2})(\.)?(?![\d:])', t):
+    # "am 15.4", "15.04.", "15.04.2027". A bare "2.3" is a number, not a day.
+    numbers = (
+        r'(?<![\w.,:])(?:(am|bis\s+zum|bis|zum|vom|ab|für\s+den|den)\s+)?(\d{1,2})\.\s?(\d{1,2})(\.(?:\d{4}|\d{2})?)?(?![\d:])'
+        r'(?:\s*(?:bis(?:\s+zum)?|-|–)\s*\d{1,2}\.\s?\d{1,2}\.(?:\d{4}|\d{2})?(?![\d:]))?'
+    )
+    for m in re.finditer(numbers, t):
         before, after = t[:m.start()], t[m.end():]
-        if re.search(r'\bum\s*$', before) or re.search(r'(?:\bnr|\bs|\bseite|\baufgabe|\bkapitel|\bnummer)\.?\s*$', before):
+        if _NOT_A_DAY_BEFORE.search(before) or _NOT_A_DAY_AFTER.match(after):
             continue
-        if re.match(r'\s*(?:uhr|stunden?|std|min|minuten|seiten|punkte|euro|€|%|prozent)\b', after):
+        if not m.group(4) and not m.group(1):
             continue
-        if not m.group(3) and not re.search(r'\b(?:am|bis|zum|vom|ab|den)\s*$', before):
+        if (m.group(1) or '').startswith('bis') and re.search(r'\d\.\d+\s*$', before):
             continue
-        day, month = int(m.group(1)), int(m.group(2))
-        year = today.year
+        written = (m.group(4) or '').strip('.')
+        year = int(written) + (2000 if len(written) == 2 else 0) if written else today.year
         try:
-            d = datetime(year, month, day).date()
-            if d < today:
-                d = datetime(year + 1, month, day).date()
-            return d.strftime('%Y-%m-%d')
+            day = datetime(year, int(m.group(3)), int(m.group(2))).date()
+            if not written and day < today:
+                day = datetime(year + 1, int(m.group(3)), int(m.group(2))).date()
+        except ValueError:
+            continue
+        return found(m, day)
+
+    m = re.search(rf'(?<![\w.])(?:(?:am|bis\s+zum|bis|zum|vom|ab|den)\s+)?(\d{{1,2}})\.\s*({"|".join(_MONTHS)})(?!\w)', t)
+    if m:
+        try:
+            day = datetime(today.year, _MONTHS[m.group(2)], int(m.group(1))).date()
+            if day < today:
+                day = datetime(today.year + 1, _MONTHS[m.group(2)], int(m.group(1))).date()
+            return found(m, day)
         except ValueError:
             pass
 
-    for mname, mnum in month_names.items():
-        m = re.search(rf'(\d{{1,2}})\.\s*{mname}', t)
-        if m:
-            try:
-                d = datetime(today.year, mnum, int(m.group(1))).date()
-                if d < today:
-                    d = datetime(today.year + 1, mnum, int(m.group(1))).date()
-                return d.strftime('%Y-%m-%d')
-            except ValueError:
-                pass
+    return None, None
 
-    return None
+
+def _find_time(text):
+    """The clock time a text names and where its words stand: (HH:MM, (start, end)), or (None, None)."""
+    t = text.lower()
+    lead = r'(?<![\w.])(?:(?:um|bis|gegen|ab)\s+)?'
+    rules = (
+        (r'(?<![\w.])von\s+(\d{1,2})(?:[:.](\d{2}))?(?:\s*uhr)?\s+bis\s+\d{1,2}(?:[:.]\d{2})?(?:\s*uhr)?(?!\w)', None),
+        (rf'{lead}(\d{{1,2}})[:.](\d{{2}})\s*uhr(?!\w)', None),
+        (rf'{lead}(\d{{1,2}})\s*uhr(?:\s+(\d{{2}})(?!\d){_NOT_MINUTES})?(?!\w)', None),
+        (r'(?<![\w.])(?:um\s+)?halb\s+(\d{1,2})(?:\s*uhr)?(?!\w)', 'half'),
+        (rf'{lead}(\d{{1,2}}):(\d{{2}})(?!\d|:\d)', None),
+        (r'(?<![\w.])um\s+(\d{1,2})\.(\d{2})(?![\d.])', None),
+        (r'(?<![\w.])um\s+(\d{1,2})(?=\s*(?:$|[,.!;)]|an\b|am\b|bei\b|mit\b|zum\b|zur\b|in\b|im\b))', None),
+        (r'(?<![\w.])at\s+(\d{1,2})[:.](\d{2})(?!\d)', None),
+        (r'(?<![\w.])at\s+(\d{1,2})\s*(am|pm)(?!\w)', 'english'),
+        (r'(?<![\w.])(\d{1,2})\s*(pm)(?!\w)', 'english'),
+    )
+    for pattern, kind in rules:
+        for m in re.finditer(pattern, t):
+            hour = int(m.group(1))
+            minute = 0
+            if kind == 'half':
+                hour, minute = hour - 1, 30
+            elif kind == 'english':
+                hour += 12 if m.group(2) == 'pm' and hour < 12 else 0
+            elif m.lastindex and m.lastindex >= 2 and m.group(2):
+                minute = int(m.group(2))
+            if 0 <= hour < 24 and minute < 60:
+                return f'{hour:02d}:{minute:02d}', m.span()
+    return None, None
+
+
+def _day_and_time(text, reference_date=None):
+    """Day, time and the spans of both. The time is looked for outside the words of the day, so "20.10." is no clock."""
+    day, day_span = _find_date(text, reference_date)
+    rest = text if not day_span else text[:day_span[0]] + ' ' * (day_span[1] - day_span[0]) + text[day_span[1]:]
+    clock, clock_span = _find_time(rest)
+    return day, clock, [span for span in (day_span, clock_span) if span]
+
+
+def _without_when(text):
+    for start, end in sorted(_day_and_time(text)[2], reverse=True):
+        text = text[:start] + ' ' + text[end:]
+    return ' '.join(text.split())
+
+
+def _parse_date_nl(text, reference_date=None):
+    """Parse natural language date references into YYYY-MM-DD."""
+    return _find_date(text, reference_date)[0]
 
 
 def _parse_time_nl(text):
     """Parse natural language time references into HH:MM."""
-    t = text.lower()
-
-    # "um 15:00", "um 3pm", "um 15 Uhr"
-    m = re.search(r'um\s+(\d{1,2})[:\.](\d{2})', t)
-    if m:
-        return f'{int(m.group(1)):02d}:{m.group(2)}'
-
-    m = re.search(r'um\s+(\d{1,2})\s*uhr', t)
-    if m:
-        return f'{int(m.group(1)):02d}:00'
-
-    m = re.search(r'at\s+(\d{1,2})[:\.](\d{2})', t)
-    if m:
-        return f'{int(m.group(1)):02d}:{m.group(2)}'
-
-    m = re.search(r'at\s+(\d{1,2})\s*(pm|am)', t)
-    if m:
-        hour = int(m.group(1))
-        if m.group(2) == 'pm' and hour < 12:
-            hour += 12
-        return f'{hour:02d}:00'
-
-    m = re.search(r'(\d{1,2})[:\.](\d{2})\s*uhr', t)
-    if m:
-        return f'{int(m.group(1)):02d}:{m.group(2)}'
-
-    m = re.search(r'(?<![\d.:])(\d{1,2}):(\d{2})(?![\d:])', t)
-    if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
-        return f'{int(m.group(1)):02d}:{m.group(2)}'
-
-    m = re.search(r'(?<![\d.:])(\d{1,2})\s*uhr\b', t) or re.search(r'\bum\s+(\d{1,2})(?![\d.:])(?!\s*(?:euro|€|%|prozent|punkte|seiten|minuten|stunden|tage))', t)
-    if m and int(m.group(1)) < 24:
-        return f'{int(m.group(1)):02d}:00'
-
-    return None
+    return _day_and_time(text)[1]
 
 
 _CREATE_NOUN = r'(?:aufgabe|task|todo|to-do|termin|event|erinnerung|reminder)'
-_WEEKDAY = r'(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)'
-_DATE_PHRASE = (
-    r'(?:(?:am|bis\s+zum|bis|für\s+den|für|ab|zum)\s+)?'
-    rf'(?:heute|übermorgen|(?<!guten\s)morgen|{_WEEKDAY}|\d{{1,2}}\.\s?\d{{1,2}}\.(?:\d{{2,4}})?)'
-    r'(?:\s+(?:früh|morgens|vormittags?|mittags?|nachmittags?|abends?|nachts?))?'
-)
-_TIME_PHRASE = r'(?:um\s+\d{1,2}(?:[:.]\d{2})?(?:\s*uhr)?|\d{1,2}(?:[:.]\d{2})?\s*uhr|\d{1,2}:\d{2})'
-_WHEN = rf'(?<![\w.])(?:{_DATE_PHRASE}|{_TIME_PHRASE})(?!\w)'
-_WHEN_FOUND = re.compile(_WHEN, re.IGNORECASE)
 _CREATE_FORMS = (
     ('verb', re.compile(
-        r'^(?:bitte\s+)?(?P<verb>erstell(?:e|en)?|leg(?:e|en)?|mach(?:e|en)?|notier(?:e|en)?|speicher(?:e|n)?|schreib(?:e|en)?|trag(?:e|en)?|create|add)\s+'
+        r'^(?:bitte\s+)?(?P<verb>erstell(?:e|en)?|leg(?:e|en)?|notier(?:e|en)?|speicher(?:e|n)?|trag(?:e|en)?|create|add)\s+'
         r'(?:(?:mir|dir|uns|bitte|mal|doch|kurz|noch|schnell)\s+)*'
         r'(?:(?:eine?[nmrs]?|ne[nmrs]?|neue[nmrs]?|den|die|das|an?|new)\s+)*'
         rf'(?P<noun>{_CREATE_NOUN})\b(?P<rest>.*)$',
         re.IGNORECASE | re.DOTALL,
     )),
     ('fresh', re.compile(rf'^(?:bitte\s+)?(?:neue[nmrs]?|new)\s+(?P<noun>{_CREATE_NOUN})\b(?P<rest>.*)$', re.IGNORECASE | re.DOTALL)),
-    ('bare', re.compile(rf'^(?:bitte\s+)?(?P<noun>{_CREATE_NOUN})\s*(?P<rest>:.*)$', re.IGNORECASE | re.DOTALL)),
+    ('bare', re.compile(r'^(?:bitte\s+)?(?P<noun>todo|to-do|termin|event|erinnerung|reminder)\s*(?P<rest>:.*)$', re.IGNORECASE | re.DOTALL)),
     ('entry', re.compile(r'^(?:bitte\s+)?trag(?:e|en)?\s+(?:(?:bitte|mal)\s+)*ein\s*(?P<rest>:.*)$', re.IGNORECASE | re.DOTALL)),
     ('remind', re.compile(r'^(?:bitte\s+)?(?:erinner(?:e|n)?\s+mich|remind\s+me)\b(?P<rest>.*)$', re.IGNORECASE | re.DOTALL)),
     ('keep', re.compile(r'^nicht\s+vergessen\s*(?P<rest>:.*)$', re.IGNORECASE | re.DOTALL)),
 )
-_UNTIL_COLON = re.compile(rf'^(?:\s+(?:an|ein|hinzu))?(?:\s+{_WHEN})*\s*:(?P<title>.*)$', re.IGNORECASE | re.DOTALL)
 _NAMED = re.compile(
-    r'^(?:\s+(?:an|ein|hinzu))?\s*(?:(?:namens|mit\s+dem\s+titel|mit\s+titel|genannt)\s+(?P<plain>.+)|["„“\'](?P<quoted>[^"“”\']+)["“”\'](?P<tail>.*))$',
+    r'^(?:\s+(?:an|ein|hinzu))?\s*(?:(?:namens|mit\s+dem\s+titel|mit\s+titel|genannt)\s+(?P<plain>.+)'
+    r'|"(?P<double>[^"]+)"|„(?P<low>[^“”"]+)[“”"]|\'(?P<single>[^\']+)\')\s*$',
     re.IGNORECASE | re.DOTALL,
 )
 _NO_WORDS = frozenset(('', 'bitte', 'mal', 'doch', 'kurz', 'danke', 'an', 'ein', 'hinzu', 'am', 'um', 'für', 'bis'))
 _QUESTION_START = re.compile(r'^(?:wie|was|wann|warum|wieso|weshalb|welche[rsnm]?|wer|wo|wozu|woher|wohin|ob)\b', re.IGNORECASE)
-_FORMAL_ORDER = re.compile(r'\b[A-ZÄÖÜ][a-zäöüß]+(?:en|ern|eln)\s+Sie\b')
+_QUESTION_INSIDE = re.compile(r'(?<!en)(?<!ern)(?<!eln),\s*(?:wie|was|wann|warum|wieso|weshalb|welche[rsnm]?|wer|wo)\b', re.IGNORECASE)
+_FORMAL_ORDER = re.compile(r'\b[a-zäöüß]+(?:en|ern|eln)\s+sie\b', re.IGNORECASE)
+_TO_THE_ASSISTANT = re.compile(
+    r'^du\b|^(?:kannst|könntest|kann|würdest|magst|willst)\s+du\b|\b(?:erklär\w*|zeig\w*|sag\w*|hilf|helf\w*|gib|gebt?|nenn\w*|schreib\w*|mach\w*|lös\w*|rechne\w*|beantworte\w*|übersetz\w*)\s+mir\b',
+    re.IGNORECASE,
+)
 _EXERCISE_VERB = (
     r'berechn|bestimm|ermittl|ermittel|analysier|erläuter|erklär|beschreib|begründ|beweis|zeig|untersuch|vergleich|nenn|interpretier|diskutier|'
     r'erörter|skizzier|zeichn|lös|leit|gib|geb|stell|beurteil|bewert|fass|ordn|prüf|überprüf|definier|charakterisier|übersetz|formulier|'
     r'entwickl|entwickel|entwirf|wert|vereinfach|lies|les|nimm|arbeit|bearbeit|schreib|markier|ergänz|rechn|faktorisier|kürz|multiplizier|'
-    r'addier|subtrahier|dividier|integrier|differenzier'
+    r'addier|subtrahier|dividier|integrier|differenzier|find|bild|wend'
 )
-_EXERCISE = re.compile(rf'^(?:\d|[a-z]\)|(?:{_EXERCISE_VERB})(?:e|en|t|et|est)?\b|eine?[nmrs]?\b|der\b|die\b|das\b|gegeben\b|sei(?:en)?\b)', re.IGNORECASE)
+_EXERCISE = re.compile(rf'^(?:\d|[a-z]\)|(?:{_EXERCISE_VERB})(?:e|en|n|t|et|est)?\b|eine?[nmrs]?\b|der\b|die\b|das\b|gegeben\b|sei(?:en)?\b)', re.IGNORECASE)
 _REMIND_QUESTION = re.compile(
     r'^(?:(?:nochmal|noch\s+mal|kurz|bitte|daran|dran|mal)\s*,?\s*)*(?:wie|was|warum|wieso|weshalb|wann|wo|wer|ob|welche[rsn]?)\b', re.IGNORECASE)
+_REMIND_DOUBT = re.compile(r'\b(?:nicht|nie|niemals|kein\w*|bloß)\b|,\s*was\b|\b(?:was|als|wie)\s+wir\b|\bvon\s+(?:heute|gestern|morgen)\b', re.IGNORECASE)
 
 
 def _title_of(text, reminder=False):
-    title = ' '.join(_WHEN_FOUND.sub(' ', text).split())
-    title = re.sub(r'^ich\s+muss\s+', '', title, flags=re.IGNORECASE)
+    title = re.sub(r'\(\s*\)', ' ', _without_when(text))
+    title = re.sub(r'^ich\s+muss\s+', '', ' '.join(title.split()), flags=re.IGNORECASE)
     if reminder:
-        title = re.sub(r'^(?:bitte\s+)?(?:(?:daran|dran)\s*,?\s*)?(?:an\s+(?:(?:den|die|das|dem|der|meine[nmrs]?|mein)\s+)?)?', '', title, flags=re.IGNORECASE)
+        title = re.sub(r'^[\s,:]*(?:(?:bitte|nochmal|noch\s+mal|noch\s+einmal|auch|dann)\s+)*(?:(?:daran|dran)\s*,?\s*)?', '', title, flags=re.IGNORECASE)
+        title = re.sub(r'^dass\s+ich\s+(.+?)\s+(?:muss|soll|will|möchte)$', r'\1', title, flags=re.IGNORECASE)
+        title = re.sub(r'^(?:dass\s+|ans\s+|an\s+(?:(?:den|die|das|dem|der|meine[nmrs]?|mein)\s+)?)', '', title, flags=re.IGNORECASE)
     title = title.strip(' .,;:!?"„“”\'')
     return '' if title.lower() in _NO_WORDS else title
 
 
 def _reads_like_an_exercise(body, strict):
-    if len(body) > 140 or _QUESTION_START.match(body) or _FORMAL_ORDER.search(body) or re.search(r'[=^√∫]|\bf\s*\(', body):
+    """True for text that is a question, an exercise or a request to the assistant rather than the name of an entry."""
+    if len(body) > 140 or re.search(r'[=^√∫]|\bf\s*\(', body):
+        return True
+    if _QUESTION_START.match(body) or _QUESTION_INSIDE.search(body) or _FORMAL_ORDER.search(body) or _TO_THE_ASSISTANT.search(body):
         return True
     return strict and bool(_EXERCISE.match(body))
 
@@ -1463,7 +1487,8 @@ def _creation_request(message):
     if kind == 'remind':
         if not rest.strip(' .!'):
             return ''
-        if _REMIND_QUESTION.match(rest.strip()) or not _WHEN_FOUND.search(rest):
+        day, clock, _ = _day_and_time(rest)
+        if _REMIND_QUESTION.match(rest.strip()) or _REMIND_DOUBT.search(rest) or not (day or clock):
             return None
         return _title_of(rest, reminder=True)
     strict = False
@@ -1474,15 +1499,15 @@ def _creation_request(message):
             return '' if creating else None
         named = _NAMED.match(rest) if creating else None
         if named:
-            return _title_of(named.group('plain') or named.group('quoted'))
-        found = _UNTIL_COLON.match(rest)
-        if not found:
+            quoted = named.group('double') or named.group('low') or named.group('single')
+            return quoted.strip() if quoted else _title_of(named.group('plain'))
+        colon = re.search(r':(?!\d)', rest)
+        if not colon or _without_when(re.sub(r'^\s+(?:an|ein|hinzu)\b', ' ', rest[:colon.start()], flags=re.IGNORECASE)):
             return None
-        body = found.group('title').strip()
-        strict = not creating
+        body = rest[colon.end():].strip()
+        strict = not creating or (verb.startswith('erstell') and match.group('noun').lower() in ('aufgabe', 'task'))
     else:
         body = rest[1:].strip()
-        strict = kind == 'bare' and match.group('noun').lower() in ('aufgabe', 'task')
     if not body:
         return ''
     return None if _reads_like_an_exercise(body, strict) else _title_of(body)
@@ -1518,9 +1543,9 @@ def try_create_from_nl(message, load_school_fn=None, save_school_fn=None):
     # Determine priority from keywords
     msg_lower = message.lower()
     priority = 'medium'
-    if any(w in msg_lower for w in ['wichtig', 'dringend', 'urgent', 'important', 'asap']):
+    if _kw_match(msg_lower, ['wichtig', 'dringend', 'urgent', 'important', 'asap'], word_boundary=True):
         priority = 'high'
-    elif any(w in msg_lower for w in ['irgendwann', 'niedrig', 'low', 'optional']):
+    elif _kw_match(msg_lower, ['irgendwann', 'niedrig', 'low', 'optional'], word_boundary=True):
         priority = 'low'
 
     # Create the task
@@ -1596,16 +1621,16 @@ def _is_done_command(message):
     return _done_shape(message) is not None
 
 
-def _complete_from_command(message, load_school_fn=None):
+def _complete_from_command(message, load_school_fn=None, bare=True):
     """Carries out a done command; None when the message is not one or names nothing that is open."""
     shape = _done_shape(message)
     if not shape:
         return None
     kind, words = shape
     if kind.startswith('homework'):
-        return _try_complete_homework(words, load_school_fn, named=kind.endswith('named'))
+        return _try_complete_homework(words, load_school_fn, named=kind.endswith('named')) if words or bare else None
     if kind == 'bare':
-        return _task_choice([t for t in db.get_hub_tasks('all') if not t.get('completed')])
+        return _task_choice([t for t in db.get_hub_tasks('all') if not t.get('completed')]) if bare else None
     return _try_complete_task(words, named=kind == 'named')
 
 
@@ -1717,25 +1742,27 @@ def is_data_query(message):
 
 
 def _replies_to_a_question(message, history):
-    """A few words right after the assistant asked something are an answer to it, not a new request."""
+    """One word, or just numbers, right after the assistant asked something is an answer to it, not a new request."""
     last = next((turn for turn in reversed(history or []) if turn.get('role') == 'assistant'), None)
     said = str((last or {}).get('content') or '').rstrip()
-    return said.endswith('?') and not said.endswith('Was möchtest du wissen?') and ':' not in message and len(message.split()) <= 3
+    short = len(message.split()) == 1 or re.fullmatch(r'[\d\s+\-*/.,:%()]+', message) is not None
+    return said.endswith('?') and not said.endswith('Was möchtest du wissen?') and short
 
 
 def quick_answer(message, load_school_fn=None, history=None):
     """An exact answer without the model, or None when the model should answer."""
-    if len(message) > 400 or _replies_to_a_question(message, history):
+    if len(message) > 400:
         return None
-    if len(message) <= 160:
+    reply = _replies_to_a_question(message, history)
+    if not reply and len(message) <= 160:
         from . import offline_tools
         tool_answer = offline_tools.try_offline_tool(message)
         if tool_answer:
             return tool_answer
     answer = _create_from_command(message)
     if answer is None:
-        answer = _complete_from_command(message, load_school_fn)
-    return answer if answer is not None else _lookup_answer(message, load_school_fn)
+        answer = _complete_from_command(message, load_school_fn, bare=not reply)
+    return answer if answer is not None or reply else _lookup_answer(message, load_school_fn)
 
 
 # ---- Offline Fallback (Data-Driven) ----
@@ -1970,8 +1997,8 @@ def _try_complete_task(wanted, named=True):
     """Marks the one open task the words name as done.
 
     After a colon ("Erledigt: Referat") whole words anywhere in a title count.
-    In a sentence ("Referat erledigt") the words must be the title or its
-    larger first part; a weaker fit only asks back, and no fit returns None.
+    In a sentence ("Referat erledigt") the words must be the title or more
+    than its first half; a weaker fit only asks back, and no fit returns None.
     """
     open_tasks = [t for t in db.get_hub_tasks('all') if not t.get('completed')]
     clean = _plain(wanted)
@@ -1983,7 +2010,7 @@ def _try_complete_task(wanted, named=True):
     found = starts or ([t for t, title in titles if re.search(rf'(?<!\w){re.escape(clean)}(?!\w)', title)] if named else [])
     if not found:
         return None
-    sure = bool(exact) or named or len(clean.split()) * 2 >= len(found[0]['title'].split())
+    sure = bool(exact) or named or len(clean.split()) * 2 > len(found[0]['title'].split())
     if len(found) == 1 and sure:
         db.toggle_hub_task(found[0]['id'])
         return f'**Aufgabe erledigt** ✓\n"{found[0]["title"]}" wurde als erledigt markiert.'

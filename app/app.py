@@ -3823,6 +3823,14 @@ def _llm_history_for_context():
     ]
 
 
+def _open_question(history):
+    """The conversation so far, if its last turn is the assistant's and only a few minutes old."""
+    stored = load_assistant_history()
+    last = stored[-1] if stored else {}
+    recent = last.get('role') == 'assistant' and time.time() - float(last.get('ts') or 0) < 600
+    return history if recent else None
+
+
 @app.route('/api/hub/assistant/history', methods=['GET', 'DELETE'])
 def assistant_history_route():
     if request.method == 'DELETE':
@@ -3893,7 +3901,7 @@ def assistant_chat():
             actions_executed = _run_model_actions(ai, tool_uses, message, researched)
 
         elif backend == 'local':
-            response_text = ai.quick_answer(message, school, history)
+            response_text = ai.quick_answer(message, school, _open_question(history))
             if response_text is None:
                 system_prompt, researched = _assistant_prompt(ai, message, history)
                 response_text = ai.chat_local(message, system_prompt, history)
@@ -3941,7 +3949,7 @@ def assistant_stream():
         from_model = False
         researched = False
         try:
-            quick = ai.quick_answer(message, school, history) if backend == 'local' else None
+            quick = ai.quick_answer(message, school, _open_question(history)) if backend == 'local' else None
             if quick is not None or backend == 'offline':
                 response = quick if quick is not None else ai.offline_response(message, school)
                 buffer_parts.append(response)

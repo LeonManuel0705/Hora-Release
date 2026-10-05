@@ -70,7 +70,9 @@ _FACT_PATTERNS = [
 _MATH_HINTS = re.compile(r'[+\-*/=^]|\\frac|\\sqrt|\\int|\blöse\b|\bberechne\b|\bableiten?\b|\bintegriere\b', re.IGNORECASE)
 _OWN_DATA = re.compile(
     r'\b(?:mein|meine|meinen|meinem|meiner|meines|unser|unsere|unseren|unserem|unserer|unseres|heute|übermorgen|gestern|'
-    r'stundenplan|vertretungsplan|hausaufgaben?)\b|(?<!guten\s)\bmorgen\b|\b(?:diese|nächste)[rnms]?\s+(?:woche|stunde)\b',
+    r'stundenplan|vertretungsplan|hausaufgaben?|dran)\b|(?<!guten\s)\bmorgen\b'
+    r'|\b(?:diese|nächste|letzte)[rnms]?\s+(?:woche|stunde|note|klausur|test|block)\b'
+    r'|\b(?:ersten?|zweiten?|dritten?|vierten?|fünften?|sechsten?)\s+(?:stunde|block)\b',
     re.IGNORECASE,
 )
 

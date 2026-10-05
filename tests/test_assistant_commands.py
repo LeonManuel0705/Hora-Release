@@ -124,6 +124,22 @@ def school():
     'Deutsch Hausaufgabe muss bis morgen fertig',
     'Wegen Deutsch Hausaufgabe fix und fertig',
     'Ha, endlich fertig',
+    'Aufgabe: Vokabeln lernen',
+    'Aufgabe: Peter hat 5 Äpfel und isst 2 davon',
+    'Task: Translate the following sentence into German',
+    'Mach die Aufgabe: Seite 45 Nr. 3',
+    'Schreib mir die Aufgabe: Erörterung zum Thema Handyverbot',
+    'Neue Aufgabe: Erkläre mir den Unterschied zwischen Mitose und Meiose',
+    'Neue Aufgabe: Ein Zug fährt mit 80 km/h von A nach B, wie lange braucht er für 200 km',
+    'Nicht vergessen: du sollst auf Deutsch antworten',
+    'Todo: erklär mir das nochmal',
+    'Erinnere mich bloß nicht an morgen',
+    'Erinnere mich nicht an die Klausur morgen',
+    'Erinnere mich an das, was wir heute in Mathe gemacht haben',
+    'Erinnere mich an den Stoff von heute',
+    'Erinnere mich an den Montag als wir die Klausur geschrieben haben',
+    'Neue Aufgabe: Kannst du mir das bitte erklären',
+    'Erstelle eine Aufgabe: Berechne die Ableitung von x hoch 3',
 ])
 def test_a_message_that_is_no_command_changes_nothing(tasks, school, message):
     before = tasks()
@@ -153,6 +169,31 @@ def test_a_message_that_is_no_command_changes_nothing(tasks, school, message):
     ('Erstelle eine Aufgabe namens Mathe lernen', 'Mathe lernen', None, None),
     ('Erinnere mich morgen früh um 7 an Sport', 'Sport', day(1), '07:00'),
     ('Erinnere mich heute Abend an die Wäsche', 'Wäsche', day(0), None),
+    ('Neue Aufgabe: Geschenk kaufen bis zum 20.10.', 'Geschenk kaufen', coming(20, 10), None),
+    ('Neue Aufgabe: Geschenk kaufen bis zum 20.10. um 15 Uhr', 'Geschenk kaufen', coming(20, 10), '15:00'),
+    ('Termin: Museum 21.10.', 'Museum', coming(21, 10), None),
+    ('Neue Aufgabe: Abgabe zum 31.12.', 'Abgabe', coming(31, 12), None),
+    ('Neue Aufgabe: Paket abholen bis 18 Uhr', 'Paket abholen', None, '18:00'),
+    ('Neue Aufgabe: Bis 15 Uhr Paket abholen', 'Paket abholen', None, '15:00'),
+    ('Termin: Friseur gegen 16 Uhr', 'Friseur', None, '16:00'),
+    ('Termin: Nachhilfe von 15 bis 16 Uhr', 'Nachhilfe', None, '15:00'),
+    ('Neue Aufgabe: Zahnarzt 15 Uhr 30', 'Zahnarzt', None, '15:30'),
+    ('Erinnere mich um 7 Uhr 30 an den Bus', 'Bus', None, '07:30'),
+    ('Erinnere mich morgen um halb 8 an den Bus', 'Bus', day(1), '07:30'),
+    ('Neue Aufgabe: Aufsatz um 1 Seite kürzen', 'Aufsatz um 1 Seite kürzen', None, None),
+    ('Neue Aufgabe: Mathe um 2 Noten verbessern', 'Mathe um 2 Noten verbessern', None, None),
+    ('Neue Aufgabe: Mathe Aufgaben 2.1 bis 2.5', 'Mathe Aufgaben 2.1 bis 2.5', None, None),
+    ('Neue Aufgabe: Mathe lernen (morgen)', 'Mathe lernen', day(1), None),
+    ('Neue Aufgabe: Mathe lernen am 12.10', 'Mathe lernen', coming(12, 10), None),
+    ('Neue Aufgabe: Salat 5 pm kaufen', 'Salat kaufen', None, '17:00'),
+    ('Erstelle eine Aufgabe "Tims Geschenk kaufen"', 'Tims Geschenk kaufen', None, None),
+    ('Erstelle eine Aufgabe: herausfinden, wer Goethe war', 'herausfinden, wer Goethe war', None, None),
+    ('Neue Aufgabe: Praktikum vom 12.10. bis 16.10.', 'Praktikum', coming(12, 10), None),
+    ('Neue Aufgabe: Montag bis Freitag Vokabeln lernen', 'Vokabeln lernen', next_weekday(0), None),
+    ('Neue Aufgabe um 15:30: Zahnarzt anrufen', 'Zahnarzt anrufen', None, '15:30'),
+    ('Erinnere mich um 18 Uhr ans Training', 'Training', None, '18:00'),
+    ('Erinnere mich daran dass ich morgen Mathe lernen muss', 'Mathe lernen', day(1), None),
+    ('Erinnere mich morgen nochmal an den Termin', 'Termin', day(1), None),
     ('Termin: Zahnarzt Montag 15:00', 'Zahnarzt', next_weekday(0), '15:00'),
     ('Trag ein: Zahnarzt am Freitag um 14 Uhr', 'Zahnarzt', next_weekday(4), '14:00'),
     ('Erinnere mich morgen an den Arzttermin', 'Arzttermin', day(1), None),
@@ -183,7 +224,6 @@ def test_a_creation_command_without_a_title_asks_for_one(tasks, school, message)
     ('Referat geschafft!', 'Referat'),
     ('Aufgabe erledigt: Wäsche waschen', 'Wäsche waschen'),
     ('Erledigt: Bewerbung', 'Bewerbung schreiben'),
-    ('Die Bewerbung ist fertig!', 'Bewerbung schreiben'),
     ('Biologie Protokoll abgehakt', 'Biologie Protokoll'),
 ])
 def test_a_done_command_ticks_the_one_task_it_names(tasks, school, message, title):
@@ -201,9 +241,14 @@ def test_a_done_command_that_fits_several_tasks_asks_which(tasks, school):
     assert [name for name, entry in tasks().items() if entry[0]] == ['Mathe']
 
 
-def test_a_weak_fit_asks_back_instead_of_ticking(tasks, school):
-    answer = ai.quick_answer('Sportfest erledigt', school)
-    assert 'Welche Aufgabe' in answer and 'Sportfest Punktesystem bauen' in answer and 'Einkaufen' not in answer.split('Sag z.B.')[0]
+@pytest.mark.parametrize('message, offered', [
+    ('Sportfest erledigt', 'Sportfest Punktesystem bauen'),
+    ('Die Bewerbung ist fertig!', 'Bewerbung schreiben'),
+    ('Biologie geschafft', 'Biologie Protokoll'),
+])
+def test_a_weak_fit_asks_back_instead_of_ticking(tasks, school, message, offered):
+    answer = ai.quick_answer(message, school)
+    assert 'Welche Aufgabe' in answer and offered in answer and 'Einkaufen' not in answer.split('Sag z.B.')[0]
     assert not any(entry[0] for entry in tasks().values())
 
 
@@ -211,6 +256,9 @@ def test_a_few_words_after_a_question_from_the_assistant_are_its_answer(tasks, s
     asked = [{'role': 'user', 'content': 'Hilf mir bei Aufgabe 3'}, {'role': 'assistant', 'content': 'Bist du mit Teil a schon fertig?'}]
     assert ai.quick_answer('Fertig', school, asked) is None
     assert ai.quick_answer('Test', school, asked) is None
+    assert ai.quick_answer('3/4', school, asked) is None
+    assert 'Offene Hausaufgaben' in ai.quick_answer('Welche Hausaufgaben habe ich?', school, asked)
+    assert 'erledigt' in ai.quick_answer('Einkaufen erledigt', school, asked)
     assert 'Bewerbung schreiben' in ai.quick_answer('Erledigt: Bewerbung', school, asked)
     greeted = [{'role': 'assistant', 'content': 'Guten Tag! Für heute ist keine Aufgabe offen. Was möchtest du wissen?'}]
     assert 'Klausur Analysis' in ai.quick_answer('Klausuren', school, greeted)
@@ -289,6 +337,10 @@ def test_dates_and_times_are_read_as_written():
     assert ai._parse_time_nl('Vokabeln lernen um 8.10 Uhr') == '08:10'
     assert ai._parse_time_nl('Zahnarzt Montag 15:00') == '15:00'
     assert ai._parse_time_nl('Elternabend 12.10.') is None
+    assert ai._parse_time_nl('Geschenk kaufen bis zum 20.10.') is None
+    assert ai._parse_time_nl('Referat 24.12.') is None
+    assert ai._parse_date_nl('Kapitel 3.1 bis 3.4 lesen', monday) is None
+    assert ai._parse_date_nl('Abgabe am 15.04.2027', monday) == '2027-04-15'
 
 
 def test_the_clock_and_the_calculator_only_answer_what_was_asked():
@@ -309,6 +361,8 @@ def test_questions_about_the_own_day_are_not_looked_up_on_wikipedia(message):
     assert not research_service.wants_research(message)
     for question in ('Wer war Goethe?', 'Was ist Meinungsfreiheit?', 'Was sind die Aufgaben des Bundestags?'):
         assert research_service.wants_research(question)
+    for question in ('Was war die letzte Note in Physik?', 'Was ist in der dritten Stunde dran?', 'Was ist in Mathe dran?'):
+        assert not research_service.wants_research(question)
 
 
 def test_a_question_on_how_to_do_something_gets_no_study_plan_brief():
