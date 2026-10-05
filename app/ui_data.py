@@ -596,7 +596,7 @@ def event_view(item):
     }
     if end_day and end_day > when:
         view['endDate'] = end_day
-    if item.get('google_id'):
+    if item.get('google_id') and not item.get('google_new'):
         view['google'] = True
     if item.get('google_dirty'):
         view['pending'] = True

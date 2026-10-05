@@ -14,6 +14,7 @@ import copy
 import logging
 import threading
 import time
+import uuid
 from datetime import date, datetime, timedelta, timezone
 
 from . import database as db
@@ -23,7 +24,8 @@ from .paths import DATA_DIR
 
 CACHE_FILE = DATA_DIR / 'google_calendar_cache.json'
 QUEUE_FILE = DATA_DIR / 'google_calendar_queue.json'
-CACHE_VERSION = 1
+CACHE_VERSION = 2
+CONFIRM_LIMIT = 25
 BACK_DAYS = 62
 AHEAD_DAYS = 93
 CHECK_SECONDS = 60
@@ -35,6 +37,7 @@ KIND_WORDS = (
     ('school', ('schule', 'school', 'iserv', 'kurs', 'uni', 'klasse')),
 )
 GONE = (404, 410)
+UNREADABLE = (403, 404, 410)
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +45,7 @@ _sync_lock = threading.Lock()
 _memory_lock = threading.Lock()
 _queue_lock = threading.Lock()
 _memory = {'signature': None, 'cache': None}
-_status = {'checked': None, 'problem': None}
+_status = {'checked': None, 'problem': None, 'epoch': 0}
 
 
 def _google():
@@ -125,7 +128,7 @@ def forget():
             pass
     with _memory_lock:
         _memory.update(signature=None, cache=None)
-    _status.update(checked=None, problem=None)
+    _status.update(checked=None, problem=None, epoch=_status['epoch'] + 1)
 
 
 def _status_of(error):
@@ -163,7 +166,8 @@ def _load_calendar(service, cache, calendar):
     }
 
 
-def _pull_full(service, email, today):
+def _pull_full(service, email, today, previous=None):
+    """The whole window again. A calendar that cannot be read right now keeps its last copy and is named in the second value."""
     start, end = window(today)
     began = datetime.now(timezone.utc)
     calendars = []
@@ -188,40 +192,60 @@ def _pull_full(service, email, today):
         ],
         'events': {},
     }
+    failed = set()
     for calendar in cache['calendars']:
         try:
             cache['events'][calendar['id']] = _load_calendar(service, cache, calendar)
         except Exception as error:
             log.warning('Google calendar skipped: %s', type(error).__name__)
-    return cache
+            if _status_of(error) in UNREADABLE:
+                continue
+            failed.add(calendar['id'])
+            kept = ((previous or {}).get('events') or {}).get(calendar['id'])
+            if kept is not None:
+                cache['events'][calendar['id']] = kept
+    if failed:
+        cache['partial'] = True
+        if previous and previous.get('synced_at'):
+            cache['synced_at'] = min(cache['synced_at'], previous['synced_at'])
+    return cache, failed
 
 
 def _pull_changes(service, cache):
+    """What changed since the last check. Deleted events and seen ones are named with their calendar, ids repeat across calendars."""
     google = _google()
     began = datetime.now(timezone.utc)
     changed = False
     cancelled = set()
     seen = {}
-    for calendar in cache['calendars']:
-        bucket = cache['events'].setdefault(calendar['id'], {})
-        items = google.list_calendar_events(service, calendar['id'], updatedMin=cache['synced_at'], showDeleted=True, singleEvents=False)
+    for calendar in list(cache['calendars']):
+        name = calendar['id']
+        try:
+            items = google.list_calendar_events(service, name, updatedMin=cache['synced_at'], showDeleted=True, singleEvents=False)
+        except Exception as error:
+            if _status_of(error) != 404:
+                raise
+            cache['calendars'].remove(calendar)
+            cache['events'].pop(name, None)
+            changed = True
+            continue
+        bucket = cache['events'].setdefault(name, {})
+        cancelled.update((name, item['id']) for item in items if item.get('status') == 'cancelled' and item.get('id'))
         if any(item.get('recurrence') or item.get('recurringEventId') for item in items):
             fresh = _load_calendar(service, cache, calendar)
             if fresh != bucket:
-                cache['events'][calendar['id']] = fresh
+                cache['events'][name] = fresh
                 changed = True
-            cancelled.update(item['id'] for item in items if item.get('status') == 'cancelled' and item.get('id'))
             continue
         for item in items:
             key = item.get('id')
             if not key:
                 continue
             if item.get('status') == 'cancelled':
-                cancelled.add(key)
                 changed = bucket.pop(key, None) is not None or changed
                 continue
             view = google.calendar_event_view(item, calendar)
-            seen[key] = view
+            seen[(name, key)] = view
             if not _in_window(view, cache):
                 changed = bucket.pop(key, None) is not None or changed
             elif bucket.get(key) != view:
@@ -232,6 +256,7 @@ def _pull_changes(service, cache):
 
 
 def _body(item):
+    """The event as Google stores it. Both forms of start and end are named, a patch would otherwise keep the old one beside the new."""
     body = {'summary': item.get('title') or 'Termin', 'description': item.get('description') or '', 'location': item.get('location') or ''}
     first = item['date']
     last = max(item.get('end_date') or first, first)
@@ -241,11 +266,13 @@ def _body(item):
         finish = datetime.fromisoformat(f'{last}T{end}:00') if end else begin + timedelta(hours=1)
         if finish <= begin:
             finish = begin + timedelta(hours=1)
-        body['start'] = {'dateTime': begin.astimezone().isoformat()}
-        body['end'] = {'dateTime': finish.astimezone().isoformat()}
+        body['start'] = {'dateTime': begin.astimezone().isoformat(), 'date': None}
+        body['end'] = {'dateTime': finish.astimezone().isoformat(), 'date': None}
+        body['endTimeUnspecified'] = not end
     else:
-        body['start'] = {'date': first}
-        body['end'] = {'date': (date.fromisoformat(last) + timedelta(days=1)).isoformat()}
+        body['start'] = {'date': first, 'dateTime': None, 'timeZone': None}
+        body['end'] = {'date': (date.fromisoformat(last) + timedelta(days=1)).isoformat(), 'dateTime': None, 'timeZone': None}
+        body['endTimeUnspecified'] = False
     return body
 
 
@@ -253,7 +280,11 @@ def _mark(item_id, stamp, values):
     def change(items):
         for item in items:
             if str(item.get('id')) == item_id:
-                item.update(values)
+                for key, value in values.items():
+                    if value is None:
+                        item.pop(key, None)
+                    else:
+                        item[key] = value
                 if (item.get('updated_at') or item.get('created_at')) == stamp:
                     item.pop('google_dirty', None)
                 return True
@@ -261,63 +292,94 @@ def _mark(item_id, stamp, values):
     return ui_data.modify_list('calendar', change)
 
 
+def _enqueue_delete(calendar, key):
+    with _queue_lock:
+        encrypt_file([*_queue(), {'calendar': calendar or 'primary', 'id': key}], QUEUE_FILE)
+
+
 def _push_deletes(service, target):
     with _queue_lock:
         queue = _queue()
-        if not queue:
-            return False
-        waiting = []
-        for entry in queue:
-            try:
-                service.events().delete(calendarId=entry.get('calendar') or target, eventId=entry['id']).execute()
-            except Exception as error:
-                if _status_of(error) not in GONE:
-                    waiting.append(entry)
-        if waiting:
-            encrypt_file(waiting, QUEUE_FILE)
-        else:
-            QUEUE_FILE.unlink()
-        return len(waiting) < len(queue)
+    done = []
+    for entry in queue:
+        try:
+            service.events().delete(calendarId=entry.get('calendar') or target, eventId=entry['id']).execute()
+        except Exception as error:
+            if _status_of(error) not in GONE:
+                continue
+        done.append(entry)
+    if done:
+        with _queue_lock:
+            waiting = [entry for entry in _queue() if entry not in done]
+            if waiting:
+                encrypt_file(waiting, QUEUE_FILE)
+            else:
+                QUEUE_FILE.unlink(missing_ok=True)
+    return bool(done)
+
+
+def _patch(service, calendar, key, body):
+    """The changed event, or None when Google no longer has it."""
+    try:
+        answer = service.events().patch(calendarId=calendar, eventId=key, body=body).execute()
+    except Exception as error:
+        if _status_of(error) in GONE:
+            return None
+        raise
+    return None if answer.get('status') == 'cancelled' else answer
+
+
+def _insert(service, calendar, key, body):
+    """The new event under an id chosen here. If the id is taken, an earlier try arrived and only its answer was lost."""
+    try:
+        return service.events().insert(calendarId=calendar, body={**body, 'id': key}).execute()
+    except Exception as error:
+        if _status_of(error) != 409:
+            raise
+    return _patch(service, calendar, key, body)
 
 
 def _push(service, cache):
+    if not write_enabled():
+        return False
     target = _primary(cache) or 'primary'
     sent = _push_deletes(service, target)
-    if not write_enabled():
-        return sent
     for item in ui_data.load_list('calendar'):
         if not item.get('google_dirty') or not ui_data.iso_day(item.get('date')):
             continue
         stamp = item.get('updated_at') or item.get('created_at')
         body = _body(item)
+        remote = item.get('google_id')
         calendar = item.get('google_calendar') or target
+        fresh = bool(item.get('google_new')) or not remote
         try:
-            if item.get('google_id'):
-                try:
-                    service.events().patch(calendarId=calendar, eventId=item['google_id'], body=body).execute()
-                    remote = item['google_id']
-                except Exception as error:
-                    if _status_of(error) not in GONE:
-                        raise
-                    remote = service.events().insert(calendarId=target, body=body).execute().get('id')
-                    calendar = target
-            else:
-                remote = service.events().insert(calendarId=target, body=body).execute().get('id')
-                calendar = target
+            answer = None if fresh else _patch(service, calendar, remote, body)
+            for _ in range(2):
+                if answer is not None:
+                    break
+                if not fresh or not remote:
+                    remote = uuid.uuid4().hex
+                fresh, calendar = False, target
+                answer = _insert(service, calendar, remote, body)
         except Exception as error:
             log.warning('Event not sent to Google: %s', type(error).__name__)
             continue
-        if remote:
-            _mark(str(item.get('id')), stamp, {'google_id': remote, 'google_calendar': calendar})
-            sent = True
+        if answer is None:
+            continue
+        values = {'google_id': remote, 'google_calendar': calendar, 'google_new': None, 'google_seen': answer.get('updated') or ''}
+        if not _mark(str(item.get('id')), stamp, values):
+            _enqueue_delete(calendar, remote)
+        sent = True
     return sent
 
 
-def _lookup(cache, item):
+def _calendar_of(cache, item):
     calendar = item.get('google_calendar')
-    if calendar in (None, 'primary'):
-        calendar = _primary(cache)
-    return (cache.get('events', {}).get(calendar) or {}).get(item.get('google_id'))
+    return _primary(cache) if calendar in (None, 'primary') else calendar
+
+
+def _lookup(cache, item):
+    return (cache.get('events', {}).get(_calendar_of(cache, item)) or {}).get(item.get('google_id'))
 
 
 def _local_fields(view):
@@ -325,33 +387,40 @@ def _local_fields(view):
     if view.get('all_day') and last:
         last = (date.fromisoformat(last) - timedelta(days=1)).isoformat()
     first = view.get('start_date')
+    timed = not view.get('all_day')
+    open_end = timed and view.get('open_end')
     return {
         'title': view.get('title') or 'Termin',
         'date': first,
-        'end_date': last if last and last > first else '',
-        'time': '' if view.get('all_day') else ui_data.clock(view.get('start_time')) or '',
-        'end_time': '' if view.get('all_day') else ui_data.clock(view.get('end_time')) or '',
+        'end_date': last if last and last > first and not open_end else '',
+        'time': ui_data.clock(view.get('start_time')) or '' if timed else '',
+        'end_time': ui_data.clock(view.get('end_time')) or '' if timed and not open_end else '',
         'location': view.get('location') or '',
         'description': view.get('description') or '',
     }
 
 
+def _settled(item):
+    return item.get('google_id') and not item.get('google_dirty') and not item.get('google_new')
+
+
 def _adopt(cache, cancelled, seen):
+    """Takes over what was changed or deleted in Google for events the app wrote there, never what was changed here since."""
     def change(items):
         changed = False
         for item in list(items):
-            remote = item.get('google_id')
-            if not remote or item.get('google_dirty'):
+            if not _settled(item):
                 continue
-            if remote in cancelled:
+            key = (_calendar_of(cache, item), item['google_id'])
+            if key in cancelled:
                 items.remove(item)
                 changed = True
                 continue
-            view = seen.get(remote) or _lookup(cache, item)
-            if not view:
+            view = seen.get(key) or _lookup(cache, item)
+            if not view or (view.get('updated') or '') == (item.get('google_seen') or ''):
                 continue
-            fields = _local_fields(view)
-            if any((item.get(key) or '') != value for key, value in fields.items()):
+            fields = {**_local_fields(view), 'google_seen': view.get('updated') or ''}
+            if any((item.get(name) or '') != value for name, value in fields.items()):
                 item.update(fields)
                 changed = True
         return changed
@@ -360,36 +429,69 @@ def _adopt(cache, cancelled, seen):
     return ui_data.modify_list('calendar', change)
 
 
+def _confirm_missing(service, cache, failed, cancelled, seen):
+    """Linked events the fresh copy lacks. Google is asked about each one, so only a deletion it confirms is taken over."""
+    names = {calendar['id']: calendar for calendar in cache['calendars']}
+    asked = 0
+    for item in ui_data.load_list('calendar'):
+        if not _settled(item):
+            continue
+        calendar = _calendar_of(cache, item)
+        key = (calendar, item['google_id'])
+        day = ui_data.iso_day(item.get('date'))
+        if calendar in failed or calendar not in cache['events'] or key in cancelled or key in seen or item['google_id'] in cache['events'][calendar]:
+            continue
+        if not day or not cache['start'] < day < cache['end'] or asked >= CONFIRM_LIMIT:
+            continue
+        asked += 1
+        try:
+            event = service.events().get(calendarId=calendar, eventId=item['google_id']).execute()
+        except Exception as error:
+            if _status_of(error) in GONE:
+                cancelled.add(key)
+            continue
+        if event.get('status') == 'cancelled':
+            cancelled.add(key)
+        else:
+            seen[key] = _google().calendar_event_view(event, names.get(calendar) or {'id': calendar})
+
+
 def sync(full=False, today=None):
     if not connected():
         return None
     today = today or date.today()
     with _sync_lock:
+        epoch = _status['epoch']
         try:
             service, email = _google().calendar_service()
         except Exception:
             service, email = None, None
         if service is None:
-            problem = 'offline' if connected() else 'login'
+            problem = 'login' if not connected() or _google().login_expired(email) else 'offline'
             _status.update(checked=time.monotonic(), problem=problem)
             return problem
         cache = _load()
         try:
+            known = cache is not None and cache.get('account') == email
             stale = (
-                cache is None or cache.get('account') != email or cache.get('full_day') != today.isoformat()
+                not known or cache.get('partial') or cache.get('full_day') != today.isoformat()
                 or time.time() - float(cache.get('full_at') or 0) > FULL_SECONDS
             )
-            _push(service, cache)
-            cancelled, seen = set(), {}
-            if full or stale:
-                cache, changed = _pull_full(service, email, today), True
-            else:
+            _push(service, cache if known else None)
+            changed, cancelled, seen, failed = False, set(), {}, set()
+            if known:
                 try:
                     changed, cancelled, seen = _pull_changes(service, cache)
                 except Exception as error:
-                    if _status_of(error) not in (400, 410):
+                    if not (full or stale or _status_of(error) in (400, 410)):
                         raise
-                    cache, changed = _pull_full(service, email, today), True
+                    stale = True
+            if full or stale:
+                cache, failed = _pull_full(service, email, today, cache if known else None)
+                changed = True
+                _confirm_missing(service, cache, failed, cancelled, seen)
+            if _status['epoch'] != epoch:
+                return None
             _adopt(cache, cancelled, seen)
             if changed:
                 _save(cache)
@@ -397,12 +499,14 @@ def sync(full=False, today=None):
                 with _memory_lock:
                     if _memory['cache'] is not None:
                         _memory['cache']['synced_at'] = cache['synced_at']
-            _status.update(checked=time.monotonic(), problem=None)
-            return None
+            problem = 'offline' if failed else None
+            _status.update(checked=time.monotonic(), problem=problem)
+            return problem
         except Exception as error:
             log.warning('Google calendar sync failed: %s', type(error).__name__)
-            _status.update(checked=time.monotonic(), problem='offline')
-            return 'offline'
+            problem = 'login' if type(error).__name__ == 'RefreshError' else 'offline'
+            _status.update(checked=time.monotonic(), problem=problem)
+            return problem
 
 
 def _checked_lately():
@@ -444,18 +548,22 @@ def _spawn(run):
 
 
 def touch(item):
-    if not connected() or not write_enabled():
-        return False
+    """Marks an event that was made or changed here. True when it should be sent now."""
+    sending = connected() and write_enabled()
+    if not item.get('google_id'):
+        if not sending:
+            return False
+        item['google_id'] = uuid.uuid4().hex
+        item['google_new'] = True
     item['google_dirty'] = True
-    return True
+    return sending
 
 
 def drop(item):
     remote = item.get('google_id')
-    if not remote or not connected():
+    if not remote or not connected() or not write_enabled():
         return False
-    with _queue_lock:
-        encrypt_file([*_queue(), {'calendar': item.get('google_calendar') or 'primary', 'id': remote}], QUEUE_FILE)
+    _enqueue_delete(item.get('google_calendar'), remote)
     return True
 
 
@@ -485,11 +593,13 @@ def view(item):
     last = ui_data.iso_day(item.get('end_date'))
     if item.get('all_day') and last:
         last = (date.fromisoformat(last) - timedelta(days=1)).isoformat()
+    elif item.get('open_end'):
+        last = None
     result = {
         'id': f"g-{item.get('calendar_id', '')}-{item.get('id', '')}",
         'date': day,
         'start': None if item.get('all_day') else ui_data.clock(item.get('start_time')),
-        'end': None if item.get('all_day') else ui_data.clock(item.get('end_time')),
+        'end': None if item.get('all_day') or item.get('open_end') else ui_data.clock(item.get('end_time')),
         'title': str(item.get('title') or 'Termin'),
         'place': str(item.get('location') or ''),
         'kind': kind_of(item.get('calendar'), item.get('title')),

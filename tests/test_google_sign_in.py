@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 # SPDX-License-Identifier: AGPL-3.0-only
 
+from datetime import datetime, timedelta
+
 import pytest
 
 from app import google_oauth
@@ -110,6 +112,7 @@ class FakeCredentials:
         self.token_uri = 'https://oauth2.googleapis.com/token'
         self.client_id = 'client'
         self.client_secret = 'secret'
+        self.expiry = datetime.utcnow() + timedelta(hours=1)
 
 
 class FakeFlow:
@@ -164,6 +167,7 @@ def test_calendar_alone_is_enough_and_its_scopes_are_kept(monkeypatch, token_sto
     result = google_oauth.complete_oauth_flow('abc')
     assert result['success'] is True and result['email'] == 'kalender@example.com'
     assert token_store['kalender@example.com']['scopes'] == [CALENDAR]
+    assert token_store['kalender@example.com']['expiry']
     creds = google_oauth.get_credentials('kalender@example.com')
     assert list(creds.scopes) == [CALENDAR]
 

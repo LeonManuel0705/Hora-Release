@@ -96,43 +96,57 @@ def save_tokens(tokens: Dict) -> bool:
     except Exception:
         return False
 
+def _expiry_of(token_data: Dict) -> Optional[datetime]:
+    try:
+        return datetime.fromisoformat(token_data['expiry']) if token_data.get('expiry') else None
+    except (TypeError, ValueError):
+        return None
+
+
+def login_expired(email: str = None) -> bool:
+    """True when Google no longer accepts the stored sign-in and the account has to be connected again."""
+    tokens = load_tokens()
+    data = tokens.get(email) if email in tokens else next(iter(tokens.values()), None)
+    return isinstance(data, dict) and bool(data.get('expired'))
+
+
 def get_credentials(email: str) -> Optional[Credentials]:
 
     tokens = load_tokens()
     token_data = tokens.get(email)
 
-    if not token_data:
+    if not token_data or token_data.get('expired'):
         return None
 
+    expiry = _expiry_of(token_data)
     creds = Credentials(
         token=token_data.get('token'),
         refresh_token=token_data.get('refresh_token'),
         token_uri='https://oauth2.googleapis.com/token',
         client_id=GOOGLE_CLIENT_ID or token_data.get('client_id'),
         client_secret=GOOGLE_CLIENT_SECRET or token_data.get('client_secret'),
-        scopes=token_data.get('scopes') or SCOPES
+        scopes=token_data.get('scopes') or SCOPES,
+        expiry=expiry,
     )
 
-    if creds.expired and creds.refresh_token:
+    if creds.refresh_token and (expiry is None or creds.expired):
         try:
             creds.refresh(Request())
-
-            tokens[email] = {
-                **token_data,
-                'token': creds.token,
-                'refresh_token': creds.refresh_token,
-                'token_uri': creds.token_uri,
-                'client_id': creds.client_id,
-                'client_secret': creds.client_secret
-            }
-            save_tokens(tokens)
         except Exception as e:
-
             if 'invalid_grant' in str(e) or 'revoked' in str(e).lower():
-                if email in tokens:
-                    del tokens[email]
-                    save_tokens(tokens)
+                tokens[email] = {**token_data, 'expired': True}
+                save_tokens(tokens)
             return None
+        tokens[email] = {
+            **token_data,
+            'token': creds.token,
+            'refresh_token': creds.refresh_token,
+            'token_uri': creds.token_uri,
+            'client_id': creds.client_id,
+            'client_secret': creds.client_secret,
+            'expiry': creds.expiry.isoformat() if creds.expiry else None,
+        }
+        save_tokens(tokens)
 
     return creds
 
@@ -230,7 +244,8 @@ def complete_oauth_flow(auth_code: str) -> Dict:
             'token_uri': creds.token_uri,
             'client_id': creds.client_id,
             'client_secret': creds.client_secret,
-            'scopes': sorted(granted)
+            'scopes': sorted(granted),
+            'expiry': creds.expiry.isoformat() if getattr(creds, 'expiry', None) else None,
         }
         save_tokens(tokens)
 
@@ -492,7 +507,9 @@ def calendar_event_view(event: Dict, calendar: Dict) -> Dict:
         "calendar_id": calendar.get('id'),
         "calendar_color": calendar.get('backgroundColor', '#4285f4'),
         "source": "google",
-        "recurring_event_id": event.get('recurringEventId', None)
+        "recurring_event_id": event.get('recurringEventId', None),
+        "updated": event.get('updated', ''),
+        "open_end": bool(event.get('endTimeUnspecified')),
     }
 
 
