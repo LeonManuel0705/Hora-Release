@@ -779,6 +779,16 @@ def test_sending_a_mail_removes_the_draft_it_was_kept_as(client, monkeypatch):
     assert stale.status_code == 409 and stale.get_json()["sent"] is True and drafts() == ["draft-11"]
     assert client.delete("/api/ui/mail/drafts/draft-10").status_code == 200
 
+    # While a mail is being handed over, a second request for the same draft does not start another handover.
+    from app import ui_pages
+    assert client.put("/api/ui/mail/drafts/draft-13", json=letter).status_code == 200
+    ui_pages._sending_now.add("draft-13")
+    busy = client.post("/api/ui/mail/send", json={**letter, "account": "leon@example.org", "draft": "draft-13"})
+    assert busy.status_code == 409 and len(sent) == 3 and "draft-13" in ui_pages._sending_now
+    ui_pages._sending_now.discard("draft-13")
+    assert client.post("/api/ui/mail/send", json={**letter, "account": "leon@example.org", "draft": "draft-13"}).status_code == 200
+    assert len(sent) == 4 and ui_pages._sending_now == set()
+
     # The page marks the draft the moment "Senden" is pressed. Until the mail can no longer be on its way it is not
     # listed, and a page loaded then is told to ask again.
     assert client.put("/api/ui/mail/drafts/draft-12", json={**letter, "sending": True}).status_code == 200

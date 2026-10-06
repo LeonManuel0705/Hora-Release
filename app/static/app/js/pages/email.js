@@ -112,7 +112,7 @@ function load() {
 function addDrafts(drafts) {
   let added = 0;
   drafts.forEach((draft) => {
-    if (!draft?.id || kept.sending.has(draft.id) || state.mails.some((mail) => mail.id === draft.id)) return;
+    if (!draft?.id || kept.sending.has(draft.id) || kept.dropped.has(draft.id) || state.mails.some((mail) => mail.id === draft.id)) return;
     const mail = {
       id: draft.id, folder: "drafts", direction: "out", read: true, flagged: false, attachments: [], peer: contactFor(draft.to || ""),
       to: draft.to || "", subject: draft.subject || "", body: draft.body || "", replyTo: draft.replyTo || null, sendFrom: draft.account || null,
@@ -140,7 +140,7 @@ async function lookForUnsent(tries = 8) {
 
 // Drafts and the archive live on this device. What the server holds is remembered here, and only a difference is sent.
 // A draft whose mail is on its way stays stored until the mail is out. The phone app has no mail yet and keeps neither.
-const kept = { drafts: new Map(), archive: new Set(), sending: new Set(), retry: 0, wait: 0, full: false };
+const kept = { drafts: new Map(), archive: new Set(), sending: new Set(), dropped: new Set(), retry: 0, wait: 0, full: false };
 // sending marks a draft whose mail is on its way. The server does not list it then, so that a page loaded in that moment cannot send it a second time.
 const draftRecord = (mail) => ({ to: mail.to || "", subject: mail.subject || "", body: mail.body || "", replyTo: mail.replyTo || null, account: mail.sendFrom || null, sending: !!mail.sending });
 const archiveRecord = (mail) => ({ subject: mail.subject || "", peer: { name: mail.peer?.name || "", detail: mail.peer?.detail || "" }, received: mail.received || "", body: String(mail.body || "").slice(0, 300) });
@@ -190,6 +190,7 @@ function keepLocal() {
   [...kept.drafts.keys()].filter((id) => !drafts.has(id) && !kept.sending.has(id)).forEach((id) => {
     const text = kept.drafts.get(id);
     kept.drafts.delete(id);
+    kept.dropped.add(id);
     mailRequest("DELETE", `/api/ui/mail/drafts/${encodeURIComponent(id)}`).then(done, failed(() => kept.drafts.set(id, text)));
   });
   const archive = new Map(state.mails.filter((mail) => mail.folder === "archive" && mail.account && mail.uid).map((mail) => [mail.id, mail]));
@@ -930,6 +931,7 @@ function leaveArchive(id) {
   if (index < 0) return;
   const mail = state.mails[index];
   const row = rowOf(id);
+  const hadFocus = !!row && (row === document.activeElement || row.contains(document.activeElement));
   const next = neighbourId(id);
   const reading = state.mode === "read" && state.openId === id;
   state.mails.splice(index, 1);
@@ -937,7 +939,7 @@ function leaveArchive(id) {
     if (next) openReader(next);
     else closeReader({ refocus: true });
   }
-  toast(`Aus dem Archiv genommen: „${esc(clip(mail.subject || "ohne Betreff"))}“. Die Mail liegt weiter im Postfach.`, {
+  toast(`Aus dem Archiv genommen: „${esc(clip(mail.subject || "ohne Betreff"))}“. Am Postfach ändert das nichts.`, {
     icon: "undo-2",
     action: {
       label: "Rückgängig",
@@ -953,6 +955,7 @@ function leaveArchive(id) {
   exitInPlace(row).then(() => {
     if (row) row.dataset.flip = "leaving";
     render({ flip: true });
+    if ((hadFocus || reading) && next && !isSheet()) focusRow(rowOf(next));
   });
 }
 
@@ -1207,12 +1210,20 @@ function transmit(mail, snapshot, stored) {
     kept.drafts.delete(stored.id);
   }, (error) => {
     if (error.sent) {
-      // Another page has sent this very mail already. It is out, so it must not go a second time or come back as a draft.
+      // Another page has sent this very mail already. It is out, so it must not go a second time or come back as its draft.
       if (stored) {
         kept.sending.delete(stored.id);
         kept.drafts.delete(stored.id);
       }
-      toast(`${esc(error.message)}.`, { icon: "info" });
+      if (!snapshot.edited) {
+        toast(`${esc(error.message)}.`, { icon: "info" });
+        return;
+      }
+      // What went out is the text from before. The changed one was not sent, so it is offered as a new draft.
+      state.mails = state.mails.filter((item) => item.id !== mail.id);
+      render({ flip: true });
+      openCompose({ to: snapshot.to, subject: snapshot.subject, body: snapshot.body, replyTo: snapshot.replyTo, account: snapshot.account });
+      toast(`${esc(error.message)}. Was du geändert hast, liegt als neuer Entwurf bereit.`, { icon: "info" });
       return;
     }
     state.mails = state.mails.filter((item) => item.id !== mail.id);
@@ -1263,9 +1274,17 @@ function sendCompose() {
   }
   // Closing the app in the seconds before the mail leaves must not cost the mail: it stays a stored draft until it is out.
   const stored = commitDraft();
-  if (stored) Object.assign(stored, { sending: true, unsent: false });
+  // Whether the text was changed since this mail was opened: it matters if another page turns out to have sent it already.
+  const edited = !!draft.untold;
+  if (stored) {
+    Object.assign(stored, { sending: true, unsent: false });
+    kept.dropped.delete(stored.id);
+    // Should this attempt fail as well, it is to be said again.
+    const told = storage.get(TOLD_KEY);
+    if (Array.isArray(told) && told.includes(stored.id)) storage.set(TOLD_KEY, told.filter((id) => id !== stored.id));
+  }
   keepLocal();
-  const snapshot = { ...draft, account };
+  const snapshot = { ...draft, account, edited };
   if (stored) {
     kept.sending.add(stored.id);
     state.mails = state.mails.filter((item) => item.id !== stored.id);

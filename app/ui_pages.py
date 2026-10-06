@@ -3,6 +3,7 @@
 
 import json
 import re
+import threading
 import time
 from datetime import date, datetime
 
@@ -882,6 +883,10 @@ DRAFT_ID = r'draft-[0-9a-z-]{1,40}'
 # can then neither send the mail again nor store the draft back.
 SENT_DRAFTS = 200
 ALREADY_SENT = 'Diese Mail ist schon rausgegangen'
+# The drafts whose mail is being handed to the mail server right now. Two pages pressing "Senden" for the same
+# draft at the same moment would otherwise both pass the look at what was sent before.
+_sending_now = set()
+_sending_lock = threading.Lock()
 
 
 def _sent(item):
@@ -1058,23 +1063,32 @@ def mail_send():
         except ui_data.StoreError:
             return False
 
-    if settle_draft('sending'):
+    with _sending_lock:
+        taken = draft in _sending_now
+        if draft and not taken:
+            _sending_now.add(draft)
+    if taken:
         return jsonify({'success': False, 'error': ALREADY_SENT, 'sent': True}), 409
     try:
-        if account.endswith('@iserv'):
-            service = get_iserv_service()
-            if not service.is_connected():
-                service.connect()
-            result = service.send_email(to=to, subject=subject, body=body)
-        elif account in {item['email'] for item in get_google_accounts()}:
-            result = send_gmail(account, to, subject, body)
-        else:
-            result = send_email(account, to, subject, body)
-    except Exception:
-        settle_draft('unsent')
-        return _error('Senden ging gerade nicht', 502)
-    if not result.get('success'):
-        settle_draft('unsent')
-        return _error('Der Mailserver hat die Nachricht nicht angenommen. Prüf die Adresse und versuch es noch einmal', 502)
-    settle_draft('sent')
-    return jsonify({'success': True})
+        if settle_draft('sending'):
+            return jsonify({'success': False, 'error': ALREADY_SENT, 'sent': True}), 409
+        try:
+            if account.endswith('@iserv'):
+                service = get_iserv_service()
+                if not service.is_connected():
+                    service.connect()
+                result = service.send_email(to=to, subject=subject, body=body)
+            elif account in {item['email'] for item in get_google_accounts()}:
+                result = send_gmail(account, to, subject, body)
+            else:
+                result = send_email(account, to, subject, body)
+        except Exception:
+            settle_draft('unsent')
+            return _error('Senden ging gerade nicht', 502)
+        if not result.get('success'):
+            settle_draft('unsent')
+            return _error('Der Mailserver hat die Nachricht nicht angenommen. Prüf die Adresse und versuch es noch einmal', 502)
+        settle_draft('sent')
+        return jsonify({'success': True})
+    finally:
+        _sending_now.discard(draft)
