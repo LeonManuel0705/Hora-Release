@@ -526,6 +526,11 @@ def change_note(ref):
             if request.method == 'DELETE':
                 del items[index]
             else:
+                if not str(item.get('title') or '').strip():
+                    # The page shows the first line of such a note as its title and sends only what changed.
+                    # Stored the same way first, a change to one part cannot swallow the other.
+                    shown = ui_data.note_view(item)
+                    item['title'], item['content'] = shown['title'], shown['details']
                 if 'title' in payload:
                     item['title'] = _text(payload.get('title'), NOTE_TITLE)
                 if 'details' in payload:
@@ -717,7 +722,7 @@ def save_place(key):
                 'lon': known['longitude'],
                 'stop': (known.get('id') or '') if known.get('type') == 'stop' else '',
             }
-        return jsonify({'success': True, 'removed': removed, **({'weatherFromHome': _weather_follows_home()} if key == 'home' else {})})
+        return jsonify({'success': True, 'removed': removed, **({'weatherFromHome': _weather_follows_home(), 'weatherCanFollowHome': False} if key == 'home' else {})})
     payload = _payload()
     if payload is None:
         return _error('JSON erwartet')
@@ -741,7 +746,7 @@ def save_place(key):
     service.save_known_location(key, location)
     answer = {'success': True, 'place': ui_data.place_view('Zuhause' if key == 'home' else 'Schule', location)}
     if key == 'home':
-        answer['weatherFromHome'] = _weather_follows_home(refresh=True)
+        answer.update(weatherFromHome=_weather_follows_home(refresh=True), weatherCanFollowHome=ui_data.home_weather_place() is not None)
     return jsonify(answer)
 
 
@@ -866,7 +871,7 @@ def mail_inbox():
         if key in sent_along or address not in connected or not uid or not isinstance(kept, dict):
             continue
         view = _mail_view(connected[address], {**kept, 'id': uid, 'read': True})
-        view['folder'] = 'archive'
+        view.update(folder='archive', old=True)
         messages.append(view)
     return jsonify({'success': True, 'accounts': accounts, 'messages': messages, 'failed': failed})
 
@@ -894,6 +899,8 @@ def mail_draft(ref):
             'account': _text(payload.get('account'), 200) or None,
             'saved_at': datetime.now().isoformat(timespec='seconds'),
         }
+        if payload.get('sending'):
+            draft['sending_at'] = draft['saved_at']
         if not (draft['to'] or draft['subject'] or draft['body'].strip()):
             draft = None
 
@@ -981,6 +988,8 @@ def mail_message():
             result = get_email_detail(account, uid, 'INBOX')
     except Exception:
         return _error('Die Mail ließ sich nicht laden', 502)
+    if result.get('gone'):
+        return jsonify({'success': False, 'error': 'Diese Mail gibt es im Postfach nicht mehr', 'gone': True}), 404
     if not result.get('success'):
         return _error('Die Mail ließ sich nicht laden', 502)
     detail = result.get('email') or {}
@@ -1001,6 +1010,31 @@ def mail_send():
     body = str(payload.get('body') or '')[:MAIL_BODY]
     if not account or not to:
         return _error('Absender oder Empfänger fehlt')
+    # The page keeps the mail as a draft until it is out. What becomes of that draft is settled here, together with
+    # the sending, because the page may be gone by the time the mail server answers.
+    draft = _text(payload.get('draft'), 60)
+
+    def settle_draft(outcome):
+        def change(items):
+            for index, item in enumerate(items):
+                if not isinstance(item, dict) or item.get('id') != draft:
+                    continue
+                if outcome == 'sent':
+                    del items[index]
+                elif outcome == 'sending':
+                    item['sending_at'] = datetime.now().isoformat(timespec='seconds')
+                else:
+                    item.pop('sending_at', None)
+                    item['unsent'] = True
+                return
+
+        if re.fullmatch(DRAFT_ID, draft):
+            try:
+                ui_data.modify_list('mail_drafts', change)
+            except ui_data.StoreError:
+                pass
+
+    settle_draft('sending')
     try:
         if account.endswith('@iserv'):
             service = get_iserv_service()
@@ -1012,17 +1046,10 @@ def mail_send():
         else:
             result = send_email(account, to, subject, body)
     except Exception:
+        settle_draft('unsent')
         return _error('Senden ging gerade nicht', 502)
     if not result.get('success'):
+        settle_draft('unsent')
         return _error('Der Mailserver hat die Nachricht nicht angenommen. Prüf die Adresse und versuch es noch einmal', 502)
-    # The page keeps the mail as a draft until it is out. It goes here, together with the sending, because the page may be gone by now.
-    draft = _text(payload.get('draft'), 60)
-    if re.fullmatch(DRAFT_ID, draft):
-        def drop(items):
-            items[:] = [item for item in items if not (isinstance(item, dict) and item.get('id') == draft)]
-
-        try:
-            ui_data.modify_list('mail_drafts', drop)
-        except ui_data.StoreError:
-            pass
+    settle_draft('sent')
     return jsonify({'success': True})

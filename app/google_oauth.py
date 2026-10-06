@@ -430,6 +430,8 @@ def get_gmail_message_detail(email: str, msg_id: str) -> Dict:
 
     except Exception as e:
         logging.error(f"Gmail message detail error: {e}")
+        if getattr(getattr(e, 'resp', None), 'status', None) == 404:
+            return {"success": False, "error": "Not found", "gone": True}
         return {"success": False, "error": "Failed to fetch email details"}
 
 def send_gmail(from_email: str, to_email: str, subject: str, body: str) -> Dict:

@@ -21,6 +21,8 @@ class Imap:
     trash = []
     uidplus = True
     flags_first = False
+    folders = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Trash) "/" "Trash"']
+    noise = None
 
     def __init__(self, host, port, ssl_context=None, timeout=None):
         pass
@@ -35,10 +37,23 @@ class Imap:
     def capability(self):
         return 'OK', [b'IMAP4rev1 UIDPLUS' if Imap.uidplus else b'IMAP4rev1']
 
+    def list(self):
+        return 'OK', list(Imap.folders)
+
+    def bin_names(self):
+        return [line.rsplit(b' ', 1)[-1].decode() for line in Imap.folders if b'Trash' in line.split(b')')[0] or b'Papierkorb' in line]
+
+    @staticmethod
+    def with_noise(answer):
+        """Another app changed a flag in this moment: the server slips in a line about some other mail."""
+        line = b'3 (UID 11 FLAGS (\\Seen))'
+        return [line, *answer] if Imap.noise == 'before' else [*answer, line] if Imap.noise == 'after' else answer
+
     def uid(self, command, *args):
         Imap.calls.append(('uid', command, *args))
         if command == 'search':
-            return 'OK', [b' '.join(b'%d' % uid for uid in Imap.box)]
+            uids = [b'%d' % uid for uid in Imap.box]
+            return 'OK', [b' '.join(uids[:2]), b' '.join(uids[2:])] if Imap.noise == 'split' else [b' '.join(uids)]
         uid = int(args[0])
         if command == 'fetch':
             if uid not in Imap.box:
@@ -47,15 +62,15 @@ class Imap:
             number = list(Imap.box).index(uid) + 1
             flags = b'FLAGS (\\Seen)' if uid in Imap.seen else b'FLAGS ()'
             if 'FLAGS' not in args[1]:
-                return 'OK', [(b'%d (UID %d RFC822 {%d}' % (number, uid, len(raw)), raw), b')']
+                return 'OK', Imap.with_noise([(b'%d (UID %d RFC822 {%d}' % (number, uid, len(raw)), raw), b')'])
             if Imap.flags_first:
-                return 'OK', [(b'%d (UID %d %s RFC822 {%d}' % (number, uid, flags, len(raw)), raw), b')']
-            return 'OK', [(b'%d (UID %d RFC822 {%d}' % (number, uid, len(raw)), raw), b' ' + flags + b')']
+                return 'OK', Imap.with_noise([(b'%d (UID %d %s RFC822 {%d}' % (number, uid, flags, len(raw)), raw), b')'])
+            return 'OK', Imap.with_noise([(b'%d (UID %d RFC822 {%d}' % (number, uid, len(raw)), raw), b' ' + flags + b')'])
         if command == 'store':
             (Imap.seen if 'Seen' in args[2] else Imap.marked).add(uid)
             return 'OK', [b'']
         if command == 'copy':
-            if args[1] != 'Trash':
+            if args[1] not in self.bin_names():
                 return 'NO', [b'no such folder']
             Imap.trash.append(uid)
             return 'OK', [b'']
@@ -86,7 +101,8 @@ def mailbox(monkeypatch):
     from app import email_service
 
     Imap.calls, Imap.seen, Imap.marked, Imap.trash = [], set(), set(), []
-    Imap.uidplus, Imap.flags_first = True, False
+    Imap.uidplus, Imap.flags_first, Imap.noise = True, False, None
+    Imap.folders = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Trash) "/" "Trash"']
     Imap.box = {7: RAW}
     monkeypatch.setattr(email_service.imaplib, 'IMAP4_SSL', Imap)
     monkeypatch.setattr(email_service, 'load_email_config',
@@ -174,5 +190,42 @@ def test_a_server_that_cannot_expunge_single_mails_still_deletes(mailbox):
     assert sorted(Imap.box) == [11] and ('expunge',) in Imap.calls
 
 
-def test_a_mail_that_is_gone_is_reported_instead_of_breaking(mailbox):
-    assert mailbox.get_email_detail(ACCOUNT, '999') == {'success': False, 'error': 'Could not fetch email'}
+def test_a_mail_that_is_gone_is_reported_as_gone(mailbox):
+    assert mailbox.get_email_detail(ACCOUNT, '999') == {'success': False, 'error': 'Could not fetch email', 'gone': True}
+
+
+@pytest.mark.parametrize('noise', ['before', 'after'])
+def test_a_line_about_another_mail_in_the_answer_changes_nothing(mailbox, noise):
+    Imap.box = {11: letter('Erste'), 40: letter('Zweite'), 205: letter('Dritte')}
+    Imap.noise = noise
+    listed = mailbox.fetch_emails(ACCOUNT, 'INBOX', 20)['emails']
+    assert [(mail['id'], mail['subject'], mail['read']) for mail in listed] == [('205', 'Dritte', False), ('40', 'Zweite', False), ('11', 'Erste', False)]
+    assert mailbox.get_email_detail(ACCOUNT, '40')['email']['subject'] == 'Zweite'
+    assert mailbox.get_email_detail(ACCOUNT, '999').get('gone') is True
+
+
+def test_a_search_answer_in_several_lines_is_read_whole(mailbox):
+    Imap.box = {11: letter('Erste'), 40: letter('Zweite'), 205: letter('Dritte'), 206: letter('Vierte')}
+    Imap.noise = 'split'
+    assert [mail['id'] for mail in mailbox.fetch_emails(ACCOUNT, 'INBOX', 20)['emails']] == ['206', '205', '40', '11']
+
+
+def test_the_bin_is_the_folder_the_server_marks_as_one(mailbox):
+    Imap.box = {11: letter('Erste'), 40: letter('Zweite')}
+    Imap.folders = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Trash) "/" "Gel&APY-scht"']
+    assert mailbox.delete_email(ACCOUNT, '40')['success']
+    assert ('uid', 'copy', '40', '"Gel&APY-scht"') in Imap.calls and sorted(Imap.box) == [11] and Imap.trash == [40]
+
+
+def test_a_bin_with_a_space_in_its_name_is_found_too(mailbox, monkeypatch):
+    Imap.box = {11: letter('Erste'), 40: letter('Zweite')}
+    Imap.folders = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren) "/" "Deleted Items"']
+    monkeypatch.setattr(Imap, 'bin_names', lambda self: ['"Deleted Items"'])
+    assert mailbox.delete_email(ACCOUNT, '40')['success'] and Imap.trash == [40]
+
+
+def test_without_a_bin_the_mail_stays(mailbox):
+    Imap.box = {11: letter('Erste'), 40: letter('Zweite')}
+    Imap.folders = [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren) "/" "Ablage"']
+    assert mailbox.delete_email(ACCOUNT, '40') == {'success': False, 'error': 'No trash folder'}
+    assert sorted(Imap.box) == [11, 40] and Imap.marked == set()

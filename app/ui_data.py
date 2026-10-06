@@ -272,6 +272,11 @@ def school_setup(settings):
     }
 
 
+def is_own_subject(own):
+    """Whether what the settings store under a key is an own subject that can be shown."""
+    return isinstance(own, dict) and bool(own.get('custom')) and isinstance(own.get('name'), str) and bool(own['name'].strip()) and own.get('hue') in HUES
+
+
 def custom_subjects(catalog, put_aside=False):
     """The subjects made in the settings. With put_aside those that were deleted but kept, because grades or entries hang on them.
 
@@ -284,11 +289,9 @@ def custom_subjects(catalog, put_aside=False):
     removed = saved.get('removed') if isinstance(saved.get('removed'), list) else []
     result = {}
     for key, own in items.items():
-        if key in catalog or (key in removed) != put_aside or not isinstance(own, dict) or not own.get('custom'):
+        if key in catalog or (key in removed) != put_aside or not is_own_subject(own):
             continue
-        name = own['name'].strip()[:32] if isinstance(own.get('name'), str) else ''
-        if not name or own.get('hue') not in HUES:
-            continue
+        name = own['name'].strip()[:32]
         label = f'{name} LK' if own.get('type') == 'LK' else name
         result[key] = {'name': label, 'label': label, 'short': _short(name), 'hue': own['hue']}
     return result
@@ -1014,19 +1017,36 @@ def page_tasks(data, school, settings, today, iserv):
     return {'notes': notes()}
 
 
-def mail_drafts():
-    """The drafts as the mail page shows them, newest first."""
+# How long a mail may be on its way: the page waits some seconds before it sends, then the mail server has its say.
+MAIL_SENDING = timedelta(seconds=90)
+
+
+def mail_drafts(now=None):
+    """The drafts as the mail page shows them, newest first.
+
+    A mail stays a stored draft until it is out. While it is on its way it is not listed, or a page loaded in that
+    moment would offer it for sending a second time. If it never went out, it is listed and says so.
+    """
     try:
         stored = load_list('mail_drafts')
     except StoreError:
         return []
-    drafts = [
-        {
+    now = now or datetime.now()
+    drafts = []
+    for item in stored:
+        if not isinstance(item, dict) or not item.get('id'):
+            continue
+        try:
+            started = datetime.fromisoformat(str(item.get('sending_at') or ''))
+        except ValueError:
+            started = None
+        if started and timedelta(0) <= now - started < MAIL_SENDING:
+            continue
+        drafts.append({
             'id': str(item.get('id') or ''), 'to': str(item.get('to') or ''), 'subject': str(item.get('subject') or ''), 'body': str(item.get('body') or ''),
             'replyTo': item.get('reply_to') or None, 'account': item.get('account') or None, 'saved': str(item.get('saved_at') or ''),
-        }
-        for item in stored if isinstance(item, dict) and item.get('id')
-    ]
+            'unsent': bool(started or item.get('unsent')),
+        })
     return sorted(drafts, key=lambda draft: draft['saved'], reverse=True)
 
 
@@ -1067,7 +1087,7 @@ def keep_used_subjects(value):
     old = before.get('items') if isinstance(before, dict) and isinstance(before.get('items'), dict) else {}
     wanted = value.get('items') if isinstance(value, dict) and isinstance(value.get('items'), dict) else {}
     use = subject_use()
-    lost = [key for key, own in old.items() if key not in wanted and isinstance(own, dict) and own.get('custom') and any(use.get(key, {}).values())]
+    lost = [key for key, own in old.items() if is_own_subject(own) and not is_own_subject(wanted.get(key)) and any(use.get(key, {}).values())]
     if not lost:
         return value
     kept = dict(value) if isinstance(value, dict) else {}
@@ -1103,7 +1123,7 @@ def page_settings(data, school, settings, today, iserv):
         'places': {
             'weather': chosen,
             'weatherFromHome': followed,
-            'weatherCanFollowHome': True,
+            'weatherCanFollowHome': home_weather_place() is not None,
             'home': place_line(known.get('home')),
             'school': place_line(known.get('school')),
         },

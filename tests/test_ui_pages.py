@@ -192,6 +192,16 @@ def test_an_own_subject_in_use_cannot_be_dropped_from_the_store(client):
     assert set(stored()["items"]) == {"geo-used"} and stored()["removed"] == ["geo-used"]
     assert any(item["id"] == grade["id"] for item in page_data(client, "/hub/school")["page"]["grades"])
 
+    # Keeping the key but storing something under it that is no subject does not get rid of it either.
+    whole = stored()["items"]["geo-used"]
+    for broken in ({}, {**whole, "custom": False}, {**whole, "name": " "}, {**whole, "hue": "kein-farbton"}, "Geografie", None):
+        assert client.put("/api/ui/store/app-subjects", json={"items": {"geo-used": broken}, "removed": []}).status_code == 200
+        assert stored()["items"]["geo-used"] == whole and stored()["removed"] == ["geo-used"]
+    assert any(item["id"] == grade["id"] for item in page_data(client, "/hub/school")["page"]["grades"])
+    # An edit that leaves it a subject goes through.
+    assert client.put("/api/ui/store/app-subjects", json={"items": {"geo-used": {**whole, "name": "Erdkunde"}}, "removed": []}).status_code == 200
+    assert stored()["items"]["geo-used"]["name"] == "Erdkunde" and stored()["removed"] == []
+
     # Without anything hanging on it, it goes.
     assert client.delete(f"/api/ui/grades/{grade['id']}").status_code == 200
     assert client.delete("/api/ui/store/app-subjects").status_code == 200
@@ -293,7 +303,9 @@ def test_without_a_place_of_its_own_the_weather_follows_home(client, monkeypatch
     assert client.put("/api/ui/places/home", json=home).get_json()["weatherFromHome"] is None
 
     assert client.put("/api/ui/weather/place", json={"name": ""}).get_json() == {"success": True, "place": "", "weatherFromHome": "Berlin"}
-    assert client.delete("/api/ui/places/home").get_json()["weatherFromHome"] is None
+    gone = client.delete("/api/ui/places/home").get_json()
+    assert (gone["weatherFromHome"], gone["weatherCanFollowHome"]) == (None, False)
+    assert page_data(client, "/hub/settings")["page"]["places"]["weatherCanFollowHome"] is False
     assert ui_data.weather_location({}) is None
     assert client.put("/api/ui/weather/place", json={"name": ""}).status_code == 400
 
@@ -701,8 +713,19 @@ def test_an_archived_mail_stays_listed_once_the_mailbox_no_longer_sends_it(clien
     inbox = newer
     kept = listed()
     assert sorted(kept) == ["7", "8", "9"]
-    assert {key: kept["7"][key] for key in ("id", "folder", "subject", "received", "body", "read", "partial")} == {
-        "id": "leon@example.org|7", "folder": "archive", "subject": "Hallo", "received": "2026-10-05T10:00", "body": "Bis Freitag", "read": True, "partial": True}
+    assert {key: kept["7"][key] for key in ("id", "folder", "subject", "received", "body", "read", "partial", "old")} == {
+        "id": "leon@example.org|7", "folder": "archive", "subject": "Hallo", "received": "2026-10-05T10:00", "body": "Bis Freitag", "read": True, "partial": True, "old": True}
+    assert "old" not in kept["8"]
+
+    # Opening it asks the mailbox. If the mail was moved or deleted in another app, the page is told that it is gone.
+    from app import email_service, google_oauth
+    monkeypatch.setattr(google_oauth, "get_google_accounts", lambda: [])
+    monkeypatch.setattr(email_service, "get_email_detail", lambda account, uid, folder: {"success": False, "error": "Could not fetch email", "gone": True})
+    answer = client.get("/api/ui/mail/message?account=leon@example.org&id=7")
+    assert answer.status_code == 404 and answer.get_json()["gone"] is True
+    monkeypatch.setattr(email_service, "get_email_detail", lambda account, uid, folder: {"success": False, "error": "An error occurred"})
+    answer = client.get("/api/ui/mail/message?account=leon@example.org&id=7")
+    assert answer.status_code == 502 and "gone" not in answer.get_json()
     assert kept["7"]["peer"] == {"name": "Anna", "role": "other", "detail": "a@example.org"}
 
     # While the mailbox still sends it, it is not listed twice. A mailbox that is no longer connected lists nothing.
@@ -719,22 +742,43 @@ def test_an_archived_mail_stays_listed_once_the_mailbox_no_longer_sends_it(clien
 def test_sending_a_mail_removes_the_draft_it_was_kept_as(client, monkeypatch):
     from app import email_service, google_oauth
 
-    sent = []
-    monkeypatch.setattr(google_oauth, "get_google_accounts", lambda: [])
-    monkeypatch.setattr(email_service, "send_email", lambda account, to, subject, body: sent.append(to) or {"success": to != "falsch@example.org"})
+    sent, listed_meanwhile = [], []
     drafts = lambda: [item["id"] for item in page_data(client, "/hub/email")["page"]["drafts"]]
+    unsent = lambda: {item["id"]: item["unsent"] for item in page_data(client, "/hub/email")["page"]["drafts"]}
+
+    def send(account, to, subject, body):
+        # What a page would be given that is loaded while the mail server is still being talked to.
+        listed_meanwhile.append(sorted(item["id"] for item in ui_data.mail_drafts()))
+        sent.append(to)
+        return {"success": to != "falsch@example.org"}
+
+    monkeypatch.setattr(google_oauth, "get_google_accounts", lambda: [])
+    monkeypatch.setattr(email_service, "send_email", send)
     letter = {"to": "ben@example.org", "subject": "Referat", "body": "Hallo Ben"}
     for ref in ("draft-10", "draft-11"):
         assert client.put(f"/api/ui/mail/drafts/{ref}", json=letter).status_code == 200
 
-    # A mail the server did not take keeps its draft.
+    # A mail the server did not take keeps its draft, and the draft says that the mail did not go out.
     refused = client.post("/api/ui/mail/send", json={**letter, "account": "leon@example.org", "to": "falsch@example.org", "draft": "draft-10"})
-    assert refused.status_code == 502 and sorted(drafts()) == ["draft-10", "draft-11"]
+    assert refused.status_code == 502 and unsent() == {"draft-10": True, "draft-11": False}
+    # Storing it again, as the page does when it is edited, makes it an ordinary draft.
+    client.put("/api/ui/mail/drafts/draft-10", json=letter)
+    assert unsent() == {"draft-10": False, "draft-11": False}
     assert client.post("/api/ui/mail/send", json={**letter, "account": "leon@example.org", "draft": "draft-10"}).status_code == 200
     assert drafts() == ["draft-11"] and sent == ["falsch@example.org", "ben@example.org"]
+    # While either mail was on its way, its draft was not offered to a page.
+    assert listed_meanwhile == [["draft-11"], ["draft-11"]]
     assert client.post("/api/ui/mail/send", json={**letter, "account": "leon@example.org", "draft": "../x"}).status_code == 200
     assert drafts() == ["draft-11"]
-    assert client.delete("/api/ui/mail/drafts/draft-11").status_code == 200
+
+    # The page marks the draft the moment "Senden" is pressed. If the app is closed before the mail leaves,
+    # the draft is back once the mail can no longer be on its way, and says that it was not sent.
+    assert client.put("/api/ui/mail/drafts/draft-12", json={**letter, "sending": True}).status_code == 200
+    assert drafts() == ["draft-11"]
+    later = datetime.now() + ui_data.MAIL_SENDING + timedelta(seconds=1)
+    assert {item["id"]: item["unsent"] for item in ui_data.mail_drafts(later)} == {"draft-11": False, "draft-12": True}
+    for ref in ("draft-11", "draft-12"):
+        assert client.delete(f"/api/ui/mail/drafts/{ref}").status_code == 200
 
 
 def test_notes_and_ideas_can_be_seen_changed_and_removed(client):
@@ -774,6 +818,20 @@ def test_a_note_from_the_older_interface_without_a_title_shows_its_first_line(cl
     stored = next(item for item in ui_data.load_list("notes") if item["id"] == "alt-1")
     assert (stored["title"], stored["content"]) == ("Sportzeug waschen", "bis Mittwoch\nund trocknen")
     assert client.delete("/api/ui/notes/alt-1").status_code == 200
+
+
+@pytest.mark.parametrize("change, title, content", [
+    ({"details": "bis Mittwoch\nund bügeln"}, "Sportzeug waschen", "bis Mittwoch\nund bügeln"),
+    ({"title": "Sportzeug und Schuhe waschen"}, "Sportzeug und Schuhe waschen", "bis Mittwoch\nund trocknen"),
+    ({"type": "idea"}, "Sportzeug waschen", "bis Mittwoch\nund trocknen"),
+])
+def test_changing_one_part_of_a_note_without_a_title_keeps_the_other(client, change, title, content):
+    ui_data.modify_list("notes", lambda items: items.append({"id": "alt-3", "type": "note", "title": None, "content": "Sportzeug waschen\nbis Mittwoch\nund trocknen", "created_at": "2026-09-30T18:00:00"}))
+    saved = client.patch("/api/ui/notes/alt-3", json=change).get_json()["note"]
+    assert (saved["title"], saved["details"]) == (title, content)
+    again = next(item for item in page_data(client, "/hub/tasks")["page"]["notes"] if item["id"] == "alt-3")
+    assert (again["title"], again["details"]) == (title, content)
+    assert client.delete("/api/ui/notes/alt-3").status_code == 200
 
 
 def test_a_long_note_from_the_older_interface_is_not_cut_by_an_edit_or_an_undo(client):

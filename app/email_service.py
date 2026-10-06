@@ -313,6 +313,43 @@ def _can(imap, capability: str) -> bool:
         return False
 
 
+def _own_part(msg_data, uid):
+    """What a FETCH answered for one UID: (the mail, the text around it), or None if it sent nothing for it.
+
+    imaplib hands back every untagged FETCH line that came in during the command. Another app that changes a
+    flag in that moment adds a line for some other mail, before or after the one that was asked for.
+    """
+    wanted = re.compile(rb'\bUID %d\b' % int(uid))
+    answers = []
+    for index, part in enumerate(msg_data or []):
+        if not isinstance(part, tuple) or len(part) < 2 or not isinstance(part[0], bytes) or not isinstance(part[1], bytes):
+            continue
+        tail = msg_data[index + 1] if index + 1 < len(msg_data) and isinstance(msg_data[index + 1], bytes) else b''
+        if re.match(rb'\s*\d+ \(', tail):
+            tail = b''
+        answers.append((part[1], part[0] + b' ' + tail))
+    for raw, around in answers:
+        if wanted.search(around):
+            return raw, around.decode(errors='replace')
+    if len(answers) == 1 and not re.search(rb'\bUID \d+', answers[0][1]):
+        return answers[0][0], answers[0][1].decode(errors='replace')
+    return None
+
+
+def _trash_folders(imap):
+    """Names to try as the bin, first the folder the server itself marks as one."""
+    marked = []
+    try:
+        status, lines = imap.list()
+    except Exception:
+        status, lines = 'NO', []
+    for line in lines if status == 'OK' else []:
+        found = re.match(rb'\((?P<flags>[^)]*)\)\s+(?:"(?:[^"\\]|\\.)*"|NIL)\s+(?P<name>\S.*)$', line.strip()) if isinstance(line, bytes) else None
+        if found and rb'\trash' in found.group('flags').lower():
+            marked.append(found.group('name').decode(errors='replace'))
+    return marked + ['"[Gmail]/Trash"', '"[Gmail]/Papierkorb"', '"Trash"', '"INBOX.Trash"', '"Papierkorb"', '"Deleted"', '"Deleted Items"', '"Deleted Messages"']
+
+
 # Message numbers move up whenever a mail is expunged, here or in another app. Every mail is therefore
 # addressed by its UID, which stays with it: the ids handed out below are UIDs.
 def fetch_emails(email: str, folder: str = "INBOX", limit: int = 20) -> Dict:
@@ -343,23 +380,23 @@ def fetch_emails(email: str, folder: str = "INBOX", limit: int = 20) -> Dict:
             imap.logout()
             return {"success": False, "error": "Could not search messages"}
 
-        message_ids = sorted(((messages[0] if messages else b"") or b"").split(), key=int)
+        # A long answer may come in several lines.
+        found = b" ".join(part for part in messages or [] if isinstance(part, bytes))
+        message_ids = sorted((part for part in found.split() if part.isdigit()), key=int)
         message_ids = message_ids[-limit:] if len(message_ids) > limit else message_ids
         message_ids.reverse()
 
         emails = []
         for msg_id in message_ids:
             status, msg_data = imap.uid("fetch", msg_id.decode(), "(RFC822 FLAGS)")
-            if status != "OK" or not msg_data or not isinstance(msg_data[0], tuple):
+            answer = _own_part(msg_data, msg_id) if status == "OK" else None
+            if not answer:
                 continue
 
             import email
-            raw_email = msg_data[0][1]
+            raw_email, flags = answer
             msg = email.message_from_bytes(raw_email)
-
-            # The flags come before or after the mail itself, depending on the server.
-            around = [part[0] if isinstance(part, tuple) else part for part in msg_data]
-            flags = b" ".join(part for part in around if isinstance(part, bytes)).decode(errors="replace")
+            # The flags stand before or after the mail itself, depending on the server.
             is_read = "\\Seen" in flags
 
             date_str = str(msg.get("Date", ""))[:200]
@@ -416,12 +453,14 @@ def get_email_detail(email_addr: str, msg_id: str, folder: str = "INBOX") -> Dic
         imap.select(folder, readonly=True)
 
         status, msg_data = imap.uid("fetch", str(msg_id), "(RFC822)")
-        if status != "OK" or not msg_data or not isinstance(msg_data[0], tuple):
+        answer = _own_part(msg_data, msg_id) if status == "OK" else None
+        if not answer:
             imap.logout()
-            return {"success": False, "error": "Could not fetch email"}
+            # The server answered and has nothing under this UID: the mail was moved or deleted elsewhere.
+            return {"success": False, "error": "Could not fetch email", **({"gone": True} if status == "OK" else {})}
 
         import email
-        raw_email = msg_data[0][1]
+        raw_email = answer[0]
         msg = email.message_from_bytes(raw_email)
         summary = summarize_message(msg, msg_id)
 
@@ -526,15 +565,19 @@ def delete_email(email: str, msg_id: str, folder: str = "INBOX") -> Dict:
         _validate_folder(folder)
         imap.select(folder)
 
-        trash_folders = ['[Gmail]/Trash', 'Trash', 'Deleted', 'Deleted Items']
-
-        for trash in trash_folders:
+        copied = False
+        for trash in _trash_folders(imap):
             try:
                 status, _ = imap.uid("copy", str(msg_id), trash)
-                if status == "OK":
-                    break
             except Exception:
                 continue
+            if status == "OK":
+                copied = True
+                break
+        if not copied:
+            # The page says the mail goes to the bin. Where no bin is found it stays, instead of being gone for good.
+            imap.logout()
+            return {"success": False, "error": "No trash folder"}
 
         imap.uid("store", str(msg_id), '+FLAGS', '\\Deleted')
         # A plain expunge also removes what other apps have marked for deletion. Where the server can, only this mail goes.

@@ -45,7 +45,7 @@ async function mailRequest(method, url, body) {
   try {
     payload = await response.json();
   } catch {}
-  if (!response.ok || payload.success === false) throw new Error(payload.error || "");
+  if (!response.ok || payload.success === false) throw Object.assign(new Error(payload.error || ""), { status: response.status, gone: !!payload.gone });
   return payload;
 }
 
@@ -106,7 +106,7 @@ function load() {
     const mail = {
       id: draft.id, folder: "drafts", direction: "out", read: true, flagged: false, attachments: [], peer: contactFor(draft.to || ""),
       to: draft.to || "", subject: draft.subject || "", body: draft.body || "", replyTo: draft.replyTo || null, sendFrom: draft.account || null,
-      at: new Date(draft.saved || Date.now()),
+      at: new Date(draft.saved || Date.now()), unsent: !!draft.unsent,
     };
     state.mails.push(mail);
     kept.drafts.set(mail.id, JSON.stringify(draftRecord(mail)));
@@ -116,7 +116,8 @@ function load() {
 // Drafts and the archive live on this device. What the server holds is remembered here, and only a difference is sent.
 // A draft whose mail is on its way stays stored until the mail is out. The phone app has no mail yet and keeps neither.
 const kept = { drafts: new Map(), archive: new Set(), sending: new Set(), retry: 0, wait: 0 };
-const draftRecord = (mail) => ({ to: mail.to || "", subject: mail.subject || "", body: mail.body || "", replyTo: mail.replyTo || null, account: mail.sendFrom || null });
+// sending marks a draft whose mail is on its way. The server does not list it then, so that a page loaded in that moment cannot send it a second time.
+const draftRecord = (mail) => ({ to: mail.to || "", subject: mail.subject || "", body: mail.body || "", replyTo: mail.replyTo || null, account: mail.sendFrom || null, sending: !!mail.sending });
 const archiveRecord = (mail) => ({ subject: mail.subject || "", peer: { name: mail.peer?.name || "", detail: mail.peer?.detail || "" }, received: mail.received || "", body: String(mail.body || "").slice(0, 300) });
 
 function keepLocal() {
@@ -138,7 +139,12 @@ function keepLocal() {
     const before = kept.drafts.get(id);
     if (before === text) return;
     kept.drafts.set(id, text);
-    mailRequest("PUT", `/api/ui/mail/drafts/${encodeURIComponent(id)}`, JSON.parse(text)).then(done, failed(() => (before === undefined ? kept.drafts.delete(id) : kept.drafts.set(id, before))));
+    const again = failed(() => (before === undefined ? kept.drafts.delete(id) : kept.drafts.set(id, before)));
+    mailRequest("PUT", `/api/ui/mail/drafts/${encodeURIComponent(id)}`, JSON.parse(text)).then(done, (error) => {
+      // The store of drafts is full. Trying again would not help, so the reason is said and this version is left alone.
+      if (error.status === 409) toast(`${esc(error.message)}.`, { icon: "circle-alert" });
+      else again();
+    });
   });
   [...kept.drafts.keys()].filter((id) => !drafts.has(id) && !kept.sending.has(id)).forEach((id) => {
     const text = kept.drafts.get(id);
@@ -274,7 +280,8 @@ function marksInner(mail) {
 function filingActs(mail) {
   const erase = mail.account?.endsWith("@iserv") ? [] : [["delete", "trash-2", "Löschen", "#"]];
   if (mail.folder === "inbox") return [["archive", "archive", "Archivieren", "E"], ...erase];
-  if (mail.folder === "archive") return [["inbox", "inbox", "In den Posteingang", "E"], ...erase];
+  // A mail the mailbox no longer sends is only listed because it is archived. Out of the archive it would be in no folder here.
+  if (mail.folder === "archive") return [...(mail.old ? [] : [["inbox", "inbox", "In den Posteingang", "E"]]), ...erase];
   return [];
 }
 
@@ -291,7 +298,7 @@ function actionsHtml(mail) {
 
 function ariaFor(mail) {
   const parts = [`${peerText(mail)}: ${mail.subject || "ohne Betreff"}`];
-  if (mail.folder === "drafts") parts.push("Entwurf");
+  if (mail.folder === "drafts") parts.push(mail.unsent ? "Nicht gesendet" : "Entwurf");
   if (isUnread(mail)) parts.push("ungelesen");
   if (mail.attachments.length) parts.push(mail.attachments.length === 1 ? "1 Anhang" : `${mail.attachments.length} Anhänge`);
   if (mail.flagged) parts.push("markiert");
@@ -301,7 +308,7 @@ function ariaFor(mail) {
 
 function rowHtml(mail) {
   const draft = mail.folder === "drafts";
-  const detail = draft ? "Entwurf" : detailOf(mail.peer);
+  const detail = draft ? (mail.unsent ? "Nicht gesendet" : "Entwurf") : detailOf(mail.peer);
   const selected = mail.id === state.openId;
   const classes = ["row", "mail-row", "is-interactive", isUnread(mail) && "is-unread", selected && "is-selected", draft && "is-draft"].filter(Boolean).join(" ");
   return `<li class="${classes}" data-id="${esc(mail.id)}" tabindex="-1">
@@ -1059,7 +1066,7 @@ function commitDraft({ tell = false } = {}) {
     state.mails.push(mail);
     draft.id = mail.id;
   }
-  if (changed) Object.assign(mail, { peer: contactFor(draft.to), to: draft.to.trim(), subject: draft.subject.trim(), body: draft.body, at: now() });
+  if (changed) Object.assign(mail, { peer: contactFor(draft.to), to: draft.to.trim(), subject: draft.subject.trim(), body: draft.body, at: now(), unsent: false });
   Object.assign(mail, { replyTo: draft.replyTo || null, sendFrom: draft.account || null });
   // Saving while the mail is still being written stays quiet. The word comes once, when the mail is put away.
   const news = changed || !!draft.untold;
@@ -1110,6 +1117,7 @@ const pendingSends = new Map();
 function backToDraft(snapshot, stored) {
   if (stored) {
     kept.sending.delete(stored.id);
+    Object.assign(stored, { sending: false, unsent: false });
     if (!byId(stored.id)) state.mails.push(stored);
   }
   render({ flip: true });
@@ -1172,6 +1180,7 @@ function sendCompose() {
   }
   // Closing the app in the seconds before the mail leaves must not cost the mail: it stays a stored draft until it is out.
   const stored = commitDraft();
+  if (stored) Object.assign(stored, { sending: true, unsent: false });
   keepLocal();
   const snapshot = { ...draft, account };
   if (stored) {
@@ -1249,8 +1258,16 @@ async function loadBody(mail) {
     mail.body = result.body || mail.body;
     mail.partial = false;
     if (state.mode === "read" && state.openId === mail.id) renderReader();
-  } catch {
-    if (state.mode === "read" && state.openId === mail.id) toast("Die ganze Mail ließ sich gerade nicht laden.", { icon: "wifi-off" });
+  } catch (error) {
+    const reading = state.mode === "read" && state.openId === mail.id;
+    if (error.gone) {
+      // Moved or deleted in another app since it was listed. It leaves the list here too, and with it its mark in the archive.
+      const archived = mail.folder === "archive";
+      state.mails = state.mails.filter((item) => item !== mail);
+      if (reading) closeReader({ refocus: true });
+      render({ flip: true });
+      toast(`Diese Mail gibt es im Postfach nicht mehr${archived ? ". Sie ist aus dem Archiv genommen" : ""}.`, { icon: "info" });
+    } else if (reading) toast("Die ganze Mail ließ sich gerade nicht laden.", { icon: "wifi-off" });
   }
 }
 
@@ -1322,7 +1339,7 @@ async function startSync({ initial = false } = {}) {
   if (!result) {
     render({ flip: true });
     toast("Die Postfächer sind gerade nicht erreichbar.", { icon: "wifi-off" });
-    return;
+    return true;
   }
   state.accounts = result.accounts || [];
   const known = new Set(state.mails.map((mail) => mail.id));
@@ -1336,8 +1353,20 @@ async function startSync({ initial = false } = {}) {
   const fresh = inbox.filter((mail) => !known.has(mail.id)).map((mail) => mail.id);
   render({ flip: true });
   if (!initial) staggerIn(fresh.map(rowOf));
-  if ((result.failed || []).length) toast(`Nicht erreichbar: ${esc(result.failed.join(", "))}`, { icon: "wifi-off" });
+  const troubled = (result.failed || []).length > 0;
+  if (troubled) toast(`Nicht erreichbar: ${esc(result.failed.join(", "))}`, { icon: "wifi-off" });
   else if (!initial) announce(fresh.length ? `${fresh.length} neue ${fresh.length === 1 ? "Mail" : "Mails"}` : "Keine neuen Mails");
+  return troubled;
+}
+
+// A mail that was still waiting to go out when the app was closed, or that the mail server refused after the page was left.
+function tellUnsent() {
+  const unsent = state.mails.filter((mail) => mail.folder === "drafts" && mail.unsent).length;
+  if (!unsent) return;
+  toast(unsent === 1 ? "Eine Mail ist nicht rausgegangen. Sie liegt bei den Entwürfen." : `${unsent} Mails sind nicht rausgegangen. Sie liegen bei den Entwürfen.`, {
+    icon: "circle-alert",
+    action: state.folder === "drafts" ? undefined : { label: "Anzeigen", run: () => setFolder("drafts") },
+  });
 }
 
 let announceTimer = 0;
@@ -1463,7 +1492,8 @@ function onKey(event) {
   const mail = id ? byId(id) : null;
   if (key === "e" && mail && (mail.folder === "inbox" || mail.folder === "archive")) {
     event.preventDefault();
-    moveMail(id, mail.folder === "inbox" ? "archive" : "inbox");
+    if (mail.old) toast("Diese Mail gehört nicht mehr zu den neuesten im Postfach und bleibt deshalb im Archiv.", { icon: "info" });
+    else moveMail(id, mail.folder === "inbox" ? "archive" : "inbox");
   } else if (key === "u" && mail && !outgoing(mail)) {
     event.preventDefault();
     if (mail.read) markUnread(id);
@@ -1620,5 +1650,6 @@ export function init() {
   renderAlert();
   render();
   registerSearch(paletteItems);
-  startSync({ initial: true });
+  // Only one message shows at a time. If the first sync has trouble to report, that is given its time before this follows.
+  startSync({ initial: true }).then((troubled) => setTimeout(tellUnsent, troubled ? 6000 : 0));
 }

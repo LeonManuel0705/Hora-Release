@@ -1934,8 +1934,11 @@ function closePlaceForm(key) {
 
 // weatherFromHome is the town the forecast takes from home, "" where the address names none, and null while it does not go by home.
 // Only the desktop server knows that rule and says so, in the phone app the weather needs a place of its own.
-const followedWeather = (answer) => (answer && "weatherFromHome" in answer ? { weatherFromHome: answer.weatherFromHome } : {});
-const homeCountsForWeather = () => !!page.places?.weatherCanFollowHome && !!page.places?.home;
+const followedWeather = (answer) => ({
+  ...(answer && "weatherFromHome" in answer ? { weatherFromHome: answer.weatherFromHome } : {}),
+  ...(answer && "weatherCanFollowHome" in answer ? { weatherCanFollowHome: answer.weatherCanFollowHome } : {}),
+});
+const homeCountsForWeather = () => !!page.places?.weatherCanFollowHome;
 
 async function pickPlace(key, item) {
   try {
@@ -2371,10 +2374,15 @@ function deleteWarning(key) {
 }
 
 // What hangs on a subject is counted when the page loads. Before a subject goes it is counted again, so that a grade entered since then is not overlooked.
-async function askDeleteSubject(key) {
+async function countSubjectUse() {
+  if (root.dataset.shell) return;
   try {
     page.subjectUse = (await request("GET", "/api/ui/subjects/use")).use;
   } catch {}
+}
+
+async function askDeleteSubject(key) {
+  await countSubjectUse();
   if (catalog.subject !== key || !$("subjectConfirm")) return;
   if (data.subjects[key]?.custom && !cellsOf(key).length && !keptOnDelete(key)) {
     deleteSubject(key);
@@ -2903,15 +2911,19 @@ async function importData(file) {
   });
 }
 
-function wipeData() {
+async function wipeData() {
   const before = snapshot();
   if (!Object.keys(before).length) {
     toast("Auf diesem Gerät ist nichts gespeichert.", { icon: "trash-2" });
     return;
   }
-  restore({});
+  // An own subject that still has grades or entries cannot go for good, or they would be hidden. The server puts it aside, and so does the page.
+  await countSubjectUse();
+  const own = subjectStore().items;
+  const used = Object.keys(own).filter((key) => own[key]?.custom && keptOnDelete(key));
+  restore(used.length ? { [LOCAL_KEYS.subjects]: JSON.stringify({ items: Object.fromEntries(used.map((key) => [key, own[key]])), removed: used }) } : {});
   $("dataWipe")?.focus({ preventScroll: true });
-  toast("Alles auf diesem Gerät gelöscht", {
+  toast(used.length ? "Alles auf diesem Gerät gelöscht. Fächer mit Noten oder Einträgen stehen weiter unter „Gelöscht“." : "Alles auf diesem Gerät gelöscht", {
     icon: "trash-2",
     action: { label: "Rückgängig", undo: true, run: () => {
       restore(before);

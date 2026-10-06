@@ -84,11 +84,10 @@ function focusMark() {
   return { note, part: active === row ? "" : CONTROLS.find((selector) => active.matches(selector)) || "" };
 }
 
-function render() {
+function render(mark = focusMark()) {
   const toggle = $("notesToggle");
   const list = $("notesList");
   const shown = state.notes.length > 0;
-  const mark = focusMark();
   toggle.hidden = !shown;
   $("notesLabel").textContent = labelText();
   toggle.setAttribute("aria-expanded", String(state.open && shown));
@@ -105,9 +104,11 @@ function render() {
 function arrive(note, attempt = 0) {
   return noteApi.create(note).then((saved) => {
     if (!saved?.id) return;
+    // Where the focus is has to be read while the list still carries the old id.
+    const mark = focusMark();
     if (state.editing === note.id) state.editing = saved.id;
     note.id = saved.id;
-    if (state.notes.includes(note)) render();
+    if (state.notes.includes(note)) render(mark);
   }, () => (attempt < 3 && state.notes.includes(note) ? pause(3000 * (attempt + 1)).then(() => arrive(note, attempt + 1)) : undefined));
 }
 
@@ -133,8 +134,9 @@ function take(id, { after = Promise.resolve() } = {}) {
   exitInPlace(row).then(() => {
     render();
     if (!hadFocus) return;
+    // Not into a text field: there the undo key would belong to the field and not to the toast that offers it.
     const next = state.notes[Math.min(index, state.notes.length - 1)];
-    const target = next ? rowOf(next.id)?.querySelector("[data-note-edit], [name='title']") : document.getElementById("quickInput");
+    const target = next ? rowOf(next.id)?.querySelector("[data-note-edit], [name='title']") : document.querySelector("#taskGroups .row .row-open, #tasksDoneToggle:not([hidden])");
     target?.focus({ preventScroll: true });
   });
   return { note, back: () => gone.then((removed) => put(note, index, { create: removed })) };
