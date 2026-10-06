@@ -6,6 +6,7 @@ import copy
 import json
 import re
 import threading
+import time
 import uuid
 import zlib
 from datetime import date, datetime, timedelta
@@ -274,7 +275,9 @@ def school_setup(settings):
 
 def is_own_subject(own):
     """Whether what the settings store under a key is an own subject that can be shown."""
-    return isinstance(own, dict) and bool(own.get('custom')) and isinstance(own.get('name'), str) and bool(own['name'].strip()) and own.get('hue') in HUES
+    if not isinstance(own, dict) or not own.get('custom') or not isinstance(own.get('name'), str) or not own['name'].strip():
+        return False
+    return isinstance(own.get('hue'), str) and own['hue'] in HUES
 
 
 def custom_subjects(catalog, put_aside=False):
@@ -1017,37 +1020,42 @@ def page_tasks(data, school, settings, today, iserv):
     return {'notes': notes()}
 
 
-# How long a mail may be on its way: the page waits some seconds before it sends, then the mail server has its say.
-MAIL_SENDING = timedelta(seconds=90)
+# How long a mail may be on its way, in seconds: the page waits some before it sends, then the mail server has its say.
+MAIL_SENDING = 90
+# A send belongs to the process that runs it. What an earlier run of the app left "on its way" never went out.
+STARTED = time.time()
 
 
-def mail_drafts(now=None):
-    """The drafts as the mail page shows them, newest first.
+def mail_draft_state(now=None):
+    """The drafts as the mail page shows them, newest first, and how many mails are on their way right now.
 
     A mail stays a stored draft until it is out. While it is on its way it is not listed, or a page loaded in that
     moment would offer it for sending a second time. If it never went out, it is listed and says so.
+    The times are seconds since 1970, so that a change of the clock does not move them.
     """
     try:
         stored = load_list('mail_drafts')
     except StoreError:
-        return []
-    now = now or datetime.now()
-    drafts = []
+        return [], 0
+    now = time.time() if now is None else now
+    drafts, on_the_way = [], 0
     for item in stored:
-        if not isinstance(item, dict) or not item.get('id'):
+        if not isinstance(item, dict) or not item.get('id') or item.get('sent_at'):
             continue
-        try:
-            started = datetime.fromisoformat(str(item.get('sending_at') or ''))
-        except ValueError:
-            started = None
-        if started and timedelta(0) <= now - started < MAIL_SENDING:
+        started = item.get('sending_at')
+        if isinstance(started, (int, float)) and started >= STARTED and 0 <= now - started < MAIL_SENDING:
+            on_the_way += 1
             continue
         drafts.append({
             'id': str(item.get('id') or ''), 'to': str(item.get('to') or ''), 'subject': str(item.get('subject') or ''), 'body': str(item.get('body') or ''),
             'replyTo': item.get('reply_to') or None, 'account': item.get('account') or None, 'saved': str(item.get('saved_at') or ''),
             'unsent': bool(started or item.get('unsent')),
         })
-    return sorted(drafts, key=lambda draft: draft['saved'], reverse=True)
+    return sorted(drafts, key=lambda draft: draft['saved'], reverse=True), on_the_way
+
+
+def mail_drafts(now=None):
+    return mail_draft_state(now)[0]
 
 
 def archived_mails():
@@ -1059,7 +1067,8 @@ def archived_mails():
 
 
 def page_email(data, school, settings, today, iserv):
-    return {'messages': [], 'contacts': [], 'drafts': mail_drafts()}
+    drafts, on_the_way = mail_draft_state()
+    return {'messages': [], 'contacts': [], 'drafts': drafts, 'draftsPending': on_the_way}
 
 
 def subject_use():

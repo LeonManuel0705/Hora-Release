@@ -47,6 +47,8 @@ class Imap:
     def with_noise(answer):
         """Another app changed a flag in this moment: the server slips in a line about some other mail."""
         line = b'3 (UID 11 FLAGS (\\Seen))'
+        if Imap.noise == 'unreadable':
+            return [answer[0][0].split(b' RFC822')[0] + b' RFC822 NIL)']
         return [line, *answer] if Imap.noise == 'before' else [*answer, line] if Imap.noise == 'after' else answer
 
     def uid(self, command, *args):
@@ -201,6 +203,14 @@ def test_a_line_about_another_mail_in_the_answer_changes_nothing(mailbox, noise)
     listed = mailbox.fetch_emails(ACCOUNT, 'INBOX', 20)['emails']
     assert [(mail['id'], mail['subject'], mail['read']) for mail in listed] == [('205', 'Dritte', False), ('40', 'Zweite', False), ('11', 'Erste', False)]
     assert mailbox.get_email_detail(ACCOUNT, '40')['email']['subject'] == 'Zweite'
+    assert mailbox.get_email_detail(ACCOUNT, '999').get('gone') is True
+
+
+def test_a_mail_the_server_cannot_read_is_not_taken_for_gone(mailbox):
+    Imap.box = {11: letter('Erste'), 40: letter('Zweite')}
+    Imap.noise = 'unreadable'
+    assert mailbox.get_email_detail(ACCOUNT, '40') == {'success': False, 'error': 'Could not fetch email'}
+    assert mailbox.fetch_emails(ACCOUNT, 'INBOX', 20) == {'success': True, 'emails': []}
     assert mailbox.get_email_detail(ACCOUNT, '999').get('gone') is True
 
 

@@ -878,6 +878,21 @@ def mail_inbox():
 
 MAIL_DRAFTS, MAIL_ARCHIVE, MAIL_BODY = 500, 2000, 100000
 DRAFT_ID = r'draft-[0-9a-z-]{1,40}'
+# Once a mail is out, only the id of its draft is kept for a while. A second page that still shows the draft
+# can then neither send the mail again nor store the draft back.
+SENT_DRAFTS = 200
+ALREADY_SENT = 'Diese Mail ist schon rausgegangen'
+
+
+def _sent(item):
+    return isinstance(item, dict) and bool(item.get('sent_at'))
+
+
+@bp.route('/api/ui/mail/drafts')
+def mail_draft_list():
+    """The drafts once more. A page loaded while a mail was on its way asks again, in case that mail did not go out after all."""
+    drafts, on_the_way = ui_data.mail_draft_state()
+    return jsonify({'success': True, 'drafts': drafts, 'pending': on_the_way})
 
 
 @bp.route('/api/ui/mail/drafts/<ref>', methods=['PUT', 'DELETE'])
@@ -900,23 +915,28 @@ def mail_draft(ref):
             'saved_at': datetime.now().isoformat(timespec='seconds'),
         }
         if payload.get('sending'):
-            draft['sending_at'] = draft['saved_at']
+            draft['sending_at'] = time.time()
         if not (draft['to'] or draft['subject'] or draft['body'].strip()):
             draft = None
 
     def change(items):
+        if any(_sent(item) and item.get('id') == ref for item in items):
+            return 'sent'
         kept = [item for item in items if not (isinstance(item, dict) and item.get('id') == ref)]
         # Something written is never dropped to make room: a further draft is refused instead.
-        if draft and len(kept) == len(items) and len(kept) >= MAIL_DRAFTS:
-            return False
+        if draft and len(kept) == len(items) and sum(1 for item in kept if not _sent(item)) >= MAIL_DRAFTS:
+            return 'full'
         items[:] = [*kept, draft] if draft else kept
-        return True
+        return 'stored'
 
     try:
-        stored = ui_data.modify_list('mail_drafts', change)
+        outcome = ui_data.modify_list('mail_drafts', change)
     except ui_data.StoreError:
         return _error('Die Entwürfe ließen sich nicht lesen', 500)
-    return jsonify({'success': True}) if stored else _error('Zu viele Entwürfe. Räum zuerst den Ordner Entwürfe auf', 409)
+    if outcome == 'sent':
+        # A delete has nothing left to do. Storing it again would bring back the draft of a mail that went out.
+        return jsonify({'success': True}) if request.method == 'DELETE' else (jsonify({'success': False, 'error': ALREADY_SENT, 'sent': True}), 409)
+    return jsonify({'success': True}) if outcome == 'stored' else _error('Zu viele Entwürfe. Räum zuerst den Ordner Entwürfe auf', 409)
 
 
 @bp.route('/api/ui/mail/archive', methods=['PUT'])
@@ -1015,26 +1035,31 @@ def mail_send():
     draft = _text(payload.get('draft'), 60)
 
     def settle_draft(outcome):
+        """Marks the draft as on its way, as not sent, or as sent. Tells True if its mail went out before."""
         def change(items):
-            for index, item in enumerate(items):
-                if not isinstance(item, dict) or item.get('id') != draft:
-                    continue
-                if outcome == 'sent':
-                    del items[index]
-                elif outcome == 'sending':
-                    item['sending_at'] = datetime.now().isoformat(timespec='seconds')
-                else:
-                    item.pop('sending_at', None)
-                    item['unsent'] = True
-                return
+            found = next((item for item in items if isinstance(item, dict) and item.get('id') == draft), None)
+            if _sent(found):
+                return True
+            if outcome == 'sent':
+                others = [item for item in items if item is not found]
+                gone = [item for item in others if _sent(item)][:-(SENT_DRAFTS - 1)]
+                items[:] = [item for item in others if not any(item is old for old in gone)] + [{'id': draft, 'sent_at': time.time()}]
+            elif found and outcome == 'sending':
+                found['sending_at'] = time.time()
+            elif found:
+                found.pop('sending_at', None)
+                found['unsent'] = True
+            return False
 
-        if re.fullmatch(DRAFT_ID, draft):
-            try:
-                ui_data.modify_list('mail_drafts', change)
-            except ui_data.StoreError:
-                pass
+        if not re.fullmatch(DRAFT_ID, draft):
+            return False
+        try:
+            return ui_data.modify_list('mail_drafts', change)
+        except ui_data.StoreError:
+            return False
 
-    settle_draft('sending')
+    if settle_draft('sending'):
+        return jsonify({'success': False, 'error': ALREADY_SENT, 'sent': True}), 409
     try:
         if account.endswith('@iserv'):
             service = get_iserv_service()

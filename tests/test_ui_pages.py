@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -194,7 +195,7 @@ def test_an_own_subject_in_use_cannot_be_dropped_from_the_store(client):
 
     # Keeping the key but storing something under it that is no subject does not get rid of it either.
     whole = stored()["items"]["geo-used"]
-    for broken in ({}, {**whole, "custom": False}, {**whole, "name": " "}, {**whole, "hue": "kein-farbton"}, "Geografie", None):
+    for broken in ({}, {**whole, "custom": False}, {**whole, "name": " "}, {**whole, "hue": "kein-farbton"}, {**whole, "hue": ["moss"]}, "Geografie", None):
         assert client.put("/api/ui/store/app-subjects", json={"items": {"geo-used": broken}, "removed": []}).status_code == 200
         assert stored()["items"]["geo-used"] == whole and stored()["removed"] == ["geo-used"]
     assert any(item["id"] == grade["id"] for item in page_data(client, "/hub/school")["page"]["grades"])
@@ -771,14 +772,27 @@ def test_sending_a_mail_removes_the_draft_it_was_kept_as(client, monkeypatch):
     assert client.post("/api/ui/mail/send", json={**letter, "account": "leon@example.org", "draft": "../x"}).status_code == 200
     assert drafts() == ["draft-11"]
 
-    # The page marks the draft the moment "Senden" is pressed. If the app is closed before the mail leaves,
-    # the draft is back once the mail can no longer be on its way, and says that it was not sent.
+    # A second page that still shows the draft of the mail that went out can neither send it again nor store it back.
+    again = client.post("/api/ui/mail/send", json={**letter, "account": "leon@example.org", "draft": "draft-10"})
+    assert again.status_code == 409 and again.get_json()["sent"] is True and sent == ["falsch@example.org", "ben@example.org", "ben@example.org"]
+    stale = client.put("/api/ui/mail/drafts/draft-10", json={**letter, "body": "weiter getippt"})
+    assert stale.status_code == 409 and stale.get_json()["sent"] is True and drafts() == ["draft-11"]
+    assert client.delete("/api/ui/mail/drafts/draft-10").status_code == 200
+
+    # The page marks the draft the moment "Senden" is pressed. Until the mail can no longer be on its way it is not
+    # listed, and a page loaded then is told to ask again.
     assert client.put("/api/ui/mail/drafts/draft-12", json={**letter, "sending": True}).status_code == 200
-    assert drafts() == ["draft-11"]
-    later = datetime.now() + ui_data.MAIL_SENDING + timedelta(seconds=1)
+    assert drafts() == ["draft-11"] and page_data(client, "/hub/email")["page"]["draftsPending"] == 1
+    asked = client.get("/api/ui/mail/drafts").get_json()
+    assert ([item["id"] for item in asked["drafts"]], asked["pending"]) == (["draft-11"], 1)
+    later = time.time() + ui_data.MAIL_SENDING + 1
     assert {item["id"]: item["unsent"] for item in ui_data.mail_drafts(later)} == {"draft-11": False, "draft-12": True}
+    # If the app was closed before the mail left, nothing is on its way after the next start: the draft says so at once.
+    monkeypatch.setattr(ui_data, "STARTED", time.time() + 5)
+    assert unsent() == {"draft-11": False, "draft-12": True} and page_data(client, "/hub/email")["page"]["draftsPending"] == 0
     for ref in ("draft-11", "draft-12"):
         assert client.delete(f"/api/ui/mail/drafts/{ref}").status_code == 200
+    assert drafts() == []
 
 
 def test_notes_and_ideas_can_be_seen_changed_and_removed(client):

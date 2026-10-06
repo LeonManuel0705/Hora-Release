@@ -333,6 +333,10 @@ def _own_part(msg_data, uid):
             return raw, around.decode(errors='replace')
     if len(answers) == 1 and not re.search(rb'\bUID \d+', answers[0][1]):
         return answers[0][0], answers[0][1].decode(errors='replace')
+    # The server knows the mail but sent no text for it, as some do for a mail they cannot read. That is not "gone".
+    for part in msg_data or []:
+        if isinstance(part, bytes) and wanted.search(part):
+            return None, part.decode(errors='replace')
     return None
 
 
@@ -390,7 +394,7 @@ def fetch_emails(email: str, folder: str = "INBOX", limit: int = 20) -> Dict:
         for msg_id in message_ids:
             status, msg_data = imap.uid("fetch", msg_id.decode(), "(RFC822 FLAGS)")
             answer = _own_part(msg_data, msg_id) if status == "OK" else None
-            if not answer:
+            if not answer or answer[0] is None:
                 continue
 
             import email
@@ -454,10 +458,10 @@ def get_email_detail(email_addr: str, msg_id: str, folder: str = "INBOX") -> Dic
 
         status, msg_data = imap.uid("fetch", str(msg_id), "(RFC822)")
         answer = _own_part(msg_data, msg_id) if status == "OK" else None
-        if not answer:
+        if not answer or answer[0] is None:
             imap.logout()
             # The server answered and has nothing under this UID: the mail was moved or deleted elsewhere.
-            return {"success": False, "error": "Could not fetch email", **({"gone": True} if status == "OK" else {})}
+            return {"success": False, "error": "Could not fetch email", **({"gone": True} if status == "OK" and not answer else {})}
 
         import email
         raw_email = answer[0]
