@@ -1854,10 +1854,10 @@ function renderPlaces() {
   const info = page.places || {};
   const weather = placeState.editing
     ? `<form class="set-row is-stack place-form" id="weatherForm" novalidate>
-        <div class="set-row-text"><label class="set-row-label" for="weatherInput">Wetter</label><p class="set-row-desc" id="weatherDesc">Ort für die Vorhersage auf der Übersicht</p></div>
+        <div class="set-row-text"><label class="set-row-label" for="weatherInput">Wetter</label><p class="set-row-desc" id="weatherDesc">Ort für die Vorhersage auf der Übersicht. Bleibt das Feld leer, gilt Zuhause.</p></div>
         <div class="set-row-control"><input class="field-control" id="weatherInput" value="${esc(prefs.places.weather)}" maxlength="40" autocomplete="address-level2" aria-describedby="weatherDesc weatherError"><button class="btn btn-quiet" type="button" id="weatherCancel">Abbrechen</button><button class="btn btn-primary" type="submit">Speichern</button>${errorHtml("weatherError", "")}</div>
       </form>`
-    : row({ id: "rowWeather", label: "Wetter", desc: "Ort für die Vorhersage auf der Übersicht", cls: "is-stack", control: `<span class="set-value">${esc(prefs.places.weather || "Noch nicht festgelegt")}</span><button class="btn btn-quiet" type="button" id="weatherEdit">${prefs.places.weather ? "Ändern" : "Festlegen"}</button>` });
+    : row({ id: "rowWeather", label: "Wetter", desc: "Ort für die Vorhersage auf der Übersicht", cls: "is-stack", control: `<span class="set-value">${esc(prefs.places.weather || (info.weatherFromHome ? `${info.weatherFromHome}, wie Zuhause` : "Noch nicht festgelegt"))}</span><button class="btn btn-quiet" type="button" id="weatherEdit">${prefs.places.weather ? "Ändern" : "Festlegen"}</button>` });
   const placeRow = (key, id, label, desc) => {
     if (placeState.place === key) {
       return `<form class="set-row is-stack place-form" id="placeForm" data-place="${key}" novalidate autocomplete="off">
@@ -1881,13 +1881,13 @@ async function saveWeatherPlace(value, input) {
   const before = prefs.places.weather;
   try {
     const result = await request("PUT", "/api/ui/weather/place", { name: value });
-    const place = result.place || value;
+    const place = value ? result.place || value : "";
     placeState.editing = false;
-    page.places = { ...(page.places || {}), weather: place };
+    page.places = { ...(page.places || {}), weather: place, weatherFromHome: place ? "" : result.weatherFromHome || "" };
     prefs.places.weather = place;
     savePrefs();
     renderPlaces();
-    if (place !== before) toast(`Wetter jetzt für ${esc(place)}`, { icon: "map-pin" });
+    if (place !== before) toast(place ? `Wetter jetzt für ${esc(place)}` : "Das Wetter richtet sich wieder nach Zuhause", { icon: "map-pin" });
     $("weatherEdit")?.focus({ preventScroll: true });
   } catch (error) {
     setError(input, $("weatherError"), error.message || "Diesen Ort finde ich gerade nicht. Versuch es mit dem Namen der Stadt.");
@@ -1932,10 +1932,12 @@ function closePlaceForm(key) {
   placesCard().querySelector(`[data-place-edit="${key}"]`)?.focus({ preventScroll: true });
 }
 
+const followedWeather = (answer) => (typeof answer?.weatherFromHome === "string" ? { weatherFromHome: answer.weatherFromHome } : {});
+
 async function pickPlace(key, item) {
   try {
-    await request("PUT", `/api/ui/places/${key}`, { name: item.name, area: item.area || "", lat: item.lat, lon: item.lon, stop: item.kind === "stop" ? item.id : "" });
-    page.places = { ...(page.places || {}), [key]: placeLine(item) };
+    const saved = await request("PUT", `/api/ui/places/${key}`, { name: item.name, area: item.area || "", lat: item.lat, lon: item.lon, stop: item.kind === "stop" ? item.id : "" });
+    page.places = { ...(page.places || {}), [key]: placeLine(item), ...followedWeather(saved) };
     closePlaceForm(key);
     toast(`${PLACE_WORDS[key]}: ${esc(placeLine(item))}`, { icon: "map-pin" });
   } catch {
@@ -1947,15 +1949,15 @@ async function removePlace(key) {
   const before = (page.places || {})[key] || "";
   try {
     const result = await request("DELETE", `/api/ui/places/${key}`);
-    page.places = { ...(page.places || {}), [key]: "" };
+    page.places = { ...(page.places || {}), [key]: "", ...followedWeather(result) };
     closePlaceForm(key);
     const removed = result?.removed;
     toast(`${PLACE_WORDS[key]} entfernt`, {
       icon: "map-pin",
       action: removed && before ? { label: "Rückgängig", undo: true, run: async () => {
         try {
-          await request("PUT", `/api/ui/places/${key}`, removed);
-          page.places = { ...(page.places || {}), [key]: before };
+          const restored = await request("PUT", `/api/ui/places/${key}`, removed);
+          page.places = { ...(page.places || {}), [key]: before, ...followedWeather(restored) };
           renderPlaces();
         } catch {
           toast("Der Ort ließ sich gerade nicht zurückholen.", { icon: "circle-alert" });
@@ -2032,7 +2034,7 @@ function bindPlaces() {
     if (event.target.id !== "weatherForm") return;
     const input = $("weatherInput");
     const value = input.value.replace(/\s+/g, " ").trim();
-    if (!value) {
+    if (!value && !(page.places || {}).home) {
       setError(input, $("weatherError"), "Trag einen Ort ein, zum Beispiel Potsdam.");
       input.focus();
       return;
@@ -2196,9 +2198,9 @@ function subjectFormHtml(key) {
     return `<label class="hue-pick" style="--swatch:var(--hue-${item})" data-tip="${esc(text)}"><input type="radio" name="hue" value="${item}"${item === hue ? " checked" : ""}><span class="visually-hidden">${esc(text)}</span>${icon("check")}</label>`;
   }).join("");
   const types = COURSE_TYPES.map((item) => `<label class="choice"><input type="radio" name="type" value="${item}"${item === type ? " checked" : ""}><span>${COURSE_WORDS[item]}</span></label>`).join("");
-  const iserv = !creating && !info.custom;
+  const kept = !creating && keptOnDelete(key);
   const lessonsText = count ? `${esc(info.label)} steht in ${plural(count, "Stunde", "Stunden")} im Stundenplan. Beim Löschen werden sie geleert.` : "";
-  const gradesText = iserv ? `Die Noten ${count ? "" : `von ${esc(info.label)} `}bleiben erhalten und zählen weiter im Schnitt. Tests und Abgaben des Fachs blendet ${BRAND} aus, unter „Gelöscht“ holst du es zurück.` : "";
+  const gradesText = kept ? `Die Noten ${count ? "" : `von ${esc(info.label)} `}bleiben erhalten und zählen weiter im Schnitt. Tests und Abgaben des Fachs blendet ${BRAND} aus, unter „Gelöscht“ holst du es zurück.` : "";
   return `<form class="set-form subject-form" id="subjectForm" data-key="${esc(key)}" novalidate aria-labelledby="subjectFormTitle">
       <p class="set-form-title" id="subjectFormTitle">${creating ? "Neues Fach" : `${esc(info.label)} bearbeiten`}</p>
       <div class="set-form-grid">
@@ -2355,19 +2357,26 @@ function saveSubject(formNode) {
   }
 }
 
+// A subject from the school plan, and an own one that has grades or entries, is only put aside: its grades stay visible and count on.
+function keptOnDelete(key) {
+  const use = page.subjectUse?.[key];
+  return !data.subjects[key]?.custom || !!(use && (use.grades || use.entries));
+}
+
 function deleteSubject(key) {
   const info = data.subjects[key];
   if (!info) return;
   const shown = cellsOf(key).length;
   const iserv = !info.custom;
+  const kept = keptOnDelete(key);
   commitCatalog((draft) => {
     cellsOf(key, { all: true }).forEach(([week, dow, n]) => {
       if (iserv && baseLesson(week, dow, n)?.subject === key) delete draft.lessons[cellKey(week, dow, n)];
       else setLesson(draft.lessons, week, dow, n, null);
     });
-    if (!iserv) delete draft.subjects.items[key];
+    if (!kept) delete draft.subjects.items[key];
     else if (!draft.subjects.removed.includes(key)) draft.subjects.removed.push(key);
-  }, `${esc(info.label)} gelöscht${shown ? `, ${plural(shown, "Stunde", "Stunden")} geleert` : ""}${iserv ? ". Die Noten bleiben im Schnitt." : ""}`, "trash-2");
+  }, `${esc(info.label)} gelöscht${shown ? `, ${plural(shown, "Stunde", "Stunden")} geleert` : ""}${kept ? ". Die Noten bleiben im Schnitt." : ""}`, "trash-2");
   catalog.subject = null;
   renderSubjects();
   $("subjectAdd")?.focus({ preventScroll: true });

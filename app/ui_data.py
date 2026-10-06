@@ -263,10 +263,18 @@ def school_setup(settings):
     subjects_view = {key: {k: v for k, v in info.items() if k != 'type'} for key, info in catalog.items()}
     courses = {key: {'type': info['type']} for key, info in catalog.items()}
     known = {**subjects_view, **custom_subjects(catalog)}
-    return {'subjects': subjects_view, 'known': known, 'courses': courses, 'blocks': periods, 'timetable': timetable, 'abReference': reference, 'abWeeks': ab_on}
+    shown = {**known, **custom_subjects(catalog, put_aside=True)}
+    return {
+        'subjects': subjects_view, 'known': known, 'shown': shown, 'courses': courses, 'blocks': periods, 'timetable': timetable,
+        'abReference': reference, 'abWeeks': ab_on,
+    }
 
 
-def custom_subjects(catalog):
+def custom_subjects(catalog, put_aside=False):
+    """The subjects made in the settings. With put_aside those that were deleted but kept, because grades or entries hang on them.
+
+    New entries only take the first kind ('known'), what is stored is shown for both ('shown').
+    """
     saved = db.get_ui_store().get('app-subjects')
     items = saved.get('items') if isinstance(saved, dict) else None
     if not isinstance(items, dict):
@@ -274,7 +282,7 @@ def custom_subjects(catalog):
     removed = saved.get('removed') if isinstance(saved.get('removed'), list) else []
     result = {}
     for key, own in items.items():
-        if key in catalog or key in removed or not isinstance(own, dict) or not own.get('custom'):
+        if key in catalog or (key in removed) != put_aside or not isinstance(own, dict) or not own.get('custom'):
             continue
         name = own['name'].strip()[:32] if isinstance(own.get('name'), str) else ''
         if not name or own.get('hue') not in HUES:
@@ -369,13 +377,13 @@ def effective_school(settings=None, store=None):
             label = info['name']
         subjects[key] = {'name': label, 'type': kind, 'retired': key in removed}
     for key, own in items.items():
-        if key in subjects or key in removed or not isinstance(own, dict) or not own.get('custom'):
+        if key in subjects or not isinstance(own, dict) or not own.get('custom'):
             continue
         name = own['name'].strip()[:32] if isinstance(own.get('name'), str) else ''
         if not name or own.get('hue') not in HUES:
             continue
         kind = own.get('type') if own.get('type') in COURSE_TYPES else 'GK'
-        subjects[key] = {'name': f"{name}{' LK' if kind == 'LK' else ''}", 'type': kind, 'retired': False}
+        subjects[key] = {'name': f"{name}{' LK' if kind == 'LK' else ''}", 'type': kind, 'retired': key in removed}
 
     stored = [entry for days in school['timetable'].values() for entries in days.values() for entry in entries]
     teachers = _teachers(stored, saved('app-teachers'))
@@ -469,7 +477,7 @@ def deadline_view(prefix, item, school, today):
     if not when:
         return None
     subject_key = str(item.get('subject_id') or '')
-    if subject_key not in school['known']:
+    if subject_key not in school['shown']:
         subject_key = None
     detail = item.get('notes') if prefix == 'hw' else item.get('topics')
     view = {
@@ -653,6 +661,25 @@ _weather_lock = threading.Lock()
 
 
 def weather_location(settings):
+    """The place the forecast is for: the one set in the settings, otherwise home."""
+    return chosen_weather_place(settings) or home_weather_place()
+
+
+def home_weather_place():
+    """Home as the place for the forecast, named after its town. The coordinates are rounded, the forecast needs no street."""
+    home = known_places().get('home')
+    if not isinstance(home, dict):
+        return None
+    lat, lon = home.get('latitude'), home.get('longitude')
+    if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+        return None
+    address, name = str(home.get('address') or ''), str(home.get('name') or '')
+    town = re.search(r'\b\d{5}\s+([^,]+)', address)
+    city = (town.group(1) if town else address.split(',')[-1] or name.split(',')[0]).strip()[:80]
+    return {'city': city, 'lat': round(lat, 1), 'lon': round(lon, 1)} if city else None
+
+
+def chosen_weather_place(settings):
     try:
         value = json.loads((settings or {}).get('location_json') or 'null')
     except (TypeError, ValueError):
@@ -804,7 +831,7 @@ def build(active, store, now):
     today = now.date()
     settings = db.get_timetable_settings() or {}
     school = school_setup(settings)
-    plan, pool = tasks(school['known'], today)
+    plan, pool = tasks(school['shown'], today)
     iserv = iserv_account()
     data = {
         'user': {},
@@ -871,7 +898,7 @@ def page_school(data, school, settings, today, iserv):
         subject_key = str(item.get('subject_id') or '')
         points = item.get('points')
         when = iso_day(item.get('date')) or today.isoformat()
-        if subject_key not in school['known'] or not isinstance(points, (int, float)):
+        if subject_key not in school['shown'] or not isinstance(points, (int, float)):
             continue
         term = str(item.get('semester') or semester)
         entry = {
@@ -935,9 +962,26 @@ def page_email(data, school, settings, today, iserv):
     return {'messages': [], 'contacts': []}
 
 
+def subject_use():
+    """How many grades and how many tests, exams and homework entries each subject has. A subject that has some is kept when it is deleted."""
+    use = {}
+    for name, field in (('grades', 'grades'), ('tests', 'entries'), ('exams', 'entries'), ('homework', 'entries')):
+        try:
+            items = load_list(name)
+        except StoreError:
+            continue
+        for item in items:
+            key = item.get('subject_id') if isinstance(item, dict) else None
+            if isinstance(key, str) and key:
+                use.setdefault(key, {'grades': 0, 'entries': 0})[field] += 1
+    return use
+
+
 def page_settings(data, school, settings, today, iserv):
     google = load_dict('google')
-    city = (weather_location(settings) or {}).get('city') or ''
+    chosen = (chosen_weather_place(settings) or {}).get('city') or ''
+    followed = '' if chosen else (home_weather_place() or {}).get('city') or ''
+    city = chosen or followed
     known = known_places()
     return {
         'school': {
@@ -955,8 +999,10 @@ def page_settings(data, school, settings, today, iserv):
             'google': {'connected': bool(google), 'calendars': []},
         },
         'notifications': copy.deepcopy(NOTIFY_DEFAULTS),
+        'subjectUse': subject_use(),
         'places': {
-            'weather': city or '',
+            'weather': chosen,
+            'weatherFromHome': followed,
             'home': place_line(known.get('home')),
             'school': place_line(known.get('school')),
         },

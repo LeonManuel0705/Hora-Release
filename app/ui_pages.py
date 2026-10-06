@@ -637,6 +637,16 @@ def substitution_plan_file(page):
     return response
 
 
+def _weather_follows_home(refresh=False):
+    """The town the forecast takes from home while no place of its own is set, '' otherwise."""
+    if ui_data.chosen_weather_place({'location_json': db.get_location_setting()}):
+        return ''
+    place = ui_data.home_weather_place()
+    if place and refresh:
+        ui_data.refresh_weather_soon(place)
+    return (place or {}).get('city') or ''
+
+
 @bp.route('/api/ui/places/<key>', methods=['PUT', 'DELETE'])
 def save_place(key):
     if key not in ('home', 'school'):
@@ -647,6 +657,7 @@ def save_place(key):
         known = (service.get_known_locations().get('locations') or {}).get(key)
         service.delete_known_location(key)
         removed = None
+        follows = _weather_follows_home() if key == 'home' else None
         if isinstance(known, dict) and known.get('name') and known.get('latitude') is not None and known.get('longitude') is not None:
             removed = {
                 'name': known['name'],
@@ -655,7 +666,7 @@ def save_place(key):
                 'lon': known['longitude'],
                 'stop': (known.get('id') or '') if known.get('type') == 'stop' else '',
             }
-        return jsonify({'success': True, 'removed': removed})
+        return jsonify({'success': True, 'removed': removed, **({'weatherFromHome': follows} if follows is not None else {})})
     payload = _payload()
     if payload is None:
         return _error('JSON erwartet')
@@ -677,7 +688,10 @@ def save_place(key):
         'address': _text(payload.get('area'), 120),
     }
     service.save_known_location(key, location)
-    return jsonify({'success': True, 'place': ui_data.place_view('Zuhause' if key == 'home' else 'Schule', location)})
+    answer = {'success': True, 'place': ui_data.place_view('Zuhause' if key == 'home' else 'Schule', location)}
+    if key == 'home':
+        answer['weatherFromHome'] = _weather_follows_home(refresh=True)
+    return jsonify(answer)
 
 
 @bp.route('/api/ui/weather/place', methods=['PUT'])
@@ -687,7 +701,10 @@ def weather_place():
         return _error('JSON erwartet')
     name = _text(payload.get('name'), 80)
     if not name:
-        return _error('Trag einen Ort ein, zum Beispiel Potsdam.')
+        if not ui_data.home_weather_place():
+            return _error('Trag einen Ort ein, zum Beispiel Potsdam.')
+        db.save_location_setting('')
+        return jsonify({'success': True, 'place': '', 'weatherFromHome': _weather_follows_home(refresh=True)})
     try:
         place = ui_data.geocode(name)
     except Exception:

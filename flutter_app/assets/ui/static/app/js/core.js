@@ -509,10 +509,10 @@ function resolveSubjects(teachers) {
     result[key] = make({ ...info, type: defaultType(key, info), teacher: teacher ? teacherId(teacher) : "", room: defaultRoom(key), custom: false, retired: removed.has(key) }, items[key] || {});
   });
   Object.entries(items).forEach(([key, own]) => {
-    if (result[key] || removed.has(key) || schoolDefaults.subjects[key] || !own?.custom) return;
+    if (result[key] || schoolDefaults.subjects[key] || !own?.custom) return;
     const name = typeof own.name === "string" ? own.name.trim() : "";
     if (!name || !HUES.includes(own.hue)) return;
-    result[key] = make({ name, label: name, short: name.slice(0, 3), hue: own.hue, type: "GK", teacher: "", room: "", custom: true }, own);
+    result[key] = make({ name, label: name, short: name.slice(0, 3), hue: own.hue, type: "GK", teacher: "", room: "", custom: true, retired: removed.has(key) }, own);
   });
   return result;
 }

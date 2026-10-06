@@ -983,7 +983,7 @@ function renderWeather() {
   const place = data.weather?.place || "";
   $("weatherTitle").textContent = place ? `Wetter in ${place}` : "Wetter";
   if (!hasWeather()) {
-    $("weatherSummary").textContent = place ? `Für ${place} liegt gerade keine Vorhersage vor.` : "Leg in den Einstellungen unter Orte fest, für welchen Ort du das Wetter sehen willst.";
+    $("weatherSummary").textContent = place ? `Für ${place} liegt gerade keine Vorhersage vor.` : "Leg in den Einstellungen unter Orte dein Zuhause oder einen eigenen Ort für das Wetter fest.";
     $("weatherHours").innerHTML = "";
     return;
   }

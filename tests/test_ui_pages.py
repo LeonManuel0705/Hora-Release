@@ -150,6 +150,28 @@ def test_removed_or_unknown_subjects_take_no_grades(client):
     assert client.post("/api/ui/grades", json={"subject": "nirgends", "points": 9}).status_code == 400
 
 
+def test_an_own_subject_that_was_deleted_keeps_showing_its_grades(client):
+    own_subject(client, "geo-kept")
+    semester = page_data(client, "/hub/school")["page"]["semester"]
+    grade = client.post("/api/ui/grades", json={"subject": "geo-kept", "points": 11, "type": "test", "semester": semester, "title": "Klimazonen"}).get_json()["grade"]
+    when = (date.today() + timedelta(days=4)).isoformat()
+    test = client.post("/api/ui/deadlines", json={"kind": "Test", "title": "Stadtgeografie", "date": when, "subject": "geo-kept"}).get_json()["deadline"]
+    assert page_data(client, "/hub/settings")["page"]["subjectUse"]["geo-kept"] == {"grades": 1, "entries": 1}
+
+    own_subject(client, "geo-kept", removed=True)
+    school = page_data(client, "/hub/school")
+    assert any(item["id"] == grade["id"] and item["subject"] == "geo-kept" for item in school["page"]["grades"])
+    assert any(item["id"] == test["id"] and item["subject"] == "geo-kept" for item in school["deadlines"])
+    assert ui_data.effective_school()["subjects"]["geo-kept"] == {"name": "Geografie", "type": "GK", "retired": True, "teacher": ""}
+    assert client.post("/api/ui/grades", json={"subject": "geo-kept", "points": 9}).status_code == 400
+
+    own_subject(client, "geo-kept")
+    assert ui_data.effective_school()["subjects"]["geo-kept"]["retired"] is False
+    assert client.delete(f"/api/ui/grades/{grade['id']}").status_code == 200
+    assert client.delete(f"/api/ui/deadlines/{test['id']}").status_code == 200
+    assert "geo-kept" not in page_data(client, "/hub/settings")["page"]["subjectUse"]
+
+
 def test_event_round_trip(client):
     when = (date.today() + timedelta(days=1)).isoformat()
     event = client.post("/api/ui/events", json={"title": "Gym", "date": when, "start": "16:30", "end": "17:45", "kind": "training"}).get_json()["event"]
@@ -209,6 +231,43 @@ def test_weather_place_endpoint(client, monkeypatch):
     assert response.get_json() == {"success": True, "place": "Potsdam"}
     assert json.loads(db.get_location_setting())["city"] == "Potsdam"
     assert client.put("/api/ui/weather/place", json={"name": "Nirgendwo"}).status_code == 404
+    assert client.put("/api/ui/weather/place", json={"name": ""}).status_code == 400
+
+
+def test_without_a_place_of_its_own_the_weather_follows_home(client, monkeypatch):
+    saved = {}
+
+    class Places:
+        def save_known_location(self, key, location):
+            saved[key] = location
+
+        def delete_known_location(self, key):
+            saved.pop(key, None)
+
+        def get_known_locations(self):
+            return {"locations": saved}
+
+    from app import vbb_service
+    monkeypatch.setattr(vbb_service, "get_vbb_service", lambda: Places())
+    refreshed = []
+    monkeypatch.setattr(ui_data, "refresh_weather_soon", refreshed.append)
+    assert ui_data.weather_location({}) is None
+    home = {"name": "Unter den Linden 6", "area": "10117 Berlin", "lat": 52.5191, "lon": 13.3937, "stop": ""}
+    assert client.put("/api/ui/places/home", json=home).get_json()["weatherFromHome"] == "Berlin"
+    assert refreshed == [{"city": "Berlin", "lat": 52.5, "lon": 13.4}]
+    assert ui_data.weather_location({}) == {"city": "Berlin", "lat": 52.5, "lon": 13.4}
+    places = page_data(client, "/hub/settings")["page"]["places"]
+    assert (places["weather"], places["weatherFromHome"]) == ("", "Berlin")
+
+    monkeypatch.setattr(ui_data, "geocode", lambda name: {"city": "Potsdam", "lat": 52.39, "lon": 13.06})
+    client.put("/api/ui/weather/place", json={"name": "Potsdam"})
+    places = page_data(client, "/hub/settings")["page"]["places"]
+    assert (places["weather"], places["weatherFromHome"]) == ("Potsdam", "")
+    assert client.put("/api/ui/places/home", json=home).get_json()["weatherFromHome"] == ""
+
+    assert client.put("/api/ui/weather/place", json={"name": ""}).get_json() == {"success": True, "place": "", "weatherFromHome": "Berlin"}
+    assert client.delete("/api/ui/places/home").get_json()["weatherFromHome"] == ""
+    assert ui_data.weather_location({}) is None
     assert client.put("/api/ui/weather/place", json={"name": ""}).status_code == 400
 
 
