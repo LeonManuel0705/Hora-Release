@@ -3998,6 +3998,7 @@ def assistant_config():
 
     def view():
         config = ai.load_config()
+        ollama = ai.check_ollama_status()
         key = config.get('claude_api_key', '')
         masked = ''
         if key:
@@ -4008,7 +4009,8 @@ def assistant_config():
             'preferred_backend': config.get('preferred_backend', 'auto'),
             'ollama_model': config.get('ollama_model', 'llama3.2:1b'),
             'claude_model': config.get('claude_model', ai.CLAUDE_MODEL),
-            'ollama_models': ai.get_ollama_models(),
+            'ollama_running': ollama['available'],
+            'ollama_models': ollama.get('models', []),
             'active': ai.get_status(),
         }
 

@@ -674,7 +674,7 @@ function bind() {
     if (!shortcutsEnabled() || typing(event.target) || event.ctrlKey || event.metaKey || event.altKey || overlayOpen()) return;
     const key = event.key.toLowerCase();
     const rows = interactiveRows();
-    const current = document.activeElement?.closest?.(".row.is-interactive");
+    const current = document.activeElement?.closest?.(".row.is-interactive[data-id]");
     const index = rows.indexOf(current);
     if (key === "j" || key === "k") {
       event.preventDefault();

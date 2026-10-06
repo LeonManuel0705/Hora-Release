@@ -721,7 +721,7 @@ function saveNote(detail) {
   job.then((saved) => {
     // Only the desktop server answers with the whole note, and only there the task page lists notes.
     const listed = (detail.type === "note" || detail.type === "idea") && !!saved?.id && !!saved.title;
-    const action = listed && !document.getElementById("notesList") ? { label: "Ansehen", run: () => openPage("tasks", `${ROUTES.tasks}#notizen`) } : undefined;
+    const action = listed && !document.getElementById("notesList") ? { label: "Anzeigen", run: () => openPage("tasks", `${ROUTES.tasks}#notizen`) } : undefined;
     toast(`${words[detail.type]}${when} angelegt: „${esc(detail.title)}“`, { icon: "check", action });
     if (listed) document.dispatchEvent(new CustomEvent("app:note-created", { detail: saved }));
   }).catch(() => {});

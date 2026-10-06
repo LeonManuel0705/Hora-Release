@@ -6,7 +6,7 @@ import {
 import { animates, travels, rich, level, flipKeyed, exitInPlace, enterInPlace, setDigits, pop, crossfade, swapText, breath, chalkCheck, bezier, token, ms } from "./motion.js";
 import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
 import { toast, openPage, registerSearch, typing, shortcutsEnabled, overlayOpen, placeNear, clampSheet, parseNote, cleanTitle, syncTime } from "./shell.js";
-import { tasks as taskApi, deadlines as deadlineApi, notes as noteApi, serverId } from "./api.js";
+import { tasks as taskApi, deadlines as deadlineApi, serverId } from "./api.js";
 
 const $ = (id) => document.getElementById(id);
 const DAY_START = data.blocks?.length ? Math.min(...data.blocks.map((block) => toMin(block.start))) : 480;
@@ -981,9 +981,14 @@ function renderWeek(day) {
 
 function renderWeather() {
   const place = data.weather?.place || "";
-  $("weatherTitle").textContent = place ? `Wetter in ${place}` : "Wetter";
+  // A home whose address names no town still gets its forecast, only without a name for it.
+  const atHome = !place && !!data.weather?.fromHome;
+  $("weatherTitle").textContent = place ? `Wetter in ${place}` : atHome ? "Wetter zu Hause" : "Wetter";
   if (!hasWeather()) {
-    $("weatherSummary").textContent = place ? `Für ${place} liegt gerade keine Vorhersage vor.` : "Leg in den Einstellungen unter Orte dein Zuhause oder einen eigenen Ort für das Wetter fest.";
+    const setUp = data.weather?.canFollowHome
+      ? "Leg in den Einstellungen unter Orte dein Zuhause oder einen eigenen Ort für das Wetter fest."
+      : "Leg in den Einstellungen unter Orte fest, für welchen Ort du das Wetter sehen willst.";
+    $("weatherSummary").textContent = place ? `Für ${place} liegt gerade keine Vorhersage vor.` : atHome ? "Für dein Zuhause liegt gerade keine Vorhersage vor." : setUp;
     $("weatherHours").innerHTML = "";
     return;
   }
@@ -1493,23 +1498,23 @@ function bindEvents() {
   window.addEventListener("app:add-task", openAddRow);
   window.addEventListener("app:weather-open", renderWeather);
   window.addEventListener("app:note", (event) => {
-    event.preventDefault();
     const detail = event.detail;
+    // Notes and ideas have no place on the overview. The shell stores them and points to where they are listed.
+    if (detail.type !== "task" && detail.type !== "homework") return;
+    event.preventDefault();
     const today = todayIso();
-    const typeWords = { task: "Aufgabe", homework: "Hausaufgabe", note: "Notiz", idea: "Idee" };
+    const typeWords = { task: "Aufgabe", homework: "Hausaufgabe" };
     const date = detail.type === "homework" ? detail.date || homeworkDate(detail.subject) : detail.date;
     const when = date && date !== today ? ` für ${shortDate(parseDate(date))}` : "";
     let id = null;
     if (detail.type === "task") {
       id = createTask({ title: detail.title, subjectKey: detail.subject, date: detail.date, block: detail.block, notes: detail.details || "" }).id;
-    } else if (detail.type === "homework") {
+    } else {
       id = `hw-new-${Date.now()}`;
       const item = { id, kind: "Hausaufgabe", title: detail.title, subject: detail.subject || null, date, block: detail.block, detail: detail.details || "", status: "offen" };
       state.deadlines.push(item);
       deadlineApi.create(item);
       settleLists();
-    } else {
-      noteApi.create({ type: detail.type, title: detail.title, details: detail.details });
     }
     toast(`${typeWords[detail.type]}${when} angelegt: „${esc(detail.title)}“`, {
       icon: "check",

@@ -1854,10 +1854,10 @@ function renderPlaces() {
   const info = page.places || {};
   const weather = placeState.editing
     ? `<form class="set-row is-stack place-form" id="weatherForm" novalidate>
-        <div class="set-row-text"><label class="set-row-label" for="weatherInput">Wetter</label><p class="set-row-desc" id="weatherDesc">Ort für die Vorhersage auf der Übersicht. Bleibt das Feld leer, gilt Zuhause.</p></div>
+        <div class="set-row-text"><label class="set-row-label" for="weatherInput">Wetter</label><p class="set-row-desc" id="weatherDesc">Ort für die Vorhersage auf der Übersicht.${homeCountsForWeather() ? " Bleibt das Feld leer, gilt Zuhause." : ""}</p></div>
         <div class="set-row-control"><input class="field-control" id="weatherInput" value="${esc(prefs.places.weather)}" maxlength="40" autocomplete="address-level2" aria-describedby="weatherDesc weatherError"><button class="btn btn-quiet" type="button" id="weatherCancel">Abbrechen</button><button class="btn btn-primary" type="submit">Speichern</button>${errorHtml("weatherError", "")}</div>
       </form>`
-    : row({ id: "rowWeather", label: "Wetter", desc: "Ort für die Vorhersage auf der Übersicht", cls: "is-stack", control: `<span class="set-value">${esc(prefs.places.weather || (info.weatherFromHome ? `${info.weatherFromHome}, wie Zuhause` : "Noch nicht festgelegt"))}</span><button class="btn btn-quiet" type="button" id="weatherEdit">${prefs.places.weather ? "Ändern" : "Festlegen"}</button>` });
+    : row({ id: "rowWeather", label: "Wetter", desc: "Ort für die Vorhersage auf der Übersicht", cls: "is-stack", control: `<span class="set-value">${esc(prefs.places.weather || (typeof info.weatherFromHome === "string" ? (info.weatherFromHome ? `${info.weatherFromHome}, wie Zuhause` : "Wie Zuhause") : "Noch nicht festgelegt"))}</span><button class="btn btn-quiet" type="button" id="weatherEdit">${prefs.places.weather ? "Ändern" : "Festlegen"}</button>` });
   const placeRow = (key, id, label, desc) => {
     if (placeState.place === key) {
       return `<form class="set-row is-stack place-form" id="placeForm" data-place="${key}" novalidate autocomplete="off">
@@ -1883,7 +1883,7 @@ async function saveWeatherPlace(value, input) {
     const result = await request("PUT", "/api/ui/weather/place", { name: value });
     const place = value ? result.place || value : "";
     placeState.editing = false;
-    page.places = { ...(page.places || {}), weather: place, weatherFromHome: place ? "" : result.weatherFromHome || "" };
+    page.places = { ...(page.places || {}), weather: place, weatherFromHome: place ? null : result.weatherFromHome ?? null };
     prefs.places.weather = place;
     savePrefs();
     renderPlaces();
@@ -1932,7 +1932,10 @@ function closePlaceForm(key) {
   placesCard().querySelector(`[data-place-edit="${key}"]`)?.focus({ preventScroll: true });
 }
 
-const followedWeather = (answer) => (typeof answer?.weatherFromHome === "string" ? { weatherFromHome: answer.weatherFromHome } : {});
+// weatherFromHome is the town the forecast takes from home, "" where the address names none, and null while it does not go by home.
+// Only the desktop server knows that rule and says so, in the phone app the weather needs a place of its own.
+const followedWeather = (answer) => (answer && "weatherFromHome" in answer ? { weatherFromHome: answer.weatherFromHome } : {});
+const homeCountsForWeather = () => !!page.places?.weatherCanFollowHome && !!page.places?.home;
 
 async function pickPlace(key, item) {
   try {
@@ -2034,7 +2037,7 @@ function bindPlaces() {
     if (event.target.id !== "weatherForm") return;
     const input = $("weatherInput");
     const value = input.value.replace(/\s+/g, " ").trim();
-    if (!value && !(page.places || {}).home) {
+    if (!value && !homeCountsForWeather()) {
       setError(input, $("weatherError"), "Trag einen Ort ein, zum Beispiel Potsdam.");
       input.focus();
       return;
@@ -2192,15 +2195,11 @@ function subjectFormHtml(key) {
   const owners = hueOwners(key);
   const hue = creating ? HUES.find((item) => !owners[item]) || HUES[0] : info.hue;
   const type = creating ? "GK" : info.type;
-  const count = creating ? 0 : cellsOf(key).length;
   const hues = HUES.map((item) => {
     const text = [HUE_NAMES[item], owners[item] ? `schon bei ${joinWords(owners[item])}` : ""].filter(Boolean).join(", ");
     return `<label class="hue-pick" style="--swatch:var(--hue-${item})" data-tip="${esc(text)}"><input type="radio" name="hue" value="${item}"${item === hue ? " checked" : ""}><span class="visually-hidden">${esc(text)}</span>${icon("check")}</label>`;
   }).join("");
   const types = COURSE_TYPES.map((item) => `<label class="choice"><input type="radio" name="type" value="${item}"${item === type ? " checked" : ""}><span>${COURSE_WORDS[item]}</span></label>`).join("");
-  const kept = !creating && keptOnDelete(key);
-  const lessonsText = count ? `${esc(info.label)} steht in ${plural(count, "Stunde", "Stunden")} im Stundenplan. Beim Löschen werden sie geleert.` : "";
-  const gradesText = kept ? `Die Noten ${count ? "" : `von ${esc(info.label)} `}bleiben erhalten und zählen weiter im Schnitt. Tests und Abgaben des Fachs blendet ${BRAND} aus, unter „Gelöscht“ holst du es zurück.` : "";
   return `<form class="set-form subject-form" id="subjectForm" data-key="${esc(key)}" novalidate aria-labelledby="subjectFormTitle">
       <p class="set-form-title" id="subjectFormTitle">${creating ? "Neues Fach" : `${esc(info.label)} bearbeiten`}</p>
       <div class="set-form-grid">
@@ -2217,7 +2216,7 @@ function subjectFormHtml(key) {
         <div class="form-field"><label class="form-label" for="subjectNewTitle">Anrede</label><select class="field-control" id="subjectNewTitle" name="newTitle">${TITLES.map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></div>
         <div class="form-field"><label class="form-label" for="subjectNewName">Nachname der neuen Lehrkraft</label><input class="field-control" id="subjectNewName" name="newName" maxlength="40" placeholder="z. B. Schulz" autocomplete="off" aria-describedby="subjectNewNameError">${errorHtml("subjectNewNameError", "")}</div>
       </div>
-      ${creating ? "" : `<div class="form-confirm" id="subjectConfirm" role="alert" hidden><p>${[lessonsText, gradesText].filter(Boolean).join(" ")}</p><div class="set-form-actions"><button type="button" class="btn btn-quiet" id="subjectKeep">Behalten</button><button type="button" class="btn btn-quiet danger-button" id="subjectConfirmDelete">${icon("trash-2")}Fach löschen</button></div></div>`}
+      ${creating ? "" : `<div class="form-confirm" id="subjectConfirm" role="alert" hidden><p id="subjectConfirmText"></p><div class="set-form-actions"><button type="button" class="btn btn-quiet" id="subjectKeep">Behalten</button><button type="button" class="btn btn-quiet danger-button" id="subjectConfirmDelete">${icon("trash-2")}Fach löschen</button></div></div>`}
       <div class="set-form-actions" id="subjectActions">
         ${creating ? "" : `<button type="button" class="btn btn-quiet danger-button form-delete" id="subjectDelete">${icon("trash-2")}Löschen</button>`}
         <button type="button" class="btn btn-quiet" id="subjectCancel">Abbrechen</button>
@@ -2363,6 +2362,30 @@ function keptOnDelete(key) {
   return !data.subjects[key]?.custom || !!(use && (use.grades || use.entries));
 }
 
+function deleteWarning(key) {
+  const info = data.subjects[key];
+  const count = cellsOf(key).length;
+  const lessonsText = count ? `${esc(info.label)} steht in ${plural(count, "Stunde", "Stunden")} im Stundenplan. Beim Löschen werden sie geleert.` : "";
+  const gradesText = keptOnDelete(key) ? `Die Noten ${count ? "" : `von ${esc(info.label)} `}bleiben erhalten und zählen weiter im Schnitt. Tests und Abgaben des Fachs blendet ${BRAND} aus, unter „Gelöscht“ holst du es zurück.` : "";
+  return [lessonsText, gradesText].filter(Boolean).join(" ");
+}
+
+// What hangs on a subject is counted when the page loads. Before a subject goes it is counted again, so that a grade entered since then is not overlooked.
+async function askDeleteSubject(key) {
+  try {
+    page.subjectUse = (await request("GET", "/api/ui/subjects/use")).use;
+  } catch {}
+  if (catalog.subject !== key || !$("subjectConfirm")) return;
+  if (data.subjects[key]?.custom && !cellsOf(key).length && !keptOnDelete(key)) {
+    deleteSubject(key);
+    return;
+  }
+  $("subjectConfirmText").innerHTML = deleteWarning(key);
+  $("subjectConfirm").hidden = false;
+  $("subjectActions").hidden = true;
+  $("subjectKeep").focus({ preventScroll: true });
+}
+
 function deleteSubject(key) {
   const info = data.subjects[key];
   if (!info) return;
@@ -2487,16 +2510,8 @@ function bindCatalog() {
     if (edit) openSubjectForm(edit.dataset.editSubject);
     else if (event.target.closest("#subjectCancel")) closeSubjectForm();
     else if (event.target.closest("[data-restore-subject]")) restoreSubject(event.target.closest("[data-restore-subject]").dataset.restoreSubject);
-    else if (event.target.closest("#subjectDelete")) {
-      const key = catalog.subject;
-      if (data.subjects[key]?.custom && !cellsOf(key).length) {
-        deleteSubject(key);
-        return;
-      }
-      $("subjectConfirm").hidden = false;
-      $("subjectActions").hidden = true;
-      $("subjectKeep").focus({ preventScroll: true });
-    } else if (event.target.closest("#subjectKeep")) {
+    else if (event.target.closest("#subjectDelete")) askDeleteSubject(catalog.subject);
+    else if (event.target.closest("#subjectKeep")) {
       $("subjectConfirm").hidden = true;
       $("subjectActions").hidden = false;
       $("subjectDelete").focus({ preventScroll: true });
@@ -2644,11 +2659,12 @@ const AI_SOURCES = [
   ["claude", "Claude", "Schickt deine Frage und die Schuldaten, die sie braucht, an Anthropic. Dafür brauchst du einen eigenen API-Schlüssel."],
   ["offline", "Ohne Sprachmodell", "Der Assistent beantwortet dann nur Fragen zu Stundenplan, Schule und Mathe."],
 ];
-const AI_NAMES = { local: "das eingebaute Sprachmodell", ollama: "Ollama", claude: "Claude" };
+const AI_NAMES = { local: "das eingebaute Sprachmodell", ollama: "Ollama" };
+// Why the chosen source cannot answer right now. Whether a stored key is accepted only shows when a question is asked, so nothing here calls it valid.
 const AI_WAITS = {
-  local: "Es ist noch nicht installiert.",
-  ollama: "Ollama antwortet gerade nicht oder kennt das Modell nicht.",
-  claude: "Es fehlt noch ein gültiger Schlüssel.",
+  local: () => "Es ist noch nicht installiert.",
+  ollama: (config) => (config.ollama_running ? "Ollama kennt dieses Modell nicht." : "Ollama läuft auf diesem Gerät gerade nicht."),
+  claude: (config) => (config.claude_api_key_set ? "Claude lässt sich auf diesem Gerät gerade nicht ansprechen." : "Es fehlt noch ein Schlüssel."),
 };
 
 function aiSourceRows() {
@@ -2658,8 +2674,10 @@ function aiSourceRows() {
   const active = config.active || {};
   let state = "";
   if (chosen !== "offline") {
-    if (chosen !== "auto" && active.backend !== chosen) state = ` ${AI_WAITS[chosen]} Bis dahin gibt es nur Antworten ohne Sprachmodell.`;
-    else if (active.available && AI_NAMES[active.backend]) state = ` Gerade antwortet ${AI_NAMES[active.backend]}${active.model ? ` (${esc(active.model)})` : ""}.`;
+    const model = active.model ? ` (${esc(active.model)})` : "";
+    if (chosen !== "auto" && active.backend !== chosen) state = ` ${AI_WAITS[chosen](config)} Bis dahin gibt es nur Antworten ohne Sprachmodell.`;
+    else if (active.backend === "claude") state = ` Fragen gehen mit deinem Schlüssel an Claude${model}.`;
+    else if (active.available && AI_NAMES[active.backend]) state = ` Gerade antwortet ${AI_NAMES[active.backend]}${model}.`;
     else state = " Gerade ist kein Sprachmodell erreichbar.";
   }
   const options = AI_SOURCES.map(([key, name]) => `<option value="${key}"${key === chosen ? " selected" : ""}>${name}</option>`).join("");
@@ -2674,7 +2692,7 @@ function aiSourceRows() {
     const choices = models.map((name) => `<option value="${esc(name)}"${name === config.ollama_model ? " selected" : ""}>${esc(name)}${missing(name) ? " (fehlt in Ollama)" : ""}</option>`).join("");
     rows.push(row({
       id: "rowAiOllama", label: "Ollama-Modell", forId: "aiOllamaModel",
-      desc: loaded.length ? "Zur Wahl stehen die Modelle, die Ollama auf diesem Gerät hat." : "Ollama läuft auf diesem Gerät gerade nicht.",
+      desc: loaded.length ? "Zur Wahl stehen die Modelle, die Ollama auf diesem Gerät hat." : config.ollama_running ? "Ollama hat noch kein Modell. Lade dort zuerst eins." : "Ollama läuft auf diesem Gerät gerade nicht.",
       control: `<select class="field-control" id="aiOllamaModel" aria-describedby="rowAiOllamaDesc">${choices}</select>`,
     }));
   }
@@ -2682,8 +2700,8 @@ function aiSourceRows() {
     rows.push(config.claude_api_key_set
       ? row({ id: "rowAiKey", label: "API-Schlüssel", desc: `Gespeichert: ${esc(config.claude_api_key_masked)}. Er liegt verschlüsselt auf diesem Gerät.`, control: `<button class="btn btn-quiet" type="button" id="aiKeyRemove">Entfernen</button>` })
       : `<form class="set-row is-stack" id="aiKeyForm" novalidate autocomplete="off">
-          <div class="set-row-text"><label class="set-row-label" for="aiKeyInput">API-Schlüssel</label><p class="set-row-desc" id="aiKeyDesc">Aus der Anthropic-Konsole. Er liegt verschlüsselt auf diesem Gerät.</p></div>
-          <div class="set-row-control"><input class="field-control" id="aiKeyInput" type="password" maxlength="300" autocomplete="off" spellcheck="false" aria-describedby="aiKeyDesc"><button class="btn btn-primary" type="submit">Speichern</button></div>
+          <div class="set-row-text"><label class="set-row-label" for="aiKeyInput">API-Schlüssel</label><p class="set-row-desc" id="aiKeyDesc">Aus der Anthropic-Konsole. Er wird verschlüsselt auf diesem Gerät abgelegt.</p></div>
+          <div class="set-row-control"><input class="field-control" id="aiKeyInput" type="password" maxlength="300" autocomplete="off" spellcheck="false" aria-describedby="aiKeyDesc aiKeyError"><button class="btn btn-primary" type="submit">Speichern</button>${errorHtml("aiKeyError", "")}</div>
         </form>`);
   }
   return rows;
@@ -2755,6 +2773,11 @@ async function loadAssistant() {
     return;
   }
   renderAssistant();
+  await loadAiConfig();
+}
+
+// Which source answers depends on what is installed, so this is asked again whenever that changes.
+async function loadAiConfig() {
   try {
     assistant.config = await request("GET", "/api/hub/assistant/config");
   } catch {
@@ -2777,6 +2800,7 @@ async function removeAssistant(button) {
     assistant.busy = false;
     renderAssistant();
   }
+  await loadAiConfig();
 }
 
 async function updateRuntime() {
@@ -2802,7 +2826,8 @@ function bindAssistant() {
     const button = event.target.closest("#aiRemove");
     if (button && !button.disabled) removeAssistant(button);
     if (event.target.closest("#aiUpdate:not(:disabled)")) updateRuntime();
-    if (event.target.closest("#aiKeyRemove")) saveAiConfig({ claude_api_key: "" }, "Schlüssel entfernt", "aiKeyInput");
+    const keyRemove = event.target.closest("#aiKeyRemove");
+    if (keyRemove && confirmTwice("ai-key", keyRemove, "Wirklich entfernen?", "Zum Entfernen noch einmal drücken")) saveAiConfig({ claude_api_key: "" }, "Schlüssel entfernt", "aiKeyInput");
   });
   $("aiSetCard").addEventListener("change", (event) => {
     if (event.target.id === "aiSource") saveAiConfig({ preferred_backend: event.target.value });
@@ -2811,9 +2836,12 @@ function bindAssistant() {
   $("aiSetCard").addEventListener("submit", (event) => {
     if (event.target.id !== "aiKeyForm") return;
     event.preventDefault();
-    const key = $("aiKeyInput").value.trim();
-    if (key) saveAiConfig({ claude_api_key: key }, "Schlüssel gespeichert", "aiKeyRemove");
-    else $("aiKeyInput").focus();
+    const input = $("aiKeyInput");
+    const key = input.value.trim();
+    const wrong = !key ? "Füg hier deinen Schlüssel ein." : /^sk-ant-\S+$/.test(key) ? "" : "Das sieht nicht nach einem Anthropic-Schlüssel aus. Er beginnt mit sk-ant-.";
+    setError(input, $("aiKeyError"), wrong);
+    if (wrong) input.focus();
+    else saveAiConfig({ claude_api_key: key }, "Schlüssel gespeichert", "aiKeyRemove");
   });
   loadAssistant();
 }

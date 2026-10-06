@@ -114,36 +114,46 @@ function load() {
 }
 
 // Drafts and the archive live on this device. What the server holds is remembered here, and only a difference is sent.
-// The phone app has no mail yet and keeps neither.
-const kept = { drafts: new Map(), archive: new Set(), quietUntil: 0 };
+// A draft whose mail is on its way stays stored until the mail is out. The phone app has no mail yet and keeps neither.
+const kept = { drafts: new Map(), archive: new Set(), sending: new Set(), retry: 0, wait: 0 };
 const draftRecord = (mail) => ({ to: mail.to || "", subject: mail.subject || "", body: mail.body || "", replyTo: mail.replyTo || null, account: mail.sendFrom || null });
+const archiveRecord = (mail) => ({ subject: mail.subject || "", peer: { name: mail.peer?.name || "", detail: mail.peer?.detail || "" }, received: mail.received || "", body: String(mail.body || "").slice(0, 300) });
 
 function keepLocal() {
-  if (native || performance.now() < kept.quietUntil) return;
+  if (native) return;
+  clearTimeout(kept.retry);
+  const done = () => {
+    kept.wait = 0;
+  };
+  // What failed is put back as it was, said once, and tried again without waiting for the next click, a little later each time.
   const failed = (undo) => () => {
     undo();
-    kept.quietUntil = performance.now() + 30000;
+    if (!kept.wait) window.dispatchEvent(new CustomEvent("app:save-failed", { detail: { message: "" } }));
+    kept.wait = Math.min(60000, (kept.wait || 2500) * 2);
+    clearTimeout(kept.retry);
+    kept.retry = setTimeout(keepLocal, kept.wait);
   };
   const drafts = new Map(state.mails.filter((mail) => mail.folder === "drafts").map((mail) => [mail.id, JSON.stringify(draftRecord(mail))]));
   drafts.forEach((text, id) => {
-    if (kept.drafts.get(id) === text) return;
+    const before = kept.drafts.get(id);
+    if (before === text) return;
     kept.drafts.set(id, text);
-    mailRequest("PUT", `/api/ui/mail/drafts/${encodeURIComponent(id)}`, JSON.parse(text)).catch(failed(() => kept.drafts.delete(id)));
+    mailRequest("PUT", `/api/ui/mail/drafts/${encodeURIComponent(id)}`, JSON.parse(text)).then(done, failed(() => (before === undefined ? kept.drafts.delete(id) : kept.drafts.set(id, before))));
   });
-  [...kept.drafts.keys()].filter((id) => !drafts.has(id)).forEach((id) => {
+  [...kept.drafts.keys()].filter((id) => !drafts.has(id) && !kept.sending.has(id)).forEach((id) => {
     const text = kept.drafts.get(id);
     kept.drafts.delete(id);
-    mailRequest("DELETE", `/api/ui/mail/drafts/${encodeURIComponent(id)}`).catch(failed(() => kept.drafts.set(id, text)));
+    mailRequest("DELETE", `/api/ui/mail/drafts/${encodeURIComponent(id)}`).then(done, failed(() => kept.drafts.set(id, text)));
   });
-  const archive = new Set(state.mails.filter((mail) => mail.folder === "archive" && mail.account && mail.uid).map((mail) => mail.id));
-  archive.forEach((id) => {
+  const archive = new Map(state.mails.filter((mail) => mail.folder === "archive" && mail.account && mail.uid).map((mail) => [mail.id, mail]));
+  archive.forEach((mail, id) => {
     if (kept.archive.has(id)) return;
     kept.archive.add(id);
-    mailRequest("PUT", "/api/ui/mail/archive", { id, archived: true }).catch(failed(() => kept.archive.delete(id)));
+    mailRequest("PUT", "/api/ui/mail/archive", { id, archived: true, mail: archiveRecord(mail) }).then(done, failed(() => kept.archive.delete(id)));
   });
   [...kept.archive].filter((id) => !archive.has(id)).forEach((id) => {
     kept.archive.delete(id);
-    mailRequest("PUT", "/api/ui/mail/archive", { id, archived: false }).catch(failed(() => kept.archive.add(id)));
+    mailRequest("PUT", "/api/ui/mail/archive", { id, archived: false }).then(done, failed(() => kept.archive.add(id)));
   });
 }
 
@@ -264,7 +274,7 @@ function marksInner(mail) {
 function filingActs(mail) {
   const erase = mail.account?.endsWith("@iserv") ? [] : [["delete", "trash-2", "Löschen", "#"]];
   if (mail.folder === "inbox") return [["archive", "archive", "Archivieren", "E"], ...erase];
-  if (mail.folder === "archive" && !outgoing(mail)) return [["inbox", "inbox", "In den Posteingang", "E"], ...erase];
+  if (mail.folder === "archive") return [["inbox", "inbox", "In den Posteingang", "E"], ...erase];
   return [];
 }
 
@@ -334,7 +344,7 @@ function emptyHtml() {
   const copy = {
     inbox: state.cleared ? ["Posteingang leer.", "Alles gelesen und einsortiert."] : state.accounts.length ? ["Keine Mails im Posteingang.", "Neue Mails landen hier."] : native ? ["E-Mail gibt es in der App noch nicht.", "Deine Mails liest du vorerst in IServ oder deiner Mail-App."] : ["Noch kein Postfach verbunden.", "Verbinde IServ in den Einstellungen oder füge ein Postfach hinzu."],
     sent: ["Keine gesendeten Mails.", "Was du abschickst, steht hier."],
-    drafts: ["Keine Entwürfe.", "Angefangene Mails landen hier, wenn du sie schließt."],
+    drafts: ["Keine Entwürfe.", "Angefangene Mails landen hier."],
     archive: ["Das Archiv ist leer.", "Archivierte Mails landen hier."],
     trash: ["Der Papierkorb ist leer.", "Gelöschte Mails liegen hier, bis du sie endgültig löschst."],
   }[state.folder];
@@ -1096,22 +1106,37 @@ function closeCompose(options = {}) {
 
 const pendingSends = new Map();
 
-function transmit(mail, snapshot) {
+// Puts the draft of a mail back that did not go out, and opens it again.
+function backToDraft(snapshot, stored) {
+  if (stored) {
+    kept.sending.delete(stored.id);
+    if (!byId(stored.id)) state.mails.push(stored);
+  }
+  render({ flip: true });
+  const text = { to: snapshot.to, subject: snapshot.subject, body: snapshot.body, account: snapshot.account };
+  openCompose(stored ? { ...stored, ...text } : { ...text, replyTo: snapshot.replyTo });
+}
+
+function transmit(mail, snapshot, stored) {
   pendingSends.delete(mail.id);
-  mailRequest("POST", "/api/ui/mail/send", { account: mail.account, to: mail.to, subject: mail.subject, body: mail.body }).catch((error) => {
+  mailRequest("POST", "/api/ui/mail/send", { account: mail.account, to: mail.to, subject: mail.subject, body: mail.body, draft: stored?.id }).then(() => {
+    if (!stored) return;
+    kept.sending.delete(stored.id);
+    kept.drafts.delete(stored.id);
+  }, (error) => {
     state.mails = state.mails.filter((item) => item.id !== mail.id);
-    render({ flip: true });
-    openCompose({ to: snapshot.to, subject: snapshot.subject, body: snapshot.body, replyTo: snapshot.replyTo, account: snapshot.account });
+    backToDraft(snapshot, stored);
     toast(`Nicht gesendet${error.message ? `: ${esc(error.message)}` : ""}. Die Mail liegt wieder im Entwurf.`, { icon: "circle-alert" });
   });
 }
 
 addEventListener("pagehide", () => {
-  pendingSends.forEach(({ timer, mail, snapshot }) => {
+  pendingSends.forEach(({ timer, mail, snapshot, stored }) => {
     clearTimeout(timer);
-    transmit(mail, snapshot);
+    transmit(mail, snapshot, stored);
   });
   keepDraftNow();
+  keepLocal();
 });
 
 let draftTimer = 0;
@@ -1120,7 +1145,6 @@ function keepDraftNow() {
   clearTimeout(draftTimer);
   if (state.mode !== "compose" || !state.draft) return;
   commitDraft();
-  kept.quietUntil = 0;
   renderCounts();
 }
 
@@ -1146,9 +1170,14 @@ function sendCompose() {
     toast("Zum Senden fehlt ein verbundenes Postfach.", { icon: "circle-alert" });
     return;
   }
+  // Closing the app in the seconds before the mail leaves must not cost the mail: it stays a stored draft until it is out.
+  const stored = commitDraft();
+  keepLocal();
   const snapshot = { ...draft, account };
-  const saved = draft.id ? byId(draft.id) : null;
-  if (saved) state.mails = state.mails.filter((item) => item.id !== saved.id);
+  if (stored) {
+    kept.sending.add(stored.id);
+    state.mails = state.mails.filter((item) => item.id !== stored.id);
+  }
   const mail = {
     id: `sent-${Date.now()}`,
     folder: "sent",
@@ -1166,8 +1195,8 @@ function sendCompose() {
   state.mails.push(mail);
   closeReader({ refocus: true });
   render({ flip: true });
-  const timer = setTimeout(() => transmit(mail, snapshot), 9500);
-  pendingSends.set(mail.id, { timer, mail, snapshot });
+  const timer = setTimeout(() => transmit(mail, snapshot, stored), 9500);
+  pendingSends.set(mail.id, { timer, mail, snapshot, stored });
   toast(`Wird gesendet an ${esc(to)} …`, {
     icon: "send",
     action: {
@@ -1179,9 +1208,7 @@ function sendCompose() {
         clearTimeout(pending.timer);
         pendingSends.delete(mail.id);
         state.mails = state.mails.filter((item) => item.id !== mail.id);
-        if (saved) state.mails.push(saved);
-        render({ flip: true });
-        openCompose(saved ? { ...saved, to: snapshot.to, subject: snapshot.subject, body: snapshot.body, account } : { to: snapshot.to, subject: snapshot.subject, body: snapshot.body, replyTo: snapshot.replyTo, account });
+        backToDraft(snapshot, stored);
       },
     },
   });
@@ -1434,19 +1461,16 @@ function onKey(event) {
   }
   const id = targetId();
   const mail = id ? byId(id) : null;
-  if (key === "e" && mail && (mail.folder === "inbox" || mail.folder === "sent")) {
+  if (key === "e" && mail && (mail.folder === "inbox" || mail.folder === "archive")) {
     event.preventDefault();
-    moveMail(id, "archive");
-  } else if (key === "e" && mail && mail.folder === "archive" && !outgoing(mail)) {
-    event.preventDefault();
-    moveMail(id, "inbox");
+    moveMail(id, mail.folder === "inbox" ? "archive" : "inbox");
   } else if (key === "u" && mail && !outgoing(mail)) {
     event.preventDefault();
     if (mail.read) markUnread(id);
     else setRead(id, true);
   } else if ((event.key === "#" || event.key === "Delete") && mail) {
     event.preventDefault();
-    if (mail.account?.endsWith("@iserv") && mail.folder === "inbox") toast("IServ-Mails lassen sich hier noch nicht löschen.", { icon: "info" });
+    if (mail.account?.endsWith("@iserv") && (mail.folder === "inbox" || mail.folder === "archive")) toast("IServ-Mails lassen sich hier noch nicht löschen.", { icon: "info" });
     else runAct(id, mail.folder === "trash" || mail.folder === "drafts" ? "destroy" : "delete");
   } else if (event.key === "/") {
     event.preventDefault();

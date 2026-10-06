@@ -3,12 +3,14 @@ const creations = new Map();
 const queues = new Map();
 
 async function send(method, url, body) {
+  const text = body === undefined ? undefined : JSON.stringify(body);
   const response = await fetch(url, {
     method,
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: text === undefined ? {} : { "Content-Type": "application/json" },
+    body: text,
     credentials: "same-origin",
-    keepalive: true,
+    // A request that may outlive the page must stay small: browsers refuse more than 64 KB of them at once.
+    keepalive: (text?.length || 0) < 20000,
   });
   let payload = null;
   try {

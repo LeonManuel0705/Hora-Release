@@ -668,17 +668,38 @@ def weather_location(settings):
 
 
 def home_weather_place():
-    """Home as the place for the forecast, named after its town. The coordinates are rounded, the forecast needs no street."""
+    """Home as the place for the forecast. The coordinates are rounded, the forecast needs no street."""
     home = known_places().get('home')
     if not isinstance(home, dict):
         return None
     lat, lon = home.get('latitude'), home.get('longitude')
     if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
         return None
+    return {'city': home_town(home), 'lat': round(lat, 1), 'lon': round(lon, 1), 'home': True}
+
+
+def home_town(home):
+    """The town of the home address, '' where it does not name one: a street or a stop is no name for the weather."""
     address, name = str(home.get('address') or ''), str(home.get('name') or '')
-    town = re.search(r'\b\d{5}\s+([^,]+)', address)
-    city = (town.group(1) if town else address.split(',')[-1] or name.split(',')[0]).strip()[:80]
-    return {'city': city, 'lat': round(lat, 1), 'lon': round(lon, 1)} if city else None
+    for text in (address, name):
+        after_postcode = re.search(r'\b\d{5}\s+([^\d,][^,]*)', text)
+        if after_postcode:
+            return after_postcode.group(1).strip()[:80]
+    last = address.split(',')[-1].strip()
+    return last[:80] if last and not any(char.isdigit() for char in last) else ''
+
+
+def same_place(one, other):
+    close = lambda key: isinstance(one.get(key), (int, float)) and isinstance(other.get(key), (int, float)) and abs(one[key] - other[key]) < 0.05
+    return one.get('city') == other.get('city') and close('lat') and close('lon')
+
+
+def weather_from_home(settings):
+    """None while the forecast has a place of its own or no home to go by. Otherwise the town of home, '' where its address names none."""
+    if chosen_weather_place(settings):
+        return None
+    place = home_weather_place()
+    return place['city'] if place else None
 
 
 def chosen_weather_place(settings):
@@ -770,13 +791,16 @@ def weather(settings, now):
         fetched = datetime.fromisoformat(str(cache.get('timestamp') or ''))
     except ValueError:
         fetched = None
-    if location:
-        stale = not fetched or now - fetched > WEATHER_MAX_AGE or not isinstance(cache.get('hourly'), dict) or cached_place.get('city') != location['city']
-        if stale:
-            refresh_weather_soon(location)
-    place = location['city'] if location else str(cached_place.get('city') or '')
-    if location and cached_place.get('city') != location['city']:
-        return {'place': place, 'high': None, 'low': None, 'wind': None, 'hours': []}
+    # canFollowHome tells the page that home counts here while no place of its own is set, fromHome that it does right now.
+    nothing = {'place': location['city'] if location else '', 'fromHome': bool(location and location.get('home')), 'canFollowHome': True, 'high': None, 'low': None, 'wind': None, 'hours': []}
+    if not location:
+        # What the cache still holds is for a place that is no longer set, and nothing would refresh it.
+        return nothing
+    current_place = same_place(cached_place, location)
+    if not fetched or now - fetched > WEATHER_MAX_AGE or not isinstance(cache.get('hourly'), dict) or not current_place:
+        refresh_weather_soon(location)
+    if not current_place:
+        return nothing
     day = now.date().isoformat()
     tomorrow = (now.date() + timedelta(days=1)).isoformat()
 
@@ -812,7 +836,7 @@ def weather(settings, now):
     current = cache.get('current') if isinstance(cache.get('current'), dict) else {}
     fresh = str(current.get('time') or '').startswith(day)
     view = {
-        'place': place,
+        **nothing,
         'high': today_value('temperature_2m_max'),
         'low': today_value('temperature_2m_min'),
         'wind': rounded(current.get('wind_speed_10m')) if fresh else None,
@@ -1007,10 +1031,11 @@ def mail_drafts():
 
 
 def archived_mails():
+    """The mails put into the archive, by id. Each keeps what its row shows, so that it stays listed once the mailbox no longer sends it."""
     try:
-        return {str(item.get('id')) for item in load_list('mail_archive') if isinstance(item, dict) and item.get('id')}
+        return {str(item.get('id')): item for item in load_list('mail_archive') if isinstance(item, dict) and item.get('id')}
     except StoreError:
-        return set()
+        return {}
 
 
 def page_email(data, school, settings, today, iserv):
@@ -1032,11 +1057,31 @@ def subject_use():
     return use
 
 
+def keep_used_subjects(value):
+    """What to store for the own subjects, given what the page wants stored.
+
+    The page decides from numbers it read when it loaded. An own subject that still has grades or entries is
+    therefore never dropped here, only put aside: its grades stay visible and it can be brought back.
+    """
+    before = db.get_ui_store().get('app-subjects')
+    old = before.get('items') if isinstance(before, dict) and isinstance(before.get('items'), dict) else {}
+    wanted = value.get('items') if isinstance(value, dict) and isinstance(value.get('items'), dict) else {}
+    use = subject_use()
+    lost = [key for key, own in old.items() if key not in wanted and isinstance(own, dict) and own.get('custom') and any(use.get(key, {}).values())]
+    if not lost:
+        return value
+    kept = dict(value) if isinstance(value, dict) else {}
+    kept['items'] = {**wanted, **{key: old[key] for key in lost}}
+    removed = kept.get('removed') if isinstance(kept.get('removed'), list) else []
+    kept['removed'] = [*removed, *(key for key in lost if key not in removed)]
+    return kept
+
+
 def page_settings(data, school, settings, today, iserv):
     google = load_dict('google')
     chosen = (chosen_weather_place(settings) or {}).get('city') or ''
-    followed = '' if chosen else (home_weather_place() or {}).get('city') or ''
-    city = chosen or followed
+    followed = weather_from_home(settings)
+    city = chosen or followed or ''
     known = known_places()
     return {
         'school': {
@@ -1058,6 +1103,7 @@ def page_settings(data, school, settings, today, iserv):
         'places': {
             'weather': chosen,
             'weatherFromHome': followed,
+            'weatherCanFollowHome': True,
             'home': place_line(known.get('home')),
             'school': place_line(known.get('school')),
         },

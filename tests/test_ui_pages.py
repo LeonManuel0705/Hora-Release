@@ -165,11 +165,37 @@ def test_an_own_subject_that_was_deleted_keeps_showing_its_grades(client):
     assert ui_data.effective_school()["subjects"]["geo-kept"] == {"name": "Geografie", "type": "GK", "retired": True, "teacher": ""}
     assert client.post("/api/ui/grades", json={"subject": "geo-kept", "points": 9}).status_code == 400
 
+    # A task keeps a subject that was put aside, as when it is restored after a delete or repeats.
+    task = client.post("/api/ui/tasks", json={"title": "Karte zeichnen", "subject": "geo-kept"}).get_json()["task"]
+    assert task["subject"] == "geo-kept"
+    assert client.delete(f"/api/ui/tasks/{task['id']}").status_code == 200
+
     own_subject(client, "geo-kept")
     assert ui_data.effective_school()["subjects"]["geo-kept"]["retired"] is False
     assert client.delete(f"/api/ui/grades/{grade['id']}").status_code == 200
     assert client.delete(f"/api/ui/deadlines/{test['id']}").status_code == 200
     assert "geo-kept" not in page_data(client, "/hub/settings")["page"]["subjectUse"]
+
+
+def test_an_own_subject_in_use_cannot_be_dropped_from_the_store(client):
+    stored = lambda: db.get_ui_store()["app-subjects"]
+    own_subject(client, "geo-used")
+    semester = page_data(client, "/hub/school")["page"]["semester"]
+    grade = client.post("/api/ui/grades", json={"subject": "geo-used", "points": 12, "type": "test", "semester": semester, "title": "Karten"}).get_json()["grade"]
+    assert client.get("/api/ui/subjects/use").get_json()["use"]["geo-used"] == {"grades": 1, "entries": 0}
+
+    # The page lost track of the grade and asks for the subject to go for good, once by storing without it, once by clearing the store.
+    other = {"custom": True, "name": "Astronomie", "short": "Ast", "hue": "sky", "type": "GK", "teacher": "", "room": ""}
+    assert client.put("/api/ui/store/app-subjects", json={"items": {"astro-new": other}, "removed": []}).status_code == 200
+    assert set(stored()["items"]) == {"astro-new", "geo-used"} and stored()["removed"] == ["geo-used"]
+    assert client.delete("/api/ui/store/app-subjects").status_code == 200
+    assert set(stored()["items"]) == {"geo-used"} and stored()["removed"] == ["geo-used"]
+    assert any(item["id"] == grade["id"] for item in page_data(client, "/hub/school")["page"]["grades"])
+
+    # Without anything hanging on it, it goes.
+    assert client.delete(f"/api/ui/grades/{grade['id']}").status_code == 200
+    assert client.delete("/api/ui/store/app-subjects").status_code == 200
+    assert "app-subjects" not in db.get_ui_store()
 
 
 def test_event_round_trip(client):
@@ -253,22 +279,67 @@ def test_without_a_place_of_its_own_the_weather_follows_home(client, monkeypatch
     monkeypatch.setattr(ui_data, "refresh_weather_soon", refreshed.append)
     assert ui_data.weather_location({}) is None
     home = {"name": "Unter den Linden 6", "area": "10117 Berlin", "lat": 52.5191, "lon": 13.3937, "stop": ""}
+    berlin = {"city": "Berlin", "lat": 52.5, "lon": 13.4, "home": True}
     assert client.put("/api/ui/places/home", json=home).get_json()["weatherFromHome"] == "Berlin"
-    assert refreshed == [{"city": "Berlin", "lat": 52.5, "lon": 13.4}]
-    assert ui_data.weather_location({}) == {"city": "Berlin", "lat": 52.5, "lon": 13.4}
+    assert refreshed == [berlin]
+    assert ui_data.weather_location({}) == berlin
     places = page_data(client, "/hub/settings")["page"]["places"]
-    assert (places["weather"], places["weatherFromHome"]) == ("", "Berlin")
+    assert (places["weather"], places["weatherFromHome"], places["weatherCanFollowHome"]) == ("", "Berlin", True)
 
     monkeypatch.setattr(ui_data, "geocode", lambda name: {"city": "Potsdam", "lat": 52.39, "lon": 13.06})
     client.put("/api/ui/weather/place", json={"name": "Potsdam"})
     places = page_data(client, "/hub/settings")["page"]["places"]
-    assert (places["weather"], places["weatherFromHome"]) == ("Potsdam", "")
-    assert client.put("/api/ui/places/home", json=home).get_json()["weatherFromHome"] == ""
+    assert (places["weather"], places["weatherFromHome"]) == ("Potsdam", None)
+    assert client.put("/api/ui/places/home", json=home).get_json()["weatherFromHome"] is None
 
     assert client.put("/api/ui/weather/place", json={"name": ""}).get_json() == {"success": True, "place": "", "weatherFromHome": "Berlin"}
-    assert client.delete("/api/ui/places/home").get_json()["weatherFromHome"] == ""
+    assert client.delete("/api/ui/places/home").get_json()["weatherFromHome"] is None
     assert ui_data.weather_location({}) is None
     assert client.put("/api/ui/weather/place", json={"name": ""}).status_code == 400
+
+
+def test_the_forecast_of_a_place_that_is_no_longer_set_is_not_shown(client, monkeypatch):
+    saved = {"home": {"name": "Unter den Linden 6", "address": "10117 Berlin", "latitude": 52.5191, "longitude": 13.3937, "type": "location"}}
+
+    class Places:
+        def delete_known_location(self, key):
+            saved.pop(key, None)
+
+        def get_known_locations(self):
+            return {"locations": saved}
+
+    from app import vbb_service
+    monkeypatch.setattr(vbb_service, "get_vbb_service", lambda: Places())
+    refreshed = []
+    monkeypatch.setattr(ui_data, "refresh_weather_soon", refreshed.append)
+    now = datetime.now()
+    write_weather({"city": "Berlin", "lat": 52.5, "lon": 13.4, "home": True}, now, now.date())
+    shown = ui_data.weather({}, now)
+    assert (shown["place"], shown["fromHome"], len(shown["hours"])) == ("Berlin", True, 24)
+
+    # Home goes and nothing else is set: no place, no numbers from before, and the page can ask for a place.
+    assert client.delete("/api/ui/places/home").status_code == 200
+    gone = ui_data.weather({}, now)
+    assert (gone["place"], gone["fromHome"], gone["canFollowHome"], gone["hours"], gone["high"]) == ("", False, True, [], None)
+    assert refreshed == []
+
+    # The same town somewhere else is another place: its forecast is fetched and the old one not shown for it.
+    saved["home"] = {"name": "Hauptstraße 1", "address": "13353 Berlin", "latitude": 52.9, "longitude": 13.9, "type": "location"}
+    moved = ui_data.weather({}, now)
+    assert (moved["place"], moved["hours"]) == ("Berlin", []) and refreshed == [{"city": "Berlin", "lat": 52.9, "lon": 13.9, "home": True}]
+
+
+@pytest.mark.parametrize("address, name, town", [
+    ("10117 Berlin", "Unter den Linden 6", "Berlin"),
+    ("Unter den Linden 6, 10117 Berlin", "Zuhause", "Berlin"),
+    ("", "15230 Frankfurt (Oder)", "Frankfurt (Oder)"),
+    ("Frankfurt (Oder)", "Lindenallee 1", "Frankfurt (Oder)"),
+    ("15230", "Lindenallee 1", ""),
+    ("", "Unter den Linden 6", ""),
+    ("", "S Frankfurt (Oder) Bhf", ""),
+])
+def test_home_is_named_after_its_town_or_not_at_all(address, name, town):
+    assert ui_data.home_town({"address": address, "name": name}) == town
 
 
 def test_weather_place_reports_network_trouble(client, monkeypatch):
@@ -558,7 +629,9 @@ def test_the_iserv_login_page_is_told_from_a_plan():
     assert not iserv_service._is_login_page(page("https://schule.example/iserv/infodisplay/file/3/1", "", "image/png"))
 
 
-def test_mail_drafts_outlive_the_page(client):
+def test_mail_drafts_outlive_the_page(client, monkeypatch):
+    from app import ui_pages
+
     drafts = lambda: [(item["id"], item["to"], item["subject"], item["body"]) for item in page_data(client, "/hub/email")["page"]["drafts"]]
     assert drafts() == []
     letter = {"to": "ben@example.org", "subject": "Referat", "body": "Hallo Ben,\nwann treffen wir uns?", "replyTo": None, "account": None}
@@ -579,7 +652,15 @@ def test_mail_drafts_outlive_the_page(client):
     long = "Zeile mit Umlauten äöü\n" * 2500
     assert client.put("/api/ui/mail/drafts/draft-2", json={**letter, "body": long}).status_code == 200
     assert drafts()[0][3] == long
-    assert client.delete("/api/ui/mail/drafts/draft-2").status_code == 200
+
+    # When the store is full a further draft is refused. Nothing that is there is dropped for it, and it can still be changed.
+    monkeypatch.setattr(ui_pages, "MAIL_DRAFTS", 2)
+    assert client.put("/api/ui/mail/drafts/draft-3", json=letter).status_code == 200
+    assert client.put("/api/ui/mail/drafts/draft-4", json=letter).status_code == 409
+    assert client.put("/api/ui/mail/drafts/draft-2", json={**letter, "subject": "Geändert"}).status_code == 200
+    assert sorted(item[0] for item in drafts()) == ["draft-2", "draft-3"]
+    for ref in ("draft-2", "draft-3"):
+        assert client.delete(f"/api/ui/mail/drafts/{ref}").status_code == 200
 
 
 def test_a_mail_put_into_the_archive_stays_there(client, monkeypatch):
@@ -599,6 +680,61 @@ def test_a_mail_put_into_the_archive_stays_there(client, monkeypatch):
     assert folders() == {"7": "inbox", "8": "inbox"}
     assert client.put("/api/ui/mail/archive", json={"id": "", "archived": True}).status_code == 400
     assert client.put("/api/ui/mail/archive", json={"id": "ohne-konto", "archived": True}).status_code == 400
+
+
+def test_an_archived_mail_stays_listed_once_the_mailbox_no_longer_sends_it(client, monkeypatch):
+    from app import ui_pages
+
+    account = {"email": "leon@example.org", "name": "Mail", "kind": "imap"}
+    old = {"id": "7", "from": "a@example.org", "from_name": "Anna", "subject": "Hallo", "date": "2026-10-05 10:00", "preview": "Bis Freitag"}
+    newer = [{"id": str(number), "from": "b@example.org", "subject": f"Mail {number}", "date": "2026-10-06 09:00"} for number in (8, 9)]
+    inbox = [old, *newer]
+    monkeypatch.setattr(ui_pages, "_mail_accounts", lambda: [account])
+    monkeypatch.setattr(ui_pages, "_fetch_inbox", lambda account, limit: (True, inbox))
+    listed = lambda: {item["uid"]: item for item in client.get("/api/ui/mail").get_json()["messages"]}
+    shown = listed()["7"]
+    assert client.put("/api/ui/mail/archive", json={"id": shown["id"], "archived": True, "mail": {**shown, "body": "x" * 5000}}).status_code == 200
+    assert len(ui_data.load_list("mail_archive")[0]["mail"]["preview"]) == 300
+    client.put("/api/ui/mail/archive", json={"id": shown["id"], "archived": True, "mail": shown})
+
+    # Newer mails have pushed it out of what the mailbox sends. It is still in the archive, with what its row showed.
+    inbox = newer
+    kept = listed()
+    assert sorted(kept) == ["7", "8", "9"]
+    assert {key: kept["7"][key] for key in ("id", "folder", "subject", "received", "body", "read", "partial")} == {
+        "id": "leon@example.org|7", "folder": "archive", "subject": "Hallo", "received": "2026-10-05T10:00", "body": "Bis Freitag", "read": True, "partial": True}
+    assert kept["7"]["peer"] == {"name": "Anna", "role": "other", "detail": "a@example.org"}
+
+    # While the mailbox still sends it, it is not listed twice. A mailbox that is no longer connected lists nothing.
+    inbox = [old, *newer]
+    assert len(client.get("/api/ui/mail").get_json()["messages"]) == 3
+    monkeypatch.setattr(ui_pages, "_mail_accounts", lambda: [])
+    assert client.get("/api/ui/mail").get_json()["messages"] == []
+    monkeypatch.setattr(ui_pages, "_mail_accounts", lambda: [account])
+    assert client.put("/api/ui/mail/archive", json={"id": "leon@example.org|7", "archived": False}).status_code == 200
+    inbox = newer
+    assert sorted(listed()) == ["8", "9"]
+
+
+def test_sending_a_mail_removes_the_draft_it_was_kept_as(client, monkeypatch):
+    from app import email_service, google_oauth
+
+    sent = []
+    monkeypatch.setattr(google_oauth, "get_google_accounts", lambda: [])
+    monkeypatch.setattr(email_service, "send_email", lambda account, to, subject, body: sent.append(to) or {"success": to != "falsch@example.org"})
+    drafts = lambda: [item["id"] for item in page_data(client, "/hub/email")["page"]["drafts"]]
+    letter = {"to": "ben@example.org", "subject": "Referat", "body": "Hallo Ben"}
+    for ref in ("draft-10", "draft-11"):
+        assert client.put(f"/api/ui/mail/drafts/{ref}", json=letter).status_code == 200
+
+    # A mail the server did not take keeps its draft.
+    refused = client.post("/api/ui/mail/send", json={**letter, "account": "leon@example.org", "to": "falsch@example.org", "draft": "draft-10"})
+    assert refused.status_code == 502 and sorted(drafts()) == ["draft-10", "draft-11"]
+    assert client.post("/api/ui/mail/send", json={**letter, "account": "leon@example.org", "draft": "draft-10"}).status_code == 200
+    assert drafts() == ["draft-11"] and sent == ["falsch@example.org", "ben@example.org"]
+    assert client.post("/api/ui/mail/send", json={**letter, "account": "leon@example.org", "draft": "../x"}).status_code == 200
+    assert drafts() == ["draft-11"]
+    assert client.delete("/api/ui/mail/drafts/draft-11").status_code == 200
 
 
 def test_notes_and_ideas_can_be_seen_changed_and_removed(client):
@@ -640,6 +776,22 @@ def test_a_note_from_the_older_interface_without_a_title_shows_its_first_line(cl
     assert client.delete("/api/ui/notes/alt-1").status_code == 200
 
 
+def test_a_long_note_from_the_older_interface_is_not_cut_by_an_edit_or_an_undo(client):
+    title, text = "Protokoll " + "sehr " * 70, "Zeile mit Umlauten äöü\n" * 400
+    assert len(title) > 300 and len(text) > 5000
+    ui_data.modify_list("notes", lambda items: items.append({"id": "alt-2", "type": "note", "title": title, "content": text, "created_at": "2026-09-30T18:00:00"}))
+    shown = next(item for item in page_data(client, "/hub/tasks")["page"]["notes"] if item["id"] == "alt-2")
+    assert (shown["title"], shown["details"]) == (title.strip(), text.strip())
+
+    # The page sends only what changed. Even when it sends everything, as after a delete that is undone, nothing is cut.
+    assert client.patch("/api/ui/notes/alt-2", json={"type": "idea"}).get_json()["note"]["details"] == text.strip()
+    assert client.patch("/api/ui/notes/alt-2", json={"title": shown["title"], "details": shown["details"]}).get_json()["note"]["title"] == title.strip()
+    assert client.delete("/api/ui/notes/alt-2").status_code == 200
+    back = client.post("/api/ui/notes", json={"type": "idea", "title": shown["title"], "details": shown["details"], "created": shown["created"]}).get_json()["note"]
+    assert (back["title"], back["details"], back["created"]) == (title.strip(), text.strip(), "2026-09-30T18:00:00")
+    assert client.delete(f"/api/ui/notes/{back['id']}").status_code == 200
+
+
 def test_the_source_of_the_assistant_can_be_chosen(client, tmp_path, monkeypatch):
     from app import assistant_service as ai
 
@@ -648,7 +800,7 @@ def test_the_source_of_the_assistant_can_be_chosen(client, tmp_path, monkeypatch
     monkeypatch.setattr(ai, "check_local_status", lambda: {"available": True, "model": "Eingebaut"})
     monkeypatch.setattr(ai, "release_assistant_soon", lambda delay=0: None)
     start = client.get("/api/hub/assistant/config").get_json()
-    assert (start["preferred_backend"], start["active"]["backend"], start["ollama_models"]) == ("auto", "local", ["gemma3:4b", "qwen2.5:14b"])
+    assert (start["preferred_backend"], start["active"]["backend"], start["ollama_models"], start["ollama_running"]) == ("auto", "local", ["gemma3:4b", "qwen2.5:14b"], True)
     assert start["claude_api_key_set"] is False
 
     chosen = client.post("/api/hub/assistant/config", json={"preferred_backend": "ollama", "ollama_model": "gemma3:4b"}).get_json()

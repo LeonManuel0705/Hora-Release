@@ -304,6 +304,17 @@ def _validate_folder(folder: str) -> str:
         raise ValueError('Folder name too long')
     return folder
 
+def _can(imap, capability: str) -> bool:
+    """Whether the server offers a capability. It is asked again after the login, where many servers first name everything."""
+    try:
+        status, data = imap.capability()
+        return status == "OK" and capability in (data[0] or b"").decode(errors="replace").upper().split()
+    except Exception:
+        return False
+
+
+# Message numbers move up whenever a mail is expunged, here or in another app. Every mail is therefore
+# addressed by its UID, which stays with it: the ids handed out below are UIDs.
 def fetch_emails(email: str, folder: str = "INBOX", limit: int = 20) -> Dict:
     config = load_email_config()
     account = next((a for a in config["accounts"] if a["email"] == email), None)
@@ -327,26 +338,28 @@ def fetch_emails(email: str, folder: str = "INBOX", limit: int = 20) -> Dict:
             imap.logout()
             return {"success": False, "error": "Ordner konnte nicht ausgewählt werden"}
 
-        status, messages = imap.search(None, "ALL")
+        status, messages = imap.uid("search", None, "ALL")
         if status != "OK":
             imap.logout()
             return {"success": False, "error": "Could not search messages"}
 
-        message_ids = messages[0].split()
+        message_ids = sorted(((messages[0] if messages else b"") or b"").split(), key=int)
         message_ids = message_ids[-limit:] if len(message_ids) > limit else message_ids
         message_ids.reverse()
 
         emails = []
         for msg_id in message_ids:
-            status, msg_data = imap.fetch(msg_id, "(RFC822 FLAGS)")
-            if status != "OK":
+            status, msg_data = imap.uid("fetch", msg_id.decode(), "(RFC822 FLAGS)")
+            if status != "OK" or not msg_data or not isinstance(msg_data[0], tuple):
                 continue
 
             import email
             raw_email = msg_data[0][1]
             msg = email.message_from_bytes(raw_email)
 
-            flags = msg_data[0][0].decode() if isinstance(msg_data[0][0], bytes) else str(msg_data[0][0])
+            # The flags come before or after the mail itself, depending on the server.
+            around = [part[0] if isinstance(part, tuple) else part for part in msg_data]
+            flags = b" ".join(part for part in around if isinstance(part, bytes)).decode(errors="replace")
             is_read = "\\Seen" in flags
 
             date_str = str(msg.get("Date", ""))[:200]
@@ -402,8 +415,8 @@ def get_email_detail(email_addr: str, msg_id: str, folder: str = "INBOX") -> Dic
         _validate_folder(folder)
         imap.select(folder, readonly=True)
 
-        status, msg_data = imap.fetch(msg_id.encode(), "(RFC822)")
-        if status != "OK":
+        status, msg_data = imap.uid("fetch", str(msg_id), "(RFC822)")
+        if status != "OK" or not msg_data or not isinstance(msg_data[0], tuple):
             imap.logout()
             return {"success": False, "error": "Could not fetch email"}
 
@@ -439,7 +452,7 @@ def mark_email_read(email_addr: str, msg_id: str, folder: str = "INBOX") -> Dict
         imap.login(email_addr, account["password"])
         _validate_folder(folder)
         imap.select(folder)
-        status, _ = imap.store(msg_id.encode(), '+FLAGS', '\\Seen')
+        status, _ = imap.uid("store", str(msg_id), '+FLAGS', '\\Seen')
         imap.logout()
         return {"success": status == "OK"}
     except Exception as e:
@@ -517,14 +530,18 @@ def delete_email(email: str, msg_id: str, folder: str = "INBOX") -> Dict:
 
         for trash in trash_folders:
             try:
-                status, _ = imap.copy(msg_id.encode(), trash)
+                status, _ = imap.uid("copy", str(msg_id), trash)
                 if status == "OK":
                     break
             except Exception:
                 continue
 
-        imap.store(msg_id.encode(), '+FLAGS', '\\Deleted')
-        imap.expunge()
+        imap.uid("store", str(msg_id), '+FLAGS', '\\Deleted')
+        # A plain expunge also removes what other apps have marked for deletion. Where the server can, only this mail goes.
+        if _can(imap, "UIDPLUS"):
+            imap.uid("expunge", str(msg_id))
+        else:
+            imap.expunge()
 
         imap.logout()
 

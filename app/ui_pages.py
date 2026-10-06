@@ -104,21 +104,31 @@ def service_worker():
 def store_value(key):
     if key not in STORE_KEYS:
         return jsonify({'success': False, 'error': 'Unbekannter Schlüssel'}), 404
-    if request.method == 'DELETE':
+    value = None
+    if request.method == 'PUT':
+        if not request.is_json:
+            return jsonify({'success': False, 'error': 'JSON erwartet'}), 415
+        value = request.get_json(silent=True)
+        if value is None and request.get_data(as_text=True).strip() != 'null':
+            return jsonify({'success': False, 'error': 'Ungültiges JSON'}), 400
+    if key == 'app-subjects':
+        value = ui_data.keep_used_subjects(value)
+    if request.method == 'DELETE' and value is None:
         db.delete_ui_value(key)
         ui_data.mirror_store(key, None)
         return jsonify({'success': True})
-    if not request.is_json:
-        return jsonify({'success': False, 'error': 'JSON erwartet'}), 415
-    value = request.get_json(silent=True)
-    if value is None and request.get_data(as_text=True).strip() != 'null':
-        return jsonify({'success': False, 'error': 'Ungültiges JSON'}), 400
     try:
         db.save_ui_value(key, value)
     except ValueError:
         return jsonify({'success': False, 'error': 'Zu groß'}), 413
     ui_data.mirror_store(key, value)
     return jsonify({'success': True})
+
+
+@bp.route('/api/ui/subjects/use')
+def subject_use():
+    """How much hangs on each subject right now. The settings ask before a subject is deleted, because their own count is from when the page loaded."""
+    return jsonify({'success': True, 'use': ui_data.subject_use()})
 
 
 @bp.route('/api/ui/transit/<action>')
@@ -142,8 +152,9 @@ def _text(value, limit):
     return str(value or '').strip()[:limit]
 
 
-def _subjects():
-    return ui_data.school_setup(db.get_timetable_settings() or {})['known']
+def _subjects(put_aside=False):
+    """The subjects a new entry may name. With put_aside also own ones that were deleted but kept: a task keeps its subject when it is restored or repeats."""
+    return ui_data.school_setup(db.get_timetable_settings() or {})['shown' if put_aside else 'known']
 
 
 def _task_columns(payload, subjects, creating):
@@ -191,7 +202,7 @@ def create_task():
     payload = _payload()
     if payload is None:
         return _error('JSON erwartet')
-    subjects = _subjects()
+    subjects = _subjects(put_aside=True)
     try:
         columns = _task_columns(payload, subjects, creating=True)
     except ValueError as error:
@@ -221,7 +232,7 @@ def change_task(task_id):
     payload = _payload()
     if payload is None:
         return _error('JSON erwartet')
-    subjects = _subjects()
+    subjects = _subjects(put_aside=True)
     try:
         columns = _task_columns(payload, subjects, creating=False)
     except ValueError as error:
@@ -468,12 +479,17 @@ def change_event(ref):
     return jsonify({'success': True, 'event': ui_data.event_view(found)})
 
 
+# The page lets a new note have a title of 300 and a text of 5000 characters. The older interface set no limit, and
+# such a note must survive an edit or a delete that is undone, so the bounds here are only there to keep the file sane.
+NOTE_TITLE, NOTE_TEXT = 1000, 100000
+
+
 @bp.route('/api/ui/notes', methods=['POST'])
 def create_note():
     payload = _payload()
     if payload is None:
         return _error('JSON erwartet')
-    title = _text(payload.get('title'), 300)
+    title = _text(payload.get('title'), NOTE_TITLE)
     if not title:
         return _error('Titel fehlt')
     try:
@@ -484,7 +500,7 @@ def create_note():
         'id': ui_data.full_id(),
         'type': 'idea' if payload.get('type') == 'idea' else 'note',
         'title': title,
-        'content': _text(payload.get('details'), 5000),
+        'content': _text(payload.get('details'), NOTE_TEXT),
         'created_at': created,
     }
     try:
@@ -499,7 +515,7 @@ def change_note(ref):
     payload = _payload() if request.method == 'PATCH' else {}
     if payload is None:
         return _error('JSON erwartet')
-    if 'title' in payload and not _text(payload.get('title'), 300):
+    if 'title' in payload and not _text(payload.get('title'), NOTE_TITLE):
         return _error('Titel fehlt')
     found = {}
 
@@ -511,9 +527,9 @@ def change_note(ref):
                 del items[index]
             else:
                 if 'title' in payload:
-                    item['title'] = _text(payload.get('title'), 300)
+                    item['title'] = _text(payload.get('title'), NOTE_TITLE)
                 if 'details' in payload:
-                    item['content'] = _text(payload.get('details'), 5000)
+                    item['content'] = _text(payload.get('details'), NOTE_TEXT)
                 if payload.get('type') in ('note', 'idea'):
                     item['type'] = payload['type']
             found.update(item)
@@ -675,13 +691,12 @@ def substitution_plan_file(page):
 
 
 def _weather_follows_home(refresh=False):
-    """The town the forecast takes from home while no place of its own is set, '' otherwise."""
-    if ui_data.chosen_weather_place({'location_json': db.get_location_setting()}):
-        return ''
-    place = ui_data.home_weather_place()
-    if place and refresh:
-        ui_data.refresh_weather_soon(place)
-    return (place or {}).get('city') or ''
+    """The town the forecast takes from home, as ui_data.weather_from_home tells it. With refresh the forecast for it is fetched."""
+    settings = {'location_json': db.get_location_setting()}
+    town = ui_data.weather_from_home(settings)
+    if town is not None and refresh:
+        ui_data.refresh_weather_soon(ui_data.home_weather_place())
+    return town
 
 
 @bp.route('/api/ui/places/<key>', methods=['PUT', 'DELETE'])
@@ -694,7 +709,6 @@ def save_place(key):
         known = (service.get_known_locations().get('locations') or {}).get(key)
         service.delete_known_location(key)
         removed = None
-        follows = _weather_follows_home() if key == 'home' else None
         if isinstance(known, dict) and known.get('name') and known.get('latitude') is not None and known.get('longitude') is not None:
             removed = {
                 'name': known['name'],
@@ -703,7 +717,7 @@ def save_place(key):
                 'lon': known['longitude'],
                 'stop': (known.get('id') or '') if known.get('type') == 'stop' else '',
             }
-        return jsonify({'success': True, 'removed': removed, **({'weatherFromHome': follows} if follows is not None else {})})
+        return jsonify({'success': True, 'removed': removed, **({'weatherFromHome': _weather_follows_home()} if key == 'home' else {})})
     payload = _payload()
     if payload is None:
         return _error('JSON erwartet')
@@ -839,19 +853,32 @@ def mail_inbox():
             failed.append(account['name'])
         messages.extend(_mail_view(account, item) for item in items if item.get('id') is not None)
     archived = ui_data.archived_mails()
+    sent_along = set()
     for message in messages:
         if message['id'] in archived:
             message['folder'] = 'archive'
+            sent_along.add(message['id'])
+    # A mailbox only sends its newest mails. Older archived ones are listed from what was kept of them, their text is fetched when one is opened.
+    connected = {account['email']: account for account in accounts}
+    for key, entry in archived.items():
+        address, _, uid = key.partition('|')
+        kept = entry.get('mail')
+        if key in sent_along or address not in connected or not uid or not isinstance(kept, dict):
+            continue
+        view = _mail_view(connected[address], {**kept, 'id': uid, 'read': True})
+        view['folder'] = 'archive'
+        messages.append(view)
     return jsonify({'success': True, 'accounts': accounts, 'messages': messages, 'failed': failed})
 
 
-MAIL_DRAFTS, MAIL_ARCHIVE, MAIL_BODY = 100, 2000, 100000
+MAIL_DRAFTS, MAIL_ARCHIVE, MAIL_BODY = 500, 2000, 100000
+DRAFT_ID = r'draft-[0-9a-z-]{1,40}'
 
 
 @bp.route('/api/ui/mail/drafts/<ref>', methods=['PUT', 'DELETE'])
 def mail_draft(ref):
     """Keeps a mail that is being written, so that it outlives the page. Drafts stay on this device and are not sent anywhere."""
-    if not re.fullmatch(r'draft-[0-9a-z-]{1,40}', ref):
+    if not re.fullmatch(DRAFT_ID, ref):
         return _error('Entwurf nicht gefunden', 404)
     draft = None
     if request.method == 'PUT':
@@ -872,14 +899,17 @@ def mail_draft(ref):
 
     def change(items):
         kept = [item for item in items if not (isinstance(item, dict) and item.get('id') == ref)]
-        items[:] = ([*kept, draft] if draft else kept)[-MAIL_DRAFTS:]
+        # Something written is never dropped to make room: a further draft is refused instead.
+        if draft and len(kept) == len(items) and len(kept) >= MAIL_DRAFTS:
+            return False
+        items[:] = [*kept, draft] if draft else kept
         return True
 
     try:
-        ui_data.modify_list('mail_drafts', change)
+        stored = ui_data.modify_list('mail_drafts', change)
     except ui_data.StoreError:
         return _error('Die Entwürfe ließen sich nicht lesen', 500)
-    return jsonify({'success': True})
+    return jsonify({'success': True}) if stored else _error('Zu viele Entwürfe. Räum zuerst den Ordner Entwürfe auf', 409)
 
 
 @bp.route('/api/ui/mail/archive', methods=['PUT'])
@@ -891,7 +921,19 @@ def mail_archive():
     key = _text(payload.get('id'), 500)
     if not key or '|' not in key:
         return _error('Mail fehlt')
-    entry = {'id': key, 'at': datetime.now().isoformat(timespec='seconds')} if payload.get('archived') else None
+    entry = None
+    if payload.get('archived'):
+        shown = payload.get('mail') if isinstance(payload.get('mail'), dict) else {}
+        sender = shown.get('peer') if isinstance(shown.get('peer'), dict) else {}
+        entry = {'id': key, 'at': datetime.now().isoformat(timespec='seconds')}
+        if shown:
+            entry['mail'] = {
+                'subject': _text(shown.get('subject'), 300),
+                'from_name': _text(sender.get('name'), 200),
+                'from': _text(sender.get('detail'), 300),
+                'date': _text(shown.get('received'), 16),
+                'preview': _text(shown.get('body'), 300),
+            }
 
     def change(items):
         kept = [item for item in items if not (isinstance(item, dict) and item.get('id') == key)]
@@ -973,4 +1015,14 @@ def mail_send():
         return _error('Senden ging gerade nicht', 502)
     if not result.get('success'):
         return _error('Der Mailserver hat die Nachricht nicht angenommen. Prüf die Adresse und versuch es noch einmal', 502)
+    # The page keeps the mail as a draft until it is out. It goes here, together with the sending, because the page may be gone by now.
+    draft = _text(payload.get('draft'), 60)
+    if re.fullmatch(DRAFT_ID, draft):
+        def drop(items):
+            items[:] = [item for item in items if not (isinstance(item, dict) and item.get('id') == draft)]
+
+        try:
+            ui_data.modify_list('mail_drafts', drop)
+        except ui_data.StoreError:
+            pass
     return jsonify({'success': True})
