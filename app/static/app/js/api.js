@@ -168,7 +168,14 @@ export const grades = {
 
 export const notes = {
   create(item) {
-    return queue(`note-${Date.now()}`, () => send("POST", "/api/ui/notes", { type: item.type, title: item.title, details: item.details || "" }));
+    const body = { type: item.type, title: item.title, details: item.details || "", ...(item.created ? { created: item.created } : {}) };
+    return queue(`note-${Date.now()}`, async () => (await send("POST", "/api/ui/notes", body)).note);
+  },
+  update(id, changes) {
+    return queue(`note-${id}`, () => send("PATCH", `/api/ui/notes/${encodeURIComponent(id)}`, changes));
+  },
+  remove(id) {
+    return queue(`note-${id}`, () => send("DELETE", `/api/ui/notes/${encodeURIComponent(id)}`));
   },
 };
 

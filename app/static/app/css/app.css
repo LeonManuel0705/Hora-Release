@@ -743,6 +743,15 @@ kbd .icon { --s: 12; }
 
 .done-list .row { min-height: 46px; }
 
+.note-kind { display: grid; place-items: center; width: 36px; height: 36px; margin-top: -8px; justify-self: center; color: var(--ink-muted); }
+.note-kind .icon { --s: 18; }
+.note-kind.is-idea { color: var(--hue-ochre); }
+.row.note.is-editing { grid-template-columns: minmax(0, 1fr); padding: 10px 8px 12px; }
+.note-form { display: grid; gap: 8px; }
+.note-form-kind { display: flex; gap: 6px; }
+.note-form-actions { display: flex; align-items: center; gap: 8px; }
+.note-form-actions [data-note-cancel] { margin-left: auto; }
+
 .leaf {
   display: grid;
   justify-items: center;

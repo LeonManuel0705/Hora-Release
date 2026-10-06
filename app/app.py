@@ -3996,37 +3996,52 @@ def assistant_stream():
 def assistant_config():
     from . import assistant_service as ai
 
-    if request.method == 'GET':
+    def view():
         config = ai.load_config()
         key = config.get('claude_api_key', '')
         masked = ''
         if key:
             masked = key[:7] + '...' + key[-4:] if len(key) > 15 else '***'
-        return jsonify({
+        return {
             'claude_api_key_set': bool(key),
             'claude_api_key_masked': masked,
             'preferred_backend': config.get('preferred_backend', 'auto'),
             'ollama_model': config.get('ollama_model', 'llama3.2:1b'),
             'claude_model': config.get('claude_model', ai.CLAUDE_MODEL),
-        })
+            'ollama_models': ai.get_ollama_models(),
+            'active': ai.get_status(),
+        }
 
-    data = request.get_json()
-    if not data:
+    if request.method == 'GET':
+        return _no_store(jsonify(view()))
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data:
         return jsonify({'error': 'No data'}), 400
+
+    def name_of(value):
+        return value if isinstance(value, str) and re.fullmatch(r'[\w.:/-]{1,100}', value) else None
 
     config = ai.load_config()
     if 'claude_api_key' in data:
-        config['claude_api_key'] = data['claude_api_key']
+        key = data['claude_api_key']
+        if not isinstance(key, str) or len(key) > 300:
+            return jsonify({'error': 'Invalid key'}), 400
+        config['claude_api_key'] = key.strip()
     if 'preferred_backend' in data:
-        if data['preferred_backend'] in ('auto', 'ollama', 'local', 'claude', 'offline'):
-            config['preferred_backend'] = data['preferred_backend']
-    if 'ollama_model' in data:
-        config['ollama_model'] = data['ollama_model']
-    if 'claude_model' in data:
-        config['claude_model'] = data['claude_model']
+        if data['preferred_backend'] not in ('auto', 'ollama', 'local', 'claude', 'offline'):
+            return jsonify({'error': 'Unknown backend'}), 400
+        config['preferred_backend'] = data['preferred_backend']
+    for field in ('ollama_model', 'claude_model'):
+        if field in data:
+            if not name_of(data[field]):
+                return jsonify({'error': 'Invalid model'}), 400
+            config[field] = data[field]
 
     ai.save_config(config)
-    return jsonify({'success': True})
+    if config.get('preferred_backend') not in ('auto', 'local'):
+        ai.release_assistant_soon(1)
+    return _no_store(jsonify({'success': True, **view()}))
 
 @app.route('/api/deadlines', methods=['GET'])
 def get_all_deadlines():

@@ -58,6 +58,8 @@ FILES = {
     'grades': 'school_grades.json',
     'calendar': 'school_calendar.json',
     'notes': 'quick_notes.json',
+    'mail_drafts': 'mail_drafts.json',
+    'mail_archive': 'mail_archive.json',
     'weather': 'weather_cache.json',
     'iserv': 'iserv_credentials.json',
     'google': 'google_tokens.json',
@@ -958,8 +960,61 @@ def page_transit(data, school, settings, today, iserv):
     return {'places': places, 'attribution': 'Transitous, DELFI e.V. und Verkehrsverbünde'}
 
 
+def note_view(item):
+    title = str(item.get('title') or '').strip()
+    details = str(item.get('content') or '').strip()
+    if not title:
+        # The older interface saved notes without a title: their first line stands in for it, the rest stays the text.
+        first, _, rest = details.partition('\n')
+        title, details = first.strip()[:300], f'{first.strip()[300:]}\n{rest}'.strip()
+    return {
+        'id': str(item.get('id') or ''),
+        'type': 'idea' if item.get('type') == 'idea' else 'note',
+        'title': title,
+        'details': details,
+        'created': str(item.get('created_at') or '')[:19],
+    }
+
+
+def notes():
+    """Notes and ideas from the quick note sheet, newest first."""
+    try:
+        stored = load_list('notes')
+    except StoreError:
+        return []
+    kept = sorted((item for item in stored if isinstance(item, dict) and item.get('id')), key=lambda item: str(item.get('created_at') or ''), reverse=True)
+    return [view for view in map(note_view, kept) if view['title']]
+
+
+def page_tasks(data, school, settings, today, iserv):
+    return {'notes': notes()}
+
+
+def mail_drafts():
+    """The drafts as the mail page shows them, newest first."""
+    try:
+        stored = load_list('mail_drafts')
+    except StoreError:
+        return []
+    drafts = [
+        {
+            'id': str(item.get('id') or ''), 'to': str(item.get('to') or ''), 'subject': str(item.get('subject') or ''), 'body': str(item.get('body') or ''),
+            'replyTo': item.get('reply_to') or None, 'account': item.get('account') or None, 'saved': str(item.get('saved_at') or ''),
+        }
+        for item in stored if isinstance(item, dict) and item.get('id')
+    ]
+    return sorted(drafts, key=lambda draft: draft['saved'], reverse=True)
+
+
+def archived_mails():
+    try:
+        return {str(item.get('id')) for item in load_list('mail_archive') if isinstance(item, dict) and item.get('id')}
+    except StoreError:
+        return set()
+
+
 def page_email(data, school, settings, today, iserv):
-    return {'messages': [], 'contacts': []}
+    return {'messages': [], 'contacts': [], 'drafts': mail_drafts()}
 
 
 def subject_use():
@@ -1011,6 +1066,7 @@ def page_settings(data, school, settings, today, iserv):
 
 
 PAGE_BUILDERS = {
+    'tasks': page_tasks,
     'calendar': page_calendar,
     'school': page_school,
     'vbb': page_transit,

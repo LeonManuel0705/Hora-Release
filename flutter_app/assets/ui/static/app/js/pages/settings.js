@@ -2636,7 +2636,76 @@ function reloadState() {
   renderAll();
 }
 
-const assistant = { status: null, busy: false };
+const assistant = { status: null, config: null, busy: false, saving: false };
+const AI_SOURCES = [
+  ["auto", "Automatisch", "Nimmt das eingebaute Sprachmodell. Fehlt es, kommt Ollama an die Reihe, danach Claude."],
+  ["local", "Eingebautes Sprachmodell", "Läuft auf diesem Gerät, auch ohne Internet."],
+  ["ollama", "Ollama", "Nutzt ein Modell, das Ollama auf diesem Gerät bereithält."],
+  ["claude", "Claude", "Schickt deine Frage und die Schuldaten, die sie braucht, an Anthropic. Dafür brauchst du einen eigenen API-Schlüssel."],
+  ["offline", "Ohne Sprachmodell", "Der Assistent beantwortet dann nur Fragen zu Stundenplan, Schule und Mathe."],
+];
+const AI_NAMES = { local: "das eingebaute Sprachmodell", ollama: "Ollama", claude: "Claude" };
+const AI_WAITS = {
+  local: "Es ist noch nicht installiert.",
+  ollama: "Ollama antwortet gerade nicht oder kennt das Modell nicht.",
+  claude: "Es fehlt noch ein gültiger Schlüssel.",
+};
+
+function aiSourceRows() {
+  const config = assistant.config;
+  if (!config) return [];
+  const chosen = AI_SOURCES.some(([key]) => key === config.preferred_backend) ? config.preferred_backend : "auto";
+  const active = config.active || {};
+  let state = "";
+  if (chosen !== "offline") {
+    if (chosen !== "auto" && active.backend !== chosen) state = ` ${AI_WAITS[chosen]} Bis dahin gibt es nur Antworten ohne Sprachmodell.`;
+    else if (active.available && AI_NAMES[active.backend]) state = ` Gerade antwortet ${AI_NAMES[active.backend]}${active.model ? ` (${esc(active.model)})` : ""}.`;
+    else state = " Gerade ist kein Sprachmodell erreichbar.";
+  }
+  const options = AI_SOURCES.map(([key, name]) => `<option value="${key}"${key === chosen ? " selected" : ""}>${name}</option>`).join("");
+  const rows = [row({
+    id: "rowAiSource", label: "Antworten kommen von", forId: "aiSource", desc: AI_SOURCES.find(([key]) => key === chosen)[2] + state,
+    control: `<select class="field-control" id="aiSource" aria-describedby="rowAiSourceDesc">${options}</select>`,
+  })];
+  if (chosen === "ollama") {
+    const loaded = config.ollama_models || [];
+    const missing = (name) => loaded.length > 0 && !loaded.includes(name) && !loaded.includes(`${name}:latest`);
+    const models = [...new Set([config.ollama_model, ...loaded].filter(Boolean))];
+    const choices = models.map((name) => `<option value="${esc(name)}"${name === config.ollama_model ? " selected" : ""}>${esc(name)}${missing(name) ? " (fehlt in Ollama)" : ""}</option>`).join("");
+    rows.push(row({
+      id: "rowAiOllama", label: "Ollama-Modell", forId: "aiOllamaModel",
+      desc: loaded.length ? "Zur Wahl stehen die Modelle, die Ollama auf diesem Gerät hat." : "Ollama läuft auf diesem Gerät gerade nicht.",
+      control: `<select class="field-control" id="aiOllamaModel" aria-describedby="rowAiOllamaDesc">${choices}</select>`,
+    }));
+  }
+  if (chosen === "claude") {
+    rows.push(config.claude_api_key_set
+      ? row({ id: "rowAiKey", label: "API-Schlüssel", desc: `Gespeichert: ${esc(config.claude_api_key_masked)}. Er liegt verschlüsselt auf diesem Gerät.`, control: `<button class="btn btn-quiet" type="button" id="aiKeyRemove">Entfernen</button>` })
+      : `<form class="set-row is-stack" id="aiKeyForm" novalidate autocomplete="off">
+          <div class="set-row-text"><label class="set-row-label" for="aiKeyInput">API-Schlüssel</label><p class="set-row-desc" id="aiKeyDesc">Aus der Anthropic-Konsole. Er liegt verschlüsselt auf diesem Gerät.</p></div>
+          <div class="set-row-control"><input class="field-control" id="aiKeyInput" type="password" maxlength="300" autocomplete="off" spellcheck="false" aria-describedby="aiKeyDesc"><button class="btn btn-primary" type="submit">Speichern</button></div>
+        </form>`);
+  }
+  return rows;
+}
+
+async function saveAiConfig(changes, done = "", focusNext = "") {
+  if (assistant.saving) return;
+  assistant.saving = true;
+  let saved = true;
+  try {
+    assistant.config = await request("POST", "/api/hub/assistant/config", changes);
+  } catch {
+    saved = false;
+    toast("Das ließ sich gerade nicht speichern. Versuch es gleich noch einmal.", { icon: "circle-alert" });
+  }
+  assistant.saving = false;
+  // A key that could not be saved stays in its field. Everything else is drawn again and so falls back to what is stored.
+  if (saved || !("claude_api_key" in changes)) renderAssistant();
+  if (!saved) return;
+  if (done) toast(done, { icon: "check" });
+  if (focusNext) $(focusNext)?.focus({ preventScroll: true });
+}
 const decimalGb = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const gigabytes = (bytes) => (bytes >= 1e9 ? `${decimalGb.format(bytes / 1e9)}\u00a0GB` : `${Math.max(1, Math.round((bytes || 0) / 1e6))}\u00a0MB`);
 
@@ -2674,7 +2743,7 @@ function renderAssistant() {
     const size = (status.runtime?.download || 0) + (model.download || 0);
     rows = [row({ id: "rowAiState", label: "Sprachmodell", desc: `Nicht installiert. Ohne Sprachmodell beantwortet der Assistent nur Fragen zu Stundenplan, Schule und Mathe. Download ${gigabytes(size)}.`, control: open("Installieren", true) })];
   }
-  keepFocus(card, () => (card.innerHTML = rows.join("")));
+  keepFocus(card, () => (card.innerHTML = [...rows, ...aiSourceRows()].join("")));
 }
 
 async function loadAssistant() {
@@ -2684,6 +2753,12 @@ async function loadAssistant() {
     assistant.status = null;
     $("aiSetCard").innerHTML = row({ id: "rowAiState", label: "Sprachmodell", desc: "Der Stand lässt sich gerade nicht abfragen." });
     return;
+  }
+  renderAssistant();
+  try {
+    assistant.config = await request("GET", "/api/hub/assistant/config");
+  } catch {
+    assistant.config = null;
   }
   renderAssistant();
 }
@@ -2727,6 +2802,18 @@ function bindAssistant() {
     const button = event.target.closest("#aiRemove");
     if (button && !button.disabled) removeAssistant(button);
     if (event.target.closest("#aiUpdate:not(:disabled)")) updateRuntime();
+    if (event.target.closest("#aiKeyRemove")) saveAiConfig({ claude_api_key: "" }, "Schlüssel entfernt", "aiKeyInput");
+  });
+  $("aiSetCard").addEventListener("change", (event) => {
+    if (event.target.id === "aiSource") saveAiConfig({ preferred_backend: event.target.value });
+    else if (event.target.id === "aiOllamaModel") saveAiConfig({ ollama_model: event.target.value });
+  });
+  $("aiSetCard").addEventListener("submit", (event) => {
+    if (event.target.id !== "aiKeyForm") return;
+    event.preventDefault();
+    const key = $("aiKeyInput").value.trim();
+    if (key) saveAiConfig({ claude_api_key: key }, "Schlüssel gespeichert", "aiKeyRemove");
+    else $("aiKeyInput").focus();
   });
   loadAssistant();
 }

@@ -32,12 +32,14 @@ const MOVES = {
 const pendingDeletes = new Map();
 
 async function mailRequest(method, url, body) {
+  const text = body === undefined ? undefined : JSON.stringify(body);
   const response = await fetch(url, {
     method,
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: text === undefined ? {} : { "Content-Type": "application/json" },
+    body: text,
     credentials: "same-origin",
-    keepalive: method !== "GET",
+    // A request that may outlive the page must stay small: browsers refuse more than 64 KB of them at once.
+    keepalive: method !== "GET" && (text?.length || 0) < 20000,
   });
   let payload = {};
   try {
@@ -99,6 +101,50 @@ function load() {
     flagged: !!mail.flagged,
   }));
   if (flags.empty) state.mails = state.mails.filter((mail) => mail.folder !== "inbox");
+  (data.page?.drafts || []).forEach((draft) => {
+    if (!draft?.id || state.mails.some((mail) => mail.id === draft.id)) return;
+    const mail = {
+      id: draft.id, folder: "drafts", direction: "out", read: true, flagged: false, attachments: [], peer: contactFor(draft.to || ""),
+      to: draft.to || "", subject: draft.subject || "", body: draft.body || "", replyTo: draft.replyTo || null, sendFrom: draft.account || null,
+      at: new Date(draft.saved || Date.now()),
+    };
+    state.mails.push(mail);
+    kept.drafts.set(mail.id, JSON.stringify(draftRecord(mail)));
+  });
+}
+
+// Drafts and the archive live on this device. What the server holds is remembered here, and only a difference is sent.
+// The phone app has no mail yet and keeps neither.
+const kept = { drafts: new Map(), archive: new Set(), quietUntil: 0 };
+const draftRecord = (mail) => ({ to: mail.to || "", subject: mail.subject || "", body: mail.body || "", replyTo: mail.replyTo || null, account: mail.sendFrom || null });
+
+function keepLocal() {
+  if (native || performance.now() < kept.quietUntil) return;
+  const failed = (undo) => () => {
+    undo();
+    kept.quietUntil = performance.now() + 30000;
+  };
+  const drafts = new Map(state.mails.filter((mail) => mail.folder === "drafts").map((mail) => [mail.id, JSON.stringify(draftRecord(mail))]));
+  drafts.forEach((text, id) => {
+    if (kept.drafts.get(id) === text) return;
+    kept.drafts.set(id, text);
+    mailRequest("PUT", `/api/ui/mail/drafts/${encodeURIComponent(id)}`, JSON.parse(text)).catch(failed(() => kept.drafts.delete(id)));
+  });
+  [...kept.drafts.keys()].filter((id) => !drafts.has(id)).forEach((id) => {
+    const text = kept.drafts.get(id);
+    kept.drafts.delete(id);
+    mailRequest("DELETE", `/api/ui/mail/drafts/${encodeURIComponent(id)}`).catch(failed(() => kept.drafts.set(id, text)));
+  });
+  const archive = new Set(state.mails.filter((mail) => mail.folder === "archive" && mail.account && mail.uid).map((mail) => mail.id));
+  archive.forEach((id) => {
+    if (kept.archive.has(id)) return;
+    kept.archive.add(id);
+    mailRequest("PUT", "/api/ui/mail/archive", { id, archived: true }).catch(failed(() => kept.archive.delete(id)));
+  });
+  [...kept.archive].filter((id) => !archive.has(id)).forEach((id) => {
+    kept.archive.delete(id);
+    mailRequest("PUT", "/api/ui/mail/archive", { id, archived: false }).catch(failed(() => kept.archive.add(id)));
+  });
 }
 
 const arrived = (mail) => !state.waiting.has(mail.id);
@@ -214,11 +260,18 @@ function marksInner(mail) {
   return files + flag;
 }
 
+// The archive is a mark kept on this device, so every received mail can go there. Deleting happens in the mailbox, which IServ does not offer yet.
+function filingActs(mail) {
+  const erase = mail.account?.endsWith("@iserv") ? [] : [["delete", "trash-2", "Löschen", "#"]];
+  if (mail.folder === "inbox") return [["archive", "archive", "Archivieren", "E"], ...erase];
+  if (mail.folder === "archive" && !outgoing(mail)) return [["inbox", "inbox", "In den Posteingang", "E"], ...erase];
+  return [];
+}
+
 function rowActs(mail) {
   if (mail.folder === "trash") return [["restore", "undo-2", "Wiederherstellen"], ["destroy", "trash-2", "Endgültig löschen"]];
   if (mail.folder === "drafts") return [["destroy", "trash-2", "Entwurf verwerfen"]];
-  if (mail.account?.endsWith("@iserv")) return [];
-  return mail.folder === "inbox" ? [["delete", "trash-2", "Löschen"]] : [];
+  return filingActs(mail);
 }
 
 function actionsHtml(mail) {
@@ -338,6 +391,7 @@ function render({ flip = false } = {}) {
 }
 
 function renderCounts() {
+  keepLocal();
   renderHead();
   renderFolders();
   renderFilters();
@@ -465,8 +519,7 @@ function footHtml(mail) {
 
 function readerTools(mail) {
   if (mail.folder === "trash") return [["restore", "undo-2", "Wiederherstellen"], ["destroy", "trash-2", "Endgültig löschen", "#"]];
-  if (mail.folder !== "inbox" || mail.account?.endsWith("@iserv")) return [];
-  return [["delete", "trash-2", "Löschen", "#"]];
+  return filingActs(mail);
 }
 
 function toolHtml(mail, [act, name, label, key]) {
@@ -992,12 +1045,16 @@ function commitDraft({ tell = false } = {}) {
   }
   const changed = !mail || mail.to !== draft.to.trim() || mail.subject !== draft.subject.trim() || mail.body !== draft.body;
   if (!mail) {
-    mail = { id: `draft-${Date.now()}`, folder: "drafts", direction: "out", read: true, flagged: false, attachments: [] };
+    mail = { id: `draft-${Date.now()}`, folder: "drafts", direction: "out", read: true, flagged: false, attachments: [], peer: contactFor(draft.to) };
     state.mails.push(mail);
     draft.id = mail.id;
   }
   if (changed) Object.assign(mail, { peer: contactFor(draft.to), to: draft.to.trim(), subject: draft.subject.trim(), body: draft.body, at: now() });
-  if (tell && changed) toast("Als Entwurf gespeichert.", { icon: "file-pen-line" });
+  Object.assign(mail, { replyTo: draft.replyTo || null, sendFrom: draft.account || null });
+  // Saving while the mail is still being written stays quiet. The word comes once, when the mail is put away.
+  const news = changed || !!draft.untold;
+  draft.untold = news && !tell;
+  if (tell && news) toast("Als Entwurf gespeichert.", { icon: "file-pen-line" });
   return mail;
 }
 
@@ -1019,7 +1076,7 @@ function openCompose(source = null) {
     subject: source?.subject ?? "",
     body: source?.body ?? "",
     replyTo: source?.replyTo ?? null,
-    account: source?.account ?? null,
+    account: source?.account ?? source?.sendFrom ?? null,
   };
   markSelected();
   renderReader();
@@ -1054,7 +1111,23 @@ addEventListener("pagehide", () => {
     clearTimeout(timer);
     transmit(mail, snapshot);
   });
+  keepDraftNow();
 });
+
+let draftTimer = 0;
+
+function keepDraftNow() {
+  clearTimeout(draftTimer);
+  if (state.mode !== "compose" || !state.draft) return;
+  commitDraft();
+  kept.quietUntil = 0;
+  renderCounts();
+}
+
+const keepDraftSoon = () => {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(keepDraftNow, 1500);
+};
 
 function sendCompose() {
   readDraftFields();
@@ -1227,9 +1300,11 @@ async function startSync({ initial = false } = {}) {
   state.accounts = result.accounts || [];
   const known = new Set(state.mails.map((mail) => mail.id));
   const local = state.mails.filter((mail) => !mail.account || mail.folder !== "inbox");
-  const inbox = (result.messages || []).map((mail) => ({ ...mail, at: new Date(mail.received), attachments: [], read: !!mail.read, flagged: false }))
+  const fetched = (result.messages || []).map((mail) => ({ ...mail, at: new Date(mail.received), attachments: [], read: !!mail.read, flagged: false }))
     .filter((mail) => !local.some((item) => item.id === mail.id));
-  state.mails = [...local, ...inbox];
+  fetched.filter((mail) => mail.folder === "archive").forEach((mail) => kept.archive.add(mail.id));
+  const inbox = fetched.filter((mail) => mail.folder === "inbox");
+  state.mails = [...local, ...fetched];
   data.mailUnread = inbox.filter((mail) => !mail.read).length;
   const fresh = inbox.filter((mail) => !known.has(mail.id)).map((mail) => mail.id);
   render({ flip: true });
@@ -1362,6 +1437,9 @@ function onKey(event) {
   if (key === "e" && mail && (mail.folder === "inbox" || mail.folder === "sent")) {
     event.preventDefault();
     moveMail(id, "archive");
+  } else if (key === "e" && mail && mail.folder === "archive" && !outgoing(mail)) {
+    event.preventDefault();
+    moveMail(id, "inbox");
   } else if (key === "u" && mail && !outgoing(mail)) {
     event.preventDefault();
     if (mail.read) markUnread(id);
@@ -1424,6 +1502,7 @@ function bindReader() {
   reader.addEventListener("submit", (event) => event.preventDefault());
   reader.addEventListener("input", (event) => {
     if (state.mode !== "compose" || !state.draft) return;
+    keepDraftSoon();
     const field = event.target;
     if (field.id === "composeTo") {
       state.draft.to = field.value;

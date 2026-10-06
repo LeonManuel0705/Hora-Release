@@ -557,3 +557,113 @@ def test_the_iserv_login_page_is_told_from_a_plan():
     assert not iserv_service._is_login_page(page("https://schule.example/iserv/infodisplay/show/3", "<img src='/iserv/infodisplay/file/3/1'>"))
     assert not iserv_service._is_login_page(page("https://schule.example/iserv/infodisplay/file/3/1", "", "image/png"))
 
+
+def test_mail_drafts_outlive_the_page(client):
+    drafts = lambda: [(item["id"], item["to"], item["subject"], item["body"]) for item in page_data(client, "/hub/email")["page"]["drafts"]]
+    assert drafts() == []
+    letter = {"to": "ben@example.org", "subject": "Referat", "body": "Hallo Ben,\nwann treffen wir uns?", "replyTo": None, "account": None}
+    assert client.put("/api/ui/mail/drafts/draft-1759700000000", json=letter).status_code == 200
+    assert drafts() == [("draft-1759700000000", "ben@example.org", "Referat", letter["body"])]
+    client.put("/api/ui/mail/drafts/draft-1759700000001", json={"to": "", "subject": "Zweiter", "body": ""})
+    client.put("/api/ui/mail/drafts/draft-1759700000000", json={**letter, "subject": "Referat Bio"})
+    assert sorted(item[2] for item in drafts()) == ["Referat Bio", "Zweiter"]
+    assert client.put("/api/ui/mail/drafts/draft-1759700000001", json={"to": " ", "subject": "", "body": "  "}).status_code == 200
+    assert [item[2] for item in drafts()] == ["Referat Bio"]
+    assert client.delete("/api/ui/mail/drafts/draft-1759700000000").status_code == 200
+    assert client.delete("/api/ui/mail/drafts/draft-1759700000000").status_code == 200
+    assert drafts() == []
+    assert client.put("/api/ui/mail/drafts/entwurf", json=letter).status_code == 404
+    assert client.put("/api/ui/mail/drafts/draft-1", data="x").status_code == 400
+
+    # A long mail is kept as long as it could be sent.
+    long = "Zeile mit Umlauten äöü\n" * 2500
+    assert client.put("/api/ui/mail/drafts/draft-2", json={**letter, "body": long}).status_code == 200
+    assert drafts()[0][3] == long
+    assert client.delete("/api/ui/mail/drafts/draft-2").status_code == 200
+
+
+def test_a_mail_put_into_the_archive_stays_there(client, monkeypatch):
+    from app import ui_pages
+
+    account = {"email": "leon@example.org", "name": "Mail", "kind": "imap"}
+    mails = [{"id": "7", "from": "a@example.org", "subject": "Hallo", "date": "2026-10-05 10:00"}, {"id": "8", "from": "b@example.org", "subject": "Termin", "date": "2026-10-05 11:00"}]
+    monkeypatch.setattr(ui_pages, "_mail_accounts", lambda: [account])
+    monkeypatch.setattr(ui_pages, "_fetch_inbox", lambda account, limit: (True, mails))
+    folders = lambda: {item["uid"]: item["folder"] for item in client.get("/api/ui/mail").get_json()["messages"]}
+    assert folders() == {"7": "inbox", "8": "inbox"}
+    assert client.put("/api/ui/mail/archive", json={"id": "leon@example.org|7", "archived": True}).status_code == 200
+    assert folders() == {"7": "archive", "8": "inbox"}
+    client.put("/api/ui/mail/archive", json={"id": "leon@example.org|7", "archived": True})
+    assert len(ui_data.load_list("mail_archive")) == 1
+    assert client.put("/api/ui/mail/archive", json={"id": "leon@example.org|7", "archived": False}).status_code == 200
+    assert folders() == {"7": "inbox", "8": "inbox"}
+    assert client.put("/api/ui/mail/archive", json={"id": "", "archived": True}).status_code == 400
+    assert client.put("/api/ui/mail/archive", json={"id": "ohne-konto", "archived": True}).status_code == 400
+
+
+def test_notes_and_ideas_can_be_seen_changed_and_removed(client):
+    listed = lambda: [(item["type"], item["title"], item["details"]) for item in page_data(client, "/hub/tasks")["page"]["notes"]]
+    assert listed() == []
+    note = client.post("/api/ui/notes", json={"type": "note", "title": "Ben wegen Referat fragen", "details": "Thema Vulkane"}).get_json()["note"]
+    idea = client.post("/api/ui/notes", json={"type": "idea", "title": "Lernkarten für Bio", "created": "2026-10-01T08:00:00"}).get_json()["note"]
+    assert (note["type"], idea["type"], idea["created"]) == ("note", "idea", "2026-10-01T08:00:00")
+    assert listed() == [("note", "Ben wegen Referat fragen", "Thema Vulkane"), ("idea", "Lernkarten für Bio", "")]
+
+    changed = client.patch(f"/api/ui/notes/{idea['id']}", json={"title": "Lernkarten für Bio und Chemie", "details": "mit Bildern", "type": "note"}).get_json()["note"]
+    assert (changed["type"], changed["title"], changed["details"], changed["created"]) == ("note", "Lernkarten für Bio und Chemie", "mit Bildern", "2026-10-01T08:00:00")
+    assert client.patch(f"/api/ui/notes/{idea['id']}", json={"title": "  "}).status_code == 400
+    assert client.patch("/api/ui/notes/gibt-es-nicht", json={"title": "x"}).status_code == 404
+
+    removed = client.delete(f"/api/ui/notes/{note['id']}").get_json()["note"]
+    assert removed["title"] == "Ben wegen Referat fragen"
+    assert client.delete(f"/api/ui/notes/{note['id']}").status_code == 404
+    assert [item[1] for item in listed()] == ["Lernkarten für Bio und Chemie"]
+    assert client.delete(f"/api/ui/notes/{idea['id']}").status_code == 200
+
+    # Two notes from the same second still come newest first.
+    quick = [client.post("/api/ui/notes", json={"type": "note", "title": title}).get_json()["note"] for title in ("zuerst", "danach")]
+    assert [item[1] for item in listed()] == ["danach", "zuerst"]
+    for item in quick:
+        assert client.delete(f"/api/ui/notes/{item['id']}").status_code == 200
+
+
+def test_a_note_from_the_older_interface_without_a_title_shows_its_first_line(client):
+    ui_data.modify_list("notes", lambda items: items.append({"id": "alt-1", "type": "note", "title": None, "content": "Sportzeug waschen\nbis Mittwoch\nund trocknen", "created_at": "2026-09-30T18:00:00"}))
+    shown = page_data(client, "/hub/tasks")["page"]["notes"]
+    assert [(item["id"], item["title"], item["details"]) for item in shown] == [("alt-1", "Sportzeug waschen", "bis Mittwoch\nund trocknen")]
+
+    # Saving what the list shows keeps every line: the first one becomes the title, the rest stays the text.
+    saved = client.patch("/api/ui/notes/alt-1", json={"title": shown[0]["title"], "details": shown[0]["details"], "type": "idea"}).get_json()["note"]
+    assert (saved["type"], saved["title"], saved["details"]) == ("idea", "Sportzeug waschen", "bis Mittwoch\nund trocknen")
+    stored = next(item for item in ui_data.load_list("notes") if item["id"] == "alt-1")
+    assert (stored["title"], stored["content"]) == ("Sportzeug waschen", "bis Mittwoch\nund trocknen")
+    assert client.delete("/api/ui/notes/alt-1").status_code == 200
+
+
+def test_the_source_of_the_assistant_can_be_chosen(client, tmp_path, monkeypatch):
+    from app import assistant_service as ai
+
+    monkeypatch.setattr(ai, "CONFIG_FILE", tmp_path / "assistant_config.json")
+    monkeypatch.setattr(ai, "check_ollama_status", lambda: {"available": True, "models": ["gemma3:4b", "qwen2.5:14b"]})
+    monkeypatch.setattr(ai, "check_local_status", lambda: {"available": True, "model": "Eingebaut"})
+    monkeypatch.setattr(ai, "release_assistant_soon", lambda delay=0: None)
+    start = client.get("/api/hub/assistant/config").get_json()
+    assert (start["preferred_backend"], start["active"]["backend"], start["ollama_models"]) == ("auto", "local", ["gemma3:4b", "qwen2.5:14b"])
+    assert start["claude_api_key_set"] is False
+
+    chosen = client.post("/api/hub/assistant/config", json={"preferred_backend": "ollama", "ollama_model": "gemma3:4b"}).get_json()
+    assert (chosen["preferred_backend"], chosen["ollama_model"], chosen["active"]["backend"], chosen["active"]["model"]) == ("ollama", "gemma3:4b", "ollama", "gemma3:4b")
+    missing = client.post("/api/hub/assistant/config", json={"ollama_model": "nicht-da:1b"}).get_json()
+    assert missing["active"]["backend"] == "offline"
+    assert client.post("/api/hub/assistant/config", json={"preferred_backend": "offline"}).get_json()["active"]["available"] is False
+
+    assert client.post("/api/hub/assistant/config", json={"preferred_backend": "irgendwas"}).status_code == 400
+    assert client.post("/api/hub/assistant/config", json={"ollama_model": "a b; rm"}).status_code == 400
+    assert client.post("/api/hub/assistant/config", json={"claude_api_key": ["x"]}).status_code == 400
+    assert client.post("/api/hub/assistant/config", json={}).status_code == 400
+
+    keyed = client.post("/api/hub/assistant/config", json={"claude_api_key": "  sk-ant-test-0123456789abcdef  "}).get_json()
+    assert keyed["claude_api_key_set"] is True and "0123456789" not in json.dumps(keyed)
+    assert ai.load_config()["claude_api_key"] == "sk-ant-test-0123456789abcdef"
+    assert client.post("/api/hub/assistant/config", json={"claude_api_key": ""}).get_json()["claude_api_key_set"] is False
+

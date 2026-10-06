@@ -476,18 +476,55 @@ def create_note():
     title = _text(payload.get('title'), 300)
     if not title:
         return _error('Titel fehlt')
+    try:
+        created = datetime.fromisoformat(str(payload.get('created') or '')).isoformat()
+    except ValueError:
+        created = datetime.now().isoformat()
     note = {
         'id': ui_data.full_id(),
         'type': 'idea' if payload.get('type') == 'idea' else 'note',
         'title': title,
         'content': _text(payload.get('details'), 5000),
-        'created_at': datetime.now().isoformat(),
+        'created_at': created,
     }
     try:
         ui_data.modify_list('notes', lambda items: items.append(note))
     except ui_data.StoreError:
         return _error('Die Notizen ließen sich nicht lesen', 500)
-    return jsonify({'success': True, 'note': {'id': note['id']}})
+    return jsonify({'success': True, 'note': ui_data.note_view(note)})
+
+
+@bp.route('/api/ui/notes/<ref>', methods=['PATCH', 'DELETE'])
+def change_note(ref):
+    payload = _payload() if request.method == 'PATCH' else {}
+    if payload is None:
+        return _error('JSON erwartet')
+    if 'title' in payload and not _text(payload.get('title'), 300):
+        return _error('Titel fehlt')
+    found = {}
+
+    def change(items):
+        for index, item in enumerate(items):
+            if not isinstance(item, dict) or str(item.get('id')) != ref:
+                continue
+            if request.method == 'DELETE':
+                del items[index]
+            else:
+                if 'title' in payload:
+                    item['title'] = _text(payload.get('title'), 300)
+                if 'details' in payload:
+                    item['content'] = _text(payload.get('details'), 5000)
+                if payload.get('type') in ('note', 'idea'):
+                    item['type'] = payload['type']
+            found.update(item)
+            return True
+        return False
+
+    try:
+        changed = ui_data.modify_list('notes', change)
+    except ui_data.StoreError:
+        return _error('Die Notizen ließen sich nicht lesen', 500)
+    return jsonify({'success': True, 'note': ui_data.note_view(found)}) if changed else _error('Notiz nicht gefunden', 404)
 
 
 def _synced_macos(start, end):
@@ -801,7 +838,71 @@ def mail_inbox():
         if not ok:
             failed.append(account['name'])
         messages.extend(_mail_view(account, item) for item in items if item.get('id') is not None)
+    archived = ui_data.archived_mails()
+    for message in messages:
+        if message['id'] in archived:
+            message['folder'] = 'archive'
     return jsonify({'success': True, 'accounts': accounts, 'messages': messages, 'failed': failed})
+
+
+MAIL_DRAFTS, MAIL_ARCHIVE, MAIL_BODY = 100, 2000, 100000
+
+
+@bp.route('/api/ui/mail/drafts/<ref>', methods=['PUT', 'DELETE'])
+def mail_draft(ref):
+    """Keeps a mail that is being written, so that it outlives the page. Drafts stay on this device and are not sent anywhere."""
+    if not re.fullmatch(r'draft-[0-9a-z-]{1,40}', ref):
+        return _error('Entwurf nicht gefunden', 404)
+    draft = None
+    if request.method == 'PUT':
+        payload = _payload()
+        if payload is None:
+            return _error('JSON erwartet')
+        draft = {
+            'id': ref,
+            'to': _text(payload.get('to'), 300),
+            'subject': _text(payload.get('subject'), 300),
+            'body': str(payload.get('body') or '')[:MAIL_BODY],
+            'reply_to': _text(payload.get('replyTo'), 300) or None,
+            'account': _text(payload.get('account'), 200) or None,
+            'saved_at': datetime.now().isoformat(timespec='seconds'),
+        }
+        if not (draft['to'] or draft['subject'] or draft['body'].strip()):
+            draft = None
+
+    def change(items):
+        kept = [item for item in items if not (isinstance(item, dict) and item.get('id') == ref)]
+        items[:] = ([*kept, draft] if draft else kept)[-MAIL_DRAFTS:]
+        return True
+
+    try:
+        ui_data.modify_list('mail_drafts', change)
+    except ui_data.StoreError:
+        return _error('Die Entwürfe ließen sich nicht lesen', 500)
+    return jsonify({'success': True})
+
+
+@bp.route('/api/ui/mail/archive', methods=['PUT'])
+def mail_archive():
+    """Remembers which mails were put into the archive here. The mailbox itself is left as it is."""
+    payload = _payload()
+    if payload is None:
+        return _error('JSON erwartet')
+    key = _text(payload.get('id'), 500)
+    if not key or '|' not in key:
+        return _error('Mail fehlt')
+    entry = {'id': key, 'at': datetime.now().isoformat(timespec='seconds')} if payload.get('archived') else None
+
+    def change(items):
+        kept = [item for item in items if not (isinstance(item, dict) and item.get('id') == key)]
+        items[:] = ([*kept, entry] if entry else kept)[-MAIL_ARCHIVE:]
+        return True
+
+    try:
+        ui_data.modify_list('mail_archive', change)
+    except ui_data.StoreError:
+        return _error('Das Archiv ließ sich nicht lesen', 500)
+    return jsonify({'success': True})
 
 
 def _mail_target():
@@ -855,7 +956,7 @@ def mail_send():
     account = _text(payload.get('account'), 200)
     to = _text(payload.get('to'), 300)
     subject = _text(payload.get('subject'), 300) or '(ohne Betreff)'
-    body = str(payload.get('body') or '')[:100000]
+    body = str(payload.get('body') or '')[:MAIL_BODY]
     if not account or not to:
         return _error('Absender oder Empfänger fehlt')
     try:

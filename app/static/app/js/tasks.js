@@ -2,6 +2,7 @@ import { data, esc, icon, tinte, isoDate, parseDate, addDays, startOfDay, dayDif
 import { animates, travels, flipKeyed, exitInPlace, enterInPlace, token } from "./motion.js";
 import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen } from "./shell.js";
 import { tasks as taskApi, deadlines as deadlineApi, debounced, serverId } from "./api.js";
+import { initNoteList } from "./notes.js";
 
 const saveText = debounced(700, (key, id, changes) => taskApi.update(id, changes));
 
@@ -399,10 +400,11 @@ function createTask(text) {
   });
 }
 
-function addTask(task) {
+function addTask(task, { tell = true } = {}) {
   state.tasks.push(task);
-  if (task.synced) deadlineApi.create({ id: task.id.slice(6), kind: "Hausaufgabe", title: task.title, subject: task.subject || null, date: task.date, detail: task.detail || "" });
-  else taskApi.create(task);
+  const saved = task.synced
+    ? deadlineApi.create({ id: task.id.slice(6), kind: "Hausaufgabe", title: task.title, subject: task.subject || null, date: task.date, detail: task.detail || "" })
+    : taskApi.create(task);
   document.dispatchEvent(new CustomEvent("app:task-created", { detail: { id: task.id, title: task.title } }));
   if (!inFilter(task)) {
     state.filter = "alle";
@@ -413,7 +415,8 @@ function addTask(task) {
   const row = rowOf(task.id);
   enterInPlace(row);
   row?.classList.add("is-flash");
-  toast(`Angelegt: „${esc(task.title)}“`, { icon: "check", action: { label: "Rückgängig", undo: true, run: () => removeTask(task.id, "delete") } });
+  if (tell) toast(`Angelegt: „${esc(task.title)}“`, { icon: "check", action: { label: "Rückgängig", undo: true, run: () => removeTask(task.id, "delete") } });
+  return saved;
 }
 
 function renderChips() {
@@ -716,6 +719,22 @@ function bindNotes() {
   });
 }
 
+function taskFromNote(note) {
+  const task = { id: `new-${Date.now()}`, title: note.title, subject: null, date: today(), anchor: "", minutes: 20, source: "own", notes: note.details || "", done: false };
+  const saved = addTask(task, { tell: false });
+  const undo = () => {
+    const index = state.tasks.indexOf(task);
+    if (index < 0) return;
+    state.tasks.splice(index, 1);
+    saveText.cancel(`${task.id}:notes`);
+    saveText.cancel(`${task.id}:title`);
+    taskApi.remove(task.id);
+    if (state.selected === task.id) closePanel();
+    render({ flip: true });
+  };
+  return { saved, undo };
+}
+
 export function initTasks() {
   if (!$("tasksPage")) return;
   load();
@@ -723,4 +742,5 @@ export function initTasks() {
   bind();
   bindNotes();
   render();
+  initNoteList({ toTask: taskFromNote });
 }
