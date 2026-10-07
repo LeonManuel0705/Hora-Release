@@ -6,6 +6,6 @@
 class BuildInfo {
   static const String version = '0.5.2';
   static const String versionName = '0.5.2 Closed Beta';
-  static const int buildNumber = 38;
-  static const String fullVersion = '0.5.2 Build 38';
+  static const int buildNumber = 39;
+  static const String fullVersion = '0.5.2 Build 39';
 }
