@@ -117,9 +117,10 @@
 .set-form + .set-row { border-top: 1px solid var(--line-soft); }
 
 .set-row-text { min-width: 0; }
-.set-row-label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: var(--text-base); font-weight: var(--weight-medium); line-height: 1.35; color: var(--ink); }
+.set-row-label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: var(--text-base); font-weight: var(--weight-medium); line-height: 1.35; color: var(--ink); text-wrap: balance; }
 .set-row-desc { max-width: 62ch; margin-top: 3px; font-size: var(--text-sm); line-height: 1.45; color: var(--ink-muted); text-wrap: pretty; }
 .set-row-control { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.set-row-control:empty { display: none; }
 .set-row.is-muted .set-row-label { color: var(--ink-muted); }
 
 .set-value { display: grid; justify-items: end; gap: 1px; font-size: var(--text-base); font-weight: var(--weight-medium); color: var(--ink); text-align: right; }
@@ -238,7 +239,8 @@
 
 .about-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px 20px; padding: 18px 0 16px; }
 .about-list dt { font-size: var(--text-sm); color: var(--ink-muted); }
-.about-list dd { margin-top: 2px; font-size: var(--text-base); font-weight: var(--weight-medium); color: var(--ink); }
+.about-list dd { margin-top: 2px; font-size: var(--text-base); font-weight: var(--weight-medium); color: var(--ink); text-wrap: pretty; }
+.about-part { display: inline-block; }
 .about-links { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 0 6px; border-top: 1px solid var(--line-soft); }
 .about-links .pill { color: var(--ink); }
 .about-links .pill .icon { --s: 16; color: var(--ink-soft); }
@@ -459,7 +461,7 @@
 .raster-card { padding: 18px 22px 10px; }
 .set-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .set-card-title { font-size: var(--text-md); font-weight: var(--weight-strong); color: var(--ink); }
-.set-card-meta { margin-top: 2px; font-size: var(--text-sm); color: var(--ink-muted); }
+.set-card-meta { margin-top: 2px; font-size: var(--text-sm); color: var(--ink-muted); text-wrap: balance; }
 .set-card-head .text-button { margin: -4px -8px 0 0; }
 .text-button:disabled { opacity: 0.45; cursor: default; }
 
@@ -745,7 +747,7 @@
   .kind-row .set-row-text { grid-column: 1; grid-row: 1; }
   .kind-switch { grid-column: 2; grid-row: 1; }
   .kind-lead { grid-column: 1 / -1; grid-row: 2; }
-  .kind-lead select.field-control { font-size: 16px; }
+  .kind-lead select.field-control { min-width: 172px; font-size: 16px; }
   .set-row-control .field-control, .form-field .field-control, .raster-input.field-control, .cell-room-input.field-control { font-size: 16px; }
   .set-value { justify-items: start; text-align: left; }
   .plan-board { padding: 12px 10px 10px; border-radius: 24px; }
@@ -764,6 +766,11 @@
   .raster-remove { margin-left: 0; }
   .retired-row { grid-template-columns: minmax(0, 1fr); }
   .retired-row .set-row-control { justify-content: flex-start; }
+  .subject-row .set-row-label { display: block; padding-left: 18px; text-indent: -18px; text-wrap: wrap; }
+  .subject-row .set-row-label > * { text-indent: 0; }
+  .subject-row .set-row-label > span:first-of-type::after { content: " "; letter-spacing: 6px; }
+  .subject-row .set-row-label .subject-dot { margin-right: 10px; vertical-align: 1px; }
+  .subject-row .set-row-label .short-tag { vertical-align: top; }
   .set-form-grid { grid-template-columns: minmax(0, 1fr); }
   .about-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
@@ -808,6 +815,10 @@
 
 @media (max-width: 359px) {
   .look-modes .icon { display: none; }
+  .plan-actions .btn { min-width: 0; height: auto; padding-inline: 8px; white-space: normal; text-align: center; }
+  .set-row:has(> .set-row-control > :is(.btn, .status)) { grid-template-columns: minmax(0, 1fr); }
+  .set-row:has(> .set-row-control > :is(.btn, .status)) .set-row-control { justify-content: flex-start; }
+  .set-row-control input[type="time"].field-control { width: 104px; }
   .raster-row { grid-template-columns: 22px minmax(0, 96px) auto minmax(0, 96px) minmax(0, 1fr); row-gap: 2px; }
   .raster-len { grid-column: 2 / -1; }
 }

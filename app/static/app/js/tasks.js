@@ -108,7 +108,7 @@ function metaFor(task) {
     const diff = dayDiff(startOfDay(now()), linked.date);
     badges.push(`<span class="badge is-test">${icon(ASSESSMENTS[linked.kind].icon)}${esc(linked.kind)} ${esc(diff <= 1 ? relativeDay(diff, parseDate(linked.date)) : WEEKDAYS_SHORT[parseDate(linked.date).getDay()] + ".")}</span>`);
   }
-  return `${parts.join(", ")}${badges.length ? `<span class="badges">${badges.join("")}</span>` : ""}`;
+  return `${parts.join(", ")}${badges.length ? `<span class="badges${parts.length ? "" : " is-first"}">${badges.join("")}</span>` : ""}`;
 }
 
 function rowHtml(task) {

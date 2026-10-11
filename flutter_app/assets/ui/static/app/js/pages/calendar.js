@@ -337,7 +337,8 @@ function eventCard(entry, pos, len) {
   const detail = state.narrow ? `${timeText(item)}${item.place ? `, ${esc(item.place)}` : ""}` : hm(item.start);
   const place = !state.narrow && !size && item.place ? `<span class="ev-place">${esc(item.place)}</span>` : "";
   const tip = state.narrow ? "" : ` data-tip="${esc(`<b>${esc(item.title)}</b><br>${esc(timeText(item))}${item.place ? `, ${esc(item.place)}` : ""}`)}"`;
-  const classes = ["ev", isPast(item) ? "is-past" : "", state.narrow ? "is-wrap" : size || "is-tall", entry.indent ? "is-stacked" : "", state.selected === item.id ? "is-selected" : ""].filter(Boolean).join(" ");
+  const fit = state.narrow ? (e - s < 55 ? "is-short" : e - s < 80 ? "is-medium" : "is-wrap") : size || "is-tall";
+  const classes = ["ev", isPast(item) ? "is-past" : "", fit, entry.indent ? "is-stacked" : "", state.selected === item.id ? "is-selected" : ""].filter(Boolean).join(" ");
   return `<button type="button" class="${classes}" data-id="${esc(item.id)}" data-key="ev:${esc(item.id)}" data-flip="ev:${esc(item.id)}" data-order="${item.date}|1|${item.start}" style="--top:${pos(s)};--len:${len(s, e)};--lane:${entry.lane};--lanes:${entry.lanes};--indent:${entry.indent};--k:${kindVar(item.kind)}"${tip} aria-label="${esc(label)}">
     <span class="ev-title" data-title-of="${esc(item.id)}">${esc(item.title)}</span><span class="ev-time">${detail}</span>${place}
   </button>`;

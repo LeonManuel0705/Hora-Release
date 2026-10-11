@@ -784,7 +784,7 @@ function renderTasks() {
     }
   } else {
     list.innerHTML = open.slice(0, 5).map((task) => taskRow(task, date)).join("");
-    if (open.length > 5) list.insertAdjacentHTML("beforeend", `<li class="row is-interactive more-row" data-more-tasks data-flip="tasks-more" tabindex="-1"><span></span><button type="button" class="row-link more-link">${open.length - 5} weitere Aufgaben</button>${icon("chevron-right", "chev-end")}</li>`);
+    if (open.length > 5) list.insertAdjacentHTML("beforeend", `<li class="row is-interactive more-row" data-more-tasks data-flip="tasks-more" tabindex="-1"><span></span><button type="button" class="row-link more-link">${open.length === 6 ? "1 weitere Aufgabe" : `${open.length - 5} weitere Aufgaben`}</button>${icon("chevron-right", "chev-end")}</li>`);
   }
   const doneList = $("doneList");
   const filed = doneTasks().filter((task) => !state.pending.has(task.id));
@@ -827,7 +827,7 @@ function dueMeta(item, date) {
   else if (diff <= 1) when = `<span class="due-when${prepared ? "" : " is-urgent"}">${cap(relativeDay(diff, target))}</span>`;
   else when = `<span class="due-when">${inDays(diff)}</span>`;
   const prep = prepared ? `, <span class="row-note is-ready">${icon("check")}vorbereitet</span>` : "";
-  return { html: `${kind} ${subjectText}${subjectText ? ", " : ""}${when}${prep}`, prepared, diff };
+  return { html: `${kind}${subjectText ? ` ${subjectText}` : ""}, ${when}${prep}`, prepared, diff };
 }
 
 function dueRow(item, date) {

@@ -972,7 +972,7 @@ function lessonBox(lesson, time) {
 
 function slotsHtml(key) {
   const slots = slotsOf(key);
-  const line = (list) => list.length ? list.map((slot) => `${WEEKDAYS_SHORT[slot.dow % 7]}. ${slot.block}.\u00a0Block`).join(", ") : "keine Stunde";
+  const line = (list) => list.length ? list.map((slot) => `${WEEKDAYS_SHORT[slot.dow % 7]}.\u00a0${slot.block}.\u00a0Block`).join(", ") : "keine Stunde";
   if (!abWeeks()) return `<ul class="slot-list"><li><span>${esc(line(slots.A))}</span></li></ul>`;
   return `<ul class="slot-list">${["A", "B"].map((week) => `<li><span class="week-badge" aria-label="${week}-Woche">${week}</span><span>${esc(line(slots[week]))}</span></li>`).join("")}</ul>`;
 }
@@ -1299,11 +1299,11 @@ function scaleHtml(overall) {
     return `<tr><th scope="row">${word}</th>${cells.join("")}</tr>`;
   }).join("");
   const title = grades ? "Noten und Bewertung" : "Punkte und Noten";
-  const caption = grades ? "Noten der Mittelstufe mit Wert und Bewertung" : "Punkte und Noten in der Oberstufe";
+  const label = grades ? "Noten der Mittelstufe mit Wert und Bewertung" : "Punkte und Noten in der Oberstufe";
   const hint = mine == null ? "" : grades ? `Umrandet: dein Schnitt in ${SEMESTER} als Note.` : `Umrandet: dein Schnitt in ${SEMESTER}, gerundet.`;
   return `<details class="calc scale-box"${state.calc.table ? " open" : ""}>
     <summary class="calc-summary"><span>${title}</span>${icon("chevron-down", "calc-chev")}</summary>
-    <table class="scale${grades ? " is-grades" : ""}"><caption class="visually-hidden">${caption}</caption><tbody>${rows}</tbody></table>
+    <table class="scale${grades ? " is-grades" : ""}" aria-label="${label}"><tbody>${rows}</tbody></table>
     ${hint ? `<p class="side-hint">${hint}</p>` : ""}
   </details>`;
 }

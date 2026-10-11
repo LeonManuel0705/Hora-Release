@@ -1168,7 +1168,7 @@ function renderSchool() {
   const grade = Number(prefs.school.grade);
   const state = school.loading || prefs.school.state;
   const rows = [
-    row({ id: "rowSchoolName", label: "Schule", desc: "Kommt aus IServ", control: `<span class="set-value">${esc(info.name || "")}<small>${esc(info.town || "")}</small></span>`, cls: "is-stack" }),
+    row({ id: "rowSchoolName", label: "Schule", desc: "Kommt aus IServ", control: info.name || info.town ? `<span class="set-value">${esc(info.name || "")}<small>${esc(info.town || "")}</small></span>` : "", cls: "is-stack" }),
     row({ id: "rowGrade", label: "Klassenstufe", forId: "gradeSelect", desc: gradeDesc(grade), control: `<select class="field-control" id="gradeSelect" aria-describedby="rowGradeDesc">${GRADES.map((value) => `<option value="${value}"${value === grade ? " selected" : ""}>Klasse ${value}</option>`).join("")}</select>` }),
     row({ id: "rowState", label: "Bundesland", forId: "stateSelect", desc: "Für Ferien und Feiertage im Kalender", control: `<select class="field-control" id="stateSelect" aria-describedby="rowStateDesc"${school.loading ? " disabled" : ""}>${(page.states || []).map((item) => `<option value="${item.code}"${item.code === state ? " selected" : ""}>${esc(item.name)}</option>`).join("")}</select>`, cls: "is-stack" }),
     school.loading ? loadingHtml(`Lade Ferien und Feiertage für ${stateName(school.loading)}`, "Dauert nur einen Moment.") : "",
@@ -2691,7 +2691,7 @@ function aiSourceRows() {
   const options = AI_SOURCES.map(([key, name]) => `<option value="${key}"${key === chosen ? " selected" : ""}>${name}</option>`).join("");
   const rows = [row({
     id: "rowAiSource", label: "Antworten kommen von", forId: "aiSource", desc: AI_SOURCES.find(([key]) => key === chosen)[2] + state,
-    control: `<select class="field-control" id="aiSource" aria-describedby="rowAiSourceDesc">${options}</select>`,
+    control: `<select class="field-control" id="aiSource" aria-describedby="rowAiSourceDesc">${options}</select>`, cls: "is-stack",
   })];
   if (chosen === "ollama") {
     const loaded = config.ollama_models || [];
@@ -2701,7 +2701,7 @@ function aiSourceRows() {
     rows.push(row({
       id: "rowAiOllama", label: "Ollama-Modell", forId: "aiOllamaModel",
       desc: loaded.length ? "Zur Wahl stehen die Modelle, die Ollama auf diesem Gerät hat." : config.ollama_running ? "Ollama hat noch kein Modell. Lade dort zuerst eins." : "Ollama läuft auf diesem Gerät gerade nicht.",
-      control: `<select class="field-control" id="aiOllamaModel" aria-describedby="rowAiOllamaDesc">${choices}</select>`,
+      control: `<select class="field-control" id="aiOllamaModel" aria-describedby="rowAiOllamaDesc">${choices}</select>`, cls: "is-stack",
     }));
   }
   if (chosen === "claude") {
@@ -2976,7 +2976,7 @@ function systemName() {
 function renderAbout() {
   const card = $("aboutCard");
   const about = page.about || {};
-  const version = card.dataset.version || about.version || "";
+  const version = esc(card.dataset.version || about.version || "").replace(/^(.+?) (\([^)]*\))$/, `<span class="about-part">$1</span> <span class="about-part">$2</span>`);
   const where = platform.desktop ? `${systemName()}, Desktop-App` : `${systemName()}, im Browser`;
   const browser = typeof window.hubShell?.openInBrowser === "function"
     ? `<button class="pill" type="button" id="openInBrowser">${icon("arrow-up-right")}Im Browser öffnen</button>`
@@ -2988,7 +2988,7 @@ function renderAbout() {
     about.source && [about.source, "Quellcode", "code"],
   ].filter(Boolean);
   card.innerHTML = `<dl class="about-list">
-      <div><dt>Version</dt><dd>${esc(version)}</dd></div>
+      <div><dt>Version</dt><dd>${version}</dd></div>
       <div><dt>Plattform</dt><dd>${esc(where)}</dd></div>
       <div><dt>Daten</dt><dd>Lokal auf diesem Gerät</dd></div>
       <div><dt>Lizenz</dt><dd>${esc(about.license || "AGPL-3.0")}</dd></div>

@@ -263,7 +263,7 @@
   top: 24px;
   display: grid;
   gap: 16px;
-  max-height: calc(100dvh - 108px);
+  max-height: calc(100dvh - 96px);
   overflow-y: auto;
   overscroll-behavior: contain;
   border-radius: 24px;
@@ -594,7 +594,7 @@
 
 .grade-bar {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 34px;
+  grid-template-columns: 124px minmax(0, 1fr) 34px;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -808,7 +808,7 @@
     position: fixed;
     right: 12px;
     bottom: calc(12px + var(--bar-space, 0px));
-    left: 12px;
+    left: calc(var(--sidebar-width) + 12px);
     z-index: 40;
     max-width: 620px;
     max-height: min(72vh, 660px);
@@ -896,5 +896,9 @@
   .free-slot { min-height: 76px; }
   .chapters { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
   .chapter-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .grade-bar { grid-template-columns: 84px minmax(0, 1fr) 34px; }
+  .grade-bar { grid-template-columns: 120px minmax(0, 1fr) 34px; }
+}
+
+@media (max-width: 359px) {
+  .seg-range { display: none; }
 }
