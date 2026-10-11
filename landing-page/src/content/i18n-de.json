@@ -558,10 +558,10 @@
       },
       {
         "icon": "globe",
-        "to": "Google",
-        "what": "Adressen deiner Lesezeichen, für die kleinen Seitensymbole",
-        "when": "Lesezeichen am Computer",
-        "tone": "warn"
+        "to": "Die verlinkten Seiten",
+        "what": "ein Abruf der Seite, um ihr Logo neben dem Lesezeichen zu zeigen",
+        "when": "wenn du deine Lesezeichen öffnest",
+        "tone": "ok"
       },
       {
         "icon": "server-off",

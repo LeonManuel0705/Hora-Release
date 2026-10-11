@@ -558,10 +558,10 @@
       },
       {
         "icon": "globe",
-        "to": "Google",
-        "what": "addresses of your bookmarks, for the little site icons",
-        "when": "bookmarks on the computer",
-        "tone": "warn"
+        "to": "The linked sites",
+        "what": "a request to the page, to show its logo next to the bookmark",
+        "when": "when you open your bookmarks",
+        "tone": "ok"
       },
       {
         "icon": "server-off",
