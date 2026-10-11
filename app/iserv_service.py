@@ -8,6 +8,7 @@ import socket
 from datetime import datetime, timedelta
 from email import message_from_string
 from pathlib import Path
+from types import SimpleNamespace
 
 from .crypto_utils import encrypt_file, decrypt_file
 
@@ -24,6 +25,7 @@ root_logger.addFilter(IServWarningFilter())
 from urllib.parse import quote, urljoin, urlparse
 from urllib3.util import parse_url
 
+from bs4 import BeautifulSoup
 from IServAPI import IServAPI
 from .email_service import summarize_message
 from .paths import DATA_DIR
@@ -31,6 +33,8 @@ from .paths import DATA_DIR
 CREDENTIALS_FILE = DATA_DIR / 'iserv_credentials.json'
 
 _MAX_MAIL_SOURCE = 5 * 1024 * 1024
+_MAX_HANDOFF_PAGE = 200 * 1024
+_REFRESH_TARGET = re.compile(r'\s*\d+(?:\.\d*)?\s*[;,]\s*(?:url\s*=\s*)?(.+?)\s*$', re.IGNORECASE | re.DOTALL)
 
 _PLAN_KINDS = (
     (b'%PDF-', 'pdf', 'application/pdf', '.pdf'),
@@ -48,6 +52,36 @@ def _is_login_page(response):
     if 'text/html' not in str(response.headers.get('Content-Type', '')):
         return False
     return bool(re.search(r'name=["\']_(?:username|password)["\']', str(getattr(response, 'text', '') or '')[:20000]))
+
+
+def _on_auth_page(url) -> bool:
+    return urlparse(str(url or '')).path.startswith('/iserv/auth/')
+
+
+def _outside_app(response) -> bool:
+    return _is_login_page(response) or _on_auth_page(getattr(response, 'url', ''))
+
+
+def _handoff_target(response):
+    url = str(getattr(response, 'url', '') or '')
+    if getattr(response, 'status_code', None) != 200 or not _on_auth_page(url):
+        return None
+    if 'text/html' not in str(response.headers.get('Content-Type', '')):
+        return None
+    text = str(getattr(response, 'text', '') or '')[:_MAX_HANDOFF_PAGE]
+    if 'refresh' not in text.lower():
+        return None
+    for meta in BeautifulSoup(text, 'html.parser').find_all('meta'):
+        if str(meta.get('http-equiv') or '').strip().lower() != 'refresh':
+            continue
+        match = _REFRESH_TARGET.match(str(meta.get('content') or ''))
+        target = match.group(1).strip('\'"') if match else ''
+        if target:
+            try:
+                return urljoin(url, target)
+            except ValueError:
+                return None
+    return None
 
 
 def _plan_kind(content: bytes):
@@ -122,6 +156,29 @@ def _request_on_host(session, method: str, url: str, base_url: str, **kwargs):
         except ValueError:
             return None
     return None
+
+
+def _pass_handoff(session, base_url: str):
+    plain = session.request
+
+    def request(method, url, **kwargs):
+        response = plain(method, url, **kwargs)
+        target = _handoff_target(response)
+        if target is None:
+            return response
+        entered = _request_on_host(
+            SimpleNamespace(request=plain), 'GET', target, base_url,
+            timeout=kwargs.get('timeout') or _AUTO_CONNECT_TIMEOUT, stream=kwargs.get('stream', False),
+        )
+        if entered is None:
+            return response
+        response.close()
+        if _on_auth_page(url) or _outside_app(entered):
+            return entered
+        entered.close()
+        return plain(method, url, **kwargs)
+
+    session.request = request
 
 
 def _read_capped(response, limit: int):
@@ -288,6 +345,11 @@ class IServService:
 
             self.iserv_url = iserv_url
 
+            problem = self._enter_app()
+            if problem:
+                self.connected = False
+                return {'success': False, 'error': problem}
+
             try:
                 self.user_info = self.api.get_own_user_info()
             except Exception:
@@ -323,6 +385,23 @@ class IServService:
                 return {'success': False, 'error': 'SSL-Zertifikatfehler'}
             else:
                 return {'success': False, 'error': 'IServ-Verbindung fehlgeschlagen'}
+
+    def _enter_app(self):
+        session = getattr(self.api, '_session', None)
+        if session is None:
+            return None
+        base_url = f'https://{self.iserv_url}'
+        _pass_handoff(session, base_url)
+        response = _request_on_host(session, 'GET', f'{base_url}/iserv/', base_url, timeout=_AUTO_CONNECT_TIMEOUT)
+        if response is not None and _is_login_page(response):
+            return 'Falscher Benutzername oder Passwort'
+        if response is None or _on_auth_page(getattr(response, 'url', '')):
+            return 'IServ hat die Anmeldung nicht abgeschlossen. Bitte später erneut versuchen.'
+        for name in ('IServSAT', 'IServSATId', 'IServSession'):
+            value = next((cookie.value for cookie in session.cookies if cookie.name == name), None)
+            if value:
+                setattr(self.api, f'_{name}', value)
+        return None
 
     def disconnect(self):
 
@@ -825,7 +904,7 @@ class IServService:
         if response is None:
             return {'success': False, 'error': 'Umleitung außerhalb von IServ abgelehnt'}
 
-        if response.status_code == 401 or _is_login_page(response):
+        if response.status_code == 401 or _outside_app(response):
             return {'success': False, 'error': 'Sitzung abgelaufen', 'expired': True}
 
         if response.status_code == 403:
@@ -849,7 +928,6 @@ class IServService:
             }
 
         if 'text/html' in content_type:
-            from bs4 import BeautifulSoup
             soup = BeautifulSoup(response.text, 'html.parser')
 
             pdfs = []
