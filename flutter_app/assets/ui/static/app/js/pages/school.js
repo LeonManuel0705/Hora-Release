@@ -89,6 +89,7 @@ const state = {
   calc: { open: false, table: false, tool: "ziel", system: null, subject: null, average: "", count: "", target: "", exams: ["", "", "", ""], other: "", points: 12, mark: 2 },
   vplan: { loaded: false, loading: false, stand: null, files: [], problem: null, message: "", supported: true, page: 0, zoomed: false },
   writtenOpen: false,
+  openNotes: new Set(),
   signature: "",
   tick: 0,
   fresh: new Set(),
@@ -320,7 +321,7 @@ function sortedSubjects(rows) {
 
 function focusKeyOf(node) {
   if (!node || node === document.body) return null;
-  for (const attr of ["data-cell", "data-open-item", "data-open-lesson", "data-open-subject", "data-open-grades", "data-edit-item", "data-delete-item", "data-done-item", "data-delete-grade", "data-week", "data-semester", "data-slot", "data-kind", "data-calc-tool", "data-calc-system", "data-calc", "data-calc-for"]) {
+  for (const attr of ["data-cell", "data-open-item", "data-open-lesson", "data-open-subject", "data-open-grades", "data-edit-item", "data-delete-item", "data-done-item", "data-note-more", "data-delete-grade", "data-week", "data-semester", "data-slot", "data-kind", "data-calc-tool", "data-calc-system", "data-calc", "data-calc-for"]) {
     if (node.hasAttribute?.(attr)) return `[${attr}="${CSS.escape(node.getAttribute(attr))}"]`;
   }
   return node.id ? `#${CSS.escape(node.id)}` : null;
@@ -763,7 +764,7 @@ function dueRow(item, time) {
   return `<li class="row due is-interactive${written ? " is-written" : ""}" data-row="${esc(item.id)}">
     ${leaf(parseDate(item.date), leafClass)}
     <div class="row-main">
-      <p class="row-title"><button type="button" class="row-link" data-open-item="${esc(item.id)}">${widow(glue(esc(item.title)))}</button></p>
+      <p class="row-title"><button type="button" class="row-link" data-open-item="${esc(item.id)}"><span class="row-text">${widow(glue(esc(item.title)))}</span></button></p>
       <p class="row-meta">${dueMeta(item, time)}</p>
     </div>
     ${icon("chevron-right", "chev-end")}
@@ -911,7 +912,22 @@ function itemTools(item) {
 function itemNote(item) {
   const test = isAssessment(item);
   const done = item.status === "abgegeben" ? `<small>Erledigt</small>` : "";
-  return `<div class="lesson-note${test ? " is-test" : ""}">${icon(FLAG_ICONS[item.kind] || "notebook-pen")}<span class="note-text"><b>${esc(item.kind)}:</b> ${esc(item.title)}${item.detail ? `<small>${esc(item.detail)}</small>` : ""}${done}</span>${itemTools(item)}</div>`;
+  return `<div class="lesson-note${test ? " is-test" : ""}">${icon(FLAG_ICONS[item.kind] || "notebook-pen")}<span class="note-text"><b>${esc(item.kind)}:</b> ${esc(item.title)}${item.detail ? detailHtml(item) : ""}${done}</span>${itemTools(item)}</div>`;
+}
+
+function detailHtml(item) {
+  const open = state.openNotes.has(item.id);
+  return `<small class="note-detail${open ? " is-open" : ""}">${esc(item.detail)}</small><button type="button" class="text-button note-more" data-note-more="${esc(item.id)}" aria-expanded="${open}" hidden>${open ? "Weniger anzeigen" : "Mehr anzeigen"}</button>`;
+}
+
+function fitNotes() {
+  document.querySelectorAll("#schoolPanel .note-more").forEach((button) => {
+    const text = button.previousElementSibling;
+    const open = text.classList.contains("is-open");
+    text.classList.remove("is-open");
+    button.hidden = text.scrollHeight <= text.clientHeight + 1;
+    text.classList.toggle("is-open", open);
+  });
 }
 
 function itemBox(item, time) {
@@ -1330,6 +1346,26 @@ function testSlots(key) {
   return upcoming(clockState(), (lesson) => lesson.subject === key, 4, 35);
 }
 
+const TEXT_LIMITS = { title: 300, detail: 2000 };
+
+function countHtml(field, text) {
+  const limit = TEXT_LIMITS[field];
+  return `<small class="field-count${text.length >= limit ? " is-full" : ""}" data-count="${field}"${text.length < limit * 0.9 ? " hidden" : ""}>${text.length} von ${limit} Zeichen</small>`;
+}
+
+function showCount(field, text) {
+  const node = document.querySelector(`#schoolPanel [data-count="${field}"]`);
+  if (node) node.outerHTML = countHtml(field, text);
+}
+
+function keepOneLine(field) {
+  if (!/[\r\n]/.test(field.value)) return;
+  const flat = (text) => text.replace(/\s*[\r\n]+\s*/g, " ");
+  const caret = flat(field.value.slice(0, field.selectionStart)).length;
+  field.value = flat(field.value);
+  field.setSelectionRange(caret, caret);
+}
+
 function testFormHtml() {
   const draft = state.draft;
   const editing = !!draft.id;
@@ -1358,8 +1394,8 @@ function testFormHtml() {
         <div class="field-body" role="group" aria-labelledby="testWhenLabel">${pills}<button type="button" class="pill" data-slot="pick" aria-pressed="${custom}">${icon("calendar-days")}${customLabel}</button><input class="date-proxy" type="date" id="testDate" value="${esc(draft.date || "")}"${editing ? "" : ` min="${esc(time.iso)}"`} tabindex="-1" aria-hidden="true"></div>
       </div>
       ${kinds}
-      <label class="field"><span class="field-label">${homework ? "Aufgabe" : "Thema"}</span><input class="field-control" id="testTitle" value="${esc(draft.title)}" placeholder="${homework ? "z. B. Arbeitsblatt Nr. 3" : "z. B. Vektoren im Raum"}" maxlength="90"></label>
-      <label class="field"><span class="field-label">${homework ? "Notiz" : "Lernstoff"}</span><textarea class="field-control" id="testDetail" rows="2" maxlength="600" placeholder="${homework ? "z. B. Seite und Nummer" : "z. B. Seiten, Themen, Hilfsmittel"}">${esc(draft.detail || "")}</textarea></label>
+      <label class="field"><span class="field-label">${homework ? "Aufgabe" : "Thema"}</span><textarea class="field-control is-line" id="testTitle" rows="1" maxlength="${TEXT_LIMITS.title}" enterkeyhint="done" placeholder="${homework ? "z. B. Arbeitsblatt Nr. 3" : "z. B. Vektoren im Raum"}">${esc(draft.title)}</textarea>${countHtml("title", draft.title)}</label>
+      <label class="field"><span class="field-label">${homework ? "Notiz" : "Lernstoff"}</span><textarea class="field-control" id="testDetail" rows="2" maxlength="${TEXT_LIMITS.detail}" placeholder="${homework ? "z. B. Seite und Nummer" : "z. B. Seiten, Themen, Hilfsmittel"}">${esc(draft.detail || "")}</textarea>${countHtml("detail", draft.detail || "")}</label>
     </div>
     <div class="panel-actions">${editing ? `<button type="button" class="btn btn-quiet panel-delete" data-delete-item="${esc(draft.id)}">${icon("trash-2")}Löschen</button>` : ""}<button type="button" class="btn btn-quiet" data-panel-close>Abbrechen</button><button type="submit" class="btn btn-primary" id="testSave"${ready ? "" : " disabled"}>${editing ? "Speichern" : "Eintragen"}</button></div>
   </form>`;
@@ -1383,6 +1419,7 @@ function renderPanel() {
       const item = state.items.find((entry) => entry.id === selection.item);
       panel.innerHTML = item ? `${panelHead(item.kind)}${itemBox(item, clockState())}` : "";
     }
+    fitNotes();
   });
   panel.setAttribute("aria-labelledby", "panelTitle");
 }
@@ -1404,6 +1441,7 @@ function openPanel(selection, { trigger = null, form = false } = {}) {
   if (trigger && !panel.contains(trigger)) state.returnTo = focusKeyOf(trigger);
   renderPanel();
   panel.hidden = false;
+  fitNotes();
   $("schoolPage").classList.add("has-panel");
   markSelection();
   if (opening && animates()) {
@@ -1756,6 +1794,13 @@ function bindPanel() {
       completeItem(doneButton.dataset.doneItem);
       return;
     }
+    const moreButton = target.closest("[data-note-more]");
+    if (moreButton) {
+      const id = moreButton.dataset.noteMore;
+      if (!state.openNotes.delete(id)) state.openNotes.add(id);
+      renderPanel();
+      return;
+    }
     const gradeButton = target.closest("[data-delete-grade]");
     if (gradeButton) {
       deleteGrade(gradeButton.dataset.deleteGrade);
@@ -1849,9 +1894,21 @@ function bindPanel() {
       panel.querySelector('[data-slot="pick"]')?.focus();
     }
   });
+  panel.addEventListener("beforeinput", (event) => {
+    if (event.target.id !== "testTitle" || event.isComposing || !["insertLineBreak", "insertParagraph"].includes(event.inputType)) return;
+    event.preventDefault();
+    event.target.form.requestSubmit();
+  });
   panel.addEventListener("input", (event) => {
-    if (event.target.id === "testTitle" && state.draft) state.draft.title = event.target.value;
-    if (event.target.id === "testDetail" && state.draft) state.draft.detail = event.target.value;
+    if (event.target.id === "testTitle" && state.draft) {
+      keepOneLine(event.target);
+      state.draft.title = event.target.value;
+      showCount("title", state.draft.title);
+    }
+    if (event.target.id === "testDetail" && state.draft) {
+      state.draft.detail = event.target.value;
+      showCount("detail", state.draft.detail);
+    }
     const field = event.target.dataset.calc;
     if (!field || field === "subject") return;
     if (field === "points") {

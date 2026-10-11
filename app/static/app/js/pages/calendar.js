@@ -539,7 +539,7 @@ function listRow({ type, item }) {
     const meta = [`<i class="subject-dot" style="--hue:${hueVar(item.subject)}"></i>${esc(subject(item.subject).label)}`, block ? `${block.n}. Block` : "", lesson ? esc(lesson.room) : "", overdue ? `<span class="cl-urgent">überfällig</span>` : ""].filter(Boolean).join(", ");
     return `<li><button type="button" class="cl-row is-due${isTest(item) ? " is-test" : ""}${selected}" ${base}>
       <span class="cl-time">${block ? `<b>${hm(block.start)}</b><small>${hm(block.end)}</small>` : `<span class="cl-icon">${icon(dueIcon(item))}</span>`}</span>
-      <span class="cl-main"><span class="cl-title">${isTest(item) ? icon("nx-test") : ""}${esc(item.kind)}: ${esc(item.title)}</span><span class="cl-meta">${meta}</span></span>${icon("chevron-right", "chev-end")}
+      <span class="cl-main"><span class="cl-title">${isTest(item) ? icon("nx-test") : ""}<span class="cl-text">${esc(item.kind)}: ${esc(item.title)}</span></span><span class="cl-meta">${meta}</span></span>${icon("chevron-right", "chev-end")}
     </button></li>`;
   }
   const meta = `<i class="cal-dot" style="--k:${kindVar(item.kind)}"></i>${esc(KINDS[item.kind].label)}${item.place ? `, ${esc(item.place)}` : ""}`;
@@ -698,7 +698,7 @@ function panelDue(item) {
     ["Art", `<i class="subject-dot" style="--hue:${hueVar(item.subject)}"></i>${esc(item.kind)}, ${esc(subject(item.subject).name)}`],
     ["Zeit", `${esc(longDate(date))}${item.block ? `<br>${esc(dueTime(item))}` : ""}${overdue ? `<br><b class="cal-urgent">überfällig seit ${esc(shortDate(date))}</b>` : ""}`],
     lesson ? ["Raum", `${esc(lesson.room)}, ${esc(lesson.teacher)}`] : null,
-    item.detail ? ["Hinweis", esc(item.detail)] : null,
+    item.detail ? ["Hinweis", `<span class="cal-detail">${esc(item.detail)}</span>`] : null,
     open.length ? ["Vorbereitung", `<a class="cal-link" ${tasksLink()}>${plural(open.length, "Aufgabe", "Aufgaben")} offen${icon("chevron-right")}</a>`] : null,
   ];
   return `${panelHead(`is-due${tone}`, dueIcon(item), item.title)}

@@ -123,6 +123,19 @@ def test_homework_deadline_round_trip(client):
     assert client.delete(f"/api/ui/deadlines/{deadline['id']}").status_code == 404
 
 
+def test_the_test_form_takes_no_more_text_than_is_kept(client):
+    source = (ROOT / "app" / "static" / "app" / "js" / "pages" / "school.js").read_text(encoding="utf-8")
+    title, detail = map(int, re.search(r"const TEXT_LIMITS = \{ title: (\d+), detail: (\d+) \};", source).groups())
+    assert title >= 300 and detail >= 2000
+    when = (date.today() + timedelta(days=3)).isoformat()
+    for kind in ("Test", "Klausur", "Hausaufgabe"):
+        saved = client.post("/api/ui/deadlines", json={"kind": kind, "title": "T" * title, "date": when, "detail": "D" * detail}).get_json()["deadline"]
+        assert (len(saved["title"]), len(saved["detail"])) == (title, detail), kind
+        changed = client.patch(f"/api/ui/deadlines/{saved['id']}", json={"title": "U" * title, "detail": "E" * detail}).get_json()["deadline"]
+        assert (len(changed["title"]), len(changed["detail"])) == (title, detail), kind
+        assert client.delete(f"/api/ui/deadlines/{saved['id']}").status_code == 200
+
+
 def own_subject(client, key, removed=False):
     own = {"custom": True, "name": "Geografie", "short": "Geo", "hue": "moss", "type": "GK", "teacher": "", "room": ""}
     body = {"items": {key: own}, "removed": [key] if removed else []}

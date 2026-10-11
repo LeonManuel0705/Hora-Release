@@ -333,8 +333,9 @@
 .cl-icon { display: grid; padding-top: 2px; color: var(--ink-muted); }
 .cl-icon .icon { --s: 18; }
 .cl-main { display: grid; gap: 3px; min-width: 0; }
-.cl-title { display: flex; align-items: center; gap: 6px; font-size: var(--text-base); font-weight: var(--weight-medium); line-height: 1.33; color: var(--ink); text-wrap: pretty; }
+.cl-title { display: flex; align-items: center; gap: 6px; font-size: var(--text-base); font-weight: var(--weight-medium); line-height: 1.33; color: var(--ink); text-wrap: pretty; overflow-wrap: anywhere; }
 .cl-title .icon { --s: 16; color: var(--urgent-ink); }
+.cl-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-width: 0; }
 .cl-meta { font-size: var(--text-sm); line-height: 1.4; color: var(--ink-muted); text-wrap: pretty; }
 .cl-meta .cal-dot { margin-right: 6px; vertical-align: 0.5px; }
 .cl-meta .subject-dot { width: 7px; height: 7px; }
@@ -376,7 +377,7 @@
 .cal-agenda-main { display: grid; gap: 1px; min-width: 0; }
 .cal-agenda-title { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: var(--text-sm); font-weight: var(--weight-medium); line-height: 1.35; color: var(--ink); }
 .cal-agenda-title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cal-agenda-meta { font-size: var(--text-xs); line-height: 1.4; color: var(--ink-soft); }
+.cal-agenda-meta { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: var(--text-xs); line-height: 1.4; color: var(--ink-soft); overflow-wrap: anywhere; }
 .cal-agenda-item.is-past .cal-agenda-time, .cal-agenda-item.is-past .cal-agenda-title { color: var(--ink-muted); }
 .cal-agenda-item.is-test .cal-agenda-title { color: var(--urgent-ink); font-weight: var(--weight-strong); }
 .cal-agenda-empty { margin-top: 12px; font-size: var(--text-sm); color: var(--ink-soft); }
@@ -387,7 +388,7 @@
 .cal-next-card { display: grid; gap: 2px; width: calc(100% + 16px); margin: 6px -8px 0; padding: 8px; border-radius: 12px; text-align: left; transition: background-color var(--dur-hover-out) var(--ease-hover); }
 .cal-next-card.is-selected { background: color-mix(in oklab, var(--ink) 8%, transparent); }
 .cal-next-title { display: flex; align-items: center; font-size: var(--text-lg); font-weight: var(--weight-strong); letter-spacing: -0.01em; line-height: 1.3; color: var(--ink); }
-.cal-next-topic { font-size: var(--text-sm); line-height: 1.4; color: var(--ink-soft); text-wrap: pretty; }
+.cal-next-topic { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-size: var(--text-sm); line-height: 1.4; color: var(--ink-soft); text-wrap: pretty; overflow-wrap: anywhere; }
 .cal-next-when { margin-top: 2px; font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--ink); }
 .cal-next-prep { display: inline-flex; align-items: center; gap: 2px; margin-top: 4px; border-radius: 6px; font-size: var(--text-sm); color: var(--ink-soft); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; transition: color var(--dur-hover-out) var(--ease-hover); }
 .cal-next-prep .icon { --s: 14; }
@@ -404,7 +405,7 @@
 .cal-mark.is-urgent { color: var(--urgent-ink); }
 .cal-mark.is-due, .cal-mark.is-holiday { color: var(--ink-soft); }
 .cal-mark.is-due.is-urgent { color: var(--urgent-ink); }
-.panel-title.is-static { padding: 6px 8px 4px; }
+.panel-title.is-static { padding: 6px 8px 4px; overflow-wrap: anywhere; }
 .cal-when { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .cal-when-times { display: inline-flex; align-items: center; gap: 6px; }
 .cal-when-to { font-size: var(--text-sm); color: var(--ink-muted); }
@@ -419,6 +420,7 @@
 .cal-facts > div { display: grid; gap: 3px; padding: 11px 0; border-top: 1px solid var(--desk-card-edge); }
 .cal-facts dt { font-size: var(--text-sm); color: var(--ink-muted); }
 .cal-facts dd { margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--ink); }
+.cal-detail { display: block; white-space: pre-line; overflow-wrap: anywhere; }
 .cal-facts + .panel-source { margin-top: 4px; }
 .cal-route-slot:empty { display: none; }
 

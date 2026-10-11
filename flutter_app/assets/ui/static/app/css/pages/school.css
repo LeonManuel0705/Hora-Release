@@ -263,7 +263,7 @@
   top: 24px;
   display: grid;
   gap: 16px;
-  max-height: calc(100dvh - 48px);
+  max-height: calc(100dvh - 108px);
   overflow-y: auto;
   overscroll-behavior: contain;
   border-radius: 24px;
@@ -390,7 +390,7 @@
 .ov-item .chev-end { margin-left: auto; align-self: center; }
 .ov-item-text { display: grid; gap: 2px; min-width: 0; }
 .ov-item-text b { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--ink); }
-.ov-item-title { font-size: var(--text-sm); line-height: 1.35; color: var(--ink-soft); text-wrap: pretty; }
+.ov-item-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-size: var(--text-sm); line-height: 1.35; color: var(--ink-soft); text-wrap: pretty; overflow-wrap: anywhere; }
 .ov-item-text small { font-size: var(--text-xs); color: var(--ink-muted); }
 .ov-item-text small.due-when { font-weight: var(--weight-medium); color: var(--ink-soft); }
 .ov-item-text small.due-when.is-urgent { color: var(--urgent-ink); }
@@ -452,7 +452,10 @@
 .lesson-note small { display: block; font-size: var(--text-xs); color: var(--ink-muted); }
 .lesson-note.is-urgent { color: var(--urgent-ink); font-weight: var(--weight-medium); }
 .lesson-note.is-urgent .icon, .lesson-note.is-test .icon { color: var(--urgent-ink); }
-.lesson-note .note-text { flex: 1; min-width: 0; }
+.lesson-note .note-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.note-detail { white-space: pre-line; }
+.note-detail:not(.is-open) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; }
+.note-more { display: flex; min-height: 26px; margin: 2px 0 0 -8px; padding: 2px 8px; font-size: var(--text-xs); }
 .note-tools { display: flex; flex: none; margin: -6px -8px -6px 0; }
 .note-tools .icon-button { width: 30px; height: 30px; }
 .lesson-note .note-tools .icon-button .icon { --s: 16; margin-top: 0; color: currentColor; }
@@ -521,7 +524,7 @@
 .mini-icon { --s: 16; margin-top: 2px; color: var(--ink-soft); }
 .mini-due.is-test .mini-icon, .mini-due.is-test .mini-title b { color: var(--urgent-ink); }
 .mini-text { display: grid; gap: 1px; min-width: 0; }
-.mini-title { font-size: var(--text-sm); line-height: 1.35; color: var(--ink); text-wrap: pretty; }
+.mini-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: var(--text-sm); line-height: 1.35; color: var(--ink); text-wrap: pretty; overflow-wrap: anywhere; }
 .mini-title b { font-weight: var(--weight-strong); }
 .mini-text small { font-size: var(--text-xs); color: var(--ink-soft); }
 .mini-text small.is-urgent { color: var(--urgent-ink); font-weight: var(--weight-medium); }
@@ -568,6 +571,10 @@
 .school-panel .btn-quiet { background: var(--tile); }
 
 .test-form .field-control { width: 100%; }
+.test-form textarea.field-control { max-height: 240px; field-sizing: content; }
+.test-form .field-control.is-line { min-height: 0; line-height: 1.35; resize: none; }
+.field-count { justify-self: end; margin-top: -2px; font-size: var(--text-xs); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.field-count.is-full { color: var(--urgent-ink); font-weight: var(--weight-medium); }
 .test-form .field-body .pill { font-variant-numeric: tabular-nums; }
 
 .grade-switch { margin-top: 14px; background: color-mix(in oklab, var(--ink) 6%, transparent); box-shadow: none; }
@@ -700,6 +707,7 @@
 .school-lists { grid-area: lists; min-width: 0; }
 .list-section + .list-section { margin-top: 34px; }
 .list-section .rows { margin-top: 2px; }
+.list-section .row-text { -webkit-line-clamp: 3; }
 .list-section .empty-state { padding: 18px 16px 24px; }
 
 .inline-link {

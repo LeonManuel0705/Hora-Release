@@ -167,6 +167,23 @@ void main() {
     expect((await api(hub, 'POST', '/api/ui/grades', {'subject': 'nirgends', 'points': 9})).status, 400);
   });
 
+  test('the test form takes no more text than is kept', () async {
+    final source = File('assets/ui/static/app/js/pages/school.js').readAsStringSync();
+    final limits = RegExp(r'const TEXT_LIMITS = \{ title: (\d+), detail: (\d+) \};').firstMatch(source)!;
+    final title = int.parse(limits.group(1)!), detail = int.parse(limits.group(2)!);
+    final hub = bridge();
+    final when = DateTime.now().add(const Duration(days: 3));
+    final day = '${when.year}-${when.month.toString().padLeft(2, '0')}-${when.day.toString().padLeft(2, '0')}';
+    for (final kind in ['Test', 'Klausur', 'Hausaufgabe']) {
+      final created = await api(hub, 'POST', '/api/ui/deadlines', {'kind': kind, 'title': 'T' * title, 'date': day, 'detail': 'D' * detail});
+      final saved = (jsonDecode(created.body as String) as Map)['deadline'] as Map;
+      expect([(saved['title'] as String).length, (saved['detail'] as String).length], [title, detail], reason: kind);
+      final edited = await api(hub, 'PATCH', '/api/ui/deadlines/${Uri.encodeComponent('${saved['id']}')}', {'title': 'U' * title, 'detail': 'E' * detail});
+      final changed = (jsonDecode(edited.body as String) as Map)['deadline'] as Map;
+      expect([(changed['title'] as String).length, (changed['detail'] as String).length], [title, detail], reason: kind);
+    }
+  });
+
   test('broken or oversized requests are refused like on the device server', () async {
     final hub = bridge();
     final invalid = await api(hub, 'POST', '/api/ui/tasks', '{"title": ');

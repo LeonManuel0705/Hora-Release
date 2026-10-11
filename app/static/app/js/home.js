@@ -841,7 +841,7 @@ function dueRow(item, date) {
   return `<li class="row due is-interactive${written ? " is-written" : ""}" data-id="${esc(item.id)}" tabindex="-1">
     ${leaf(target, date, leafClass)}
     <div class="row-main">
-      <p class="row-title"><a class="row-link" href="${esc(href)}" data-page-action="${page}">${widow(glue(esc(item.title)))}</a></p>
+      <p class="row-title"><a class="row-link" href="${esc(href)}" data-page-action="${page}"><span class="row-text">${widow(glue(esc(item.title)))}</span></a></p>
       <p class="row-meta">${meta.html}</p>
     </div>
     ${icon("chevron-right", "chev-end")}
