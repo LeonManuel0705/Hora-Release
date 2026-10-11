@@ -375,7 +375,7 @@ function renderRhythm() {
     : "Jede Woche gilt derselbe Plan. Der Plan der B-Woche bleibt gespeichert und ist beim Einschalten wieder da.";
   const card = $("rhythmCard");
   keepFocus(card, () => {
-    card.innerHTML = `<div class="set-row" id="rowAb"><div class="set-row-text"><p class="set-row-label" id="rowAbLabel">A/B-Wochen</p><p class="set-row-desc" id="rowAbDesc">${desc}</p>${on ? `<button class="text-button row-action" type="button" id="abSwap">${icon("arrow-left-right")}A und B tauschen</button>` : ""}</div><div class="set-row-control">${switchHtml("abToggle", on, "rowAbLabel", { describedBy: "rowAbDesc" })}</div></div>`;
+    card.innerHTML = `<div class="set-row" id="rowAb"><div class="set-row-text"><p class="set-row-label" id="rowAbLabel">A/B-Wochen</p><p class="set-row-desc" id="rowAbDesc">${desc}</p>${on ? `<button class="text-button row-action" type="button" id="abSwap">${icon("arrow-left-right")}<span>A und B tauschen</span></button>` : ""}</div><div class="set-row-control">${switchHtml("abToggle", on, "rowAbLabel", { describedBy: "rowAbDesc" })}</div></div>`;
   });
 }
 
@@ -547,7 +547,7 @@ function editorHtml({ week, dow, block, entry, base, edited }) {
   const baseName = base ? `${schoolDefaults.subjects[base.subject]?.label || subject(base.subject).label}${data.subjects[base.subject]?.retired ? ", gelöscht" : ""}` : "";
   const groups = subjectGroups().map((group) => `<fieldset class="pick-group"><legend class="pick-title${group.keys.length === 1 && subject(group.keys[0]).label === group.title ? " visually-hidden" : ""}">${esc(group.title)}</legend><div class="pick-grid">${group.keys.map((key) => `<label class="pick" style="--hue:${hueVar(key)}"><input type="radio" name="subject" value="${esc(key)}"${key === chosen ? " checked" : ""}><i class="subject-dot" aria-hidden="true"></i><span class="pick-name">${esc(subject(key).label)}</span>${icon("check", "pick-tick")}</label>`).join("")}</div></fieldset>`).join("");
   const origin = edited
-    ? `<p class="cell-origin">${icon("graduation-cap")}<span>In IServ: ${base ? `${esc(baseName)}, ${esc(base.room)}` : "frei"}</span><button type="button" class="text-button" data-cell-origin>Wiederherstellen</button></p>`
+    ? `<p class="cell-origin">${icon("graduation-cap")}<span>In IServ: ${base ? `${esc(baseName)}, ${esc(base.room)}` : "frei"}</span><button type="button" class="text-button" data-cell-origin><span>Wiederherstellen</span></button></p>`
     : "";
   return `<div class="sheet-head cell-head">
       <div><h2 class="sheet-title" id="cellTitle">${WEEKDAYS[dow]}, ${block.n}.\u00a0Block</h2><p class="cell-when">${abWeeks() ? `${week}-Woche, ` : ""}${hm(block.start)} bis ${hm(block.end)}</p></div>
@@ -918,7 +918,7 @@ function renderRaster() {
   keepFocus(card, () => {
     card.innerHTML = `<div class="set-card-head">
         <div><h3 class="set-card-title" id="rasterTitle">Stundenraster</h3><p class="set-card-meta" id="rasterMeta">${rasterMeta(blocks)}</p></div>
-        <button class="text-button" type="button" id="rasterReset"${custom ? "" : " disabled"}>${icon("rotate-ccw")}Standardraster</button>
+        <button class="text-button" type="button" id="rasterReset"${custom ? "" : " disabled"}>${icon("rotate-ccw")}<span>Standardraster</span></button>
       </div>
       <div class="raster-axis" id="rasterAxis" aria-hidden="true">${axisHtml(blocks)}</div>
       <div class="raster-list">${blocks.map((block, index) => rasterRowHtml(block, blocks[index + 1])).join("")}</div>
@@ -1782,7 +1782,7 @@ function renderLook() {
     card.innerHTML = [
       row({ id: "rowTheme", label: "Farbschema", desc: themeDesc(), cls: "is-stack", control: `<div class="segmented look-modes" role="group" aria-labelledby="rowThemeLabel" aria-describedby="rowThemeDesc">${modes.map(([key, text, glyph]) => `<button type="button" id="theme-${key}" data-scheme="${key}" aria-pressed="${look.theme === key}">${icon(glyph)}${text}</button>`).join("")}</div>` }),
       row({ id: "rowMotion", label: "Bewegung reduzieren", desc: motionDesc, control: switchHtml("motionToggle", motionReduced(), "rowMotionLabel", { disabled: locked, describedBy: "rowMotionDesc" }) }),
-      `<div class="set-row" id="rowKeys"><div class="set-row-text"><p class="set-row-label" id="rowKeysLabel">Einzeltasten-Kürzel</p><p class="set-row-desc" id="rowKeysDesc">N für eine Notiz, J und K durch Listen, X hakt ab. Aus, wenn du mit Sprachsteuerung arbeitest.</p><button class="text-button row-action" type="button" id="showShortcuts">${icon("keyboard")}Alle Kürzel ansehen</button></div><div class="set-row-control">${switchHtml("keysToggle", singleKeys(), "rowKeysLabel", { describedBy: "rowKeysDesc" })}</div></div>`,
+      `<div class="set-row" id="rowKeys"><div class="set-row-text"><p class="set-row-label" id="rowKeysLabel">Einzeltasten-Kürzel</p><p class="set-row-desc" id="rowKeysDesc">N für eine Notiz, J und K durch Listen, X hakt ab. Aus, wenn du mit Sprachsteuerung arbeitest.</p><button class="text-button row-action" type="button" id="showShortcuts">${icon("keyboard")}<span>Alle Kürzel ansehen</span></button></div><div class="set-row-control">${switchHtml("keysToggle", singleKeys(), "rowKeysLabel", { describedBy: "rowKeysDesc" })}</div></div>`,
     ].join("");
   });
 }

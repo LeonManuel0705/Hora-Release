@@ -598,7 +598,7 @@ function renderOverview() {
   const agenda = state.loading && !items.length
     ? `<p class="cal-agenda-empty">Termine werden geladen.</p>`
     : items.length ? `<ol class="cal-agenda">${items.map(agendaItem).join("")}</ol>` : `<p class="cal-agenda-empty">${diff === 0 ? "Heute stehen keine Termine an." : "Keine Termine an diesem Tag."}</p>`;
-  const back = diff !== 0 ? `<button type="button" class="text-button cal-back" data-back-today>${icon("calendar-days")}Zurück zu heute</button>` : "";
+  const back = diff !== 0 ? `<button type="button" class="text-button cal-back" data-back-today>${icon("calendar-days")}<span>Zurück zu heute</span></button>` : "";
   const test = nextTest();
   let testHtml = "";
   if (test) {

@@ -909,7 +909,7 @@ function itemNote(item) {
 
 function detailHtml(item) {
   const open = state.openNotes.has(item.id);
-  return `<small class="note-detail${open ? " is-open" : ""}">${esc(item.detail)}</small><button type="button" class="text-button note-more" data-note-more="${esc(item.id)}" aria-expanded="${open}" hidden>${open ? "Weniger anzeigen" : "Mehr anzeigen"}</button>`;
+  return `<small class="note-detail${open ? " is-open" : ""}">${esc(item.detail)}</small><button type="button" class="text-button note-more" data-note-more="${esc(item.id)}" aria-expanded="${open}" hidden><span>${open ? "Weniger anzeigen" : "Mehr anzeigen"}</span></button>`;
 }
 
 function fitNotes() {
@@ -997,7 +997,7 @@ function gradeListHtml(key) {
   }).join("");
   const form = state.gradeForm
     ? gradeFormHtml()
-    : `<div class="grade-actions"><button type="button" class="text-button grade-add" data-grade-form>${icon("plus")}Note eintragen</button>${list.length ? `<button type="button" class="text-button" data-calc-for="${esc(key)}">Zielnote berechnen</button>` : ""}</div>`;
+    : `<div class="grade-actions"><button type="button" class="text-button grade-add" data-grade-form>${icon("plus")}<span>Note eintragen</span></button>${list.length ? `<button type="button" class="text-button" data-calc-for="${esc(key)}"><span>Zielnote berechnen</span></button>` : ""}</div>`;
   return `<div class="field panel-grades">
     <div class="field-split"><span class="field-label" id="gradesLabel">Noten ${SEMESTER}</span>${average != null ? `<span class="grade-average">Schnitt <b class="num">${decimal(average)}</b></span>` : ""}</div>
     ${list.length ? `<ul class="grade-list" aria-labelledby="gradesLabel">${rows}</ul>` : `<p class="field-empty">Noch keine Note in ${SEMESTER}.</p>`}
@@ -1075,7 +1075,7 @@ function gradesPanelHtml() {
   let entry = "";
   if (semester === SEMESTER) {
     if (!activeSubjectKeys().length) entry = `<p class="side-hint">Noten trägst du ein, sobald dein Stundenplan Fächer hat.</p>`;
-    else entry = `<div class="grades-entry">${state.gradeForm ? gradeFormHtml({ pick: true }) : `<div class="grade-actions"><button type="button" class="text-button grade-add" data-grade-form>${icon("plus")}Note eintragen</button></div>`}</div>`;
+    else entry = `<div class="grades-entry">${state.gradeForm ? gradeFormHtml({ pick: true }) : `<div class="grade-actions"><button type="button" class="text-button grade-add" data-grade-form>${icon("plus")}<span>Note eintragen</span></button></div>`}</div>`;
   }
   return `${panelHead("Noten", "Punkte, Leistungskurse zählen doppelt")}
     ${switcher}

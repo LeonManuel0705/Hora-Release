@@ -461,7 +461,6 @@
 .lesson-note .note-tools .icon-button .icon { --s: 16; margin-top: 0; color: currentColor; }
 .note-tools .icon-button.is-danger { color: var(--ink-muted); }
 @media (hover: hover) and (pointer: fine) {
-  .note-tools .icon-button:hover { background: color-mix(in oklab, var(--ink) 8%, transparent); }
   .note-tools .icon-button.is-danger:hover, .grade-remove:hover { color: var(--urgent-ink); }
 }
 

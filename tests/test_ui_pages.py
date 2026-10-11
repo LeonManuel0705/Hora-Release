@@ -381,6 +381,13 @@ def test_mobile_ui_assets_are_current():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_every_text_button_keeps_its_label_in_a_span_for_the_hover_line():
+    sources = [*(ROOT / "app" / "templates" / "app").glob("*.html"), *(ROOT / "app" / "static" / "app" / "js").rglob("*.js")]
+    buttons = [(source.name, match.group(2)) for source in sources for match in re.finditer(r'<(button|a)\b[^>]*class="text-button[^>]*>(.*?)</\1>', source.read_text(encoding="utf-8"), re.S)]
+    assert buttons
+    assert [(name, inner) for name, inner in buttons if "<span" not in inner] == []
+
+
 def test_the_server_sees_the_timetable_with_the_edits_from_the_settings(client):
     monday = date.today() - timedelta(days=date.today().weekday())
     client.post("/api/hub/school/timetable/entries", json={"day": 1, "block": 1, "subject": "Mathe", "subject_type": "LK", "room": "R101", "teacher": "Herr Beck"})

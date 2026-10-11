@@ -40,6 +40,12 @@ svg { display: block; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .today :focus-visible { outline-color: var(--focus-on-hero); }
 
+@property --icon-solid {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
 .icon {
   --s: 18;
   width: calc(var(--s) * 1px);
@@ -51,6 +57,10 @@ svg { display: block; }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+.icon-line { opacity: calc(1 - var(--icon-solid, 0)); }
+.icon-fill { fill: currentColor; fill-opacity: var(--icon-solid, 0); }
+.icon-solid { fill: currentColor; opacity: var(--icon-solid, 0); }
 
 .num { font-variant-numeric: tabular-nums lining-nums; }
 
@@ -186,13 +196,22 @@ svg { display: block; }
   font-weight: var(--weight-medium);
   color: var(--ink-soft);
   text-align: left;
-  transition: background-color var(--dur-hover-out) var(--ease-hover), color var(--dur-hover-out) var(--ease-hover);
+  transition: color var(--dur-hover-out) var(--ease-hover);
 }
 
 .text-button .icon { --s: 16; }
 
+.text-button > span {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 1.5px;
+  transition: background-size calc(var(--dur-underline) / 2) var(--ease-out);
+}
+
 @media (hover: hover) and (pointer: fine) {
-  .text-button:hover { background: color-mix(in oklab, var(--ink) 6%, transparent); color: var(--ink); transition-duration: var(--dur-hover-in); }
+  .text-button:hover:where(:not(:disabled)) { color: var(--ink); transition-duration: var(--dur-hover-in); }
+  .text-button:hover:where(:not(:disabled)) > span { background-size: 100% 1.5px; transition-duration: var(--dur-underline); transition-timing-function: var(--spring-critical); }
 }
 
 .main { min-width: 0; padding-top: var(--safe-top); background: var(--surface); outline: none; }
@@ -284,13 +303,13 @@ kbd .icon { --s: 12; }
   height: var(--hit);
   border-radius: var(--radius-sm);
   color: var(--ink-muted);
-  transition: background-color var(--dur-hover-out) var(--ease-hover), color var(--dur-hover-out) var(--ease-hover), scale var(--spring-tactile-dur) var(--spring-tactile);
+  transition: color var(--dur-hover-out) var(--ease-hover), --icon-solid var(--dur-hover-out) var(--ease-hover), scale var(--spring-tactile-dur) var(--spring-tactile);
 }
 
-.icon-button .icon { --s: 18; }
+.icon-button .icon { --s: 18; stroke-width: calc((36px + var(--icon-solid, 0) * 12px) / var(--s)); }
 
 @media (hover: hover) and (pointer: fine) {
-  .icon-button:hover { background: var(--surface-hover); color: var(--ink); transition-duration: var(--dur-hover-in); }
+  .icon-button:hover:where(:not(:disabled)) { --icon-solid: 1; color: var(--ink); font-weight: var(--weight-strong); transition-duration: var(--dur-hover-in); }
 }
 
 .icon-button:active { scale: var(--scale-press-sm); transition-duration: var(--dur-press); transition-timing-function: var(--ease-out); }
