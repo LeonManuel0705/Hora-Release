@@ -9,6 +9,7 @@ import '../models/bookmark.dart';
 import '../theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/animated_list_item.dart';
+import '../widgets/bookmark_icon.dart';
 import '../widgets/page_fade_in.dart';
 
 class BookmarksScreen extends StatefulWidget {
@@ -438,26 +439,7 @@ class _BookmarkCard extends StatelessWidget {
           onTap: onTap,
           child: Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Text(
-                    bookmark.title.isNotEmpty
-                        ? bookmark.title[0].toUpperCase()
-                        : '?',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.primary,
-                    ),
-                  ),
-                ),
-              ),
+              BookmarkIcon(url: bookmark.url, title: bookmark.title),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(

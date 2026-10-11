@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/bookmark.dart';
 import '../services/database_service.dart';
+import '../services/site_icons.dart';
 
 class BookmarkProvider extends ChangeNotifier {
   final DatabaseService _db = DatabaseService();
@@ -91,15 +92,21 @@ class BookmarkProvider extends ChangeNotifier {
 
     final index = _bookmarks.indexWhere((b) => b.id == bookmark.id);
     if (index != -1) {
+      final before = _bookmarks[index].url;
       _bookmarks[index] = updated;
       notifyListeners();
+      if (before != updated.url) await forgetSiteIcon(before, _bookmarks.map((b) => b.url));
     }
   }
 
   Future<void> deleteBookmark(String id) async {
     await _db.deleteBookmark(id);
+    final removed = _bookmarks.where((b) => b.id == id).map((b) => b.url).toList();
     _bookmarks.removeWhere((b) => b.id == id);
     notifyListeners();
+    for (final url in removed) {
+      await forgetSiteIcon(url, _bookmarks.map((b) => b.url));
+    }
   }
 
   List<Bookmark> search(String query) {
