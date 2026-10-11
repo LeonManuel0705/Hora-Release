@@ -393,7 +393,8 @@
   .mail-folders { width: 100%; }
   .mail-folders button { flex: 0 0 auto; justify-content: center; }
   .mail-folders button[aria-pressed="false"] { min-width: 44px; }
-  .mail-folders button[aria-pressed="true"] { flex: 1 1 auto; }
+  .mail-folders button[aria-pressed="true"] { flex: 1 1 auto; min-width: 0; }
+  .mail-folders .folder-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mail-filters .pill { flex: 0 0 auto; }
   .mail-search input, .compose .field-control { font-size: 16px; }
   .mail-preview { -webkit-line-clamp: 2; }

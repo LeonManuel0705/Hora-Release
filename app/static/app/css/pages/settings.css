@@ -755,8 +755,10 @@
   .plan-foot { padding-top: 6px; }
   .plan-actions { width: 100%; margin-left: 0; }
   .plan-actions .btn { flex: 1 1 100%; justify-content: center; min-height: 44px; }
-  .raster-row { grid-template-columns: 22px auto auto auto minmax(0, 1fr); column-gap: 8px; }
-  .raster-input.field-control { width: 96px; padding-inline: 8px; }
+  .look-modes { display: flex; width: 100%; }
+  .look-modes button { flex: 1 1 auto; justify-content: center; gap: 6px; padding: 0 8px; }
+  .raster-row { grid-template-columns: 22px minmax(0, 96px) auto minmax(0, 96px) auto; column-gap: 8px; }
+  .raster-input.field-control { width: 100%; min-width: 0; padding-inline: 8px; }
   .raster-pause { margin-left: 30px; }
   .raster-foot .btn { flex: 1 1 0; justify-content: center; min-height: 44px; padding-inline: 10px; }
   .raster-remove { margin-left: 0; }
@@ -802,6 +804,12 @@
   .room-pick.pill { height: 36px; }
   .cell-actions .btn { min-height: 44px; }
   .cell-actions .btn-primary { flex: 1; }
+}
+
+@media (max-width: 359px) {
+  .look-modes .icon { display: none; }
+  .raster-row { grid-template-columns: 22px minmax(0, 96px) auto minmax(0, 96px) minmax(0, 1fr); row-gap: 2px; }
+  .raster-len { grid-column: 2 / -1; }
 }
 
 @media (max-width: 759px) and (prefers-reduced-motion: reduce) {
