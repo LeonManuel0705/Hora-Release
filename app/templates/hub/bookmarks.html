@@ -79,19 +79,46 @@
     gap: 0.75rem;
 }
 .bookmark-favicon {
-    width: 32px;
-    height: 32px;
-    border-radius: 14px;
+    position: relative;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 600;
     flex-shrink: 0;
-    background: rgba(255,255,255,0.1);
+    background: rgba(var(--accent-rgb), 0.14);
     overflow: hidden;
+    transition: background 0.2s ease-out;
 }
-.bookmark-favicon img { width: 20px; height: 20px; }
+.bookmark-favicon img {
+    position: absolute;
+    inset: 6px;
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    border-radius: 6px;
+    color-scheme: light;
+    opacity: 0;
+    transform: scale(0.6);
+    transition: opacity 0.2s ease-out, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.bookmark-initial { animation: bookmarkInitialIn 0.2s ease-out 0.3s both; }
+.bookmark-favicon.no-icon .bookmark-initial { animation: none; }
+.bookmark-favicon.has-icon { background: #fff; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); }
+.bookmark-favicon.has-icon img { opacity: 1; transform: none; }
+.bookmark-favicon.has-icon .bookmark-initial { opacity: 0; animation: none; }
+.bookmark-favicon.is-known, .bookmark-favicon.is-known img { transition: none; }
+@keyframes bookmarkInitialIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bookmark-favicon, .bookmark-favicon img { transition: none; }
+    .bookmark-initial { animation: none; }
+}
 .bookmark-title {
     font-weight: 600;
     font-size: 0.95rem;
@@ -193,6 +220,7 @@
 <script nonce="{{ g.csp_nonce }}">
 let bookmarks = [];
 let currentFilter = 'all';
+const iconState = new Map();
 
 document.addEventListener('DOMContentLoaded', () => loadBookmarks());
 
@@ -229,14 +257,16 @@ function renderBookmarks() {
     }
 
     container.innerHTML = filtered.map(b => {
-        const domain = getDomain(b.url);
-        const favicon = b.favicon || `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
-        const initial = b.title.charAt(0).toUpperCase();
+        const initial = ([...(b.title || '').trim()][0] || '?').toUpperCase();
+        const version = iconVersion(b.url);
+        const key = `${b.id}:${version}`;
+        const known = iconState.get(key);
+        const icon = known === 'none' ? '' : `<img src="/api/hub/bookmarks/${b.id}/icon?v=${version}" alt="" loading="lazy" onload="iconShown(this, ${jsArg(key)})" onerror="iconMissing(this, ${jsArg(key)})">`;
         return `
         <div class="bookmark-card" ondblclick="window.open(${jsArg(safeUrl(b.url))}, '_blank')">
             <div class="bookmark-header">
-                <div class="bookmark-favicon">
-                    <img src="${esc(favicon)}" alt="" onerror="this.parentElement.textContent=${jsArg(initial)}">
+                <div class="bookmark-favicon${known === 'ok' ? ' has-icon is-known' : known === 'none' ? ' no-icon' : ''}">
+                    <span class="bookmark-initial">${esc(initial)}</span>${icon}
                 </div>
                 <span class="bookmark-title">${esc(b.title)}</span>
             </div>
@@ -266,7 +296,14 @@ function renderBookmarks() {
     });
 }
 
-function getDomain(url) { try { return new URL(url).hostname; } catch { return ''; } }
+function iconVersion(url) {
+    let hash = 0;
+    for (const letter of url) hash = (hash * 31 + letter.codePointAt(0)) >>> 0;
+    return hash.toString(36);
+}
+function iconShown(img, key) { iconState.set(key, 'ok'); img.parentElement.classList.add('has-icon'); }
+function iconMissing(img, key) { iconState.set(key, 'none'); img.parentElement.classList.add('no-icon'); img.remove(); }
+function iconRetry(id) { [...iconState.keys()].filter(key => key.startsWith(`${id}:`)).forEach(key => iconState.delete(key)); }
 function getCatLabel(c) { return {Work:'Arbeit',Personal:'Persönlich',Dev:'Dev',Other:'Sonstiges'}[c]||c; }
 function esc(s) { if(!s)return''; const d=document.createElement('div'); d.textContent=s; return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function safeUrl(url) { try { const u = new URL(url); return ['http:', 'https:'].includes(u.protocol) ? url : '#'; } catch { return '#'; } }
@@ -323,8 +360,6 @@ async function saveBookmark(e) {
         url: document.getElementById('bookmarkUrl').value,
         category: document.getElementById('bookmarkCategory').value
     };
-    const domain = getDomain(data.url);
-    if (domain) data.favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
 
     try {
         await fetch(id ? `/api/hub/bookmarks/${id}` : '/api/hub/bookmarks', {
@@ -332,6 +367,7 @@ async function saveBookmark(e) {
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify(data)
         });
+        if (id) iconRetry(id);
         closeModal('bookmarkModal');
         loadBookmarks();
     } catch (err) { console.error('Error saving bookmark:', err); }

@@ -307,11 +307,9 @@ const HubApp = {
         todos: JSON.parse(localStorage.getItem('hub_todos') || '[]'),
         notes: JSON.parse(localStorage.getItem('hub_notes') || '[{"id":"default","title":"Note 1","content":"","updatedAt":""}]'),
         activeNoteId: localStorage.getItem('hub_active_note') || 'default',
-        bookmarks: JSON.parse(localStorage.getItem('hub_bookmarks') || '[]'),
         pomodoro: JSON.parse(localStorage.getItem('hub_pomodoro') || '{"workDuration":25,"breakDuration":5,"todaySessions":0,"lastSessionDate":""}'),
         editingEventId: null,
         editingTodoId: null,
-        editingBookmarkId: null,
         todoFilter: 'all',
         isOnline: navigator.onLine,
         pomodoroTimer: null,
@@ -1307,106 +1305,6 @@ const HubApp = {
         localStorage.setItem('hub_notes', JSON.stringify(this.state.notes));
     },
 
-    initBookmarks() {
-        this.renderBookmarks();
-    },
-
-    renderBookmarks() {
-        const list = document.getElementById('bookmarksList');
-        if (!list) return;
-
-        const categories = [...new Set(this.state.bookmarks.map(b => b.category))];
-
-        if (this.state.bookmarks.length === 0) {
-            list.innerHTML = `<p class="no-items">${this.t('no_bookmarks')}</p>`;
-            return;
-        }
-
-        list.innerHTML = categories.map(cat => `
-            <div class="bookmark-category">
-                <div class="category-header">${this.escapeHtml(cat)}</div>
-                <div class="category-links">
-                    ${this.state.bookmarks.filter(b => b.category === cat).map(b => {
-                        const safeBookmarkUrl = (() => { try { const u = new URL(b.url); return ['http:', 'https:'].includes(u.protocol) ? b.url : '#'; } catch { return '#'; } })();
-                        return `
-                        <a href="${this.escapeHtml(safeBookmarkUrl)}" target="_blank" rel="noopener" class="bookmark-link" data-id="${b.id}">
-                            <img src="https://www.google.com/s2/favicons?domain=${new URL(b.url).hostname}&sz=32"
-                                 alt="" class="bookmark-favicon" onerror="this.style.display='none'">
-                            <span>${this.escapeHtml(b.title)}</span>
-                        </a>
-                    `}).join('')}
-                </div>
-            </div>
-        `).join('');
-
-        list.querySelectorAll('.bookmark-link').forEach(link => {
-            link.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                this.openBookmarkModal(link.dataset.id);
-            });
-        });
-    },
-
-    openBookmarkModal(id = null) {
-        const modal = document.getElementById('bookmarkModal');
-        if (!modal) return;
-
-        const title = document.getElementById('bookmarkModalTitle');
-        const deleteBtn = document.getElementById('deleteBookmark');
-
-        if (id) {
-            const bookmark = this.state.bookmarks.find(b => b.id === id);
-            if (!bookmark) return;
-            if (title) title.textContent = 'Edit Bookmark';
-            document.getElementById('bookmarkTitle').value = bookmark.title;
-            document.getElementById('bookmarkUrl').value = bookmark.url;
-            document.getElementById('bookmarkCategory').value = bookmark.category;
-            this.state.editingBookmarkId = id;
-            if (deleteBtn) deleteBtn.style.display = 'block';
-        } else {
-            if (title) title.textContent = 'Add Bookmark';
-            document.getElementById('bookmarkTitle').value = '';
-            document.getElementById('bookmarkUrl').value = '';
-            document.getElementById('bookmarkCategory').value = 'Other';
-            this.state.editingBookmarkId = null;
-            if (deleteBtn) deleteBtn.style.display = 'none';
-        }
-        modal.classList.add('active');
-    },
-
-    saveBookmarkFromModal(e) {
-        e.preventDefault();
-        const bookmark = {
-            id: this.state.editingBookmarkId || Date.now().toString(),
-            title: document.getElementById('bookmarkTitle').value,
-            url: document.getElementById('bookmarkUrl').value,
-            category: document.getElementById('bookmarkCategory').value
-        };
-
-        if (this.state.editingBookmarkId) {
-            const idx = this.state.bookmarks.findIndex(b => b.id === this.state.editingBookmarkId);
-            if (idx !== -1) this.state.bookmarks[idx] = bookmark;
-        } else {
-            this.state.bookmarks.push(bookmark);
-        }
-
-        this.saveBookmarks();
-        this.renderBookmarks();
-        document.getElementById('bookmarkModal').classList.remove('active');
-    },
-
-    deleteBookmark() {
-        if (!this.state.editingBookmarkId) return;
-        this.state.bookmarks = this.state.bookmarks.filter(b => b.id !== this.state.editingBookmarkId);
-        this.saveBookmarks();
-        this.renderBookmarks();
-        document.getElementById('bookmarkModal').classList.remove('active');
-    },
-
-    saveBookmarks() {
-        localStorage.setItem('hub_bookmarks', JSON.stringify(this.state.bookmarks));
-    },
-
     async initCalendar() {
         await this.loadCalendarAccounts();
         this.renderCalendar();
@@ -2136,23 +2034,6 @@ const HubApp = {
         }
         if (deleteNoteBtn) {
             deleteNoteBtn.addEventListener('click', () => this.deleteCurrentNote());
-        }
-
-        const addBookmarkBtn = document.getElementById('addBookmarkBtn');
-        const bookmarkModalClose = document.getElementById('bookmarkModalClose');
-        const bookmarkForm = document.getElementById('bookmarkForm');
-        const deleteBookmarkBtn = document.getElementById('deleteBookmark');
-        if (addBookmarkBtn) {
-            addBookmarkBtn.addEventListener('click', () => this.openBookmarkModal());
-        }
-        if (bookmarkModalClose) {
-            bookmarkModalClose.addEventListener('click', () => document.getElementById('bookmarkModal').classList.remove('active'));
-        }
-        if (bookmarkForm) {
-            bookmarkForm.addEventListener('submit', (e) => this.saveBookmarkFromModal(e));
-        }
-        if (deleteBookmarkBtn) {
-            deleteBookmarkBtn.addEventListener('click', () => this.deleteBookmark());
         }
 
         document.querySelectorAll('.modal').forEach(modal => {

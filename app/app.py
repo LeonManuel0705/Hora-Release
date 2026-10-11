@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 # SPDX-License-Identifier: AGPL-3.0-only
 
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session, g
+from flask import Flask, request, jsonify, render_template, redirect, url_for, send_file, session, g
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from werkzeug.exceptions import HTTPException
@@ -33,6 +33,7 @@ except ImportError:
 
 from .crypto_utils import _get_secret_key, encrypt_file, decrypt_file
 from . import brand
+from . import site_icons
 
 app = Flask(__name__, static_folder='static')
 
@@ -152,6 +153,8 @@ def set_security_headers(response):
         "form-action 'self'; "
         f"frame-ancestors {ancestors}"
     )
+    if getattr(g, 'foreign_content', False):
+        response.headers['Content-Security-Policy'] = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox"
     if request.is_secure:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     if request.path.startswith('/static/'):
@@ -682,6 +685,7 @@ def create_bookmark():
         favicon=data.get('favicon')
     )
     bookmark = db.get_hub_bookmark(bookmark_id)
+    site_icons.retry(bookmark['url'])
     return jsonify({'success': True, 'bookmark': bookmark})
 
 @app.route('/api/hub/bookmarks/<int:bookmark_id>', methods=['PUT'])
@@ -694,12 +698,36 @@ def update_bookmark(bookmark_id):
         return jsonify({'success': False, 'error': 'Bookmark not found'}), 404
     db.update_hub_bookmark(bookmark_id, **{k: data[k] for k in ('title', 'url', 'category', 'favicon') if k in data})
     updated = db.get_hub_bookmark(bookmark_id)
+    _forget_unused_icon(bookmark['url'])
+    site_icons.retry(updated['url'])
     return jsonify({'success': True, 'bookmark': updated})
 
 @app.route('/api/hub/bookmarks/<int:bookmark_id>', methods=['DELETE'])
 def delete_bookmark(bookmark_id):
+    bookmark = db.get_hub_bookmark(bookmark_id)
     db.delete_hub_bookmark(bookmark_id)
+    if bookmark:
+        _forget_unused_icon(bookmark['url'])
     return jsonify({'success': True})
+
+
+def _forget_unused_icon(url):
+    site_icons.forget(url, still_used=[row['url'] for row in db.get_hub_bookmarks()])
+
+
+@app.route('/api/hub/bookmarks/<int:bookmark_id>/icon')
+def bookmark_icon(bookmark_id):
+    g.foreign_content = True
+    bookmark = db.get_hub_bookmark(bookmark_id)
+    icon = site_icons.icon_for(bookmark['url']) if bookmark else None
+    try:
+        response = send_file(icon.path, mimetype=icon.kind, conditional=True) if icon else None
+    except OSError:
+        response = None
+    if response is None:
+        return _no_store(app.response_class(status=404))
+    response.headers['Cache-Control'] = 'private, max-age=604800'
+    return response
 
 SCHOOL_SUBJECTS_FILE = DATA_DIR / 'school_subjects.json'
 SCHOOL_HOMEWORK_FILE = DATA_DIR / 'school_homework.json'
