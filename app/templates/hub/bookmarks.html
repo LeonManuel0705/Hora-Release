@@ -261,11 +261,13 @@ function renderBookmarks() {
         const version = iconVersion(b.url);
         const key = `${b.id}:${version}`;
         const known = iconState.get(key);
-        const icon = known === 'none' ? '' : `<img src="/api/hub/bookmarks/${b.id}/icon?v=${version}" alt="" loading="lazy" onload="iconShown(this, ${jsArg(key)})" onerror="iconMissing(this, ${jsArg(key)})">`;
+        const site = siteIcon(b.url);
+        const source = known === 'site' ? `src="${esc(site)}" data-tried="1" referrerpolicy="no-referrer"` : `src="/api/hub/bookmarks/${b.id}/icon?v=${version}"`;
+        const icon = known === 'none' ? '' : `<img ${source} data-site="${esc(site)}" alt="" loading="lazy" onload="iconShown(this, ${jsArg(key)})" onerror="iconMissing(this, ${jsArg(key)})">`;
         return `
         <div class="bookmark-card" ondblclick="window.open(${jsArg(safeUrl(b.url))}, '_blank')">
             <div class="bookmark-header">
-                <div class="bookmark-favicon${known === 'ok' ? ' has-icon is-known' : known === 'none' ? ' no-icon' : ''}">
+                <div class="bookmark-favicon${known === 'ok' || known === 'site' ? ' has-icon is-known' : known === 'none' ? ' no-icon' : ''}">
                     <span class="bookmark-initial">${esc(initial)}</span>${icon}
                 </div>
                 <span class="bookmark-title">${esc(b.title)}</span>
@@ -301,8 +303,24 @@ function iconVersion(url) {
     for (const letter of url) hash = (hash * 31 + letter.codePointAt(0)) >>> 0;
     return hash.toString(36);
 }
-function iconShown(img, key) { iconState.set(key, 'ok'); img.parentElement.classList.add('has-icon'); }
-function iconMissing(img, key) { iconState.set(key, 'none'); img.parentElement.classList.add('no-icon'); img.remove(); }
+function siteIcon(url) { try { const u = new URL(url); return u.protocol === 'https:' ? `${u.origin}/favicon.ico` : ''; } catch { return ''; } }
+function iconShown(img, key) {
+    if (img.naturalWidth && img.naturalWidth < 8) return iconMissing(img, key);
+    iconState.set(key, img.dataset.tried ? 'site' : 'ok');
+    img.parentElement.classList.add('has-icon');
+}
+function iconMissing(img, key) {
+    // Some sites turn the app away but let this window through, so the window asks them once itself.
+    if (img.dataset.site && !img.dataset.tried) {
+        img.dataset.tried = '1';
+        img.referrerPolicy = 'no-referrer';
+        img.src = img.dataset.site;
+        return;
+    }
+    iconState.set(key, 'none');
+    img.parentElement.classList.add('no-icon');
+    img.remove();
+}
 function iconRetry(id) { [...iconState.keys()].filter(key => key.startsWith(`${id}:`)).forEach(key => iconState.delete(key)); }
 function getCatLabel(c) { return {Work:'Arbeit',Personal:'Persönlich',Dev:'Dev',Other:'Sonstiges'}[c]||c; }
 function esc(s) { if(!s)return''; const d=document.createElement('div'); d.textContent=s; return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
