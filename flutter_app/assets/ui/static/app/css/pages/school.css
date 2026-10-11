@@ -323,7 +323,7 @@
   box-shadow: var(--shadow-overlay);
   overflow: hidden;
 }
-.plan-viewer[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); animation: plan-in var(--dur-popover-in) var(--ease-out); }
+.plan-viewer[open] { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); animation: plan-in var(--dur-popover-in) var(--ease-out); }
 .plan-viewer::backdrop { background: light-dark(rgba(15, 22, 17, 0.34), rgba(0, 0, 0, 0.6)); }
 @keyframes plan-in { from { opacity: 0; scale: var(--scale-from); } }
 .plan-bar { display: flex; align-items: center; gap: 12px; padding: 14px 14px 12px 20px; border-bottom: 1px solid var(--line-soft); }
@@ -828,6 +828,21 @@
   .seminar-top { flex-direction: column; gap: 10px; }
   .seminar-due { justify-items: start; text-align: left; }
   .seminar-card { padding: 16px 16px 14px; }
+
+  .plan-viewer {
+    width: calc(100vw - 16px - var(--safe-left) - var(--safe-right));
+    max-width: none;
+    height: calc(100dvh - 16px - var(--safe-top) - var(--safe-bottom));
+    max-height: none;
+    margin: calc(8px + var(--safe-top)) auto auto;
+  }
+  .plan-bar { flex-wrap: wrap; row-gap: 10px; padding: 12px 10px 10px 16px; }
+  .plan-bar-text { flex: 1; }
+  .plan-tabs { order: 1; width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .plan-tabs::-webkit-scrollbar { display: none; }
+  .plan-tabs button { flex: 1 0 auto; justify-content: center; padding: 0 12px; }
+  .plan-stage { padding: 8px; }
+  .plan-stage.is-zoomed .plan-sheet { width: 200%; }
 }
 
 @media (max-width: 560px) {

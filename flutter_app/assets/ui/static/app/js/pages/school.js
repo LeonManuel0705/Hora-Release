@@ -695,6 +695,19 @@ function openPlan(index) {
   if (!dialog.open) dialog.showModal();
 }
 
+function zoomPlan(event) {
+  const stage = $("planStage");
+  const sheet = stage.querySelector(".plan-sheet");
+  const before = sheet.getBoundingClientRect();
+  const x = Math.min(1, Math.max(0, (event.clientX - before.left) / before.width));
+  const y = Math.min(1, Math.max(0, (event.clientY - before.top) / before.height));
+  state.vplan.zoomed = !state.vplan.zoomed;
+  stage.classList.toggle("is-zoomed", state.vplan.zoomed);
+  const after = sheet.getBoundingClientRect();
+  stage.scrollLeft += after.left + x * after.width - event.clientX;
+  stage.scrollTop += after.top + y * after.height - event.clientY;
+}
+
 function nextTestHtml() {
   const time = clockState();
   const next = state.items.filter((item) => isAssessment(item) && item.date >= time.iso).sort(byDate)[0];
@@ -2038,8 +2051,7 @@ function bind() {
       renderPlanViewer();
       dialog.querySelector('[aria-pressed="true"]')?.focus();
     } else if (event.target.closest(".plan-sheet")) {
-      state.vplan.zoomed = !state.vplan.zoomed;
-      $("planStage").classList.toggle("is-zoomed", state.vplan.zoomed);
+      zoomPlan(event);
     } else if (event.target === dialog) {
       dialog.close();
     }
