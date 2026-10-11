@@ -128,7 +128,7 @@ def test_the_test_form_takes_no_more_text_than_is_kept(client):
     title, detail = map(int, re.search(r"const TEXT_LIMITS = \{ title: (\d+), detail: (\d+) \};", source).groups())
     assert title >= 300 and detail >= 2000
     when = (date.today() + timedelta(days=3)).isoformat()
-    for kind in ("Test", "Klausur", "Hausaufgabe"):
+    for kind in ("Test", "Klausur", "Vortrag", "Hausaufgabe"):
         saved = client.post("/api/ui/deadlines", json={"kind": kind, "title": "T" * title, "date": when, "detail": "D" * detail}).get_json()["deadline"]
         assert (len(saved["title"]), len(saved["detail"])) == (title, detail), kind
         changed = client.patch(f"/api/ui/deadlines/{saved['id']}", json={"title": "U" * title, "detail": "E" * detail}).get_json()["deadline"]

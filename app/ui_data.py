@@ -30,7 +30,9 @@ STATES = [
     ('NW', 'Nordrhein-Westfalen'), ('RP', 'Rheinland-Pfalz'), ('SL', 'Saarland'), ('SN', 'Sachsen'),
     ('ST', 'Sachsen-Anhalt'), ('SH', 'Schleswig-Holstein'), ('TH', 'Thüringen'),
 ]
-DEADLINE_KINDS = {'hw': ('homework', 'Hausaufgabe'), 'test': ('tests', 'Test'), 'exam': ('exams', 'Klausur')}
+DEADLINE_KINDS = {'hw': ('homework', 'Hausaufgabe'), 'test': ('tests', 'Test'), 'exam': ('exams', 'Klausur'), 'talk': ('talks', 'Vortrag')}
+DEADLINE_PREFIXES = {word: prefix for prefix, (_, word) in DEADLINE_KINDS.items()}
+GRADE_TYPES = ('klausur', 'test', 'muendlich', 'vortrag', 'sonstiges')
 WRITTEN_DAYS = 183
 EVENT_KINDS = {'school': 'school', 'training': 'training'}
 NOTIFY_DEFAULTS = {
@@ -56,6 +58,7 @@ FILES = {
     'homework': 'school_homework.json',
     'tests': 'school_tests.json',
     'exams': 'school_exams.json',
+    'talks': 'school_talks.json',
     'grades': 'school_grades.json',
     'calendar': 'school_calendar.json',
     'notes': 'quick_notes.json',
@@ -937,7 +940,7 @@ def page_school(data, school, settings, today, iserv):
             'id': f"g-{item.get('id')}",
             'subject': subject_key,
             'points': int(round(points)),
-            'type': item.get('type') if item.get('type') in ('klausur', 'test', 'muendlich', 'sonstiges') else 'sonstiges',
+            'type': item.get('type') if item.get('type') in GRADE_TYPES else 'sonstiges',
             'semester': term,
             'date': when,
             'title': str(item.get('description') or ''),
@@ -1072,9 +1075,9 @@ def page_email(data, school, settings, today, iserv):
 
 
 def subject_use():
-    """How many grades and how many tests, exams and homework entries each subject has. A subject that has some is kept when it is deleted."""
+    """How many grades and how many dated entries of any kind each subject has. A subject that has some is kept when it is deleted."""
     use = {}
-    for name, field in (('grades', 'grades'), ('tests', 'entries'), ('exams', 'entries'), ('homework', 'entries')):
+    for name, field in (('grades', 'grades'), *((store, 'entries') for store, _ in DEADLINE_KINDS.values())):
         try:
             items = load_list(name)
         except StoreError:

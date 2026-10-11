@@ -284,7 +284,7 @@ def create_deadline():
     payload = _payload()
     if payload is None:
         return _error('JSON erwartet')
-    prefix = {'Hausaufgabe': 'hw', 'Test': 'test', 'Klausur': 'exam'}.get(payload.get('kind'))
+    prefix = ui_data.DEADLINE_PREFIXES.get(payload.get('kind'))
     if not prefix:
         return _error('Unbekannte Art')
     school = ui_data.school_setup(db.get_timetable_settings() or {})
@@ -354,7 +354,7 @@ def create_grade():
         return _error('Fach fehlt')
     if not isinstance(points, int) or not 0 <= points <= 15:
         return _error('Punkte fehlen')
-    kind = payload.get('type') if payload.get('type') in ('klausur', 'test', 'muendlich', 'sonstiges') else 'sonstiges'
+    kind = payload.get('type') if payload.get('type') in ui_data.GRADE_TYPES else 'sonstiges'
     item = {
         'id': ui_data.full_id(),
         'subject_id': payload['subject'],
