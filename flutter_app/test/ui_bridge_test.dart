@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:app/services/assistant/local_model/assistant_prompt.dart';
 import 'package:app/web_ui/ui_api.dart';
 import 'package:app/web_ui/ui_bridge.dart';
 import 'package:app/web_ui/ui_db.dart';
@@ -150,6 +151,7 @@ void main() {
     expect('${talk['id']}', startsWith('talk-'));
     expect([talk['kind'], talk['title'], talk['subject'], talk['date'], talk['detail'], talk['status']], ['Vortrag', 'Stadtklima', 'bio-own', day(5), '10 Minuten', 'offen']);
     expect(await listed('${talk['id']}'), [talk]);
+    expect((await loadAssistantContext(DateTime.now())).deadlines, contains(startsWith('Vortrag: Stadtklima am ')));
 
     final changed = await api(hub, 'PATCH', '/api/ui/deadlines/${talk['id']}', {'title': 'Stadtgrün', 'date': day(8), 'detail': '', 'time': '9:50'});
     expect(changed.status, 200);

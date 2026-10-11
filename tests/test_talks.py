@@ -32,6 +32,8 @@ def client(tmp_path, monkeypatch):
     with app.test_client() as client:
         client.get(f'/hub?token={app_module.API_TOKEN}')
         yield client
+    # The data folder is shared by all tests of a run, and the assistant reads presentations straight from it.
+    ui_data.modify_list('talks', lambda items: items.clear())
 
 
 def page_data(client, path):
@@ -192,3 +194,70 @@ def test_kinds_and_their_reminders_hold_up_under_node():
         pytest.skip('node is too old')
     result = subprocess.run([node, str(ROOT / 'tests' / 'js' / 'kinds_check.mjs')], capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+NOTHING_ELSE = lambda: ([], [], [], [], [])
+
+
+def test_the_assistant_lists_presentations_where_it_lists_tests_and_exams(client):
+    from app import assistant_service as ai
+
+    own_subject(client, 'geo-ai')
+    create(client, title='Stadtklima', subject='geo-ai', date=day(1), detail='10 Minuten, mit Handout')
+    create(client, title='Wüstenbildung', subject='geo-ai', date=day(0))
+    create(client, title='Plattentektonik', subject='geo-ai', date=day(-2))
+
+    context = ai.build_context(NOTHING_ELSE)
+    section = context.split('--- Anstehende Tests, Klausuren und Vorträge ---\n', 1)[1].split('\n\n', 1)[0].splitlines()
+    assert [line.split(' am ')[0] for line in section] == ['  - Vortrag: Wüstenbildung [Geografie]', '  - Vortrag: Stadtklima [Geografie]']
+    assert section[1].endswith('(morgen). Notiz: 10 Minuten, mit Handout')
+    assert 'Plattentektonik' not in context and 'Lernstoff' not in context
+
+    tomorrow = ai.quick_answer('Was steht morgen an?', NOTHING_ELSE)
+    assert '**Vortrag:** Stadtklima [Geografie]' in tomorrow and 'Wüstenbildung' not in tomorrow
+
+    listed = ai.quick_answer('Klausuren', NOTHING_ELSE)
+    assert listed.split('**Vorträge:**\n', 1)[1].splitlines() == [
+        f'  • Wüstenbildung [Geografie] – {ai._format_date_de(day(0))}',
+        f'  • Stadtklima [Geografie] – {ai._format_date_de(day(1))}',
+    ]
+
+    week = ai.quick_answer('Wochenübersicht', NOTHING_ELSE)
+    assert f'**Vorträge diese Woche:**\n  • Wüstenbildung [Geografie] am {ai._format_date_de(day(0))}' in week and 'Plattentektonik' not in week
+
+    countdown = ai.quick_answer('Deadlines', NOTHING_ELSE)
+    assert '🟡 Vortrag: Wüstenbildung [Geografie] – **HEUTE!**' in countdown and '🟡 Vortrag: Stadtklima [Geografie] – **morgen!**' in countdown
+    assert 'Plattentektonik' not in countdown
+
+
+def test_the_assistant_lists_tests_and_exams_as_before_next_to_presentations(client):
+    from app import assistant_service as ai
+
+    exams = [{'id': 'e1', 'title': 'Analysis', 'subject_id': '', 'date': day(2), 'topics': 'Ableitungen'}]
+    tests = [{'id': 't1', 'title': 'Vektoren', 'subject_id': '', 'date': day(1), 'topics': ''}]
+    school = lambda: ([], [], exams, tests, [])
+    before = {message: ai.quick_answer(message, school) for message in ('Klausuren', 'Was steht morgen an?', 'Wochenübersicht', 'Deadlines')}
+    assert 'Vortr' not in ''.join(before.values())
+    assert '  - Klausur: Analysis am ' in ai.build_context(school) and 'Lernstoff: Ableitungen' in ai.build_context(school)
+
+    create(client, title='Stadtklima', date=day(1))
+    after = {message: ai.quick_answer(message, school) for message in before}
+    assert after['Klausuren'] == before['Klausuren'] + f"\n\n**Vorträge:**\n  • Stadtklima – {ai._format_date_de(day(1))}"
+    assert after['Was steht morgen an?'] == before['Was steht morgen an?'] + '\n**Vortrag:** Stadtklima'
+    assert after['Deadlines'].replace('  🟡 Vortrag: Stadtklima [] – **morgen!**\n', '') == before['Deadlines']
+    assert ai.quick_answer('Klausuren', NOTHING_ELSE) == f"**Anstehende Prüfungen:**\n\n**Vorträge:**\n  • Stadtklima – {ai._format_date_de(day(1))}"
+
+
+def test_without_anything_announced_the_assistant_says_so_for_all_three(client):
+    from app import assistant_service as ai
+
+    assert ai.quick_answer('Klausuren', NOTHING_ELSE) == 'Keine anstehenden Klausuren, Tests oder Vorträge.'
+    assert 'Anstehende Tests' not in ai.build_context(NOTHING_ELSE)
+
+
+def test_a_question_about_the_own_next_presentation_is_not_looked_up_on_wikipedia():
+    from app import research_service
+
+    for question in ('Was ist der nächste Vortrag?', 'Was war der letzte Vortrag in Geografie?', 'Was ist der nächste Test?'):
+        assert not research_service.wants_research(question), question
+    assert research_service.wants_research('Was ist ein Vortrag?')

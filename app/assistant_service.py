@@ -454,6 +454,11 @@ def _school_view():
         return None
 
 
+def _talks():
+    """The presentations entered on the school page. load_school_fn hands over five fixed lists, so they are read from their store."""
+    return ui_data.load_list('talks')
+
+
 def _subject_names(school, subjects):
     names = {s.get('id', s.get('name', '')): s.get('name', str(s.get('id', ''))) for s in subjects}
     if school:
@@ -502,7 +507,7 @@ def _exam_line(kind, item, names, school=None):
     subject = names.get(item.get('subject_id', ''), '')
     line = f'  - {kind}: {item.get("title") or kind}{" [" + subject + "]" if subject else ""} am {_when(item["date"])}{_exam_slot(item, school)}'
     topics = str(item.get('topics') or '').strip()
-    return f'{line}. Lernstoff: {topics[:400]}' if topics else line
+    return f'{line}. {"Notiz" if kind == "Vortrag" else "Lernstoff"}: {topics[:400]}' if topics else line
 
 
 # "die Arbeit am Freitag" and "die Arbeit in Mathe" are a test at school, "die Arbeit im Praktikum" is not.
@@ -638,11 +643,11 @@ def build_context(load_school_fn, message=None, history=None):
             lines.append('')
 
         upcoming = sorted(
-            [('Klausur', e) for e in exams if e.get('date', '') >= today] + [('Test', t) for t in tests if t.get('date', '') >= today],
+            [(kind, item) for kind, items in (('Klausur', exams), ('Test', tests), ('Vortrag', _talks())) for item in items if item.get('date', '') >= today],
             key=lambda pair: pair[1].get('date', '')
         )[:8]
         if upcoming:
-            lines.append('--- Anstehende Tests und Klausuren ---')
+            lines.append('--- Anstehende Tests, Klausuren und Vorträge ---')
             lines.extend(_exam_line(kind, item, subj_map, school) for kind, item in upcoming)
             lines.append('')
 
@@ -2376,16 +2381,17 @@ def _build_deadline_countdown(load_school_fn, today):
                     except ValueError:
                         pass
 
-            for t in tests:
-                if t.get('date', '') >= today:
-                    try:
-                        d = datetime.strptime(t['date'], '%Y-%m-%d').date()
-                        days = (d - now.date()).days
-                        subj = subj_map.get(t.get('subject_id', ''), '')
-                        label = f'Test: {t.get("title", "")} [{subj}]'
-                        deadlines.append(('🟡', label, days, t['date']))
-                    except ValueError:
-                        pass
+            for kind, items in (('Test', tests), ('Vortrag', _talks())):
+                for t in items:
+                    if t.get('date', '') >= today:
+                        try:
+                            d = datetime.strptime(t['date'], '%Y-%m-%d').date()
+                            days = (d - now.date()).days
+                            subj = subj_map.get(t.get('subject_id', ''), '')
+                            label = f'{kind}: {t.get("title", "")} [{subj}]'
+                            deadlines.append(('🟡', label, days, t['date']))
+                        except ValueError:
+                            pass
         except Exception:
             pass
 
@@ -2622,6 +2628,14 @@ def _build_week_summary(today, now, load_school_fn=None):
                     subj = subj_map.get(t.get('subject_id', ''), '')
                     lines.append(f'  • Test: {t.get("title", "")} [{subj}] am {_format_date_de(t["date"])}')
                 lines.append('')
+
+            week_talks = sorted((t for t in _talks() if today <= t.get('date', '') <= end_of_week), key=lambda t: t['date'])
+            if week_talks:
+                lines.append('**Vorträge diese Woche:**')
+                for t in week_talks:
+                    subj = subj_map.get(t.get('subject_id', ''), '')
+                    lines.append(f'  • {t.get("title", "")}{" [" + subj + "]" if subj else ""} am {_format_date_de(t["date"])}')
+                lines.append('')
         except Exception:
             pass
 
@@ -2690,7 +2704,7 @@ def _build_day_ahead(target, load_school_fn=None):
                     subj = subj_map.get(h.get('subject_id', ''), '')
                     lines.append(f'  • {h["title"]}{" [" + subj + "]" if subj else ""}')
                 lines.append('')
-            for kind, items in (('Klausur', exams), ('Test', tests)):
+            for kind, items in (('Klausur', exams), ('Test', tests), ('Vortrag', _talks())):
                 for item in items:
                     if str(item.get('date') or '')[:10] == day:
                         subj = subj_map.get(item.get('subject_id', ''), '')
@@ -2777,9 +2791,10 @@ def _build_exams_response(load_school_fn, today):
         subj_map = _subject_names(_school_view(), subjects)
         upcoming_exams = sorted([e for e in exams if e.get('date', '') >= today], key=lambda e: e['date'])
         upcoming_tests = sorted([t for t in tests if t.get('date', '') >= today], key=lambda t: t['date'])
+        upcoming_talks = sorted([t for t in _talks() if t.get('date', '') >= today], key=lambda t: t['date'])
 
-        if not upcoming_exams and not upcoming_tests:
-            return 'Keine anstehenden Klausuren oder Tests.'
+        if not upcoming_exams and not upcoming_tests and not upcoming_talks:
+            return 'Keine anstehenden Klausuren, Tests oder Vorträge.'
 
         lines = ['**Anstehende Prüfungen:**\n']
         if upcoming_exams:
@@ -2797,6 +2812,14 @@ def _build_exams_response(load_school_fn, today):
             for t in upcoming_tests[:8]:
                 subj = subj_map.get(t.get('subject_id', ''), '')
                 lines.append(f'  • {t.get("title", "Test")} [{subj}] – {_format_date_de(t["date"])}')
+
+        if upcoming_talks:
+            if upcoming_tests:
+                lines.append('')
+            lines.append('**Vorträge:**')
+            for t in upcoming_talks[:8]:
+                subj = subj_map.get(t.get('subject_id', ''), '')
+                lines.append(f'  • {t.get("title", "Vortrag")}{" [" + subj + "]" if subj else ""} – {_format_date_de(t["date"])}')
 
         return '\n'.join(lines)
     except Exception:

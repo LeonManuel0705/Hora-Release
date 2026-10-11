@@ -113,7 +113,7 @@ void main() {
     test('says so when the weekend or nothing is planned', () {
       final text = describeAssistantContext(AssistantContextData(now: DateTime(2026, 10, 3, 9)));
       expect(text, contains('Wochenende'));
-      expect(text, contains('keine Klausuren, Tests oder Hausaufgaben'));
+      expect(text, contains('keine Klausuren, Tests, Vorträge oder Hausaufgaben'));
     });
 
     test('keeps the instructions short, German and without dashes', () {

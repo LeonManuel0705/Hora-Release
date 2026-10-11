@@ -253,7 +253,7 @@ Da ich offline arbeite, kann ich deinen Text nicht direkt analysieren. Hier ist 
 Du kannst dort:
 • Deinen Stundenplan verwalten
 • Hausaufgaben tracken
-• Klausuren und Tests eintragen''';
+• Klausuren, Tests und Vorträge eintragen''';
   }
 
   String solveMath(String equation) {

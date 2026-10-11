@@ -61,9 +61,9 @@ String describeAssistantContext(AssistantContextData data) {
     lines.addAll(data.lessons.map((lesson) => '- $lesson'));
   }
   if (data.deadlines.isEmpty) {
-    lines.add('In den nächsten 7 Tagen sind keine Klausuren, Tests oder Hausaufgaben eingetragen.');
+    lines.add('In den nächsten 7 Tagen sind keine Klausuren, Tests, Vorträge oder Hausaufgaben eingetragen.');
   } else {
-    lines.add('Klausuren, Tests und Hausaufgaben der nächsten 7 Tage:');
+    lines.add('Klausuren, Tests, Vorträge und Hausaufgaben der nächsten 7 Tage:');
     lines.addAll(data.deadlines.map((deadline) => '- $deadline'));
   }
   if (data.tasks.isEmpty) {
