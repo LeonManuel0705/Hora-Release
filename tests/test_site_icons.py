@@ -174,6 +174,7 @@ def test_the_same_page_has_the_same_key_whatever_the_spelling(icons):
 
 @pytest.mark.parametrize('address, expected', [
     ('93.184.216.34', 'public'), ('8.8.8.8', 'public'), ('2606:4700:4700::1111', 'public'), ('2002:808:808::1', 'public'),
+    ('172.32.0.1', 'public'), ('100.128.0.1', 'public'), ('fec0::1', None), ('4000::1', None),
     ('10.1.2.3', 'local'), ('172.16.0.1', 'local'), ('172.31.255.254', 'local'), ('192.168.178.1', 'local'),
     ('100.64.0.1', 'local'), ('100.127.255.254', 'local'), ('fd12:3456:789a::1', 'local'), ('::ffff:192.168.1.1', 'local'),
     ('2002:c0a8:101::1', 'local'), ('64:ff9b::a00:1', 'local'),

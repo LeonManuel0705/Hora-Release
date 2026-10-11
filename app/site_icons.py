@@ -140,6 +140,8 @@ def _reach(address):
             address = inner
     if address.is_loopback or address.is_link_local or address.is_multicast or address.is_unspecified or address.is_reserved:
         return None
+    if getattr(address, 'is_site_local', False):
+        return None
     if any(address in net for net in _LOCAL):
         return 'local'
     return 'public' if address.is_global else None
