@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +19,7 @@ import '../screens/pomodoro_screen.dart';
 import '../screens/review_screen.dart';
 import '../screens/training_screen.dart';
 import '../services/holiday_service.dart';
+import '../services/iserv_plan.dart';
 import 'ui_api.dart';
 
 class UiNativePage {
@@ -129,6 +132,30 @@ mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost {
   Map<String, Object?> iservStatus() {
     final provider = context.read<IServProvider>();
     return {'connected': provider.isConnected, 'has_credentials': provider.isConnected || provider.username != null};
+  }
+
+  @override
+  Future<UiPlan?> plan({bool fresh = false}) async {
+    if (kIsWeb) return null;
+    final result = await context.read<IServProvider>().substitutionPlan(fresh: fresh);
+    final pages = <UiPlanPage>[];
+    var other = false;
+    for (final file in result.files) {
+      final Uint8List bytes;
+      try {
+        bytes = base64Decode('${file['data'] ?? ''}');
+      } on FormatException {
+        continue;
+      }
+      final type = planContentType(bytes);
+      if (type == null) continue;
+      if (type.startsWith('image/')) {
+        pages.add(UiPlanPage(bytes, type, planDigest(bytes)));
+      } else {
+        other = true;
+      }
+    }
+    return UiPlan(pages: pages, cachedAt: result.cachedAt, cause: result.cause ?? (pages.isEmpty && other ? 'format' : null));
   }
 
   @override

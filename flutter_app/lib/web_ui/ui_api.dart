@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -12,10 +13,27 @@ import 'ui_db.dart';
 import 'ui_transit.dart';
 import 'ui_weather.dart';
 
+class UiPlanPage {
+  const UiPlanPage(this.bytes, this.contentType, this.digest);
+
+  final Uint8List bytes;
+  final String contentType;
+  final String digest;
+}
+
+class UiPlan {
+  const UiPlan({required this.pages, this.cachedAt, this.cause});
+
+  final List<UiPlanPage> pages;
+  final DateTime? cachedAt;
+  final String? cause;
+}
+
 abstract class UiHost {
   Future<Map<String, Object?>> connectIserv(String url, String user, String password);
   Future<void> disconnectIserv();
   Map<String, Object?> iservStatus();
+  Future<UiPlan?> plan({bool fresh = false});
   Future<int> changeState(String name);
   Future<void> themeChoice(String? choice);
   void dataChanged(String area);
@@ -34,14 +52,20 @@ class UiRequest {
 }
 
 class UiReply {
-  const UiReply(this.status, this.body);
+  const UiReply(this.status, this.body, {this.bytes, this.contentType, this.filename});
 
   factory UiReply.ok([Map<String, Object?> extra = const {}]) => UiReply(200, {'success': true, ...extra});
 
   factory UiReply.error(String message, [int status = 400]) => UiReply(status, {'success': false, 'error': message});
 
+  factory UiReply.file(Uint8List bytes, String contentType, String filename) =>
+      UiReply(200, null, bytes: bytes, contentType: contentType, filename: filename);
+
   final int status;
   final Object? body;
+  final Uint8List? bytes;
+  final String? contentType;
+  final String? filename;
 }
 
 class _Invalid implements Exception {
@@ -85,6 +109,7 @@ class UiApi {
       }
       if (path.length == 2 && path[0] == 'hub' && path[1] == 'tour') return await _tour(prefs, request);
       if (path.length == 2 && path[0] == 'hub' && path[1] == 'bundesland' && method == 'POST') return await _state(request);
+      if (path.length >= 2 && path[0] == 'ui' && path[1] == 'vplan') return await _plan(request);
       if (path.length == 2 && path[0] == 'iserv') return await _iserv(request, path[1]);
       if (path.isNotEmpty && (path[0] == 'calendar' || path[0] == 'email')) {
         return UiReply.error('Google lässt sich in der App noch nicht verbinden', 404);
@@ -604,6 +629,43 @@ class UiApi {
     } catch (_) {
       return UiReply.error('Ferien ließen sich nicht laden', 502);
     }
+  }
+
+  static const _planProblems = {
+    'setup': 'IServ ist nicht verbunden.',
+    'login': 'Die Anmeldung bei IServ ist abgelaufen. Verbinde IServ in den Einstellungen neu.',
+    'empty': 'IServ zeigt gerade keinen Vertretungsplan.',
+    'offline': 'IServ ist gerade nicht erreichbar.',
+    'format': 'IServ liefert den Vertretungsplan als PDF. Das zeigt die App noch nicht an.',
+  };
+
+  static const _planSuffixes = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp'};
+
+  Future<UiReply> _plan(UiRequest request) async {
+    final bridge = host;
+    final path = request.segments;
+    if (bridge == null || request.method != 'GET') return UiReply.error('Nicht gefunden', 404);
+    if (path.length == 2) {
+      final fresh = request.query['frisch'] == '1';
+      final plan = await bridge.plan(fresh: fresh);
+      if (plan == null) return UiReply.error('Nicht gefunden', 404);
+      final problem = fresh && _planProblems.containsKey(plan.cause) ? plan.cause : null;
+      final stamp = plan.cachedAt?.toIso8601String();
+      return UiReply.ok({
+        'files': [
+          for (final (index, page) in plan.pages.indexed)
+            {'page': index + 1, 'type': 'image', 'url': '/api/ui/vplan/datei/${index + 1}?v=${page.digest}'},
+        ],
+        'cachedAt': stamp == null || plan.pages.isEmpty ? null : stamp.substring(0, 16),
+        'problem': problem,
+        'message': _planProblems[problem] ?? '',
+      });
+    }
+    final number = path.length == 4 && path[2] == 'datei' ? int.tryParse(path[3]) : null;
+    final plan = number == null ? null : await bridge.plan();
+    if (plan == null || number == null || number < 1 || number > plan.pages.length) return UiReply.error('Seite nicht gefunden', 404);
+    final page = plan.pages[number - 1];
+    return UiReply.file(page.bytes, page.contentType, 'vertretungsplan-$number.${_planSuffixes[page.contentType] ?? 'bin'}');
   }
 
   Future<UiReply> _iserv(UiRequest request, String action) async {

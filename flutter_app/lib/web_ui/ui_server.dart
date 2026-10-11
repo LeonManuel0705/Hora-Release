@@ -262,6 +262,15 @@ class UiServer {
       body: body,
     ));
     response.statusCode = reply.status;
+    final bytes = reply.bytes;
+    if (bytes != null) {
+      response.headers
+        ..set(HttpHeaders.contentTypeHeader, reply.contentType ?? 'application/octet-stream')
+        ..set(HttpHeaders.cacheControlHeader, 'private, no-store')
+        ..set('Content-Disposition', 'inline; filename="${reply.filename ?? 'datei'}"');
+      response.add(bytes);
+      return;
+    }
     response.headers
       ..contentType = ContentType.json
       ..set(HttpHeaders.cacheControlHeader, 'no-store');

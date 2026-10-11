@@ -57,5 +57,7 @@ class IServService {
     return {'success': false, 'error': 'IServ ist auf Web nicht verfügbar'};
   }
 
+  Future<List<Map<String, dynamic>>> getCachedVertretungsplanFiles() async => [];
+
   Future<void> syncAll() async {}
 }

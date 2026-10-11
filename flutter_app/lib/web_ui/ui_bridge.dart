@@ -161,6 +161,14 @@ class UiBridge {
       json: json,
       body: body,
     ));
+    final bytes = reply.bytes;
+    if (bytes != null) {
+      return UiBridgeReply(reply.status, headers: {
+        'Content-Type': reply.contentType ?? 'application/octet-stream',
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+      }, body: bytes);
+    }
     return UiBridgeReply.json(reply.status, reply.body);
   }
 }

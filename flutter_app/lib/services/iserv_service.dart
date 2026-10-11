@@ -10,6 +10,8 @@ import 'package:sqflite/sqflite.dart';
 import '../models/iserv.dart';
 import 'database_service.dart';
 import 'encryption_service.dart';
+import 'iserv_plan.dart';
+import 'iserv_session.dart';
 
 @visibleForTesting
 Future<void> forgetIServCredentials(Database db, EncryptionService encryption, {String? keep}) async {
@@ -28,6 +30,9 @@ class IServService {
   final EncryptionService _encryption = EncryptionService();
   Dio? _dio;
   CookieJar? _cookieJar;
+  IServSession? _session;
+  Future<bool>? _reconnecting;
+  String? _signInCause;
 
   String? _sessionToken;
   String? _baseUrl;
@@ -66,9 +71,8 @@ class IServService {
     }
   }
 
-  Dio _createDio(String baseUrl) {
+  (Dio, CookieJar) _createDio(String baseUrl) {
     final cookieJar = CookieJar();
-    _cookieJar = cookieJar;
 
     final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
@@ -84,38 +88,46 @@ class IServService {
     ));
 
     dio.interceptors.add(CookieManager(cookieJar));
-    return dio;
+    return (dio, cookieJar);
   }
 
   Future<bool> autoReconnect() async {
     if (isConnected && _dio != null) return true;
+    return _reconnect();
+  }
 
+  Future<bool> _reconnect() => _reconnecting ??= _signInWithSaved().whenComplete(() => _reconnecting = null);
+
+  Future<bool> _signInWithSaved() async {
     try {
       final db = await _db.database;
       final credentials = await db.query('iserv_credentials', orderBy: 'created_at DESC', limit: 1);
 
-      if (credentials.isNotEmpty) {
-        final cred = IServCredentials.fromMap(credentials.first);
-        _baseUrl = cred.iservUrl;
-        _currentUsername = cred.username;
-
-        final secureCredentials = await _encryption.getIServCredentials(cred.credentialKey);
-        final storedPassword = secureCredentials?['password'] ?? '';
-
-        if (storedPassword.isNotEmpty) {
-          final result = await connect(
-            username: cred.username,
-            password: storedPassword,
-            iservUrl: cred.iservUrl,
-          );
-          return result['success'] == true;
-        } else {
-          _isWebViewSession = false;
-          if (kDebugMode) print('IServ: autoReconnect - no password stored (WebView session), cannot re-authenticate');
-          return false;
-        }
+      if (credentials.isEmpty) {
+        _signInCause = 'setup';
+        return false;
       }
+      final cred = IServCredentials.fromMap(credentials.first);
+      _baseUrl = cred.iservUrl;
+      _currentUsername = cred.username;
+
+      final secureCredentials = await _encryption.getIServCredentials(cred.credentialKey);
+      final storedPassword = secureCredentials?['password'] ?? '';
+
+      if (storedPassword.isEmpty) {
+        _isWebViewSession = false;
+        _signInCause = 'login';
+        if (kDebugMode) print('IServ: autoReconnect - no password stored (WebView session), cannot re-authenticate');
+        return false;
+      }
+      final result = await connect(
+        username: cred.username,
+        password: storedPassword,
+        iservUrl: cred.iservUrl,
+      );
+      return result['success'] == true;
     } catch (e) {
+      _signInCause = 'offline';
       if (kDebugMode) print('IServ: Auto-reconnect failed: $e');
     }
 
@@ -149,129 +161,50 @@ class IServService {
       }
       _baseUrl = 'https://$normalizedUrl';
 
-      final dio = _createDio(_baseUrl!);
+      final (dio, cookieJar) = _createDio(_baseUrl!);
+      final session = IServSession(dio, Uri.parse(_baseUrl!));
+      final outcome = await session.signIn(username, password);
+      if (kDebugMode) print('IServ: sign-in outcome: ${outcome.name}');
 
-      final loginData = <String, dynamic>{
-        '_username': username,
-        '_password': password,
-      };
-      String postUrl = '/iserv/login_check';
-
-      try {
-        final loginPageResponse = await dio.get(
-          '/iserv/login',
-          options: Options(
-            followRedirects: true,
-            maxRedirects: 5,
-          ),
-        );
-        final html = loginPageResponse.data?.toString() ?? '';
-        if (kDebugMode) print('IServ: Login page status: ${loginPageResponse.statusCode}, length: ${html.length}');
-
-        final formAction = RegExp(r'<form[^>]*action="([^"]*)"', dotAll: true).firstMatch(html);
-        if (formAction != null) {
-          final action = formAction.group(1)!;
-          if (action.isNotEmpty) {
-            postUrl = action.startsWith('/') ? action : '/iserv/$action';
-            if (kDebugMode) print('IServ: Found form action: $postUrl');
-          }
-        }
-
-        final hiddenInputs = RegExp(
-          r'<input[^>]*type=["\x27]hidden["\x27][^>]*/?>',
-          dotAll: true,
-          caseSensitive: false,
-        ).allMatches(html);
-
-        for (final input in hiddenInputs) {
-          final inputHtml = input.group(0)!;
-          final nameMatch = RegExp(r'name=["\x27]([^"\x27]+)["\x27]').firstMatch(inputHtml);
-          final valueMatch = RegExp(r'value=["\x27]([^"\x27]*)["\x27]').firstMatch(inputHtml);
-          if (nameMatch != null) {
-            final name = nameMatch.group(1)!;
-            final value = valueMatch?.group(1) ?? '';
-            loginData[name] = value;
-            if (kDebugMode) print('IServ: Found hidden field: $name (${value.length} chars)');
-          }
-        }
-
-        final hiddenInputsAlt = RegExp(
-          r'<input[^>]*name=["\x27]([^"\x27]+)["\x27][^>]*type=["\x27]hidden["\x27][^>]*value=["\x27]([^"\x27]*)["\x27][^>]*/?>',
-          dotAll: true,
-          caseSensitive: false,
-        ).allMatches(html);
-
-        for (final input in hiddenInputsAlt) {
-          final name = input.group(1)!;
-          final value = input.group(2) ?? '';
-          if (!loginData.containsKey(name)) {
-            loginData[name] = value;
-            if (kDebugMode) print('IServ: Found hidden field (alt): $name (${value.length} chars)');
-          }
-        }
-
-        if (loginData.length <= 2) {
-          if (kDebugMode) print('IServ: WARNING - No hidden form fields found!');
-          final lowerHtml = html.toLowerCase();
-          if (lowerHtml.contains('_username') || lowerHtml.contains('username')) {
-            if (kDebugMode) print('IServ: Page contains username field');
-          }
-          if (lowerHtml.contains('password')) {
-            if (kDebugMode) print('IServ: Page contains password field');
-          }
-          if (kDebugMode) print('IServ: Page start: ${html.substring(0, html.length > 1000 ? 1000 : html.length)}');
-        }
-      } catch (e) {
-        if (kDebugMode) print('IServ: Could not fetch login page: $e');
+      if (outcome == IServSignIn.refused) {
+        _signInCause = 'login';
+        return {'success': false, 'error': 'Falscher Benutzername oder Passwort'};
+      }
+      if (outcome == IServSignIn.stuck) {
+        _signInCause = 'offline';
+        return {'success': false, 'error': 'IServ hat die Anmeldung nicht abgeschlossen. Bitte später erneut versuchen.'};
       }
 
-      if (kDebugMode) print('IServ: Posting login with ${loginData.length} fields to $postUrl');
+      _dio = dio;
+      _cookieJar = cookieJar;
+      _session = session;
+      _currentUsername = username;
+      _sessionToken = 'session_active';
+      _isWebViewSession = false;
+      _signInCause = null;
 
-      final response = await dio.post(
-        postUrl,
-        data: loginData,
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-          followRedirects: false,
-          validateStatus: (status) => status != null && status < 500,
-        ),
+      final credentialKey = await _encryption.storeIServCredentials(
+        username: username,
+        password: password,
+        iservUrl: _baseUrl!,
       );
 
-      if (kDebugMode) print('IServ: Login response status: ${response.statusCode}');
-      if (kDebugMode) print('IServ: Login response location: ${response.headers.value('location')}');
+      final db = await _db.database;
+      await forgetIServCredentials(db, _encryption, keep: credentialKey);
+      await db.insert(
+        'iserv_credentials',
+        IServCredentials(
+          username: username,
+          iservUrl: _baseUrl!,
+          credentialKey: credentialKey,
+          createdAt: DateTime.now(),
+        ).toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
 
-      if (response.statusCode == 302 || response.statusCode == 200) {
-        final location = response.headers.value('location') ?? '';
-        if (!location.contains('login') && !location.contains('error')) {
-          _dio = dio;
-          _currentUsername = username;
-          _sessionToken = 'session_active';
-
-          final credentialKey = await _encryption.storeIServCredentials(
-            username: username,
-            password: password,
-            iservUrl: _baseUrl!,
-          );
-
-          final db = await _db.database;
-          await forgetIServCredentials(db, _encryption, keep: credentialKey);
-          await db.insert(
-            'iserv_credentials',
-            IServCredentials(
-              username: username,
-              iservUrl: _baseUrl!,
-              credentialKey: credentialKey,
-              createdAt: DateTime.now(),
-            ).toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
-
-          return {'success': true};
-        }
-      }
-
-      return {'success': false, 'error': 'Anmeldung fehlgeschlagen'};
+      return {'success': true};
     } catch (e) {
+      _signInCause = 'offline';
       return {'success': false, 'error': 'Verbindungsfehler. Bitte überprüfe deine Internetverbindung.'};
     }
   }
@@ -279,6 +212,8 @@ class IServService {
   Future<void> disconnect() async {
     _dio = null;
     _cookieJar = null;
+    _session = null;
+    _signInCause = null;
     _sessionToken = null;
     _baseUrl = null;
     _currentUsername = null;
@@ -463,7 +398,9 @@ class IServService {
       _sessionToken = 'webview_session_active';
       _currentUsername = username ?? 'IServ-Nutzer';
       _dio = dio;
+      _session = IServSession(dio, baseUri);
       _isWebViewSession = true;
+      _signInCause = null;
 
       final credentialKey = await _encryption.storeIServCredentials(
         username: _currentUsername!,
@@ -892,11 +829,6 @@ class IServService {
     await batch.commit(noResult: true);
   }
 
-  String _decodeBody(dynamic data) {
-    if (data is List<int>) return utf8.decode(data, allowMalformed: true);
-    return data?.toString() ?? '';
-  }
-
   String _eventId(dynamic item, String title, dynamic startRaw) {
     final raw = item['id']?.toString() ?? item['uid']?.toString();
     if (raw != null && raw.isNotEmpty) return raw;
@@ -951,177 +883,49 @@ class IServService {
   }
 
   Future<Map<String, dynamic>> fetchVertretungsplan({int displayId = 3}) async {
-    if (_dio == null || _baseUrl == null) {
-      final reconnected = await autoReconnect();
-      if (!reconnected || _dio == null || _baseUrl == null) {
-        return await _getCachedVertretungsplanResult();
-      }
+    if (_session == null && !await autoReconnect()) {
+      return _getCachedVertretungsplanResult(cause: _signInCause ?? 'offline');
     }
 
     try {
-      final List<Map<String, dynamic>> files = [];
-
-      final showUrl = '$_baseUrl/iserv/infodisplay/show/$displayId';
-
-      if (_cookieJar != null) {
-        final cookies = await _cookieJar!.loadForRequest(Uri.parse(showUrl));
-        if (kDebugMode) print('IServ Vertretungsplan: Found ${cookies.length} cookies for $showUrl');
-        for (final c in cookies) {
-          if (kDebugMode) print('  Cookie: ${c.name} domain=${c.domain} path=${c.path}');
-        }
-      } else {
-        if (kDebugMode) print('IServ Vertretungsplan: WARNING - No cookie jar available!');
+      var session = _session;
+      if (session == null) return _getCachedVertretungsplanResult(cause: _signInCause ?? 'offline');
+      var plan = await fetchIServPlan(session, displayId: displayId);
+      if (plan.state == IServPlanState.expired && await _reconnect()) {
+        session = _session;
+        if (session != null) plan = await fetchIServPlan(session, displayId: displayId);
       }
 
-      final htmlResponse = await _dio!.get(
-        showUrl,
-        options: Options(
-          responseType: ResponseType.bytes,
-          receiveTimeout: const Duration(seconds: 10),
-          validateStatus: (status) => status != null && status < 500,
-        ),
-      );
-
-      if (htmlResponse.statusCode == 200) {
-        final contentType = htmlResponse.headers.value('content-type') ?? '';
-
-        if (contentType.contains('application/pdf')) {
-          final data = base64Encode(htmlResponse.data as List<int>);
-          await _db.cacheVertretungsplanFile(data: data, page: 1, contentType: 'application/pdf');
-          return {
-            'success': true,
-            'files': [{'data': data, 'contentType': 'application/pdf', 'page': 1}],
-            'isFromCache': false,
-          };
-        }
-
-        if (contentType.contains('text/html')) {
-          final html = _decodeBody(htmlResponse.data);
-
-          final urlsToTry = <String>{};
-
-          bool isInfodisplayUrl(String url) {
-            final resolved = _resolveUrl(url);
-            return resolved.contains('/iserv/infodisplay/');
+      switch (plan.state) {
+        case IServPlanState.found:
+          final files = <Map<String, dynamic>>[];
+          await _db.clearVertretungsplanCache();
+          for (var index = 0; index < plan.files.length; index++) {
+            final file = plan.files[index];
+            final data = base64Encode(file.bytes);
+            await _db.cacheVertretungsplanFile(data: data, page: index + 1, contentType: file.contentType);
+            files.add({'data': data, 'contentType': file.contentType, 'page': index + 1});
           }
-
-          final infodisplayRegex = RegExp(r'/iserv/infodisplay/(?:file|pdf)/[^\s"' "'" r'><]+', caseSensitive: false);
-          for (final match in infodisplayRegex.allMatches(html)) {
-            final src = match.group(0);
-            if (src != null) urlsToTry.add(_resolveUrl(src));
-          }
-
-          final imgRegex = RegExp(r'<img[^>]+src=["' "'" r']([^"' "'" r']+)["' "'" r']', caseSensitive: false);
-          for (final match in imgRegex.allMatches(html)) {
-            final src = match.group(1);
-            if (src != null && !src.startsWith('data:') && isInfodisplayUrl(src)) {
-              urlsToTry.add(_resolveUrl(src));
-            }
-          }
-
-          final iframeRegex = RegExp(r'<iframe[^>]+src=["' "'" r']([^"' "'" r']+)["' "'" r']', caseSensitive: false);
-          for (final match in iframeRegex.allMatches(html)) {
-            final src = match.group(1);
-            if (src != null && isInfodisplayUrl(src)) {
-              urlsToTry.add(_resolveUrl(src));
-            }
-          }
-
-          final objectRegex = RegExp(r'(?:data|src)=["' "'" r']([^"' "'" r']+\.(?:pdf|png|jpg|jpeg|gif))["' "'" r']', caseSensitive: false);
-          for (final match in objectRegex.allMatches(html)) {
-            final src = match.group(1);
-            if (src != null && isInfodisplayUrl(src)) {
-              urlsToTry.add(_resolveUrl(src));
-            }
-          }
-
-          for (int i = 1; i <= 6; i++) {
-            urlsToTry.add('$_baseUrl/iserv/infodisplay/file/$displayId/$i');
-          }
-
-          if (kDebugMode) print('IServ Vertretungsplan: Found ${urlsToTry.length} infodisplay URLs to try');
-
-          for (final url in urlsToTry) {
-            if (files.length >= 6) break;
-
-            try {
-              final response = await _dio!.get(
-                url,
-                options: Options(
-                  responseType: ResponseType.bytes,
-                  receiveTimeout: const Duration(seconds: 8),
-                  validateStatus: (status) => status != null && status < 500,
-                ),
-              );
-
-              if (response.statusCode == 200 && response.data != null) {
-                final ct = response.headers.value('content-type') ?? '';
-                final bytes = response.data as List<int>;
-
-                if (ct.contains('text/html') || ct.contains('svg') || bytes.length < 1000) {
-                  continue;
-                }
-
-                if (ct.contains('pdf') || ct.contains('image')) {
-                  final data = base64Encode(bytes);
-                  files.add({
-                    'data': data,
-                    'contentType': ct,
-                    'page': files.length + 1,
-                  });
-                }
-              }
-            } catch (e) {
-              continue;
-            }
-          }
-        }
+          return {'success': true, 'files': files, 'isFromCache': false, 'cause': null};
+        case IServPlanState.expired:
+          return _getCachedVertretungsplanResult(cause: _signInCause ?? 'login');
+        case IServPlanState.empty:
+          return _getCachedVertretungsplanResult(cause: 'empty');
+        case IServPlanState.failed:
+          return _getCachedVertretungsplanResult(cause: 'offline');
       }
-
-      if (files.isNotEmpty) {
-        await _db.clearVertretungsplanCache();
-        for (final file in files) {
-          await _db.cacheVertretungsplanFile(
-            data: file['data'] as String,
-            page: file['page'] as int,
-            contentType: file['contentType'] as String,
-          );
-        }
-        return {
-          'success': true,
-          'files': files,
-          'isFromCache': false,
-        };
-      }
-
-      return await _getCachedVertretungsplanResult();
-
-    } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout ||
-          e.type == DioExceptionType.connectionError) {
-        return await _getCachedVertretungsplanResult();
-      }
-      return await _getCachedVertretungsplanResult();
     } catch (e) {
-      return await _getCachedVertretungsplanResult();
+      return _getCachedVertretungsplanResult(cause: 'offline');
     }
   }
 
-  String _resolveUrl(String url) {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      return url;
-    }
-    if (url.startsWith('//')) {
-      return 'https:$url';
-    }
-    if (url.startsWith('/')) {
-      return '$_baseUrl$url';
-    }
-    return '$_baseUrl/$url';
-  }
+  static const _planErrors = {
+    'login': 'Sitzung abgelaufen. Bitte erneut mit IServ anmelden.',
+    'empty': 'IServ zeigt gerade keinen Vertretungsplan.',
+    'offline': 'IServ ist gerade nicht erreichbar.',
+  };
 
-  Future<Map<String, dynamic>> _getCachedVertretungsplanResult() async {
+  Future<Map<String, dynamic>> _getCachedVertretungsplanResult({String? cause}) async {
     final cachedFiles = await _db.getAllCachedVertretungsplanFiles();
     if (cachedFiles.isNotEmpty) {
       final files = cachedFiles.map((cached) => {
@@ -1135,12 +939,14 @@ class IServService {
         'files': files,
         'isFromCache': true,
         'cachedAt': cachedFiles.first['fetched_at'] as String?,
+        'cause': cause,
       };
     }
     return {
       'success': false,
-      'error': 'Keine Daten verfügbar. Bitte mit IServ verbinden.',
+      'error': _planErrors[cause] ?? 'Keine Daten verfügbar. Bitte mit IServ verbinden.',
       'isFromCache': false,
+      'cause': cause,
     };
   }
 

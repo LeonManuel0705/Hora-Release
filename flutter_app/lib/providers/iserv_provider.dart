@@ -63,6 +63,9 @@ class IServProvider extends ChangeNotifier {
   DateTime? _vertretungsplanCachedAt;
   DateTime? get vertretungsplanCachedAt => _vertretungsplanCachedAt;
 
+  String? _vertretungsplanCause;
+  String? get vertretungsplanCause => _vertretungsplanCause;
+
   int? _userGrade;
   int? get userGrade => _userGrade;
 
@@ -411,12 +414,6 @@ class IServProvider extends ChangeNotifier {
 
           if (cookies.isNotEmpty) {
             await _service.refreshWithWebViewCookies(cookies);
-          } else {
-            _vertretungsplanError = 'Sitzung abgelaufen. Bitte erneut mit IServ anmelden.';
-            _vertretungsplanFiles = [];
-            _isVertretungsplanLoading = false;
-            notifyListeners();
-            return;
           }
         } catch (e) {
           _log('CookieManager not available: $e');
@@ -424,6 +421,7 @@ class IServProvider extends ChangeNotifier {
       }
 
       final result = await _service.fetchVertretungsplan();
+      _vertretungsplanCause = result['cause'] as String?;
 
       if (result['success'] == true) {
         if (result['files'] != null) {
@@ -447,9 +445,23 @@ class IServProvider extends ChangeNotifier {
       _log('Vertretungsplan load error: $e');
       _vertretungsplanError = 'Fehler beim Laden. Bitte versuche es erneut.';
       _vertretungsplanFiles = [];
+      _vertretungsplanCause = 'offline';
     } finally {
       _isVertretungsplanLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<({List<Map<String, dynamic>> files, DateTime? cachedAt, String? cause})> substitutionPlan({bool fresh = false}) async {
+    if (fresh) {
+      await fetchVertretungsplan();
+      return (files: _vertretungsplanFiles, cachedAt: _vertretungsplanCachedAt, cause: _vertretungsplanCause);
+    }
+    final rows = await _service.getCachedVertretungsplanFiles();
+    final files = [
+      for (final row in rows) <String, dynamic>{'data': row['data_base64'], 'contentType': row['content_type'], 'page': row['page']},
+    ];
+    final stamp = rows.isEmpty ? null : DateTime.tryParse('${rows.first['fetched_at'] ?? ''}');
+    return (files: files, cachedAt: stamp, cause: null);
   }
 }
