@@ -496,6 +496,76 @@ def test_the_address_search_drops_doubles_and_names_the_postcode(monkeypatch):
     ]
 
 
+def test_a_connection_says_where_each_walk_leads_and_between_which_stops_its_fare_runs(monkeypatch):
+    from app import transit_service
+
+    def ride(mode, line, origin, target):
+        return {
+            "mode": mode, "routeShortName": line, "duration": 2400, "scheduledStartTime": "2026-10-12T06:04:00Z", "startTime": "2026-10-12T06:05:00Z", "endTime": "2026-10-12T06:45:00Z",
+            "from": {"name": "Start", "lat": 52.3917, "lon": 13.0667, "stopId": origin}, "to": {"name": "Ziel", "lat": 52.5215, "lon": 13.4112, "stopId": target},
+        }
+
+    walk = {"mode": "WALK", "duration": 240, "distance": 262.4, "startTime": "2026-10-12T06:45:00Z", "endTime": "2026-10-12T06:49:00Z", "from": {"name": "Ziel", "lat": 52.5215, "lon": 13.4112}, "to": {"name": "END", "lat": 52.5201, "lon": "13.41"}}
+    plan = {"itineraries": [
+        {"legs": [ride("METRO", "S7", "de-VBB_de:12054:900230999:3:54", "de-VBB_de:11000:900100003:2:52"), walk]},
+        {"legs": [ride("REGIONAL_RAIL", "RE1", "de-DELFI_de:12054:900230999", "de-DELFI_de:15003:2468")]},
+        {"legs": [ride("HIGHSPEED_RAIL", "ICE 1", "de-VBB_de:11000:900003201:1:1", "de-VBB_de:12054:900230999:3:54")]},
+        {"legs": [ride("BUS", "695", "de-VBB_de:12054:900230999:3:54", "de-VBB_de:12054:900230999:9:9")]},
+    ]}
+    monkeypatch.setattr(transit_service, "fetch", lambda path, params, ttl: plan)
+    found = transit_service.journeys({"von": "a", "nach": "b"})[0]["journeys"]
+    assert [journey["fare"] for journey in found] == [{"from": "900230999", "to": "900100003", "time": "2026-10-12T06:04:00Z"}, None, None, None]
+    assert found[0]["legs"][1]["from"] == {"name": "Ziel", "time": "2026-10-12T06:45:00Z", "planned": None, "track": None, "lat": 52.5215, "lon": 13.4112}
+    assert (found[0]["legs"][1]["to"]["lat"], found[0]["legs"][1]["to"]["lon"]) == (52.5201, None)
+
+
+def test_the_fare_of_a_connection_is_its_cheapest_tickets_with_the_zones_they_need(monkeypatch):
+    from app import transit_service
+
+    def group(name, **prices):
+        return {"name": name, "tickets": [{"name": kind, "price": {"amount": amount, "currency": "EUR"}} for kind, amount in prices.items()]}
+
+    def trip(line, tickets):
+        return {"legs": [{"walking": True}, {"line": {"name": line}, "plannedDeparture": "2026-10-12T08:00:00+02:00", "departure": "2026-10-12T08:01:00+02:00", "plannedArrival": "2026-10-12T08:20:00+02:00"}], "tickets": tickets}
+
+    answer = {"journeys": [
+        trip("U2", [
+            group("Berlin Kurzstrecke: Kurzstrecke", Regeltarif=280, Ermäßigungstarif=210, Fahrrad=190),
+            group("Berlin Kurzstrecke: 4-Fahrten-Kurzstr.", Regeltarif=780),
+            group("Berlin Tarifgebiet A-B: Einzelfahrausweis", Regeltarif=400, Ermäßigungstarif=250),
+            group("Berlin Tarifgebiet A-B: 24-Stunden-Karte", Regeltarif=1120),
+            group("Zeitkarte Berlin Tarifgebiet A-B: Monatskarte", **{"VBB-Umweltkarte": 11300}),
+        ]),
+        trip("RE1", [group("Regionaltarif über 25 bis 35 km: Einzelfahrausweis", Regeltarif=810, Ermäßigungstarif=600), group("Zeitkarte 1 Lkr + 1 krfr Stadt: Monatskarte", Schüler=10130)]),
+        trip("601", [group("Potsdam Tarifgebiet A-B-C: Einzelfahrausweis", Regeltarif=370)]),
+        trip("X1", [group("Potsdam Tarifgebiet A-B: 24-Stunden-Karte", Regeltarif=630)]),
+        {"legs": [{"walking": True}], "tickets": [group("Berlin Tarifgebiet A-B: Einzelfahrausweis", Regeltarif=400)]},
+    ]}
+    asked = []
+
+    def fetch_from(base, path, params, ttl):
+        asked.append((base, path, params))
+        return answer
+
+    monkeypatch.setattr(transit_service, "fetch_from", fetch_from)
+    body, status = transit_service.handle("tarif", {"von": "900100003", "nach": "900100016", "zeit": "2026-10-12T06:00:00Z"})
+    assert status == 200
+    assert [(base, path, params["from"], params["to"], params["departure"], params["tickets"]) for base, path, params in asked] == [("https://v6.vbb.transport.rest/", "journeys", "900100003", "900100016", "2026-10-12T06:00:00Z", "true")]
+    assert body["fares"] == [
+        {"start": "2026-10-12T08:00:00+02:00", "end": "2026-10-12T08:20:00+02:00", "lines": ["U2"], "single": {"label": "Berlin AB", "price": 4.0, "reduced": 2.5}, "short": {"label": "Berlin", "price": 2.8, "reduced": 2.1}, "net": "Berlin", "zones": "AB"},
+        {"start": "2026-10-12T08:00:00+02:00", "end": "2026-10-12T08:20:00+02:00", "lines": ["RE1"], "single": {"label": "Regionaltarif über 25 bis 35 km", "price": 8.1, "reduced": 6.0}, "short": None, "net": None, "zones": None},
+        {"start": "2026-10-12T08:00:00+02:00", "end": "2026-10-12T08:20:00+02:00", "lines": ["601"], "single": {"label": "Potsdam ABC", "price": 3.7, "reduced": None}, "short": None, "net": "Potsdam", "zones": "ABC"},
+    ]
+
+
+@pytest.mark.parametrize("stops", [{"von": "900100003"}, {"von": "900100003", "nach": "de-VBB_de:11000:900100016"}, {"von": "9001000031", "nach": "900100016"}, {"von": "../journeys", "nach": "900100016"}])
+def test_a_fare_is_only_asked_between_two_stop_numbers(monkeypatch, stops):
+    from app import transit_service
+
+    monkeypatch.setattr(transit_service, "fetch_from", lambda *args: pytest.fail("asked the fare service"))
+    assert transit_service.handle("tarif", stops) == ({"error": "Start oder Ziel fehlt"}, 400)
+
+
 def test_a_saved_review_comes_back_with_its_answers(client):
     created = client.post("/api/hub/reviews", json={"type": "daily", "date": "2026-10-04", "achieved": "Mathe geübt", "energy": 4}).get_json()["review"]
     assert created["achieved"] == "Mathe geübt" and created["energy"] == 4

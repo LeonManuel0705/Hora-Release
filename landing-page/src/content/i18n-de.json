@@ -489,7 +489,7 @@
       {
         "icon": "bus",
         "to": "Fahrplan-Dienste",
-        "what": "Haltestellen, Adressen und Uhrzeit deiner Suche, mit gespeichertem Zuhause oder Schulort auch deren Lage. Geht an Transitous, in den älteren Ansichten an transport.rest und für Preise an die Deutsche Bahn",
+        "what": "Haltestellen, Adressen und Uhrzeit deiner Suche, mit gespeichertem Zuhause oder Schulort auch deren Lage. Geht an Transitous, für Ticketpreise in Berlin und Brandenburg an transport.rest, in den älteren Ansichten ebenfalls an transport.rest und für Preise an die Deutsche Bahn",
         "when": "beim Öffnen des Fahrplans und beim Suchen",
         "tone": "ok"
       },

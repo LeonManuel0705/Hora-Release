@@ -489,7 +489,7 @@
       {
         "icon": "bus",
         "to": "Transit services",
-        "what": "stops, addresses and time of your search, with a saved home or school also where they are. Goes to Transitous, in the older views to transport.rest and, for fares, to Deutsche Bahn",
+        "what": "stops, addresses and time of your search, with a saved home or school also where they are. Goes to Transitous, for ticket prices in Berlin and Brandenburg to transport.rest, in the older views also to transport.rest and, for fares, to Deutsche Bahn",
         "when": "when you open the timetable and when searching",
         "tone": "ok"
       },

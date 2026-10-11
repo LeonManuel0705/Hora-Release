@@ -68,6 +68,12 @@ function setError(input, box, text) {
   else input.removeAttribute("aria-invalid");
 }
 
+const PASS_NETS = [["Berlin", "Berlin"], ["Brandenburg a.d.H", "Brandenburg an der Havel"], ["Cottbus", "Cottbus"], ["Frankfurt (Oder)", "Frankfurt (Oder)"], ["Potsdam", "Potsdam"]];
+const PASS_ZONES = ["AB", "ABC"];
+const MAP_APPS = [["auto", "Automatisch", ""], ["apple", "Apple", " Karten"], ["google", "Google", " Maps"]];
+const knownPass = (pass) => PASS_NETS.some(([net]) => net === pass?.net) && PASS_ZONES.includes(pass?.zones);
+const passLabel = (pass) => `${PASS_NETS.find(([net]) => net === pass.net)[1]} ${pass.zones}`;
+
 function prefDefaults() {
   const notify = page.notifications || {};
   const categories = {};
@@ -86,6 +92,7 @@ function prefDefaults() {
       categories,
     },
     places: { weather: page.places?.weather || "" },
+    transit: { deutschlandticket: false, passes: [], maps: "auto" },
   };
 }
 
@@ -101,6 +108,7 @@ function loadPrefs() {
     google: { ...base.google, ...(saved.google || {}), calendars: { ...base.google.calendars, ...(saved.google?.calendars || {}) } },
     notify: { ...base.notify, ...(saved.notify || {}), quiet: { ...base.notify.quiet, ...(saved.notify?.quiet || {}) }, categories },
     places: { ...base.places, ...(saved.places || {}) },
+    transit: { ...base.transit, ...(saved.transit || {}), passes: (Array.isArray(saved.transit?.passes) ? saved.transit.passes : []).filter(knownPass) },
   };
 }
 
@@ -1975,6 +1983,64 @@ async function removePlace(key) {
   }
 }
 
+const passDraft = { net: PASS_NETS[0][0], zones: PASS_ZONES[0] };
+
+function renderTransit() {
+  const card = $("transitCard");
+  const transit = prefs.transit;
+  const chips = transit.passes.length
+    ? `<ul class="room-chips pass-chips" aria-label="Deine Zeitkarten">${transit.passes.map((pass, index) => `<li class="room-chip"><span>${esc(passLabel(pass))}</span><button type="button" class="chip-x" id="pass-remove-${index}" data-remove-pass="${index}" aria-label="${esc(passLabel(pass))} entfernen">${icon("x")}</button></li>`).join("")}</ul>`
+    : "";
+  const form = `<form class="pass-add" id="passForm" novalidate>
+      <label class="visually-hidden" for="passNet">Tarifgebiet</label>
+      <select class="field-control" id="passNet">${PASS_NETS.map(([net, name]) => `<option value="${esc(net)}"${net === passDraft.net ? " selected" : ""}>${esc(name)}</option>`).join("")}</select>
+      <div class="segmented" role="group" aria-label="Tarifbereich">${PASS_ZONES.map((zones) => `<button type="button" id="pass-zones-${zones}" data-pass-zones="${zones}" aria-pressed="${zones === passDraft.zones}">${zones}</button>`).join("")}</div>
+      <button class="btn btn-quiet" type="submit" id="passSubmit">${icon("plus")}Hinzufügen</button>
+    </form>`;
+  keepFocus(card, () => {
+    card.innerHTML = [
+      row({ id: "rowGermanyTicket", label: "Deutschlandticket", desc: "Gilt in Bus, Tram, S- und U-Bahn und in Regionalzügen, nicht im Fernverkehr.", control: switchHtml("germanyTicket", transit.deutschlandticket, "rowGermanyTicketLabel", { describedBy: "rowGermanyTicketDesc" }) }),
+      row({ id: "rowPasses", label: "Zeitkarten im VBB", desc: "Monatskarte, Abo oder Schülerticket für einen Tarifbereich in Berlin und Brandenburg. Der Fahrplan zeigt dann, ob eine Verbindung damit geht und was sie sonst kostet.", cls: "is-stack pass-row", control: chips + form }),
+      row({ id: "rowMaps", label: "Karten-App", desc: `Öffnet Fußwege aus dem Fahrplan. Automatisch nimmt auf diesem Gerät ${platform.mac ? "Apple Karten" : "Google Maps"}.`, cls: "is-stack", control: `<div class="segmented" role="group" aria-labelledby="rowMapsLabel" aria-describedby="rowMapsDesc">${MAP_APPS.map(([key, text, more]) => `<button type="button" id="maps-${key}" data-maps="${key}" aria-pressed="${transit.maps === key}">${text}${more ? `<span class="maps-more">${more}</span>` : ""}</button>`).join("")}</div>` }),
+    ].join("");
+  });
+}
+
+function bindTransit() {
+  const card = $("transitCard");
+  card.addEventListener("click", (event) => {
+    const zones = event.target.closest("[data-pass-zones]");
+    const remove = event.target.closest("[data-remove-pass]");
+    const maps = event.target.closest("[data-maps]");
+    if (event.target.closest("#germanyTicket")) {
+      commitPrefs((value) => (value.transit.deutschlandticket = !value.transit.deutschlandticket), renderTransit);
+      say(prefs.transit.deutschlandticket ? "Deutschlandticket hinterlegt" : "Deutschlandticket entfernt");
+    } else if (zones) {
+      passDraft.zones = zones.dataset.passZones;
+      renderTransit();
+    } else if (remove) {
+      const index = Number(remove.dataset.removePass);
+      const label = passLabel(prefs.transit.passes[index]);
+      commitPrefs((value) => value.transit.passes.splice(index, 1), renderTransit, `Zeitkarte ${esc(label)} entfernt`, "ticket");
+      $("passNet")?.focus({ preventScroll: true });
+    } else if (maps && maps.dataset.maps !== prefs.transit.maps) {
+      commitPrefs((value) => (value.transit.maps = maps.dataset.maps), renderTransit);
+      say(`Karten-App: ${maps.textContent.trim()}`);
+    }
+  });
+  card.addEventListener("change", (event) => {
+    if (event.target.id === "passNet") passDraft.net = event.target.value;
+  });
+  card.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (prefs.transit.passes.some((pass) => pass.net === passDraft.net && pass.zones === passDraft.zones)) {
+      toast(`Die Zeitkarte ${esc(passLabel(passDraft))} ist schon hinterlegt.`, { icon: "ticket" });
+      return;
+    }
+    commitPrefs((value) => value.transit.passes.push({ ...passDraft }), renderTransit, `Zeitkarte ${esc(passLabel(passDraft))} hinterlegt`, "ticket");
+  });
+}
+
 function bindPlaces() {
   const host = $("placesCard");
   host.addEventListener("input", (event) => {
@@ -3007,6 +3073,7 @@ function renderAll() {
   renderNotify();
   renderLook();
   renderPlaces();
+  renderTransit();
   renderAssistant();
   renderData();
   renderAbout();
@@ -3165,6 +3232,7 @@ export function init() {
   bindNotify();
   bindLook();
   bindPlaces();
+  bindTransit();
   bindAssistant();
   bindData();
   bindAbout();

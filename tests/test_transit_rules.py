@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+# SPDX-License-Identifier: AGPL-3.0-only
+
+import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_tickets_and_walks_hold_up_under_node():
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('node is not installed')
+    major = int(re.match(r'v(\d+)', subprocess.run([node, '--version'], capture_output=True, text=True).stdout).group(1))
+    if major < 18:
+        pytest.skip('node is too old')
+    result = subprocess.run([node, str(ROOT / 'tests' / 'js' / 'transit_rules_check.mjs')], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr

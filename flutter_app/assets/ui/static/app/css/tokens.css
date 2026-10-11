@@ -57,6 +57,7 @@
   --dur-state: 180ms;
   --dur-strike: 240ms;
   --dur-underline: var(--spring-critical-fast);
+  --dur-unfold: var(--spring-critical-fast);
   --dur-popover-in: 200ms;
   --dur-popover-out: 140ms;
   --dur-sheet-in: 380ms;
@@ -107,6 +108,7 @@
   --dur-state: 0ms;
   --dur-strike: 0ms;
   --dur-underline: 0ms;
+  --dur-unfold: 0ms;
   --dur-popover-in: 0ms;
   --dur-popover-out: 0ms;
   --dur-sheet-in: 0ms;
@@ -175,6 +177,7 @@
     --dur-sheet-in: 200ms;
     --dur-toast-in: 200ms;
     --dur-underline: 0ms;
+    --dur-unfold: 0ms;
     --dur-digit: 0ms;
     --dur-glide: 0ms;
     --dur-breath: 0ms;

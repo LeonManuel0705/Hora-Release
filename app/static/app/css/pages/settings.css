@@ -691,6 +691,16 @@
   .room-chip .chip-x:hover { background: var(--surface-hover); color: var(--ink); }
 }
 
+.pass-row { grid-template-columns: minmax(0, 1fr); }
+.pass-row .set-row-control { justify-content: flex-start; }
+.pass-chips { flex-basis: 100%; padding: 0 0 4px; }
+.pass-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.maps-more { white-space: pre; }
+
+@media (max-width: 479px) {
+  .maps-more { display: none; }
+}
+
 .cell-origin {
   display: flex;
   flex-wrap: wrap;

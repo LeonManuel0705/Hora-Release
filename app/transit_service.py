@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 import json
+import re
 import threading
 import time
 import urllib.error
@@ -11,6 +12,7 @@ import urllib.request
 from . import brand
 
 BASE = "https://api.transitous.org/api/v1/"
+FARES = "https://v6.vbb.transport.rest/"
 HEADERS = {"User-Agent": f"{brand.NAME}/0.5 (Schul-App)", "Accept": "application/json"}
 MAX_CACHE = 400
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
@@ -36,6 +38,10 @@ CATEGORIES = {
     "BIKE": "rad",
 }
 LONG_DISTANCE = {"fern", "fernbus"}
+FARE_STOP = re.compile(r"9\d{8}")
+FARE_STOP_IN_ID = re.compile(r"_de:1[12]\d{3}:(9\d{8})(?::|$)")
+SHORT_TRIP = re.compile(r"(.+) Kurzstrecke: Kurzstrecke")
+CITY_SINGLE = re.compile(r"(.+) Tarifgebiet ([A-C](?:-[A-C])*): Einzelfahrausweis")
 
 
 def _arg(args, key, limit=120):
@@ -46,8 +52,12 @@ def _arg(args, key, limit=120):
 
 
 def fetch(path, params, ttl):
+    return fetch_from(BASE, path, params, ttl)
+
+
+def fetch_from(base, path, params, ttl):
     query = urllib.parse.urlencode({key: value for key, value in params.items() if value not in (None, "")})
-    url = f"{BASE}{path}?{query}"
+    url = f"{base}{path}?{query}"
     with _lock:
         hit = _cache.get(url)
     if hit and time.time() - hit[0] < ttl:
@@ -148,6 +158,10 @@ def departures(args):
     return {"stop": stop_name, "departures": items}, 200
 
 
+def _number(value):
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
 def leg_view(leg):
     origin = leg.get("from", {})
     target = leg.get("to", {})
@@ -156,14 +170,28 @@ def leg_view(leg):
         "line": line_name(leg),
         "headsign": leg.get("headsign") or "",
         "agency": leg.get("agencyName") or "",
-        "from": {"name": origin.get("name", ""), "time": leg.get("startTime"), "planned": leg.get("scheduledStartTime"), "track": origin.get("track") or origin.get("scheduledTrack")},
-        "to": {"name": target.get("name", ""), "time": leg.get("endTime"), "planned": leg.get("scheduledEndTime"), "track": target.get("track") or target.get("scheduledTrack")},
+        "from": {"name": origin.get("name", ""), "time": leg.get("startTime"), "planned": leg.get("scheduledStartTime"), "track": origin.get("track") or origin.get("scheduledTrack"), "lat": _number(origin.get("lat")), "lon": _number(origin.get("lon"))},
+        "to": {"name": target.get("name", ""), "time": leg.get("endTime"), "planned": leg.get("scheduledEndTime"), "track": target.get("track") or target.get("scheduledTrack"), "lat": _number(target.get("lat")), "lon": _number(target.get("lon"))},
         "minutes": round((leg.get("duration") or 0) / 60),
         "distance": round(leg.get("distance") or 0),
         "stops": len(leg.get("intermediateStops") or []),
         "realtime": bool(leg.get("realTime")),
         "cancelled": bool(leg.get("cancelled")),
     }
+
+
+def fare_stop(stop_id):
+    match = FARE_STOP_IN_ID.search(str(stop_id or ""))
+    return match.group(1) if match else None
+
+
+def fare_query(rides):
+    first, last = rides[0], rides[-1]
+    origin = fare_stop((first.get("from") or {}).get("stopId"))
+    target = fare_stop((last.get("to") or {}).get("stopId"))
+    if not origin or not target or origin == target:
+        return None
+    return {"from": origin, "to": target, "time": first.get("scheduledStartTime") or first.get("startTime")}
 
 
 def journeys(args):
@@ -185,6 +213,7 @@ def journeys(args):
         if not legs:
             continue
         ticket = "fuss" if not rides else "fern" if any(leg["category"] in LONG_DISTANCE for leg in rides) else "deutschland"
+        ridden = [leg for leg in item.get("legs", []) if category(leg.get("mode")) not in ("fuss", "rad")]
         transfers = item.get("transfers")
         result.append({
             "start": item.get("startTime"),
@@ -193,10 +222,72 @@ def journeys(args):
             "transfers": transfers if isinstance(transfers, int) and not isinstance(transfers, bool) and transfers >= 0 else max(0, len(rides) - 1),
             "legs": legs,
             "ticket": ticket,
+            "fare": fare_query(ridden) if ticket == "deutschland" else None,
             "realtime": any(leg["realtime"] for leg in rides),
             "cancelled": any(leg["cancelled"] for leg in rides),
         })
     return {"journeys": result}, 200
+
+
+def _price(group, name):
+    for variant in group.get("tickets") or []:
+        amount = (variant.get("price") or {}).get("amount")
+        if variant.get("name") == name and isinstance(amount, (int, float)) and not isinstance(amount, bool) and amount > 0:
+            return round(amount / 100, 2)
+    return None
+
+
+def _fare_ticket(group, label):
+    price = _price(group, "Regeltarif")
+    return {"label": label, "price": price, "reduced": _price(group, "Ermäßigungstarif")} if price else None
+
+
+def fare_view(journey):
+    rides = [leg for leg in journey.get("legs") or [] if leg.get("line")]
+    if not rides:
+        return None
+    single = short = net = zones = None
+    for group in journey.get("tickets") or []:
+        name = str(group.get("name") or "")
+        short_trip, city = SHORT_TRIP.fullmatch(name), CITY_SINGLE.fullmatch(name)
+        if short_trip:
+            short = short or _fare_ticket(group, short_trip.group(1))
+        elif city and not single:
+            single = _fare_ticket(group, f"{city.group(1)} {city.group(2).replace('-', '')}")
+            if single:
+                net, zones = city.group(1), city.group(2).replace("-", "")
+        elif name.endswith(": Einzelfahrausweis") and not single:
+            single = _fare_ticket(group, name[: name.rfind(":")])
+    if not single:
+        return None
+    return {
+        "start": rides[0].get("plannedDeparture") or rides[0].get("departure"),
+        "end": rides[-1].get("plannedArrival") or rides[-1].get("arrival"),
+        "lines": [str((leg.get("line") or {}).get("name") or "") for leg in rides],
+        "single": single,
+        "short": short,
+        "net": net,
+        "zones": zones,
+    }
+
+
+def fares(args):
+    origin, target = _arg(args, "von", 12) or "", _arg(args, "nach", 12) or ""
+    if not FARE_STOP.fullmatch(origin) or not FARE_STOP.fullmatch(target):
+        return {"error": "Start oder Ziel fehlt"}, 400
+    params = {
+        "from": origin,
+        "to": target,
+        "departure": _arg(args, "zeit", 40),
+        "results": 6,
+        "tickets": "true",
+        "stopovers": "false",
+        "remarks": "false",
+        "language": "de",
+    }
+    data = fetch_from(FARES, "journeys", params, 300)
+    found = [view for view in (fare_view(item) for item in data.get("journeys") or []) if view]
+    return {"fares": found}, 200
 
 
 def nearby(args):
@@ -216,7 +307,7 @@ def nearby(args):
     return {"stops": list(unique.values())[:6]}, 200
 
 
-ACTIONS = {"suche": search, "abfahrten": departures, "verbindungen": journeys, "naehe": nearby}
+ACTIONS = {"suche": search, "abfahrten": departures, "verbindungen": journeys, "naehe": nearby, "tarif": fares}
 
 
 def handle(action, args):
