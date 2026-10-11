@@ -489,8 +489,8 @@
       {
         "icon": "bus",
         "to": "Fahrplan-Dienste",
-        "what": "Haltestellen und Uhrzeit deiner Suche, an die offenen Fahrplan-Schnittstellen von transport.rest. Am Computer für Preise auch an die Deutsche Bahn",
-        "when": "beim Suchen",
+        "what": "Haltestellen, Adressen und Uhrzeit deiner Suche, mit gespeichertem Zuhause oder Schulort auch deren Lage. Geht an Transitous, in den älteren Ansichten an transport.rest und für Preise an die Deutsche Bahn",
+        "when": "beim Öffnen des Fahrplans und beim Suchen",
         "tone": "ok"
       },
       {
@@ -518,7 +518,7 @@
         "icon": "book-check",
         "to": "Wikipedia",
         "what": "der Begriff, nach dem du den Assistenten fragst",
-        "when": "bei „Wer ist“ und „Was ist“",
+        "when": "bei Wissensfragen wie „Wer ist“, „Was ist“ oder „Wann lebte“",
         "tone": "ok"
       },
       {
@@ -529,17 +529,31 @@
         "tone": "warn"
       },
       {
+        "icon": "download",
+        "to": "Hugging Face und GitHub",
+        "what": "der Abruf des Sprachmodells, etwa 3 GB, und am Computer des Programms, das es ausführt",
+        "when": "wenn du den Assistenten installierst",
+        "tone": "ok"
+      },
+      {
+        "icon": "terminal",
+        "to": "PyPI",
+        "what": "der Abruf der Python-Pakete, mit denen die App läuft",
+        "when": "Mac, beim ersten Start und nach Updates",
+        "tone": "ok"
+      },
+      {
         "icon": "refresh",
         "to": "Diese Website",
         "what": "Frage nach der neuesten Version",
-        "when": "Android und Mac",
+        "when": "Android, Mac, Windows und Linux: beim Start, danach alle zwei Stunden",
         "tone": "ok"
       },
       {
         "icon": "languages",
         "to": "Google Fonts",
-        "what": "Schriftarten der Oberfläche",
-        "when": "Desktop-App, beim Öffnen",
+        "what": "eine Schriftdatei, die der Browser von Googles Schriftserver lädt",
+        "when": "nur in der Web-App, beim Öffnen",
         "tone": "warn"
       },
       {

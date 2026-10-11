@@ -489,8 +489,8 @@
       {
         "icon": "bus",
         "to": "Transit services",
-        "what": "stops and time of your search, sent to the open transport.rest APIs. On the computer also to Deutsche Bahn for fares",
-        "when": "when searching",
+        "what": "stops, addresses and time of your search, with a saved home or school also where they are. Goes to Transitous, in the older views to transport.rest and, for fares, to Deutsche Bahn",
+        "when": "when you open the timetable and when searching",
         "tone": "ok"
       },
       {
@@ -518,7 +518,7 @@
         "icon": "book-check",
         "to": "Wikipedia",
         "what": "the term you ask the assistant about",
-        "when": "for “who is” and “what is”",
+        "when": "for knowledge questions such as “who is”, “what is” or “when did they live”",
         "tone": "ok"
       },
       {
@@ -529,17 +529,31 @@
         "tone": "warn"
       },
       {
+        "icon": "download",
+        "to": "Hugging Face and GitHub",
+        "what": "the download of the language model, about 3 GB, and on the computer of the program that runs it",
+        "when": "when you install the assistant",
+        "tone": "ok"
+      },
+      {
+        "icon": "terminal",
+        "to": "PyPI",
+        "what": "the download of the Python packages the app runs on",
+        "when": "Mac, on first start and after updates",
+        "tone": "ok"
+      },
+      {
         "icon": "refresh",
         "to": "This website",
         "what": "asks for the latest version",
-        "when": "Android and Mac",
+        "when": "Android, Mac, Windows and Linux: at start, then every two hours",
         "tone": "ok"
       },
       {
         "icon": "languages",
         "to": "Google Fonts",
-        "what": "fonts for the interface",
-        "when": "desktop app, on opening",
+        "what": "one font file the browser loads from Google's font server",
+        "when": "only in the web app, on opening",
         "tone": "warn"
       },
       {
