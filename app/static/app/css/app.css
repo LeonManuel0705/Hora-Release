@@ -421,10 +421,11 @@ kbd .icon { --s: 12; }
 
 .segment.is-next .segment-outline { display: block; }
 
-.segment-fill {
+.segment-fill { position: absolute; inset: 0; z-index: -1; border-radius: inherit; overflow: hidden; }
+.segment-fill::before {
+  content: "";
   position: absolute;
   inset: 0;
-  z-index: -1;
   background: var(--now-progress);
   transform-origin: left center;
   scale: var(--p, 0) 1;
@@ -449,7 +450,7 @@ kbd .icon { --s: 12; }
 }
 
 .track-now.is-gap { background: var(--now-marker); }
-.track.is-sweeping .track-now, .track.is-sweeping .segment-fill { transition: none; }
+.track.is-sweeping .track-now, .track.is-sweeping .segment-fill::before { transition: none; }
 
 .track-now::after {
   content: "";
@@ -1323,7 +1324,7 @@ label.switch { position: relative; display: flex; align-items: flex-start; gap: 
 .today.is-desk .track-now, .today.is-desk .segment-clock, .today.is-desk .segment-label small { display: none; }
 .today.is-desk .track-caption { bottom: calc(100% + 7px); color: var(--ink-muted); }
 .today.is-desk .track:has(.track-caption) { margin-top: 44px; }
-.today.is-desk .segment { flex-direction: row; align-items: center; justify-content: center; gap: 5px; padding: 0 10px; border-radius: 12px; background: var(--surface); border-color: var(--line); }
+.today.is-desk .segment { flex-direction: row; align-items: center; justify-content: center; gap: 5px; padding: 0 10px; border-radius: 12px; background: var(--surface); border-color: var(--line); overflow: visible; }
 .today.is-desk .segment-time { display: flex; color: var(--done-ink); }
 .today.is-desk .segment-label { font-size: var(--text-sm); color: var(--ink); }
 .today.is-desk .label-full { display: none; }
@@ -1335,7 +1336,8 @@ label.switch { position: relative; display: flex; align-items: flex-start; gap: 
 .today.is-desk .segment.is-next { background: var(--surface); border-color: var(--line-strong); }
 .today.is-desk .segment.is-now { background: #F6EAD2; border-color: transparent; }
 .today.is-desk .segment.is-now .segment-label { color: var(--now-ink); }
-.today.is-desk .segment-fill { background: var(--now-fill); }
+.today.is-desk .segment-fill::before { background: var(--now-fill); }
+.today.is-desk .segment-outline { clip-path: inset(1px round 11px); }
 .today.is-desk .segment.is-next .segment-outline rect { stroke: var(--ink); stroke-opacity: 0.55; }
 .today.is-desk .segment.is-cancelled { background: transparent; border-color: var(--urgent); }
 .today.is-desk .segment.is-cancelled .segment-label { color: var(--ink-muted); }
