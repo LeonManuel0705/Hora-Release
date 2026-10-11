@@ -188,15 +188,31 @@ export function inDays(offset) {
   return `in ${weeks}\u00a0Wochen`;
 }
 
-export const isAssessment = (item) => !!item && (item.kind === "Test" || item.kind === "Klausur" || item.kind === "Referat");
+export const ASSESSMENTS = {
+  Test: { icon: "nx-test", many: "Tests", next: "Nächster Test", past: "geschrieben" },
+  Klausur: { icon: "nx-test", many: "Klausuren", next: "Nächste Klausur", past: "geschrieben" },
+  Vortrag: { icon: "presentation", many: "Vorträge", next: "Nächster Vortrag", past: "gehalten" },
+};
+export const isAssessment = (item) => !!item && Object.hasOwn(ASSESSMENTS, item.kind);
 export const isOverdue = (item, today) => item.date < today && item.status !== "abgegeben" && !isAssessment(item);
 
 export function pastText(offset, date, kind) {
-  const word = kind === "Referat" ? "gehalten" : "geschrieben";
+  const word = ASSESSMENTS[kind]?.past || "geschrieben";
   if (offset === -1) return `gestern ${word}`;
   if (offset > -7) return `vor ${-offset}\u00a0Tagen ${word}`;
   return `am ${date.getDate()}.${date.getMonth() + 1}. ${word}`;
 }
+
+export function pastWord(items) {
+  const words = new Set(items.map((item) => ASSESSMENTS[item.kind]?.past));
+  return (words.size === 1 && [...words][0]) || "vorbei";
+}
+
+export const assessmentCount = (items) => Object.entries(ASSESSMENTS)
+  .map(([kind, info]) => [items.filter((item) => item.kind === kind).length, kind, info.many])
+  .filter(([count]) => count)
+  .map(([count, one, many]) => `${count}\u00a0${count === 1 ? one : many}`)
+  .join(", ");
 
 function monthsOn(date, count) {
   const next = new Date(date.getFullYear(), date.getMonth() + count, 1);

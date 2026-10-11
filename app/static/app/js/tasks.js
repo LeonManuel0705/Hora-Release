@@ -1,4 +1,4 @@
-import { data, esc, icon, tinte, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, relativeDay, now, minutesOf, subject, hueVar, glue, nextRepeatDate, homeworkDate, followLinks, WEEKDAYS, WEEKDAYS_SHORT, storage } from "./core.js";
+import { data, esc, icon, tinte, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, relativeDay, now, minutesOf, subject, hueVar, glue, nextRepeatDate, homeworkDate, followLinks, ASSESSMENTS, isAssessment, WEEKDAYS, WEEKDAYS_SHORT, storage } from "./core.js";
 import { animates, travels, flipKeyed, exitInPlace, enterInPlace, token } from "./motion.js";
 import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen } from "./shell.js";
 import { tasks as taskApi, deadlines as deadlineApi, debounced, serverId } from "./api.js";
@@ -46,7 +46,6 @@ function load() {
 }
 
 const deadlineOf = (task) => data.deadlines.find((item) => item.id === task.deadline);
-const isTest = (item) => item && (item.kind === "Test" || item.kind === "Klausur");
 
 function bucketOf(task) {
   if (!task.date) return "none";
@@ -105,9 +104,9 @@ function metaFor(task) {
   if (task.source === "iserv") badges.push(`<span class="badge">${icon("graduation-cap")}IServ</span>`);
   if (task.repeat) badges.push(`<span class="badge">${icon("repeat")}${REPEAT_WORDS[task.repeat]}</span>`);
   const linked = deadlineOf(task);
-  if (isTest(linked)) {
+  if (isAssessment(linked)) {
     const diff = dayDiff(startOfDay(now()), linked.date);
-    badges.push(`<span class="badge is-test">${icon("nx-test")}${esc(linked.kind)} ${esc(diff <= 1 ? relativeDay(diff, parseDate(linked.date)) : WEEKDAYS_SHORT[parseDate(linked.date).getDay()] + ".")}</span>`);
+    badges.push(`<span class="badge is-test">${icon(ASSESSMENTS[linked.kind].icon)}${esc(linked.kind)} ${esc(diff <= 1 ? relativeDay(diff, parseDate(linked.date)) : WEEKDAYS_SHORT[parseDate(linked.date).getDay()] + ".")}</span>`);
   }
   return `${parts.join(", ")}${badges.length ? `<span class="badges">${badges.join("")}</span>` : ""}`;
 }
@@ -472,7 +471,7 @@ function renderPanel() {
         <option value="">Nie</option>${Object.entries(REPEAT_WORDS).map(([key, word]) => `<option value="${key}"${task.repeat === key ? " selected" : ""}>${word[0].toUpperCase()}${word.slice(1)}</option>`).join("")}
       </select></label>`}
       ${task.source === "iserv" ? "" : `<label class="field"><span class="field-label">Notizen</span><textarea class="field-control" id="panelNotes" rows="3" placeholder="Seiten, Links, was du nicht vergessen willst">${esc(task.notes || "")}</textarea></label>`}
-      ${linked ? `<div class="field"><span class="field-label">Gehört zu</span><span class="field-value">${isTest(linked) ? icon("nx-test") : icon("calendar-days")}${esc(linked.kind)}: ${esc(linked.title)}, ${esc(shortDate(parseDate(linked.date)))}</span></div>` : ""}
+      ${linked ? `<div class="field"><span class="field-label">Gehört zu</span><span class="field-value">${icon(ASSESSMENTS[linked.kind]?.icon || "calendar-days")}${esc(linked.kind)}: ${esc(linked.title)}, ${esc(shortDate(parseDate(linked.date)))}</span></div>` : ""}
       ${task.source === "iserv" ? `<p class="panel-source">${icon("graduation-cap")}Aus IServ${task.detail ? `, ${esc(task.detail)}` : ""}</p>` : homework ? `<p class="panel-source">${icon("notebook-pen")}Hausaufgabe, steht auch unter Schule</p>` : ""}
     </div>`;
 }

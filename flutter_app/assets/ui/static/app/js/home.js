@@ -1,7 +1,7 @@
 import {
   data, flags, esc, icon, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, abWeeks, isoWeek, subject, hueVar, glue, lessonsFor, activeLessons, nextSchoolDay, relativeDay, inDays, duration, shortDate,
-  longDate, eventsOn, nextDeparture, schoolDeparture, weatherAt, rainFrom, hourIcon, hasWeather, storage, changesFor, isAssessment, isOverdue, pastText, nextRepeatDate, followLinks, homeworkDate,
+  longDate, eventsOn, nextDeparture, schoolDeparture, weatherAt, rainFrom, hourIcon, hasWeather, storage, changesFor, ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, nextRepeatDate, followLinks, homeworkDate,
   WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "./core.js";
 import { animates, travels, rich, level, flipKeyed, exitInPlace, enterInPlace, setDigits, pop, crossfade, swapText, breath, chalkCheck, bezier, token, ms } from "./motion.js";
 import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
@@ -63,10 +63,9 @@ const deadlineById = (id) => state.deadlines.find((item) => item.id === id);
 const byPriority = (a, b) => Number(!!b.priority) - Number(!!a.priority);
 const rowFor = (id) => document.querySelector(`#taskList .task[data-id="${CSS.escape(id)}"], #doneList .task[data-id="${CSS.escape(id)}"]`);
 const label = (key) => subject(key).label;
-const isTest = (item) => item.kind === "Test" || item.kind === "Klausur";
 
 function testOnDate(iso, block) {
-  return state.deadlines.find((item) => isTest(item) && item.date === iso && (!block || item.block === block));
+  return state.deadlines.find((item) => isAssessment(item) && item.date === iso && (!block || item.block === block));
 }
 
 function spoken(min) {
@@ -248,10 +247,10 @@ function heroNext(day) {
   const upcoming = state.deadlines
     .map((item) => ({ ...item, diff: dayDiff(day.date, item.date) }))
     .filter((item) => item.diff >= 1 && !item.pinned && item.status !== "abgegeben")
-    .sort((a, b) => a.diff - b.diff || Number(isTest(b)) - Number(isTest(a)))[0];
+    .sort((a, b) => a.diff - b.diff || Number(isAssessment(b)) - Number(isAssessment(a)))[0];
   if (upcoming) {
     const target = parseDate(upcoming.date);
-    const labelText = { Test: "Nächster Test", Klausur: "Nächste Klausur", Referat: "Nächstes Referat", Hausaufgabe: "Nächste Hausaufgabe" }[upcoming.kind] || "Nächste Abgabe";
+    const labelText = ASSESSMENTS[upcoming.kind]?.next || (upcoming.kind === "Hausaufgabe" ? "Nächste Hausaufgabe" : "Nächste Abgabe");
     const block = upcoming.block ? ` im ${upcoming.block}. Block` : "";
     return nextBlock(labelText, esc(label(upcoming.subject)), `<b>${esc(cap(relativeDay(upcoming.diff, target)))}</b>${block}, ${esc(glue(upcoming.title))}`);
   }
@@ -418,9 +417,9 @@ function sceneModel(day) {
   const preview = !!flags.scene;
   const later = (preview ? previewEvents(day) : eventsOn(day.date)).filter((event) => !event.start || toMin(event.end || event.start) > day.nowMin);
   const deadlines = state.deadlines.map((item) => ({ ...item, diff: dayDiff(day.date, item.date) }));
-  const test = deadlines.filter((item) => isTest(item) && item.diff >= 0 && item.diff <= 4).sort((a, b) => a.diff - b.diff)[0];
-  const talk = deadlines.some((item) => item.kind === "Referat" && item.diff >= 0 && item.diff <= 21) && open.some((task) => /referat|folie/i.test(task.title));
-  const due = deadlines.filter((item) => !isTest(item) && !item.pinned && item.diff >= -7 && item.diff <= 3 && item.status !== "abgegeben").length;
+  const test = deadlines.filter((item) => isAssessment(item) && item.diff >= 0 && item.diff <= 4).sort((a, b) => a.diff - b.diff)[0];
+  const talk = deadlines.some((item) => item.kind === "Vortrag" && item.diff >= 0 && item.diff <= 21) && open.some((task) => /vortrag|referat|präsentation|folie/i.test(task.title));
+  const due = deadlines.filter((item) => !isAssessment(item) && !item.pinned && item.diff >= -7 && item.diff <= 3 && item.status !== "abgegeben").length;
   const hour = day.nowMin / 60;
   const time = hour < 5 || hour >= 21 ? "night" : hour < 7.5 ? "dawn" : hour < 17.5 ? "day" : "dusk";
   const bloom = total > 0 && !open.length;
@@ -688,7 +687,7 @@ function linkPhrase(task, date) {
   if (diff === 0 && item.kind === "Hausaufgabe") return "";
   const target = parseDate(item.date);
   const when = item.pinned ? "" : diff === 1 ? " morgen" : diff < 7 ? ` am ${WEEKDAYS[target.getDay()]}` : ` am ${target.getDate()}.${target.getMonth() + 1}.`;
-  const noun = { Test: "den Test", Klausur: "die Klausur", Referat: "das Referat", Abgabe: item.pinned ? "die Seminararbeit" : "die Abgabe", Hausaufgabe: "die Hausaufgabe" }[item.kind] || "die Abgabe";
+  const noun = { Test: "den Test", Klausur: "die Klausur", Vortrag: "den Vortrag", Abgabe: item.pinned ? "die Seminararbeit" : "die Abgabe", Hausaufgabe: "die Hausaufgabe" }[item.kind] || "die Abgabe";
   return `für ${noun}${when}`;
 }
 
@@ -821,7 +820,7 @@ function dueMeta(item, date) {
     const text = progress ? `, ${progress.unit}\u00a0${progress.done}\u00a0von\u00a0${progress.total}` : "";
     return { html: `${subjectText}, ${inDays(diff)}${text}${bar}`, prepared, diff };
   }
-  const kind = `<span class="kind${isTest(item) ? " is-test" : ""}">${isTest(item) ? icon("nx-test") : ""}${esc(item.kind)}</span>`;
+  const kind = `<span class="kind${isAssessment(item) ? " is-test" : ""}">${isAssessment(item) ? icon(ASSESSMENTS[item.kind].icon) : ""}${esc(item.kind)}</span>`;
   let when;
   if (diff < 0 && isAssessment(item)) when = `<span class="row-note is-ready">${icon("check")}${esc(pastText(diff, target, item.kind))}</span>`;
   else if (diff < 0) when = `<span class="due-when is-urgent">${overdueText(diff, target)}</span>`;
@@ -860,7 +859,7 @@ function dueItems(date) {
   const soon = [
     ...deadlines.filter((item) => item.diff >= 0 && item.diff <= 14 && !item.pinned && item.status !== "abgegeben" && !(item.diff === 0 && linked.has(item.id))),
     ...own.filter((item) => item.diff <= 14),
-  ].sort((a, b) => a.diff - b.diff || Number(isTest(b)) - Number(isTest(a)));
+  ].sort((a, b) => a.diff - b.diff || Number(isAssessment(b)) - Number(isAssessment(a)));
   const pinned = deadlines.filter((item) => item.pinned && item.diff >= 0);
   return { overdue, soon, pinned, written };
 }
@@ -871,8 +870,9 @@ function renderWritten(written, date) {
   if (!toggle || !list) return;
   const open = state.writtenOpen && written.length > 0;
   toggle.hidden = !written.length;
-  $("writtenLabel").textContent = written.every(isTest) ? `${written.length} geschrieben` : `${written.length} vorbei`;
+  $("writtenLabel").textContent = `${written.length} ${pastWord(written)}`;
   toggle.setAttribute("aria-expanded", String(open));
+  list.setAttribute("aria-label", cap(pastWord(written)));
   list.hidden = !open;
   list.innerHTML = open ? written.map((item) => dueRow(item, date)).join("") : "";
 }
@@ -942,9 +942,9 @@ function renderWeek(day) {
       state.deadlines.filter((item) => item.date === iso && !item.pinned && item.status !== "abgegeben").forEach((item) => {
         const name = subject(item.subject).name.replace(/ LK$/, "");
         const block = item.block ? `, ${item.block}. Block` : "";
-        const test = isTest(item);
+        const test = isAssessment(item);
         const text = `${item.kind} ${name}${block}`;
-        markers.push({ order: test ? 0 : 1, text, html: `<p class="marker${test ? " is-test" : ""}">${icon(test ? "nx-test" : "list-checks")}<span>${esc(text)}</span></p>` });
+        markers.push({ order: test ? 0 : 1, text, html: `<p class="marker${test ? " is-test" : ""}">${icon(test ? ASSESSMENTS[item.kind].icon : "list-checks")}<span>${esc(text)}</span></p>` });
       });
       state.tasks.filter((task) => task.date === iso && !task.done && iso > today).forEach((task) => {
         markers.push({ order: 1, text: task.title, html: `<p class="marker">${icon("check")}<span>${esc(task.title)}</span></p>` });
@@ -1534,7 +1534,7 @@ function bindEvents() {
       },
     })),
     ...state.deadlines.map((item) => ({
-      group: "Fällig", label: `${item.kind}: ${item.title}`, icon: isTest(item) ? "nx-test" : "calendar-days", keywords: subject(item.subject).name,
+      group: "Fällig", label: `${item.kind}: ${item.title}`, icon: ASSESSMENTS[item.kind]?.icon || "calendar-days", keywords: subject(item.subject).name,
       hint: `${label(item.subject)}, ${shortDate(parseDate(item.date))}`,
       run: () => {
         const row = document.querySelector(`.due[data-id="${CSS.escape(item.id)}"]`);

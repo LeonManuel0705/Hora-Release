@@ -68,7 +68,7 @@
     },
     {
       id: 'school', dot: true, mode: 'point', target: () => navItem('school'),
-      text: 'Unter Schule liegen Stundenplan, Tests, Klausuren, Hausaufgaben und Noten.'
+      text: 'Unter Schule liegen Stundenplan, Tests, Klausuren, Vorträge, Hausaufgaben und Noten.'
     },
     {
       id: 'email', dot: true, mode: 'point', target: () => navItem('email'), skip: narrow,

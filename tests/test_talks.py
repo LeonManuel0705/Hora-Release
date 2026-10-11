@@ -3,6 +3,8 @@
 
 import json
 import re
+import shutil
+import subprocess
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -14,6 +16,7 @@ from app.crypto_utils import decrypt_file
 
 ROOT = Path(__file__).resolve().parent.parent
 PHONE = ROOT / 'flutter_app' / 'lib' / 'web_ui'
+SCRIPTS = ROOT / 'app' / 'static' / 'app' / 'js'
 PAGES = ['/hub', '/hub/tasks', '/hub/calendar', '/hub/school']
 
 
@@ -160,3 +163,32 @@ def test_the_phone_keeps_the_same_kinds_as_the_server():
     assert set(phone_table('uiGradeTypes').values()) <= set(ui_data.GRADE_TYPES)
     made = re.search(r'for \(final table in const \[(.*?)\]\)', (PHONE / 'ui_db.dart').read_text(encoding='utf-8')).group(1)
     assert set(re.findall(r"'(\w+)'", made)) == set(phone_table('uiDeadlineTables').values()) - {'homework'}
+
+
+def test_the_pages_know_the_same_kinds_as_the_server():
+    core = (SCRIPTS / 'core.js').read_text(encoding='utf-8')
+    school = (SCRIPTS / 'pages' / 'school.js').read_text(encoding='utf-8')
+    table = core.split('export const ASSESSMENTS = {', 1)[1].split('};', 1)[0]
+    words = {word for _, word in ui_data.DEADLINE_KINDS.values()}
+    assert set(re.findall(r'^  (\w+): \{', table, re.M)) == words - {'Hausaufgabe'}
+    changeable = re.search(r'const editable = .*?/\^\(([a-z|]+)\)-/', school).group(1)
+    assert set(changeable.split('|')) == {*ui_data.DEADLINE_KINDS, 'new'}
+    grades = re.search(r'^const GRADE_TYPES = \{(.*?)\};$', school, re.M).group(1)
+    assert re.findall(r'(\w+): "', grades) == list(ui_data.GRADE_TYPES)
+
+
+def test_the_reminder_switch_for_tests_names_presentations_too():
+    label = lambda categories: next(item['label'] for item in categories if item['key'] == 'tests')
+    assert label(ui_data.NOTIFY_DEFAULTS['categories']) == 'Tests, Klausuren und Vorträge'
+    assert "'key': 'tests', 'label': 'Tests, Klausuren und Vorträge'" in (PHONE / 'ui_data.dart').read_text(encoding='utf-8')
+
+
+def test_kinds_and_their_reminders_hold_up_under_node():
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('node is not installed')
+    major = int(re.match(r'v(\d+)', subprocess.run([node, '--version'], capture_output=True, text=True).stdout).group(1))
+    if major < 18:
+        pytest.skip('node is too old')
+    result = subprocess.run([node, str(ROOT / 'tests' / 'js' / 'kinds_check.mjs')], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr

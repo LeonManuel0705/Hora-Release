@@ -42,7 +42,7 @@ Map<String, Object?> uiNotifyDefaults() => {
       'categories': [
         {'key': 'lessons', 'label': 'Nächste Stunde', 'detail': 'Fach und Raum vor Beginn', 'on': true, 'lead': 10,
           'leads': [[5, '5 Min. vorher'], [10, '10 Min. vorher'], [15, '15 Min. vorher']]},
-        {'key': 'tests', 'label': 'Tests und Klausuren', 'detail': 'mit Lernstoff', 'on': true, 'lead': 1,
+        {'key': 'tests', 'label': 'Tests, Klausuren und Vorträge', 'detail': 'mit Lernstoff', 'on': true, 'lead': 1,
           'leads': [[1, 'am Vortag'], [2, '2 Tage vorher'], [3, '3 Tage vorher'], [7, '1 Woche vorher']]},
         {'key': 'homework', 'label': 'Hausaufgaben', 'detail': 'vor der Abgabe', 'on': true, 'lead': 1,
           'leads': [[1, 'am Vortag'], [2, '2 Tage vorher']]},

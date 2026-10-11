@@ -1,6 +1,6 @@
 import {
   data, flags, params, esc, icon, tinte, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
-  weekType, abWeeks, isoWeek, subject, hueVar, blockOf, lessonsFor, inDays, duration, shortDate, longDate, storage, isOverdue,
+  weekType, abWeeks, isoWeek, subject, hueVar, blockOf, lessonsFor, inDays, duration, shortDate, longDate, storage, ASSESSMENTS, isAssessment, isOverdue, assessmentCount,
   WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "../core.js";
 import { animates, travels, flipKeyed, exitInPlace, crossfade, token, ms } from "../motion.js";
 import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen, registerSearch, syncTime, pageUrl } from "../shell.js";
@@ -11,7 +11,7 @@ const saveText = debounced(700, (key, id, changes) => eventApi.update(id, change
 const $ = (id) => document.getElementById(id);
 const extra = data.page || {};
 const VIEWS = ["woche", "monat", "liste"];
-const DUE_KINDS = ["Test", "Klausur", "Abgabe", "Referat"];
+const DUE_KINDS = [...Object.keys(ASSESSMENTS), "Abgabe"];
 const LIST_DAYS = 14;
 const NARROW = 440;
 const FLOATING = matchMedia("(max-width: 1279px)");
@@ -76,7 +76,6 @@ function load() {
 const todayIso = () => isoDate(now());
 const nowMin = () => minutesOf(now());
 const mondayOf = (date) => addDays(startOfDay(date), 1 - (date.getDay() || 7));
-const isTest = (item) => item.kind === "Test" || item.kind === "Klausur";
 const covers = (item, iso) => item.date <= iso && iso <= (item.endDate || item.date);
 const kindVar = (kind) => `var(--kind-${kind})`;
 const startOf = (item) => toMin(item.start);
@@ -87,7 +86,7 @@ const visibleEvents = () => state.events.filter((item) => !state.loading || !ite
 const eventsAt = (iso) => visibleEvents().filter((item) => covers(item, iso));
 const timedAt = (iso) => eventsAt(iso).filter((item) => item.start && item.date === iso).sort((a, b) => startOf(a) - startOf(b));
 const allDayAt = (iso) => eventsAt(iso).filter((item) => !item.start);
-const dueAt = (iso) => deadlines.filter((item) => item.date === iso).sort((a, b) => Number(isTest(b)) - Number(isTest(a)));
+const dueAt = (iso) => deadlines.filter((item) => item.date === iso).sort((a, b) => Number(isAssessment(b)) - Number(isAssessment(a)));
 const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 const monthShort = (index) => `${MONTHS_SHORT[index]}${MONTHS_SHORT[index].length < MONTHS[index].length ? "." : ""}`;
 const subjectName = (key) => subject(key).name.replace(/ LK$/, "");
@@ -180,8 +179,8 @@ function monthMeta(span) {
   const first = isoDate(span.start);
   const last = isoDate(span.end);
   const events = visibleEvents().filter((item) => item.date <= last && (item.endDate || item.date) >= first).length;
-  const tests = deadlines.filter((item) => isTest(item) && item.date >= first && item.date <= last).length;
-  return [events ? plural(events, "Termin", "Termine") : "", tests ? plural(tests, "Test", "Tests") : ""].filter(Boolean).join(", ");
+  const tests = assessmentCount(deadlines.filter((item) => item.date >= first && item.date <= last));
+  return [events ? plural(events, "Termin", "Termine") : "", tests].filter(Boolean).join(", ");
 }
 
 function hourRange(days) {
@@ -253,16 +252,12 @@ function dueLabel(item, { long = false } = {}) {
   return `<span class="label-full">${esc(name.label)}</span><span class="label-short">${esc(name.short)}</span>`;
 }
 
-function dueIcon(item) {
-  if (isTest(item)) return "nx-test";
-  if (item.kind === "Referat") return "users";
-  return "list-checks";
-}
+const dueIcon = (item) => ASSESSMENTS[item.kind]?.icon || "list-checks";
 
 function dueTone(item) {
   const overdue = isOverdue(item, todayIso());
   if (overdue) return " is-overdue";
-  return isTest(item) ? " is-test" : " is-due";
+  return isAssessment(item) ? " is-test" : " is-due";
 }
 
 function chipHtml(entry, isos) {
@@ -295,7 +290,7 @@ function allDayEntries(isos) {
   const clip = (item) => ({ from: item.date < first ? first : item.date, to: (item.endDate || item.date) > last ? last : item.endDate || item.date });
   return [
     ...holidays.filter((item) => item.date <= last && item.endDate >= first).map((item) => ({ type: "holiday", item, ...clip(item) })),
-    ...deadlines.filter((item) => item.date >= first && item.date <= last).sort((a, b) => Number(isTest(b)) - Number(isTest(a))).map((item) => ({ type: "due", item, from: item.date, to: item.date })),
+    ...deadlines.filter((item) => item.date >= first && item.date <= last).sort((a, b) => Number(isAssessment(b)) - Number(isAssessment(a))).map((item) => ({ type: "due", item, from: item.date, to: item.date })),
     ...visibleEvents().filter((item) => !item.start && item.date <= last && (item.endDate || item.date) >= first).map((item) => ({ type: "event", item, ...clip(item) })),
   ];
 }
@@ -305,9 +300,9 @@ function dayHead(date) {
   const today = iso === todayIso();
   const focus = iso === state.focus;
   const count = eventsAt(iso).length;
-  const tests = dueAt(iso).filter(isTest).length;
+  const tests = assessmentCount(dueAt(iso));
   const weekend = date.getDay() === 0 || date.getDay() === 6;
-  const label = `${longDate(date)}${today ? ", heute" : ""}, ${count ? plural(count, "Termin", "Termine") : "keine Termine"}${tests ? `, ${plural(tests, "Test", "Tests")}` : ""}`;
+  const label = `${longDate(date)}${today ? ", heute" : ""}, ${count ? plural(count, "Termin", "Termine") : "keine Termine"}${tests ? `, ${tests}` : ""}`;
   const shown = focus && (state.picked || state.narrow);
   const dots = state.narrow ? `<span class="cw-dots" aria-hidden="true">${dotsFor(iso, 3)}</span>` : "";
   return `<button type="button" class="cw-day${today ? " is-today" : ""}${shown ? " is-focus" : ""}${weekend ? " is-weekend" : ""}" data-day="${iso}" data-key="day:${iso}" tabindex="${focus ? 0 : -1}" aria-pressed="${shown}" aria-label="${esc(label)}"${today ? ' aria-current="date"' : ""}>
@@ -317,7 +312,7 @@ function dayHead(date) {
 
 function dotsFor(iso, limit) {
   const dots = [
-    ...dueAt(iso).map((item) => `<i class="cal-dot${item.date < todayIso() || isTest(item) ? " is-urgent" : ""}" style="--k:${hueVar(item.subject)}"></i>`),
+    ...dueAt(iso).map((item) => `<i class="cal-dot${item.date < todayIso() || isAssessment(item) ? " is-urgent" : ""}" style="--k:${hueVar(item.subject)}"></i>`),
     ...eventsAt(iso).sort((a, b) => (a.start || "").localeCompare(b.start || "")).map((item) => `<i class="cal-dot is-event" style="--k:${kindVar(item.kind)}"></i>`),
   ];
   return dots.slice(0, limit).join("");
@@ -326,7 +321,7 @@ function dotsFor(iso, limit) {
 function lessonBand(lesson, date, pos, len) {
   const info = subject(lesson.subject);
   const iso = isoDate(date);
-  const test = deadlines.find((item) => isTest(item) && item.date === iso && item.block === lesson.block);
+  const test = deadlines.find((item) => isAssessment(item) && item.date === iso && item.block === lesson.block);
   const tip = `${lesson.block}. Block, ${hm(lesson.start)} bis ${hm(lesson.end)}: <b>${esc(info.name)}</b> in ${esc(lesson.room)}${lesson.movedFrom ? ` statt ${esc(lesson.movedFrom)}` : ""}, ${esc(lesson.teacher)}${test ? `<br>${esc(test.kind)}: ${esc(test.title)}` : ""}${lesson.cancelled ? "<br>Entfällt" : ""}`;
   const room = lesson.cancelled ? "entfällt" : `${esc(lesson.room)}${state.narrow ? `, ${esc(lesson.teacher)}` : ""}`;
   return `<div class="cw-lesson${lesson.cancelled ? " is-cancelled" : ""}${lesson.movedFrom ? " is-moved" : ""}" style="--top:${pos(lesson.startMin)};--len:${len(lesson.startMin, lesson.endMin)};--hue:${hueVar(lesson.subject)}" data-tip="${esc(tip)}" aria-hidden="true">
@@ -537,9 +532,9 @@ function listRow({ type, item }) {
     const overdue = isOverdue(item, todayIso());
     const lesson = item.block ? lessonsFor(parseDate(item.date)).find((entry) => entry.block === item.block) : null;
     const meta = [`<i class="subject-dot" style="--hue:${hueVar(item.subject)}"></i>${esc(subject(item.subject).label)}`, block ? `${block.n}. Block` : "", lesson ? esc(lesson.room) : "", overdue ? `<span class="cl-urgent">überfällig</span>` : ""].filter(Boolean).join(", ");
-    return `<li><button type="button" class="cl-row is-due${isTest(item) ? " is-test" : ""}${selected}" ${base}>
+    return `<li><button type="button" class="cl-row is-due${isAssessment(item) ? " is-test" : ""}${selected}" ${base}>
       <span class="cl-time">${block ? `<b>${hm(block.start)}</b><small>${hm(block.end)}</small>` : `<span class="cl-icon">${icon(dueIcon(item))}</span>`}</span>
-      <span class="cl-main"><span class="cl-title">${isTest(item) ? icon("nx-test") : ""}<span class="cl-text">${esc(item.kind)}: ${esc(item.title)}</span></span><span class="cl-meta">${meta}</span></span>${icon("chevron-right", "chev-end")}
+      <span class="cl-main"><span class="cl-title">${isAssessment(item) ? icon(dueIcon(item)) : ""}<span class="cl-text">${esc(item.kind)}: ${esc(item.title)}</span></span><span class="cl-meta">${meta}</span></span>${icon("chevron-right", "chev-end")}
     </button></li>`;
   }
   const meta = `<i class="cal-dot" style="--k:${kindVar(item.kind)}"></i>${esc(KINDS[item.kind].label)}${item.place ? `, ${esc(item.place)}` : ""}`;
@@ -577,14 +572,14 @@ function agendaItem({ type, item }) {
   }
   if (type === "due") {
     const block = item.block ? blockOf(item.block) : null;
-    return `<li><button type="button" class="cal-agenda-item is-due${isTest(item) ? " is-test" : ""}${selected}" data-id="${esc(item.id)}" data-key="ag:${esc(item.id)}"><span class="cal-agenda-time">${block ? hm(block.start) : icon(dueIcon(item))}</span><span class="cal-agenda-main"><span class="cal-agenda-title">${esc(item.kind)} ${esc(subjectName(item.subject))}</span><span class="cal-agenda-meta">${esc(item.title)}</span></span></button></li>`;
+    return `<li><button type="button" class="cal-agenda-item is-due${isAssessment(item) ? " is-test" : ""}${selected}" data-id="${esc(item.id)}" data-key="ag:${esc(item.id)}"><span class="cal-agenda-time">${block ? hm(block.start) : icon(dueIcon(item))}</span><span class="cal-agenda-main"><span class="cal-agenda-title">${esc(item.kind)} ${esc(subjectName(item.subject))}</span><span class="cal-agenda-meta">${esc(item.title)}</span></span></button></li>`;
   }
   return `<li><button type="button" class="cal-agenda-item${isPast(item) ? " is-past" : ""}${selected}" data-id="${esc(item.id)}" data-key="ag:${esc(item.id)}" style="--k:${kindVar(item.kind)}"><span class="cal-agenda-time">${item.start ? hm(item.start) : "ganztägig"}</span><span class="cal-agenda-main"><span class="cal-agenda-title"><i class="cal-dot"></i><span data-title-of="${esc(item.id)}">${esc(item.title)}</span></span>${item.place ? `<span class="cal-agenda-meta">${esc(item.place)}</span>` : ""}</span></button></li>`;
 }
 
 function nextTest() {
   const today = todayIso();
-  return deadlines.filter((item) => isTest(item) && item.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0] || null;
+  return deadlines.filter((item) => isAssessment(item) && item.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0] || null;
 }
 
 function renderOverview() {
@@ -610,7 +605,7 @@ function renderOverview() {
     const block = test.block ? `, ${test.block}. Block` : "";
     const open = prepTasks(test.id).length;
     testHtml = `<div class="cal-next">
-      <h3 class="cal-next-label">Nächster Test</h3>
+      <h3 class="cal-next-label">${esc(ASSESSMENTS[test.kind].next)}</h3>
       <button type="button" class="cal-next-card${state.selected === test.id ? " is-selected" : ""}" data-id="${esc(test.id)}" data-key="next:${esc(test.id)}">
         <span class="cal-next-title"><i class="subject-dot" style="--hue:${hueVar(test.subject)}"></i>${esc(subjectName(test.subject))}</span>
         <span class="cal-next-topic">${esc(test.title)}</span>
@@ -693,7 +688,7 @@ function panelDue(item) {
   const lesson = item.block ? lessonsFor(date).find((entry) => entry.block === item.block) : null;
   const open = prepTasks(item.id);
   const overdue = isOverdue(item, todayIso());
-  const tone = overdue || isTest(item) ? " is-urgent" : "";
+  const tone = overdue || isAssessment(item) ? " is-urgent" : "";
   const facts = [
     ["Art", `<i class="subject-dot" style="--hue:${hueVar(item.subject)}"></i>${esc(item.kind)}, ${esc(subject(item.subject).name)}`],
     ["Zeit", `${esc(longDate(date))}${item.block ? `<br>${esc(dueTime(item))}` : ""}${overdue ? `<br><b class="cal-urgent">überfällig seit ${esc(shortDate(date))}</b>` : ""}`],
