@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 # SPDX-License-Identifier: AGPL-3.0-only
 
-from flask import Flask, request, jsonify, render_template, redirect, url_for, send_file, session, g
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session, g
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from werkzeug.exceptions import HTTPException
@@ -721,13 +721,15 @@ def bookmark_icon(bookmark_id):
     bookmark = db.get_hub_bookmark(bookmark_id)
     icon = site_icons.icon_for(bookmark['url']) if bookmark else None
     try:
-        response = send_file(icon.path, mimetype=icon.kind, conditional=True) if icon else None
+        body = site_icons.content(icon) if icon else None
     except OSError:
-        response = None
-    if response is None:
+        body = None
+    if body is None:
         return _no_store(app.response_class(status=404))
-    response.headers['Cache-Control'] = 'private, max-age=604800'
-    return response
+    response = app.response_class(body, mimetype=icon.kind)
+    response.add_etag()
+    response.headers['Cache-Control'] = 'private, max-age=86400'
+    return response.make_conditional(request)
 
 SCHOOL_SUBJECTS_FILE = DATA_DIR / 'school_subjects.json'
 SCHOOL_HOMEWORK_FILE = DATA_DIR / 'school_homework.json'

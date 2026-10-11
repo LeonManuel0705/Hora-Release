@@ -73,6 +73,7 @@ _PAGE = 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5'
 _IMAGE = 'image/*,*/*;q=0.5'
 _ATTRIBUTE = re.compile(r'''([^\s"'<>/=]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>]+))''')
 _SIZE = re.compile(r'(\d{1,5})x\d{1,5}', re.I)
+_BRACE = re.compile(rb'[{}]')
 _SVG = re.compile(rb'\s*(?:<\?xml[^>]*\?>\s*)?(?:<!--.*?-->\s*)*(?:<!DOCTYPE[^>]*>\s*)?(?:<!--.*?-->\s*)*<svg[\s>]', re.I | re.S)
 
 _lock = threading.Lock()
@@ -323,7 +324,7 @@ def _declared(body, page_url):
         rel = set(attributes.get('rel', '').lower().split())
         touch = bool(rel & {'apple-touch-icon', 'apple-touch-icon-precomposed'})
         href = attributes.get('href', '').strip()
-        if name != 'link' or not href or not (touch or 'icon' in rel):
+        if name != 'link' or not href or not (touch or 'icon' in rel) or _for_dark(attributes.get('media', '').lower().encode()):
             continue
         try:
             url = urljoin(base, href)
@@ -351,6 +352,40 @@ def _rank(entry):
     if entry.size >= 64:
         return (1, abs(entry.size - 128))
     return (3, -entry.size)
+
+
+def _for_dark(query):
+    """Whether a media query picks a dark browser. The tile an icon lands on is always light."""
+    return b'prefers-color-scheme' in query and (b'dark' in query) != (b'not' in query)
+
+
+def _light_only(svg):
+    """The vector without the colours it keeps for a dark browser; what it keeps for a light one applies always."""
+    lowered = svg.lower()
+    kept, at = [], 0
+    while True:
+        start = lowered.find(b'@media', at)
+        opening = lowered.find(b'{', start) if start >= 0 else -1
+        if opening < 0:
+            break
+        depth, closing = 0, -1
+        for brace in _BRACE.finditer(lowered, opening):
+            depth += 1 if brace.group() == b'{' else -1
+            if depth == 0:
+                closing = brace.start()
+                break
+        if closing < 0:
+            break
+        query = lowered[start:opening]
+        if b'prefers-color-scheme' not in query:
+            kept.append(svg[at:closing + 1])
+        else:
+            kept.append(svg[at:start])
+            if not _for_dark(query):
+                kept.append(svg[opening + 1:closing])
+        at = closing + 1
+    kept.append(svg[at:])
+    return b''.join(kept)
 
 
 def _image_type(data):
@@ -511,6 +546,12 @@ def icon_for(url, wait=None):
         done.wait(WAIT if wait is None else wait)
     stored = _stored(key)
     return Icon(stored[0], stored[1]) if stored and stored[1] else None
+
+
+def content(icon):
+    """What is sent for an icon: a vector in its colours for a light surface, anything else as it was kept."""
+    body = icon.path.read_bytes()
+    return _light_only(body) if icon.kind == 'image/svg+xml' else body
 
 
 def retry(url):

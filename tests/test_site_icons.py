@@ -245,6 +245,39 @@ def test_what_is_no_icon_of_the_page_is_left_out(icons):
     assert icons._declared(body, 'https://site.test/') == []
 
 
+def test_an_icon_meant_for_a_dark_browser_is_passed_over(icons):
+    body = page(
+        '<link rel="icon" href="/dark.png" sizes="128x128" media="(prefers-color-scheme: dark)">',
+        '<link rel="icon" href="/light.png" sizes="96x96" media="(prefers-color-scheme: light)">',
+        '<link rel="icon" href="/also-light.png" sizes="64x64" media="not (prefers-color-scheme: dark)">',
+        '<link rel="icon" href="/print.png" sizes="48x48" media="print">',
+    )
+    assert [url.rsplit('/', 1)[1] for url in icons._declared(body, 'https://site.test/')] == ['light.png', 'also-light.png', 'print.png']
+
+
+@pytest.mark.parametrize('before, after', [
+    (b'<svg><style>.s{fill:#A3B690}.o{fill:#2E3A2F}@media (prefers-color-scheme: dark){.s{fill:#86A36F}.o{fill:#F8F6EE}}</style><rect class="s"/></svg>',
+     b'<svg><style>.s{fill:#A3B690}.o{fill:#2E3A2F}</style><rect class="s"/></svg>'),
+    (b'<style>path{fill:#fff}@media (prefers-color-scheme: light){path{fill:#000}}</style>', b'<style>path{fill:#fff}path{fill:#000}</style>'),
+    (b'<style>@media not (prefers-color-scheme: dark){a{fill:#000}}</style>', b'<style>a{fill:#000}</style>'),
+    (b'<style>@media not all and (prefers-color-scheme: light){a{fill:#fff}}b{fill:red}</style>', b'<style>b{fill:red}</style>'),
+    (b'<style>@MEDIA (PREFERS-COLOR-SCHEME: DARK) { A { fill: #FFF } } B{fill:red}</style>', b'<style> B{fill:red}</style>'),
+    (b'<style>@media (min-width: 10px){a{fill:red}}@media (prefers-color-scheme:dark){a{fill:#fff}}c{}</style>', b'<style>@media (min-width: 10px){a{fill:red}}c{}</style>'),
+    (b'<style>@media (prefers-color-scheme: dark){a{fill:#fff}</style>', b'<style>@media (prefers-color-scheme: dark){a{fill:#fff}</style>'),
+    (b'<style>@media (prefers-color-scheme: dark)</style>', b'<style>@media (prefers-color-scheme: dark)</style>'),
+    (SVG, SVG),
+])
+def test_a_vector_loses_the_colours_it_keeps_for_a_dark_browser(icons, before, after):
+    assert icons._light_only(before) == after
+
+
+@pytest.mark.parametrize('piece', [b'@media{', b'@media{}', b'@media', b'@media (prefers-color-scheme: dark){{', b'{'])
+def test_a_vector_built_to_keep_the_reader_busy_is_done_in_no_time(icons, piece):
+    started = time.monotonic()
+    icons._light_only(piece * (icons.MAX_ICON // len(piece)))
+    assert time.monotonic() - started < 3
+
+
 @pytest.mark.parametrize('piece', [b'<link ', b'<!--', b'<script', b'<link rel="icon" href="', b'<', b'<base href='])
 def test_a_page_built_to_keep_a_reader_busy_is_done_in_no_time(icons, piece):
     body = piece * (icons.MAX_PAGE // len(piece))
@@ -662,9 +695,21 @@ def test_the_icon_of_a_bookmark_is_served_as_an_image_that_can_do_nothing(client
     assert response.headers['Content-Type'].startswith('image/svg+xml')
     assert response.headers['Content-Security-Policy'] == "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox"
     assert response.headers['X-Content-Type-Options'] == 'nosniff'
-    assert response.headers['Cache-Control'] == 'private, max-age=604800'
+    assert response.headers['Cache-Control'] == 'private, max-age=86400'
     again = client.get(response.request.path, headers={'If-None-Match': response.headers['ETag']})
     assert again.status_code == 304 and again.data == b''
+
+
+def test_a_vector_is_served_in_its_colours_for_a_light_surface_and_other_images_as_they_are(client, icons, site, net):
+    net.names['second.test'] = [PUBLIC]
+    two_faced = b'<svg xmlns="http://www.w3.org/2000/svg"><style>path{fill:#111}@media (prefers-color-scheme: dark){path{fill:#fff}}</style><path d="M0 0h8v8z"/></svg>'
+    site.routes[('site.test', '/favicon.ico')] = reply(two_faced)
+    site.routes[('second.test', '/favicon.ico')] = reply(png())
+    vector = client.get(f"/api/hub/bookmarks/{bookmark(client, 'http://site.test/')}/icon")
+    assert vector.data == two_faced.replace(b'@media (prefers-color-scheme: dark){path{fill:#fff}}', b'')
+    assert next(icons.ICON_DIR.glob('*.svg')).read_bytes() == two_faced
+    bitmap = client.get(f"/api/hub/bookmarks/{bookmark(client, 'http://second.test/')}/icon")
+    assert bitmap.data == png() and bitmap.headers['Content-Type'] == 'image/png'
 
 
 def test_a_bookmark_without_an_icon_answers_not_found_and_is_asked_again_next_time(client, site, net):

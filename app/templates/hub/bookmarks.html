@@ -101,7 +101,6 @@
     height: 28px;
     object-fit: contain;
     border-radius: 6px;
-    color-scheme: light;
     opacity: 0;
     transform: scale(0.6);
     transition: opacity 0.2s ease-out, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -228,6 +227,7 @@
 let bookmarks = [];
 let currentFilter = 'all';
 const iconState = new Map();
+const ICON_LOOK = 2;
 
 document.addEventListener('DOMContentLoaded', () => loadBookmarks());
 
@@ -269,7 +269,7 @@ function renderBookmarks() {
         const key = `${b.id}:${version}`;
         const known = iconState.get(key);
         const site = siteIcon(b.url);
-        const source = known === 'site' ? `src="${esc(site)}" data-tried="1" referrerpolicy="no-referrer"` : `src="/api/hub/bookmarks/${b.id}/icon?v=${version}"`;
+        const source = known === 'site' ? `src="${esc(site)}" data-tried="1" referrerpolicy="no-referrer"` : `src="/api/hub/bookmarks/${b.id}/icon?v=${version}&look=${ICON_LOOK}"`;
         const icon = known === 'none' ? '' : `<img ${source} data-site="${esc(site)}" alt="" loading="lazy" onload="iconShown(this, ${jsArg(key)})" onerror="iconMissing(this, ${jsArg(key)})">`;
         return `
         <div class="bookmark-card" ondblclick="window.open(${jsArg(safeUrl(b.url))}, '_blank')">
