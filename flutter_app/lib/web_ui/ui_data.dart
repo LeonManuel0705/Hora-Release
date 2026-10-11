@@ -26,10 +26,12 @@ const uiStates = [
   ('NW', 'Nordrhein-Westfalen'), ('RP', 'Rheinland-Pfalz'), ('SL', 'Saarland'), ('SN', 'Sachsen'),
   ('ST', 'Sachsen-Anhalt'), ('SH', 'Schleswig-Holstein'), ('TH', 'Thüringen'),
 ];
-const uiDeadlineKinds = {'hw': 'Hausaufgabe', 'test': 'Test', 'exam': 'Klausur'};
-const uiDeadlineTables = {'hw': 'homework', 'test': 'tests', 'exam': 'exams'};
-const uiGradeTypes = {'Klausur': 'klausur', 'Test': 'test', 'Mündlich': 'muendlich'};
-const uiGradeWords = {'klausur': 'Klausur', 'test': 'Test', 'muendlich': 'Mündlich', 'sonstiges': 'Sonstige'};
+const uiDeadlineKinds = {'hw': 'Hausaufgabe', 'test': 'Test', 'exam': 'Klausur', 'talk': 'Vortrag'};
+const uiDeadlineTables = {'hw': 'homework', 'test': 'tests', 'exam': 'exams', 'talk': 'talks'};
+final uiDeadlinePrefixes = {for (final entry in uiDeadlineKinds.entries) entry.value: entry.key};
+// The older screens offer "Referat" as a kind of grade. It is the same thing and is shown as a presentation.
+const uiGradeTypes = {'Klausur': 'klausur', 'Test': 'test', 'Mündlich': 'muendlich', 'Vortrag': 'vortrag', 'Referat': 'vortrag'};
+const uiGradeWords = {'klausur': 'Klausur', 'test': 'Test', 'muendlich': 'Mündlich', 'vortrag': 'Vortrag', 'sonstiges': 'Sonstige'};
 const uiMarks = [6.0, 5.3, 5.0, 4.7, 4.3, 4.0, 3.7, 3.3, 3.0, 2.7, 2.3, 2.0, 1.7, 1.3, 1.0, 0.7];
 const iservPrefix = 'iserv.';
 

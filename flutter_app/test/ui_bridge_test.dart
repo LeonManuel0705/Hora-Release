@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import 'package:app/web_ui/ui_api.dart';
 import 'package:app/web_ui/ui_bridge.dart';
+import 'package:app/web_ui/ui_db.dart';
 import 'package:app/web_ui/ui_pages.dart';
 import 'package:app/web_ui/web_start_script.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -129,6 +130,68 @@ void main() {
     expect(saved['done'], isTrue);
   });
 
+  test('a presentation is entered, changed and removed like a test', () async {
+    final hub = bridge();
+    const own = {'custom': true, 'name': 'Biologie', 'short': 'Bio', 'hue': 'jade', 'type': 'GK', 'teacher': '', 'room': ''};
+    expect((await api(hub, 'PUT', '/api/ui/store/app-subjects', {'items': {'bio-own': own}, 'removed': []})).status, 200);
+    Future<List<Map>> listed(String id) async {
+      final page = pageData((await hub.handle(const UiBridgeRequest(method: 'GET', path: '/hub/school', navigate: true))).body as String);
+      return (page['deadlines'] as List).cast<Map>().where((item) => item['id'] == id).toList();
+    }
+
+    String day(int ahead) {
+      final when = DateTime.now().add(Duration(days: ahead));
+      return '${when.year}-${when.month.toString().padLeft(2, '0')}-${when.day.toString().padLeft(2, '0')}';
+    }
+
+    final created = await api(hub, 'POST', '/api/ui/deadlines', {'kind': 'Vortrag', 'title': 'Stadtklima', 'date': day(5), 'subject': 'bio-own', 'detail': '10 Minuten'});
+    expect(created.status, 200);
+    final talk = (jsonDecode(created.body as String) as Map)['deadline'] as Map;
+    expect('${talk['id']}', startsWith('talk-'));
+    expect([talk['kind'], talk['title'], talk['subject'], talk['date'], talk['detail'], talk['status']], ['Vortrag', 'Stadtklima', 'bio-own', day(5), '10 Minuten', 'offen']);
+    expect(await listed('${talk['id']}'), [talk]);
+
+    final changed = await api(hub, 'PATCH', '/api/ui/deadlines/${talk['id']}', {'title': 'Stadtgrün', 'date': day(8), 'detail': '', 'time': '9:50'});
+    expect(changed.status, 200);
+    final shown = (await listed('${talk['id']}')).single;
+    expect([shown['kind'], shown['title'], shown['date'], shown['detail'], shown['time']], ['Vortrag', 'Stadtgrün', day(8), '', '09:50']);
+
+    final db = await UiDb.open();
+    expect(await db.query('talks', columns: ['title'], where: 'id = ?', whereArgs: ['${talk['id']}'.substring(5)]), [{'title': 'Stadtgrün'}]);
+    for (final table in ['tests', 'exams', 'homework']) {
+      expect(await db.query(table, where: 'title = ?', whereArgs: ['Stadtgrün']), isEmpty, reason: table);
+    }
+
+    expect((await api(hub, 'DELETE', '/api/ui/deadlines/${talk['id']}')).status, 200);
+    expect((await api(hub, 'DELETE', '/api/ui/deadlines/${talk['id']}')).status, 404);
+    expect(await listed('${talk['id']}'), isEmpty);
+    for (final word in ['Referat', 'vortrag', 'talk', null]) {
+      expect((await api(hub, 'POST', '/api/ui/deadlines', {'kind': word, 'title': 'Falsches Wort', 'date': day(5)})).status, 400, reason: '$word');
+    }
+  });
+
+  test('a grade can be marked as a presentation, and one the older screens call Referat is shown as one', () async {
+    final hub = bridge();
+    const own = {'custom': true, 'name': 'Biologie', 'short': 'Bio', 'hue': 'jade', 'type': 'GK', 'teacher': '', 'room': ''};
+    expect((await api(hub, 'PUT', '/api/ui/store/app-subjects', {'items': {'bio-own': own}, 'removed': []})).status, 200);
+    Future<Map> school() async =>
+        pageData((await hub.handle(const UiBridgeRequest(method: 'GET', path: '/hub/school', navigate: true))).body as String)['page'] as Map;
+    final semester = (await school())['semester'];
+    final made = await api(hub, 'POST', '/api/ui/grades', {'subject': 'bio-own', 'points': 13, 'type': 'vortrag', 'semester': semester, 'title': 'Stadtklima'});
+    expect(made.status, 200);
+    final grade = (jsonDecode(made.body as String) as Map)['grade'] as Map;
+    expect(grade['type'], 'vortrag');
+    final db = await UiDb.open();
+    final stamp = DateTime.now().toIso8601String();
+    expect((await db.query('grades', where: 'id = ?', whereArgs: ['${grade['id']}'.substring(2)])).single['type'], 'Vortrag');
+    await db.insert('grades', {'id': 'older-screen', 'subject_id': 'bio-own', 'semester': semester, 'type': 'Referat', 'points': 11, 'grade_system': 'points', 'date': stamp, 'created_at': stamp});
+    await db.insert('grades', {'id': 'older-other', 'subject_id': 'bio-own', 'semester': semester, 'type': 'Hausarbeit', 'points': 9, 'grade_system': 'points', 'date': stamp, 'created_at': stamp});
+    final types = {for (final item in ((await school())['grades'] as List).cast<Map>()) item['id']: item['type']};
+    expect(types[grade['id']], 'vortrag');
+    expect(types['g-older-screen'], 'vortrag');
+    expect(types['g-older-other'], 'sonstiges');
+  });
+
   test('stored settings are read back into the next page', () async {
     final hub = bridge();
     final saved = await api(hub, 'PUT', '/api/ui/store/app-task-filter', '"woche"');
@@ -174,7 +237,7 @@ void main() {
     final hub = bridge();
     final when = DateTime.now().add(const Duration(days: 3));
     final day = '${when.year}-${when.month.toString().padLeft(2, '0')}-${when.day.toString().padLeft(2, '0')}';
-    for (final kind in ['Test', 'Klausur', 'Hausaufgabe']) {
+    for (final kind in ['Test', 'Klausur', 'Vortrag', 'Hausaufgabe']) {
       final created = await api(hub, 'POST', '/api/ui/deadlines', {'kind': kind, 'title': 'T' * title, 'date': day, 'detail': 'D' * detail});
       final saved = (jsonDecode(created.body as String) as Map)['deadline'] as Map;
       expect([(saved['title'] as String).length, (saved['detail'] as String).length], [title, detail], reason: kind);

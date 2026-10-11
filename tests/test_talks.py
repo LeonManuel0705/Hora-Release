@@ -4,6 +4,7 @@
 import json
 import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,8 @@ from app import database as db
 from app import ui_data
 from app.crypto_utils import decrypt_file
 
+ROOT = Path(__file__).resolve().parent.parent
+PHONE = ROOT / 'flutter_app' / 'lib' / 'web_ui'
 PAGES = ['/hub', '/hub/tasks', '/hub/calendar', '/hub/school']
 
 
@@ -142,3 +145,18 @@ def test_every_kind_of_entry_has_its_word_its_store_and_its_file():
     stores = [store for store, _ in ui_data.DEADLINE_KINDS.values()]
     assert all(store in ui_data.FILES and store in ui_data._locks for store in stores)
     assert len({ui_data.FILES[store] for store in stores}) == len(stores)
+
+
+def phone_table(name):
+    source = (PHONE / 'ui_data.dart').read_text(encoding='utf-8')
+    body = re.search(rf'^const {name} = \{{(.*?)\}};$', source, re.M).group(1)
+    return dict(re.findall(r"'([^']+)': '([^']+)'", body))
+
+
+def test_the_phone_keeps_the_same_kinds_as_the_server():
+    assert phone_table('uiDeadlineKinds') == {prefix: word for prefix, (_, word) in ui_data.DEADLINE_KINDS.items()}
+    assert set(phone_table('uiDeadlineTables')) == set(ui_data.DEADLINE_KINDS)
+    assert set(phone_table('uiGradeWords')) == set(ui_data.GRADE_TYPES)
+    assert set(phone_table('uiGradeTypes').values()) <= set(ui_data.GRADE_TYPES)
+    made = re.search(r'for \(final table in const \[(.*?)\]\)', (PHONE / 'ui_db.dart').read_text(encoding='utf-8')).group(1)
+    assert set(re.findall(r"'(\w+)'", made)) == set(phone_table('uiDeadlineTables').values()) - {'homework'}

@@ -265,7 +265,7 @@ class UiApi {
     final now = DateTime.now().toIso8601String();
     if (path.length == 2 && request.method == 'POST') {
       final payload = _needPayload(request);
-      final prefix = {'Hausaufgabe': 'hw', 'Test': 'test', 'Klausur': 'exam'}[payload['kind']];
+      final prefix = uiDeadlinePrefixes[payload['kind']];
       if (prefix == null) return UiReply.error('Unbekannte Art');
       final item = <String, Object?>{'id': _uuid.v4(), 'subject_id': null, 'notes': '', 'created_at': now};
       if (prefix == 'hw') {

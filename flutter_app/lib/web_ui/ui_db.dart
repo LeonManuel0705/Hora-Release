@@ -50,7 +50,7 @@ class UiDb {
 
   static Future<void> _migrate(Database db) async {
     await db.execute('CREATE TABLE IF NOT EXISTS ui_store (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)');
-    for (final table in const ['tests', 'exams']) {
+    for (final table in const ['tests', 'exams', 'talks']) {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS $table (
           id TEXT PRIMARY KEY,
