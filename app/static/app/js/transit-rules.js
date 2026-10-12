@@ -14,12 +14,19 @@ export function ownTickets(saved) {
   return { germany: saved?.deutschlandticket === true, passes };
 }
 
+const berlinWithC = (pass) => pass.net === "Berlin" && pass.zones === "ABC";
+
 export function coveringPass(fare, passes) {
   if (!fare?.net || !fare.zones) return null;
   return passes.find((pass) => {
     if (pass.net === fare.net) return [...fare.zones].every((zone) => pass.zones.includes(zone));
-    return pass.net === "Berlin" && pass.zones === "ABC" && fare.net === "Potsdam" && fare.zones === "AB";
+    return berlinWithC(pass) && fare.net === "Potsdam" && fare.zones === "AB";
   }) || null;
+}
+
+export function doubtfulPass(fare, passes) {
+  if (fare?.net !== "Potsdam" || fare.zones !== "ABC") return null;
+  return passes.find(berlinWithC) || null;
 }
 
 export function cheapest(fare) {
@@ -34,14 +41,19 @@ export function ticketState(journey, own, fare, asked) {
   const pass = coveringPass(fare, own.passes);
   if (pass) return { tone: "own", text: `Geht mit deiner Zeitkarte ${passName(pass)}.` };
   const many = own.passes.length > 1;
-  const mine = own.passes.length ? `${many ? "Deine Zeitkarten" : "Deine Zeitkarte"} ${own.passes.map(passName).join(" und ")} ${many ? "gelten" : "gilt"} hier nicht. ` : "";
+  const names = own.passes.map(passName).join(" und ");
   if (fare) {
     const best = cheapest(fare);
-    return { tone: "pay", price: best.price, text: `${mine}Günstigstes Ticket: ${best.name} für ${price(best.price)}${best.reduced ? `, ermäßigt ${price(best.reduced)}` : ""}.`, hint: !mine };
+    const costs = `Günstigstes Ticket: ${best.name} für ${price(best.price)}${best.reduced ? `, ermäßigt ${price(best.reduced)}` : ""}.`;
+    const unsure = doubtfulPass(fare, own.passes);
+    if (unsure) return { tone: "pay", price: best.price, text: `Ob deine Zeitkarte ${passName(unsure)} hier reicht, ist nicht sicher, denn Potsdam C liegt nur zum Teil in Berlin C. ${costs}` };
+    const mine = names ? `${many ? "Deine Zeitkarten" : "Deine Zeitkarte"} ${names} ${many ? "reichen" : "reicht"} hier nicht. ` : "";
+    return { tone: "pay", price: best.price, text: `${mine}${costs}`, hint: !names };
   }
-  if (mine && !journey.fare) return { tone: "pay", text: `${mine}Mit dem Deutschlandticket geht es.` };
-  if (mine && asked) return { tone: "pay", text: `Ob ${many ? "deine Zeitkarten hier gelten" : "deine Zeitkarte hier gilt"}, ließ sich gerade nicht prüfen. Mit dem Deutschlandticket geht es.` };
-  return { tone: "any", text: "Geht mit dem Deutschlandticket.", hint: !mine && asked };
+  if (!names) return { tone: "any", text: "Geht mit dem Deutschlandticket.", hint: asked };
+  const whether = many ? `Ob deine Zeitkarten ${names} hier gelten` : `Ob deine Zeitkarte ${names} hier gilt`;
+  if (!asked) return { tone: "pay", text: `${whether}, wird geprüft.` };
+  return { tone: "pay", text: `${whether}, ließ sich ${journey.fare ? "gerade nicht" : "für diese Strecke nicht"} prüfen.` };
 }
 
 export function matchFare(journey, options) {

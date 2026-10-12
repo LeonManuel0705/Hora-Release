@@ -6,6 +6,7 @@ import re
 import threading
 import time
 from datetime import date, datetime
+from pathlib import Path
 
 from flask import Blueprint, current_app, g, jsonify, render_template, request, send_file
 
@@ -33,6 +34,13 @@ PAGES = {
     'pomodoro': ('/hub/pomodoro', 'app/pomodoro.html'),
     'settings': ('/hub/settings', 'app/settings.html'),
 }
+
+
+def code_stamp():
+    return max((path.stat().st_mtime_ns for path in Path(__file__).resolve().parent.glob('*.py')), default=0)
+
+
+LOADED_CODE = code_stamp()
 
 
 def script_json(value):
@@ -76,6 +84,7 @@ def render_page(active):
         store_json=script_json(store),
         asset_version=int(time.time()),
         offline_worker=True,
+        server_behind=code_stamp() != LOADED_CODE,
     )
 
 

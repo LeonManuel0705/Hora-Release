@@ -938,4 +938,5 @@ export function initShell() {
   renderNotify();
   placeIndicator(true);
   document.fonts?.ready.then(() => placeIndicator(true));
+  if (document.body.dataset.serverBehind === "1") toast(`${BRAND} wurde aktualisiert. Beende ${BRAND} und öffne es neu, damit alles zusammenpasst.`, { icon: "refresh-cw", duration: 12000 });
 }

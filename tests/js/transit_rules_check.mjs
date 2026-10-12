@@ -3,7 +3,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { resolve, dirname } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { ownTickets, coveringPass, cheapest, ticketState, matchFare, usualFare, mapsApp, walkUrl } = await import(pathToFileURL(resolve(here, "../../app/static/app/js/transit-rules.js")).href);
+const { ownTickets, coveringPass, doubtfulPass, cheapest, ticketState, matchFare, usualFare, mapsApp, walkUrl } = await import(pathToFileURL(resolve(here, "../../app/static/app/js/transit-rules.js")).href);
 
 const fare = (net, zones, single, short = null) => ({ start: "2026-10-12T08:00:00+02:00", end: "2026-10-12T08:20:00+02:00", net, zones, single: { label: net ? `${net} ${zones}` : "Regionaltarif über 25 bis 35 km", price: single, reduced: null }, short });
 const pass = (net, zones) => ({ net, zones });
@@ -25,11 +25,30 @@ const tests = {
     assert.equal(coveringPass(fare(null, null, 8.1), mine), null);
     assert.equal(coveringPass(undefined, mine), null);
   },
-  "berlin with zone c reaches into the town of potsdam and no further"() {
+  "berlin with zone c reaches into the town of potsdam and maybe further"() {
     const mine = [pass("Berlin", "ABC")];
     assert.equal(coveringPass(fare("Potsdam", "AB", 3), mine), mine[0]);
     assert.equal(coveringPass(fare("Potsdam", "ABC", 3.7), mine), null);
+    assert.equal(doubtfulPass(fare("Potsdam", "ABC", 3.7), mine), mine[0]);
     assert.equal(coveringPass(fare("Potsdam", "AB", 3), [pass("Berlin", "AB")]), null);
+    assert.equal(doubtfulPass(fare("Potsdam", "ABC", 3.7), [pass("Berlin", "AB"), pass("Cottbus", "ABC")]), null);
+    assert.equal(doubtfulPass(fare("Berlin", "ABC", 5), mine), null);
+    assert.equal(ticketState(regional, ownTickets({ passes: mine }), fare("Potsdam", "ABC", 3.7), true).text, "Ob deine Zeitkarte Berlin ABC hier reicht, ist nicht sicher, denn Potsdam C liegt nur zum Teil in Berlin C. Günstigstes Ticket: Einzelfahrausweis Potsdam ABC für 3,70 €.");
+  },
+  "a ride from michendorf to potsdam goes with a pass for potsdam abc"() {
+    const potsdam = ownTickets({ passes: [pass("Potsdam", "ABC")] });
+    assert.deepEqual(ticketState(regional, potsdam, fare("Potsdam", "ABC", 3.7), true), { tone: "own", text: "Geht mit deiner Zeitkarte Potsdam ABC." });
+    assert.deepEqual(ticketState(regional, potsdam, fare("Potsdam", "AB", 3, { label: "Potsdam", price: 2.1, reduced: 1.6 }), true), { tone: "own", text: "Geht mit deiner Zeitkarte Potsdam ABC." });
+  },
+  "an answer without a fare makes no claim about a pass"() {
+    const potsdam = ownTickets({ passes: [pass("Potsdam", "ABC")] });
+    const older = { ticket: "deutschland", legs: [] };
+    for (const [journey, asked] of [[older, true], [abroad, true], [regional, true], [regional, false]]) {
+      const note = ticketState(journey, potsdam, undefined, asked);
+      assert.equal(/reicht|reichen|gilt hier nicht/.test(note.text), false, note.text);
+      assert.equal(note.price, undefined);
+    }
+    assert.equal(ticketState(older, potsdam, undefined, true).text, "Ob deine Zeitkarte Potsdam ABC hier gilt, ließ sich für diese Strecke nicht prüfen.");
   },
   "the cheapest ticket is the short trip where one is offered"() {
     assert.deepEqual(cheapest(fare("Berlin", "AB", 4, { label: "Berlin", price: 2.8, reduced: 2.1 })), { label: "Berlin", price: 2.8, reduced: 2.1, name: "Kurzstrecke Berlin" });
@@ -43,19 +62,23 @@ const tests = {
     assert.deepEqual(ticketState(regional, ownTickets({ deutschlandticket: true }), berlin, true), { tone: "own", text: "Geht mit deinem Deutschlandticket." });
     assert.deepEqual(ticketState(regional, ownTickets({ passes: [pass("Berlin", "ABC")] }), berlin, true), { tone: "own", text: "Geht mit deiner Zeitkarte Berlin ABC." });
     const potsdam = ownTickets({ passes: [pass("Potsdam", "ABC")] });
-    assert.equal(ticketState(regional, potsdam, berlin, true).text, "Deine Zeitkarte Potsdam ABC gilt hier nicht. Günstigstes Ticket: Einzelfahrausweis Berlin ABC für 5,00 €, ermäßigt 3,50 €.");
+    assert.equal(ticketState(regional, potsdam, berlin, true).text, "Deine Zeitkarte Potsdam ABC reicht hier nicht. Günstigstes Ticket: Einzelfahrausweis Berlin ABC für 5,00 €, ermäßigt 3,50 €.");
     assert.equal(ticketState(regional, potsdam, berlin, true).hint, false);
+    assert.equal(ticketState(regional, ownTickets({ passes: [pass("Potsdam", "AB")] }), fare("Potsdam", "ABC", 3.7), true).text, "Deine Zeitkarte Potsdam AB reicht hier nicht. Günstigstes Ticket: Einzelfahrausweis Potsdam ABC für 3,70 €.");
+    assert.equal(ticketState(regional, potsdam, fare(null, null, 8.1), true).text, "Deine Zeitkarte Potsdam ABC reicht hier nicht. Günstigstes Ticket: Einzelfahrausweis (Regionaltarif über 25 bis 35 km) für 8,10 €.");
     const both = ownTickets({ passes: [pass("Potsdam", "AB"), pass("Cottbus", "AB")] });
-    assert.equal(ticketState(regional, both, berlin, true).text.startsWith("Deine Zeitkarten Potsdam AB und Cottbus AB gelten hier nicht. "), true);
+    assert.equal(ticketState(regional, both, berlin, true).text.startsWith("Deine Zeitkarten Potsdam AB und Cottbus AB reichen hier nicht. "), true);
   },
   "without a price the note stays with what is certain"() {
     assert.deepEqual(ticketState(regional, none, undefined, false), { tone: "any", text: "Geht mit dem Deutschlandticket.", hint: false });
     assert.deepEqual(ticketState(regional, none, null, true), { tone: "any", text: "Geht mit dem Deutschlandticket.", hint: true });
     assert.deepEqual(ticketState(abroad, none, undefined, true), { tone: "any", text: "Geht mit dem Deutschlandticket.", hint: true });
     const potsdam = ownTickets({ passes: [pass("Potsdam", "ABC")] });
-    assert.equal(ticketState(regional, potsdam, undefined, false).text, "Geht mit dem Deutschlandticket.");
-    assert.equal(ticketState(regional, potsdam, null, true).text, "Ob deine Zeitkarte hier gilt, ließ sich gerade nicht prüfen. Mit dem Deutschlandticket geht es.");
-    assert.equal(ticketState(abroad, potsdam, undefined, true).text, "Deine Zeitkarte Potsdam ABC gilt hier nicht. Mit dem Deutschlandticket geht es.");
+    assert.deepEqual(ticketState(regional, potsdam, undefined, false), { tone: "pay", text: "Ob deine Zeitkarte Potsdam ABC hier gilt, wird geprüft." });
+    assert.equal(ticketState(regional, potsdam, null, true).text, "Ob deine Zeitkarte Potsdam ABC hier gilt, ließ sich gerade nicht prüfen.");
+    assert.equal(ticketState(abroad, potsdam, undefined, true).text, "Ob deine Zeitkarte Potsdam ABC hier gilt, ließ sich für diese Strecke nicht prüfen.");
+    const both = ownTickets({ passes: [pass("Potsdam", "AB"), pass("Cottbus", "AB")] });
+    assert.equal(ticketState(regional, both, null, true).text, "Ob deine Zeitkarten Potsdam AB und Cottbus AB hier gelten, ließ sich gerade nicht prüfen.");
     assert.equal(ticketState({ ticket: "fern" }, potsdam, undefined, true).tone, "fern");
     assert.equal(ticketState({ ticket: "fuss" }, none, undefined, true), null);
   },

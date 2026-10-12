@@ -381,6 +381,14 @@ def test_mobile_ui_assets_are_current():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_a_page_says_when_the_server_runs_older_code_than_its_folder_holds(client, monkeypatch):
+    from app import ui_pages
+
+    assert 'data-server-behind="0"' in client.get("/hub/vbb").get_data(as_text=True)
+    monkeypatch.setattr(ui_pages, "LOADED_CODE", ui_pages.LOADED_CODE - 1)
+    assert 'data-server-behind="1"' in client.get("/hub/vbb").get_data(as_text=True)
+
+
 def test_every_text_button_keeps_its_label_in_a_span_for_the_hover_line():
     sources = [*(ROOT / "app" / "templates" / "app").glob("*.html"), *(ROOT / "app" / "static" / "app" / "js").rglob("*.js")]
     buttons = [(source.name, match.group(2)) for source in sources for match in re.finditer(r'<(button|a)\b[^>]*class="text-button[^>]*>(.*?)</\1>', source.read_text(encoding="utf-8"), re.S)]
