@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 # SPDX-License-Identifier: AGPL-3.0-only
 
+import os
 import json
 import base64
 import hashlib
@@ -9,6 +10,7 @@ from pathlib import Path
 import pytest
 from cryptography.fernet import Fernet
 
+from app import crypto_utils
 from app.crypto_utils import (
     encrypt_json,
     decrypt_json,
@@ -150,3 +152,34 @@ class TestLegacySaltPrefixMigration:
         raw = filepath.read_text()
         assert raw.startswith(_SALT_PREFIX)
         assert decrypt_json(raw) == data
+
+
+class TestSecretKeyFile:
+    @pytest.fixture
+    def key_file(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("SECRET_KEY")
+        monkeypatch.setattr(crypto_utils, "DATA_DIR", tmp_path / "data")
+        return tmp_path / "data" / ".secret_key"
+
+    def test_fresh_data_dir_gets_a_key_that_is_kept(self, key_file):
+        key = crypto_utils._get_secret_key()
+        assert len(key) == 64 and bytes.fromhex(key)
+        assert key_file.read_text() == key
+        assert crypto_utils._get_secret_key() == key
+
+    def test_key_is_created_where_the_system_has_no_nofollow(self, key_file, monkeypatch):
+        monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+        key = crypto_utils._get_secret_key()
+        assert key_file.read_text() == key
+
+    @pytest.mark.skipif(os.name == "nt", reason="symbolic links need extra rights on Windows")
+    @pytest.mark.parametrize("nofollow", [True, False])
+    def test_key_is_never_written_through_a_link(self, key_file, tmp_path, monkeypatch, nofollow):
+        if not nofollow:
+            monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+        target = tmp_path / "elsewhere"
+        key_file.parent.mkdir()
+        key_file.symlink_to(target)
+        with pytest.raises(FileNotFoundError):
+            crypto_utils._get_secret_key()
+        assert not target.exists()

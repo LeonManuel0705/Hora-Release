@@ -54,7 +54,7 @@ def _get_secret_key() -> str:
     key = os.urandom(32).hex()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     try:
-        fd = os.open(str(key_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+        fd = os.open(str(key_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, 'O_NOFOLLOW', 0), 0o600)
     except FileExistsError:
         return _validate_secret(key_file.read_text().strip(), str(key_file))
     try:
