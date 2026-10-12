@@ -3,7 +3,7 @@ import {
   isoDate, minutesOf, lessonsFor, nextSchoolDay, WEEKDAYS, WEEKDAYS_SHORT,
   LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, activeSubjectKeys, motionDefault, slug, teacherLabel, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
-import { toast, setTheme, pageUrl, syncTime } from "../shell.js";
+import { toast, setTheme, syncTime } from "../shell.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};

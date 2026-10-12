@@ -1,8 +1,8 @@
 import {
   data, flags, esc, icon, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, abWeeks, isoWeek, subject, hueVar, glue, lessonsFor, activeLessons, nextSchoolDay, relativeDay, inDays, duration, shortDate,
-  longDate, eventsOn, nextDeparture, schoolDeparture, weatherAt, rainFrom, hourIcon, hasWeather, storage, changesFor, ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, nextRepeatDate, followLinks, homeworkDate,
-  WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "./core.js";
+  longDate, eventsOn, nextDeparture, weatherAt, rainFrom, hourIcon, hasWeather, storage, changesFor, ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, nextRepeatDate, followLinks, homeworkDate,
+  WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "./core.js";
 import { animates, travels, rich, level, flipKeyed, exitInPlace, enterInPlace, setDigits, pop, crossfade, swapText, breath, chalkCheck, bezier, token, ms } from "./motion.js";
 import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
 import { toast, openPage, registerSearch, typing, shortcutsEnabled, overlayOpen, placeNear, clampSheet, parseNote, cleanTitle, syncTime } from "./shell.js";
@@ -16,7 +16,6 @@ const WRITTEN_DAYS = 14;
 const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const clamp = (value, low = 0, high = 1) => Math.min(high, Math.max(low, value));
 const widow = (text) => text.replace(/ (\S{1,12})$/, "\u00a0$1");
-const nb = (text) => String(text).replace(/ /g, " ");
 
 const state = {
   tasks: flags.empty ? [] : [...data.tasks, ...(data.taskPool || []).filter((task) => !task.done && task.date && !task.someday)].map((task) => ({ ...task })),
@@ -59,7 +58,6 @@ const todayTasks = () => state.tasks.filter(isTodayTask);
 const openTasks = () => todayTasks().filter((task) => !task.done);
 const doneTasks = () => todayTasks().filter((task) => task.done);
 const upcomingTasks = () => state.tasks.filter((task) => !isTodayTask(task) && !task.done);
-const deadlineById = (id) => state.deadlines.find((item) => item.id === id);
 const byPriority = (a, b) => Number(!!b.priority) - Number(!!a.priority);
 const rowFor = (id) => document.querySelector(`#taskList .task[data-id="${CSS.escape(id)}"], #doneList .task[data-id="${CSS.escape(id)}"]`);
 const label = (key) => subject(key).label;
@@ -83,21 +81,6 @@ function effort(min) {
   return `${hours}${halves % 2 ? "½" : ""} Std.`;
 }
 
-function weatherWord(item) {
-  if (item.rain >= 50) return `Regen, ${item.rain} %`;
-  if (item.rain >= 30) return `Niesel, ${item.rain} %`;
-  return "trocken";
-}
-
-function weatherPhrase(fromHour) {
-  const rain = rainFrom(fromHour);
-  if (rain == null) return fromHour >= 17 ? "den Abend über trocken" : "bis zum Abend trocken";
-  if (rain <= fromHour) return `Regen um ${fromHour} Uhr`;
-  return `trocken bis ${rain} Uhr`;
-}
-
-const weatherButton = (text, tail = "") => `<span class="glue"><button type="button" class="inline-action" data-open-weather popovertarget="weatherSheet">${text}</button>${tail}</span>`;
-
 function overdueText(diff, target) {
   if (diff === -1) return "seit gestern überfällig";
   if (diff > -7) return `seit ${-diff} Tagen überfällig`;
@@ -117,17 +100,6 @@ function changeLine(day) {
   return `<p class="today-change">${icon("calendar-x-2")}<span>${esc(lines.join(". "))}.</span></p>`;
 }
 
-function lessonMeta(lesson, prefix = "") {
-  const room = lesson.movedFrom ? `<b>${esc(lesson.room)}</b> statt ${esc(lesson.movedFrom)}` : `<b>${esc(lesson.room)}</b>`;
-  return `${prefix}${room}, ${esc(lesson.teacher)}`;
-}
-
-function timeLine(parts) {
-  if (parts.plain != null) return `<p class="today-time is-plain">${parts.plain}</p>`;
-  const value = parts.value != null ? `<span class="today-count digits" data-digits="${esc(parts.value)}">${esc(parts.value)}</span>` : "";
-  return `<p class="today-time"><span class="today-time-visual" aria-hidden="true"><span class="today-time-lead">${esc(parts.lead)}</span>${value}${parts.unit ? `<span class="today-time-unit">${esc(parts.unit)}</span>` : ""}${parts.tail ? `<span class="today-time-tail">${esc(parts.tail)}</span>` : ""}</span><span class="visually-hidden" data-sr-time></span></p>`;
-}
-
 function reachableBus(day) {
   const fromMin = Math.max(day.last.endMin, day.nowMin);
   const bus = nextDeparture(fromMin);
@@ -135,175 +107,6 @@ function reachableBus(day) {
   const earlier = nextDeparture(day.last.endMin);
   const missed = earlier && earlier.time !== bus.time ? earlier.time : null;
   return { ...bus, missed };
-}
-
-function morningBus(day) {
-  if (day.kind !== "morning" && day.kind !== "soon") return null;
-  const bus = schoolDeparture(day.lesson.startMin, day.nowMin);
-  if (!bus) return null;
-  const leave = bus.leave - day.nowMin;
-  return leave <= 10 || bus.late ? { ...bus, leaveIn: Math.max(0, leave) } : null;
-}
-
-function heroNow(day) {
-  const change = inSchool(day) ? changeLine(day) : "";
-  const title = (text) => `<h2 class="today-title" id="todayTitle">${esc(text)}</h2>`;
-  const busNow = morningBus(day);
-  if (busNow) {
-    const arrival = busNow.late ? `, <span class="today-late">an ${busNow.arrive}, ${busNow.lateBy}\u00a0Min. nach Beginn</span>` : "";
-    const missed = busNow.missed ? `<p class="today-meta is-quiet">Der Bus um ${esc(busNow.missed)} ${day.nowMin >= toMin(busNow.missed) ? "ist schon weg" : "ist nicht mehr zu schaffen"}.</p>` : "";
-    const parts = busNow.leaveIn > 0
-      ? { lead: "Los in", value: String(busNow.leaveIn), unit: "Min.", tail: "", sr: `Los in ${spoken(busNow.leaveIn)}, Abfahrt ${busNow.time}.` }
-      : { lead: "Jetzt los", value: null, unit: "", tail: "", sr: `Jetzt los, Abfahrt ${busNow.time}.` };
-    return {
-      html: `${change}${title(`${busNow.mode} ${busNow.line} um ${busNow.time}`)}<p class="today-meta">ab <b>${esc(busNow.from)}</b>, ${busNow.walk}\u00a0Min. zu Fuß${arrival}</p>${missed}`,
-      parts,
-    };
-  }
-  if (day.kind === "lesson") {
-    const lesson = day.lesson;
-    const left = lesson.endMin - day.nowMin;
-    return {
-      html: `${change}${title(label(lesson.subject))}<p class="today-meta">${lessonMeta(lesson, `${lesson.block}. Block, `)}</p>`,
-      parts: { lead: "noch", value: String(left), unit: "Min.", tail: `bis ${hm(lesson.end)}`, sr: `Noch ${spoken(left)} bis ${hm(lesson.end)}.` },
-    };
-  }
-  if (day.kind === "break" || day.kind === "soon" || day.kind === "morning") {
-    const lesson = day.lesson;
-    const wait = lesson.startMin - day.nowMin;
-    const meta = `<p class="today-meta">${lessonMeta(lesson, `${lesson.block}. Block, `)}</p>`;
-    let parts;
-    if (day.kind === "break") parts = { lead: "Pause, noch", value: String(wait), unit: "Min.", tail: `bis ${hm(lesson.start)}`, sr: `Pause, noch ${spoken(wait)} bis ${hm(lesson.start)}.` };
-    else if (day.kind === "soon") parts = { lead: "Beginn in", value: String(wait), unit: "Min.", tail: `um ${hm(lesson.start)}`, sr: `Beginn in ${spoken(wait)} um ${hm(lesson.start)}.` };
-    else parts = { lead: "Beginn um", value: hm(lesson.start), unit: "Uhr,", tail: `in ${duration(wait)}`, sr: `Beginn um ${hm(lesson.start)} Uhr, in ${spoken(wait)}.` };
-    return { html: `${change}${title(label(lesson.subject))}${meta}`, parts };
-  }
-  if (day.kind === "afterSoon") {
-    const bus = reachableBus(day);
-    if (bus) {
-      const departs = toMin(bus.time) + bus.delay;
-      const leave = departs - bus.walk - day.nowMin;
-      const delay = bus.delay ? `, heute ${bus.delay} Min. später` : "";
-      const missed = bus.missed ? `<p class="today-meta is-quiet">Der Bus um ${esc(bus.missed)} ${day.nowMin >= toMin(bus.missed) ? "ist schon weg" : "ist nicht mehr zu schaffen"}.</p>` : "";
-      const parts = leave > 0
-        ? { lead: "Los in", value: String(leave), unit: "Min.", tail: "", sr: `Los in ${spoken(leave)}, Abfahrt ${clock(departs)}.` }
-        : { lead: "Jetzt los", value: null, unit: "", tail: "", sr: `Jetzt los, Abfahrt ${clock(departs)}.` };
-      return {
-        html: `${title(`${bus.mode} ${bus.line} um ${bus.time}`)}<p class="today-meta">ab <b>${esc(bus.from)}</b>, ${bus.walk} Min. zu Fuß${delay}</p>${missed}`,
-        parts,
-      };
-    }
-  }
-  const school = day.school || nextSchoolDay(day.date);
-  if (!school) {
-    return { html: `${title("Kein Unterricht")}<p class="today-meta">In den nächsten zehn Tagen steht nichts im Stundenplan.</p>`, parts: { plain: "" } };
-  }
-  const first = school.lessons[0];
-  const lastLesson = school.lessons[school.lessons.length - 1];
-  const when = cap(relativeDay(school.offset, school.date));
-  const test = testOnDate(isoDate(school.date));
-  const testText = test ? `, <span class="today-flagline">${esc(subject(test.subject).name.replace(/ LK$/, ""))}-${esc(test.kind)} im ${test.block}. Block</span>` : "";
-  const weekNote = school.offset > 1 && abWeeks() ? `, ${weekType(school.date)}-Woche` : "";
-  const count = school.lessons.length;
-  return {
-    html: `${title(label(first.subject))}<p class="today-meta">${esc(when)}, ${first.block}. Block um ${hm(first.start)}, <b>${esc(first.room)}</b></p>`,
-    parts: { plain: `${count} ${count === 1 ? "Block" : "Blöcke"} bis ${hm(lastLesson.end)}${weekNote}${testText}` },
-  };
-}
-
-function nextBlock(labelText, main, meta) {
-  return `<p class="today-next-line"><span class="today-next-label">${labelText}</span><span class="today-next-main">${main}</span></p><p class="today-next-meta">${meta}</p>`;
-}
-
-function heroNext(day) {
-  const busNow = morningBus(day);
-  if (busNow) {
-    const lesson = day.lesson;
-    return nextBlock("Danach", esc(label(lesson.subject)), `<b>${esc(lesson.room)}</b>, ${hm(lesson.start)}`);
-  }
-  if (inSchool(day)) {
-    const next = day.next;
-    if (next) {
-      const room = next.movedFrom ? `<b>${esc(next.room)}</b> statt ${esc(next.movedFrom)}` : `<b>${esc(next.room)}</b>`;
-      return nextBlock("Danach", esc(label(next.subject)), `${room}, ${hm(next.start)}`);
-    }
-    const last = day.active[day.active.length - 1];
-    const bus = nextDeparture(last.endMin);
-    return nextBlock("Danach", "Schulschluss", `um ${hm(last.end)}${bus ? `, ${esc(bus.mode)} ${esc(bus.line)} um <b>${esc(bus.time)}</b>` : ""}`);
-  }
-  const later = eventsOn(day.date).filter((event) => event.start && toMin(event.start) > day.nowMin);
-  if (later.length) {
-    const event = later[0];
-    return nextBlock(day.kind === "afterSoon" ? "Danach" : "Heute noch", esc(event.title), `<b>${esc(event.start)}</b>, ${esc(event.place)}`);
-  }
-  const lateTask = (task) => !!task.dueTime && day.nowMin >= toMin(task.dueTime);
-  const evening = (task) => /heute abend/i.test(task.anchor || "");
-  const open = openTasks().sort((a, b) => Number(lateTask(a)) - Number(lateTask(b)) || Number(evening(b)) - Number(evening(a)) || byPriority(a, b));
-  if (open.length && day.nowMin >= 13 * 60) {
-    const task = open[0];
-    const note = task.deadline ? linkPhrase(task, day.date) : "";
-    return nextBlock(day.kind === "evening" ? "Heute Abend noch" : "Heute noch", glue(esc(task.title)), `etwa ${effort(task.minutes || 20)}${note ? `, ${glue(esc(note))}` : ""}`);
-  }
-  const upcoming = state.deadlines
-    .map((item) => ({ ...item, diff: dayDiff(day.date, item.date) }))
-    .filter((item) => item.diff >= 1 && !item.pinned && item.status !== "abgegeben")
-    .sort((a, b) => a.diff - b.diff || Number(isAssessment(b)) - Number(isAssessment(a)))[0];
-  if (upcoming) {
-    const target = parseDate(upcoming.date);
-    const labelText = ASSESSMENTS[upcoming.kind]?.next || (upcoming.kind === "Hausaufgabe" ? "Nächste Hausaufgabe" : "Nächste Abgabe");
-    const block = upcoming.block ? ` im ${upcoming.block}. Block` : "";
-    return nextBlock(labelText, esc(label(upcoming.subject)), `<b>${esc(cap(relativeDay(upcoming.diff, target)))}</b>${block}, ${esc(glue(upcoming.title))}`);
-  }
-  return nextBlock("Heute noch", "nichts geplant", "Kalender und IServ sind abgeglichen");
-}
-
-function heroAfter(day) {
-  const pieces = [];
-  if (day.kind === "lesson" || day.kind === "break") {
-    const last = day.active[day.active.length - 1];
-    const bus = nextDeparture(last.endMin);
-    if (bus) {
-      const delay = bus.delay ? `, heute ${bus.delay} Min. später` : "";
-      const hour = Math.floor(toMin(bus.time) / 60);
-      const late = delay ? delay.replace(/^, /, "") : "";
-      const weather = hasWeather() ? weatherButton(weatherPhrase(hour), ".") : "";
-      const tail = weather ? `${late ? ` ${late},` : ""} ${weather}` : late ? ` ${late}.` : "";
-      pieces.push(`Heimweg mit dem <span class="glue"><button type="button" class="inline-action" data-page-action="vbb">${esc(bus.mode)} ${esc(bus.line)} um ${esc(bus.time)}</button>${tail ? "," : "."}</span>${tail}`);
-    }
-    const evening = eventsOn(day.date).filter((event) => event.start && toMin(event.start) >= last.endMin);
-    if (evening.length) pieces.push(`Danach ${evening.map((event) => `${esc(event.start)} ${esc(event.title)}`).join(" und ")}.`);
-  } else if (day.kind === "soon" || day.kind === "morning") {
-    const first = day.active[0];
-    const bus = morningBus(day) ? null : schoolDeparture(first.startMin, day.nowMin);
-    const hour = Math.max(6, Math.floor(day.nowMin / 60));
-    const current = weatherAt(hour);
-    if (bus) {
-      const leave = bus.leave - day.nowMin;
-      const when = leave <= 15 ? `los in ${leave}\u00a0Minuten` : `los um ${clock(bus.leave)}`;
-      pieces.push(`Zur Schule mit dem <span class="glue"><button type="button" class="inline-action" data-page-action="vbb">${esc(bus.mode)} ${esc(bus.line)} um ${esc(bus.time)}</button>,</span> ${when}.`);
-    }
-    const last = day.active[day.active.length - 1];
-    pieces.push(current ? `Draußen ${weatherButton(`${current.temp}°, ${weatherPhrase(hour)}`, ".")} Schluss um ${hm(last.end)}.` : `Schluss um ${hm(last.end)}.`);
-  } else {
-    const later = eventsOn(day.date).filter((event) => event.start && toMin(event.start) > day.nowMin);
-    const outdoor = hasWeather() ? later.find((event) => event.place && !/discord|online|zoom/i.test(event.place)) : null;
-    if (outdoor) {
-      const item = weatherAt(Math.floor(toMin(outdoor.start) / 60));
-      pieces.push(`${esc(outdoor.title)} um ${esc(outdoor.start)}: ${weatherButton(weatherWord(item), ".")}`);
-    }
-    const rest = later.filter((event) => event !== outdoor && event !== later[0]);
-    if (rest.length) pieces.push(`Später ${rest.map((event) => `${esc(event.start)} ${esc(event.title)}`).join(" und ")}.`);
-    const morning = data.weather.tomorrowMorning;
-    const school = day.school;
-    if (!outdoor && day.nowMin >= 17 * 60 && morning && school?.offset === 1) {
-      const bus = schoolDeparture(school.lessons[0].startMin, 0);
-      pieces.push(`Morgen früh ${weatherButton(`${morning.temp}°, ${morning.rain >= 40 ? "Regen" : "trocken"}`, bus ? "," : ".")}${bus ? ` ${esc(bus.mode)} ${esc(bus.line)} um ${esc(bus.time)}.` : ""}`);
-    } else if (!outdoor && day.nowMin < 22 * 60 && hasWeather()) {
-      const hour = Math.max(7, Math.floor(day.nowMin / 60));
-      pieces.push(`Wetter: ${weatherButton(weatherPhrase(hour), ".")}`);
-    }
-  }
-  return pieces.map((piece) => `<span class="after-piece">${piece}</span>`).join(" ");
 }
 
 function timeInline(parts) {
@@ -495,13 +298,6 @@ function renderHero(day, previous) {
     if (changedFocus && animates()) swapText(nextNode, nextHtml);
     else nextNode.innerHTML = nextHtml;
   }
-  const after = "";
-  const afterNode = $("todayAfter");
-  afterNode.hidden = !after;
-  if (afterNode.dataset.html !== after) {
-    afterNode.dataset.html = after;
-    afterNode.innerHTML = after;
-  }
   if (changedFocus) breath($("trackNow"));
 }
 
@@ -678,17 +474,6 @@ function layoutTrack({ outline = true } = {}) {
   if (marker && !marker.hidden) marker.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: 60, easing: curve, fill: "backwards" });
   const next = $("track").querySelector(".segment.is-next .segment-outline rect");
   if (outline && next) next.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: 320, delay: 60 + segments.length * 40 + 80, easing: curve, fill: "backwards" });
-}
-
-function linkPhrase(task, date) {
-  const item = task.deadline ? deadlineById(task.deadline) : null;
-  if (!item) return "";
-  const diff = dayDiff(date, item.date);
-  if (diff === 0 && item.kind === "Hausaufgabe") return "";
-  const target = parseDate(item.date);
-  const when = item.pinned ? "" : diff === 1 ? " morgen" : diff < 7 ? ` am ${WEEKDAYS[target.getDay()]}` : ` am ${target.getDate()}.${target.getMonth() + 1}.`;
-  const noun = { Test: "den Test", Klausur: "die Klausur", Vortrag: "den Vortrag", Abgabe: item.pinned ? "die Seminararbeit" : "die Abgabe", Hausaufgabe: "die Hausaufgabe" }[item.kind] || "die Abgabe";
-  return `für ${noun}${when}`;
 }
 
 function renderHeader(day) {

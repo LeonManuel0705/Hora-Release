@@ -325,14 +325,9 @@ kbd .icon { --s: 12; }
   color: var(--on-hero);
 }
 
-.today-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.62fr); gap: 28px; align-items: end; }
 .today-title { font-size: var(--text-3xl); font-weight: var(--weight-strong); letter-spacing: -0.03em; line-height: 1.04; text-wrap: balance; }
 .today-meta { margin-top: 10px; font-size: var(--text-base); color: var(--on-hero-soft); }
 .today-meta b { color: var(--on-hero); font-weight: var(--weight-strong); }
-.today-meta.is-quiet { margin-top: 4px; font-size: var(--text-sm); color: var(--on-hero-muted); }
-.today-late { color: var(--urgent-on-hero); font-weight: var(--weight-medium); }
-.today-time { margin-top: 12px; font-size: var(--text-base); color: var(--on-hero-soft); }
-.today-time.is-plain { margin-top: 6px; }
 .today-time-visual { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 0 0.3em; }
 
 .today-count {
@@ -346,8 +341,6 @@ kbd .icon { --s: 12; }
   margin: 0 2px;
 }
 
-.today-flagline { color: var(--urgent-on-hero); font-weight: var(--weight-medium); }
-
 .today-change {
   display: flex;
   align-items: center;
@@ -359,13 +352,6 @@ kbd .icon { --s: 12; }
 }
 
 .today-change .icon { --s: 16; }
-
-.today-next { padding-left: 28px; border-left: 1px solid var(--on-hero-line); }
-.today-next-line { display: grid; gap: 3px; }
-.today-next-label { font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--on-hero-muted); }
-.today-next-main { font-size: var(--text-xl); font-weight: var(--weight-strong); letter-spacing: -0.015em; line-height: 1.2; color: var(--on-hero); text-wrap: balance; }
-.today-next-meta { margin-top: 6px; font-size: var(--text-base); color: var(--on-hero-soft); }
-.today-next-meta b { color: var(--on-hero); font-weight: var(--weight-strong); }
 
 .digits { display: inline-flex; font-variant-numeric: tabular-nums; }
 .digit { position: relative; display: inline-block; overflow: hidden; height: 1.15em; line-height: 1.15em; vertical-align: bottom; }
@@ -505,25 +491,7 @@ kbd .icon { --s: 12; }
 
 @keyframes breath { 50% { scale: 1.6; } }
 
-.today-after { max-width: 62ch; margin-top: 20px; font-size: var(--text-sm); color: var(--on-hero-soft); text-wrap: pretty; }
-.today-after b { color: var(--on-hero); font-weight: var(--weight-strong); }
-.after-piece { display: block; }
 .glue { white-space: nowrap; }
-
-.inline-action {
-  color: var(--on-hero);
-  font-weight: var(--weight-strong);
-  text-decoration: underline;
-  text-decoration-color: var(--on-hero-line-strong);
-  text-decoration-thickness: 1.5px;
-  text-underline-offset: 3px;
-  border-radius: 4px;
-  transition: text-decoration-color var(--dur-hover-out) var(--ease-hover);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .inline-action:hover { text-decoration-color: var(--on-hero); transition-duration: var(--dur-hover-in); }
-}
 
 .columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; margin-top: 32px; }
 
@@ -1256,11 +1224,8 @@ label.switch { position: relative; display: flex; align-items: flex-start; gap: 
   .head-sync { display: inline; }
   .head-summary { display: block; margin-top: 8px; font-size: var(--text-base); color: var(--ink-soft); }
   .today { margin-top: 14px; padding: 18px 16px 16px; border-radius: var(--radius-md); }
-  .today-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  .today-next { padding-left: 0; padding-top: 12px; border-left: 0; border-top: 1px solid var(--on-hero-line); }
   .head-date { font-size: var(--text-xl); }
   .today-title { font-size: var(--text-2xl); }
-  .today-next-main { font-size: var(--text-lg); }
   .track { height: 40px; margin-top: 36px; }
   .segment { align-items: center; padding: 0 6px; border-radius: 8px; }
   .segment-outline rect { rx: 7px; }
@@ -1268,7 +1233,6 @@ label.switch { position: relative; display: flex; align-items: flex-start; gap: 
   .segment-label { font-size: var(--text-sm); }
   .segment-label small { display: none; }
   .segment-flag { top: 2px; right: 2px; padding: 0 4px; }
-  .today-after { margin-top: 16px; }
   .columns { margin-top: 24px; }
   .week .section-head { flex-wrap: wrap; row-gap: 0; }
   .range-long { display: none; }

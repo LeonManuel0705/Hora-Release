@@ -3,7 +3,7 @@ import {
   weekType, abWeeks, isoWeek, subject, hueVar, blockOf, lessonsFor, inDays, duration, shortDate, longDate, storage, ASSESSMENTS, isAssessment, isOverdue, assessmentCount,
   WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "../core.js";
 import { animates, travels, flipKeyed, exitInPlace, crossfade, token, ms } from "../motion.js";
-import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen, registerSearch, syncTime, pageUrl } from "../shell.js";
+import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen, registerSearch, pageUrl } from "../shell.js";
 import { events as eventApi, debounced, serverId } from "../api.js";
 
 const saveText = debounced(700, (key, id, changes) => eventApi.update(id, changes));

@@ -1,5 +1,5 @@
 import {
-  data, flags, params, esc, icon, tinte, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
+  data, flags, params, esc, icon, tinte, now, pinnedTime, toMin, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, isoWeek, subject, hueVar, blockOf, glue, relativeDay, inDays, duration, shortDate, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT,
   abWeeks, gradeScale, activeSubjectKeys, ASSESSMENTS, isAssessment, assessmentCount, pastText, pastWord, homeworkDate,
 } from "../core.js";
@@ -331,13 +331,6 @@ function keepFocus(container, paint) {
   paint();
   if (!key || container.contains(document.activeElement)) return;
   (container.querySelector(key) || container.querySelector("#panelTitle"))?.focus({ preventScroll: true });
-}
-
-function say(text) {
-  const live = $("liveStatus");
-  if (!live) return;
-  live.textContent = "";
-  requestAnimationFrame(() => (live.textContent = text));
 }
 
 function renderHead() {
