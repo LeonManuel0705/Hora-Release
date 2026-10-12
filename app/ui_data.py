@@ -120,6 +120,11 @@ def load_dict(name):
     return value if isinstance(value, dict) else {}
 
 
+def whole_list(name):
+    value = _read(name, strict=True)
+    return value if isinstance(value, list) else []
+
+
 def modify_list(name, change):
     with _locks[name]:
         path = _path(name)
@@ -925,30 +930,34 @@ def semester_for(today, level):
     return f'{level or 10}/{half}'
 
 
+def grade_view(item, subjects, semester, today):
+    subject_key = str(item.get('subject_id') or '')
+    points = item.get('points')
+    if subject_key not in subjects or not isinstance(points, (int, float)):
+        return None
+    return {
+        'id': f"g-{item.get('id')}",
+        'subject': subject_key,
+        'points': int(round(points)),
+        'type': item.get('type') if item.get('type') in GRADE_TYPES else 'sonstiges',
+        'semester': str(item.get('semester') or semester),
+        'date': iso_day(item.get('date')) or today.isoformat(),
+        'title': str(item.get('description') or ''),
+    }
+
+
 def page_school(data, school, settings, today, iserv):
     semester = semester_for(today, settings.get('class_level'))
     grades = []
     history = {}
     for item in load_list('grades'):
-        subject_key = str(item.get('subject_id') or '')
-        points = item.get('points')
-        when = iso_day(item.get('date')) or today.isoformat()
-        if subject_key not in school['shown'] or not isinstance(points, (int, float)):
+        entry = grade_view(item, school['shown'], semester, today)
+        if not entry:
             continue
-        term = str(item.get('semester') or semester)
-        entry = {
-            'id': f"g-{item.get('id')}",
-            'subject': subject_key,
-            'points': int(round(points)),
-            'type': item.get('type') if item.get('type') in GRADE_TYPES else 'sonstiges',
-            'semester': term,
-            'date': when,
-            'title': str(item.get('description') or ''),
-        }
-        if term == semester:
+        if entry['semester'] == semester:
             grades.append(entry)
         else:
-            history.setdefault(subject_key, {}).setdefault(term, []).append(entry['points'])
+            history.setdefault(entry['subject'], {}).setdefault(entry['semester'], []).append(entry['points'])
     history = {key: {term: round(sum(values) / len(values)) for term, values in terms.items()} for key, terms in history.items()}
     return {'courses': school['courses'], 'history': history, 'grades': grades, 'exams': [], 'changes': [], 'seminar': None, 'semester': semester}
 
@@ -962,6 +971,21 @@ def place_view(name, value):
     stop = str(value.get('id') or '')
     usable = stop if stop.startswith('de-') else None
     return {'id': usable or f'{lat},{lon}', 'name': name, 'detail': str(value.get('name') or value.get('address') or ''), 'stop': usable, 'lat': lat, 'lon': lon}
+
+
+def place_record(value):
+    if not isinstance(value, dict) or not value.get('name'):
+        return None
+    lat, lon = value.get('latitude'), value.get('longitude')
+    if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+        return None
+    return {
+        'name': str(value['name']),
+        'area': str(value.get('address') or ''),
+        'lat': lat,
+        'lon': lon,
+        'stop': str(value.get('id') or '') if value.get('type') == 'stop' else '',
+    }
 
 
 def place_line(value):
@@ -1021,6 +1045,36 @@ def notes():
 
 def page_tasks(data, school, settings, today, iserv):
     return {'notes': notes()}
+
+
+def _views(make, items):
+    views = (make(item) for item in items if isinstance(item, dict))
+    return [view for view in views if view]
+
+
+def export_records():
+    settings = db.get_timetable_settings() or {}
+    school = school_setup(settings)
+    today = date.today()
+    semester = semester_for(today, settings.get('class_level'))
+    dated = []
+    for prefix, (name, _) in DEADLINE_KINDS.items():
+        dated.extend(_views(lambda item: deadline_view(prefix, item, school, today), whole_list(name)))
+    kept = [item for item in whole_list('notes') if isinstance(item, dict) and item.get('id')]
+    known = known_places()
+    places = {}
+    for key in ('home', 'school'):
+        place = place_record(known.get(key))
+        if place:
+            places[key] = place
+    return {
+        'tasks': [task_view(row, school['shown']) for row in task_rows()],
+        'deadlines': dated,
+        'grades': _views(lambda item: grade_view(item, school['shown'], semester, today), whole_list('grades')),
+        'notes': [view for view in map(note_view, kept) if view['title']],
+        'events': _views(event_view, whole_list('calendar')),
+        'places': places,
+    }
 
 
 # How long a mail may be on its way, in seconds: the page waits some before it sends, then the mail server has its say.

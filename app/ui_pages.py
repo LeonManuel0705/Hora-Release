@@ -141,6 +141,14 @@ def subject_use():
     return jsonify({'success': True, 'use': ui_data.subject_use()})
 
 
+@bp.route('/api/ui/export')
+def export_records():
+    try:
+        return jsonify({'success': True, 'data': ui_data.export_records()})
+    except ui_data.StoreError:
+        return _error('Die Schuldaten ließen sich nicht lesen', 500)
+
+
 @bp.route('/api/ui/transit/<action>')
 def transit(action):
     result, status = transit_service.handle(action, request.args)
@@ -723,15 +731,7 @@ def save_place(key):
     if request.method == 'DELETE':
         known = (service.get_known_locations().get('locations') or {}).get(key)
         service.delete_known_location(key)
-        removed = None
-        if isinstance(known, dict) and known.get('name') and known.get('latitude') is not None and known.get('longitude') is not None:
-            removed = {
-                'name': known['name'],
-                'area': known.get('address') or '',
-                'lat': known['latitude'],
-                'lon': known['longitude'],
-                'stop': (known.get('id') or '') if known.get('type') == 'stop' else '',
-            }
+        removed = ui_data.place_record(known)
         return jsonify({'success': True, 'removed': removed, **({'weatherFromHome': _weather_follows_home(), 'weatherCanFollowHome': False} if key == 'home' else {})})
     payload = _payload()
     if payload is None:

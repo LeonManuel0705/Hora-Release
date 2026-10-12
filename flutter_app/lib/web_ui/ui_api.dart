@@ -94,6 +94,9 @@ class UiApi {
         final (body, status) = await UiTransit.instance.handle(path[2], request.query);
         return UiReply(status, body);
       }
+      if (path.length == 2 && path[0] == 'ui' && path[1] == 'export' && method == 'GET') {
+        return UiReply.ok({'data': await data.exportRecords()});
+      }
       if (path.length >= 2 && path[0] == 'ui' && path[1] == 'tasks') return await _tasks(db, data, request);
       if (path.length >= 2 && path[0] == 'ui' && path[1] == 'deadlines') return await _deadlines(db, data, request);
       if (path.length >= 2 && path[0] == 'ui' && path[1] == 'grades') return await _grades(db, data, request);

@@ -4,6 +4,7 @@ import {
   LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, activeSubjectKeys, motionDefault, slug, teacherLabel, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
 import { toast, setTheme, syncTime } from "../shell.js";
+import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary } from "../backup.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -2931,17 +2932,45 @@ function renderData() {
   const card = $("dataCard");
   keepFocus(card, () => {
     card.innerHTML = [
-      row({ id: "rowExport", label: "Sichern", desc: "Stundenplan, Fächer, Stundenraster, Darstellung und Einstellungen als Datei", control: `<button class="btn btn-quiet" type="button" id="dataExport">${icon("download")}Exportieren</button>` }),
-      row({ id: "rowImport", label: "Wiederherstellen", desc: `Übernimmt eine gesicherte Datei von ${BRAND}`, control: `<button class="btn btn-quiet" type="button" id="dataImport">${icon("upload")}Importieren</button>` }),
+      row({ id: "rowExport", label: "Sichern", desc: "Stundenplan, Fächer, Noten, Tests, Klausuren, Aufgaben, Termine, Orte und Einstellungen als Datei", control: `<button class="btn btn-quiet" type="button" id="dataExport">${icon("download")}Exportieren</button>` }),
+      row({ id: "rowImport", label: "Wiederherstellen", desc: `Übernimmt eine gesicherte Datei von ${BRAND}, auch von einem anderen Gerät. Stundenplan und Einstellungen kommen aus der Datei, vorhandene Noten, Aufgaben und Termine bleiben.`, control: `<button class="btn btn-quiet" type="button" id="dataImport">${icon("upload")}Importieren</button>` }),
       row({ id: "rowWipe", label: "Alles auf diesem Gerät löschen", desc: "Stundenplan, Fächer und Stundenraster wieder wie in IServ, alle Einstellungen wie beim ersten Start.", control: `<button class="btn btn-quiet danger-button" type="button" id="dataWipe">${icon("trash-2")}Löschen</button>` }),
     ].join("");
   });
   renderDataMeta();
 }
 
-function exportData() {
-  const payload = { app: BRAND, version: 1, exportedAt: new Date().toISOString(), values: snapshot() };
-  const name = `${slug(BRAND) || "app"}-einstellungen-${isoDate(now())}.json`;
+function portableValues() {
+  const values = snapshot();
+  if (!schoolDefaults) return values;
+  applySchoolEdits();
+  const whole = wholeSchool({
+    subjects: data.subjects,
+    teachers: data.teachers,
+    rooms: data.rooms,
+    blocks: data.blocks,
+    timetable: data.timetable,
+    edits: storage.get(LOCAL_KEYS.lessons),
+    gone: { teachers: storage.get(LOCAL_KEYS.teachers)?.removed, rooms: storage.get(LOCAL_KEYS.rooms)?.removed },
+    weeks: abWeeks(),
+  });
+  Object.entries(whole).forEach(([key, value]) => (values[key] = JSON.stringify(value)));
+  const saved = storage.get(PREFS_KEY);
+  const own = saved && typeof saved === "object" ? saved : {};
+  const basics = { ...(own.school || {}), grade: prefs.school.grade, state: prefs.school.state, birthday: prefs.school.birthday };
+  if (!basics.birthday) delete basics.birthday;
+  values[PREFS_KEY] = JSON.stringify({ ...own, school: basics });
+  return values;
+}
+
+async function exportData() {
+  const payload = { app: BRAND, version: VERSION, exportedAt: new Date().toISOString(), values: portableValues() };
+  const keys = schoolDefaults ? fileKeys(data.subjects) : new Map();
+  if (schoolDefaults) payload.school = { abReference: data.abReference, subjects: fileSubjects(schoolDefaults.subjects, keys) };
+  try {
+    payload.data = fileRecords((await request("GET", "/api/ui/export")).data, keys);
+  } catch {}
+  const name = `${slug(BRAND) || "app"}-sicherung-${isoDate(now())}.json`;
   const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
   const link = document.createElement("a");
   link.href = url;
@@ -2950,7 +2979,80 @@ function exportData() {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
-  toast(`Gesichert als „${esc(name)}“`, { icon: "download" });
+  if (payload.data) toast(`Gesichert als „${esc(name)}“`, { icon: "download" });
+  else toast(`Gesichert als „${esc(name)}“, aber ohne Noten, Aufgaben und Termine. Sie ließen sich gerade nicht lesen.`, { icon: "triangle-alert" });
+}
+
+const RECORD_NAMES = { deadlines: "deadline", tasks: "task", grades: "grade", notes: "note", events: "event" };
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function patient(method, url, body) {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(url, {
+      method,
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: "same-origin",
+    });
+    if (response.status === 429 && attempt < 5) {
+      await pause(15000);
+      continue;
+    }
+    let answer = {};
+    try {
+      answer = await response.json();
+    } catch {}
+    if (!response.ok || answer.success === false) throw new Error(answer.error || "");
+    return answer;
+  }
+}
+
+async function carryRecords(plan) {
+  await storage.settled();
+  const made = {};
+  const undo = [];
+  const refs = new Map(plan.deadlines.known.map(([item, twin]) => [item.id, twin.id]));
+  let failed = plan.skipped;
+  let known = 0;
+  for (const kind of KINDS) {
+    known += plan[kind].known.length;
+    for (const item of plan[kind].fresh) {
+      try {
+        const saved = (await patient("POST", `/api/ui/${kind}`, BODIES[kind](item, refs)))[RECORD_NAMES[kind]];
+        if (kind === "deadlines") refs.set(item.id, saved?.id);
+        if (saved?.id) undo.push([kind, saved.id]);
+        const word = kind === "deadlines" ? item.kind : kind;
+        made[word] = (made[word] || 0) + 1;
+      } catch {
+        failed += 1;
+      }
+    }
+  }
+  for (const [key, body, previous] of plan.places) {
+    try {
+      const saved = await patient("PUT", `/api/ui/places/${key}`, body);
+      page.places = { ...(page.places || {}), [key]: placeLine(body), ...followedWeather(saved) };
+      undo.push(["places", key, previous]);
+      made.places = (made.places || 0) + 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { made, known, failed, undo };
+}
+
+async function dropRecords(undo) {
+  let left = 0;
+  for (const [kind, id, previous] of [...undo].reverse()) {
+    try {
+      if (kind !== "places") await patient("DELETE", `/api/ui/${kind}/${encodeURIComponent(id)}`);
+      else if (previous) page.places = { ...(page.places || {}), [id]: placeLine(previous), ...followedWeather(await patient("PUT", `/api/ui/places/${id}`, previous)) };
+      else page.places = { ...(page.places || {}), [id]: "", ...followedWeather(await patient("DELETE", `/api/ui/places/${id}`)) };
+    } catch {
+      left += 1;
+    }
+  }
+  return left;
 }
 
 async function importData(file) {
@@ -2960,19 +3062,112 @@ async function importData(file) {
   } catch {}
   const known = BRAND_NAMES.map((name) => name.toLowerCase());
   const prefix = new RegExp(`^(app|${known.map((name) => slug(name)).filter(Boolean).join("|")})-`);
-  const values = known.includes(String(payload?.app || "").toLowerCase()) && payload.values && typeof payload.values === "object" ? payload.values : null;
+  const ours = known.includes(String(payload?.app || "").toLowerCase());
+  const values = ours && payload.values && typeof payload.values === "object" ? payload.values : null;
   const entries = values ? Object.entries(values).filter(([key, value]) => prefix.test(key) && typeof value === "string").map(([key, value]) => [key.replace(prefix, "app-"), value]) : [];
-  if (!entries.length) {
+  const records = ours && payload.data && typeof payload.data === "object" && !Array.isArray(payload.data) ? payload.data : null;
+  if (!entries.length && !records) {
     toast(`Die Datei ist keine Sicherung von ${BRAND}.`, { icon: "circle-alert" });
     return;
   }
+  if (importing) return;
+  importing = true;
+  const button = $("dataImport");
+  if (button) button.disabled = true;
+  try {
+    await takeBackup(file, payload, entries, records);
+  } catch {
+    toast("Die Sicherung ließ sich nicht ganz übernehmen. Lies die Datei noch einmal ein, schon Übernommenes wird dabei nicht doppelt angelegt.", { icon: "triangle-alert" });
+  } finally {
+    importing = false;
+    if ($("dataImport")) $("dataImport").disabled = false;
+  }
+}
+
+let importing = false;
+
+async function carryState(wanted) {
+  const here = page.school?.state || "";
+  if (wanted && wanted !== here && (page.states || []).some((state) => state.code === wanted)) {
+    try {
+      await request("POST", "/api/hub/bundesland", { bundesland: wanted });
+      page.school = { ...(page.school || {}), state: wanted };
+    } catch {}
+  }
+  const settled = page.school?.state || "";
+  if (settled && prefs.school.state !== settled) {
+    prefs.school.state = settled;
+    savePrefs();
+  }
+  renderSchool();
+}
+
+async function takeBackup(file, payload, entries, records) {
   const before = snapshot();
-  restore(Object.fromEntries(entries));
-  toast(`${plural(entries.length, "Eintrag", "Einträge")} aus „${esc(file.name)}“ übernommen`, {
-    icon: "upload",
-    action: { label: "Rückgängig", undo: true, run: () => {
-      restore(before);
-      say("Rückgängig gemacht");
+  const stateBefore = page.school?.state || "";
+  const schoolBefore = { ...prefs.school };
+  let wanted = Object.fromEntries(entries);
+  let keys = null;
+  let retired = [];
+  if (entries.length && payload.school && typeof payload.school === "object" && schoolDefaults) {
+    const parsed = {};
+    entries.forEach(([key, value]) => {
+      try {
+        parsed[key] = JSON.parse(value);
+      } catch {}
+    });
+    const own = { subjects: storage.get(LOCAL_KEYS.subjects), teachers: storage.get(LOCAL_KEYS.teachers), rooms: storage.get(LOCAL_KEYS.rooms) };
+    const fitted = fitSchool(parsed, payload.school, { ...schoolDefaults, own });
+    keys = fitted.keys;
+    retired = fitted.retired;
+    wanted = Object.fromEntries(Object.entries(fitted.values).map(([key, value]) => [key, JSON.stringify(value)]));
+  }
+  let plan = null;
+  if (records) {
+    try {
+      const mine = (await request("GET", "/api/ui/export")).data;
+      plan = recordPlan(records, mine, keys, { google: !!page.accounts?.google?.connected, synced: (data.events || []).filter((item) => item.synced) });
+    } catch {}
+  }
+  const settled = wanted[LOCAL_KEYS.subjects];
+  const used = plan ? subjectsInUse(plan) : new Set();
+  const held = retired.filter((key) => used.has(key));
+  if (held.length) {
+    const draft = JSON.parse(settled);
+    wanted[LOCAL_KEYS.subjects] = JSON.stringify({ ...draft, removed: draft.removed.filter((key) => !held.includes(key)) });
+  }
+  let stateCarried = null;
+  if (entries.length) {
+    restore(wanted);
+    stateCarried = carryState(prefs.school.state);
+  }
+  const moved = entries.length > 0 && (prefs.school.grade !== schoolBefore.grade || prefs.school.birthday !== schoolBefore.birthday);
+  let done = null;
+  if (plan) {
+    if (planSize(plan) > 12) toast(`Übernehme ${plural(planSize(plan), "Eintrag", "Einträge")} aus „${esc(file.name)}“ …`, { icon: "upload", duration: 600000 });
+    done = await carryRecords(plan);
+    if (held.length) {
+      storage.set(LOCAL_KEYS.subjects, JSON.parse(settled));
+      reloadState();
+    }
+    await countSubjectUse();
+    renderPlaces();
+  }
+  if (stateCarried) await Promise.race([stateCarried, pause(8000)]);
+  const text = summary({ settings: entries.length > 0, made: done?.made, known: done?.known, failed: done?.failed, unread: !!records && !plan });
+  toast(esc(text), {
+    icon: (done?.failed || (records && !plan)) ? "triangle-alert" : "upload",
+    action: { label: "Rückgängig", undo: true, run: async () => {
+      const left = done ? await dropRecords(done.undo) : 0;
+      if (entries.length) {
+        restore(before);
+        if (moved) savePrefs();
+        await carryState(stateBefore);
+      }
+      await countSubjectUse();
+      renderPlaces();
+      if (left) toast(`${plural(left, "Eintrag", "Einträge")} ${left === 1 ? "ließ" : "ließen"} sich nicht zurücknehmen.`, { icon: "triangle-alert" });
+      else say("Rückgängig gemacht");
     } },
   });
 }

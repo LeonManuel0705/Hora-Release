@@ -398,6 +398,9 @@ export const storage = {
   keys() {
     return [...serverValues.keys()];
   },
+  settled() {
+    return Promise.all(writes.values());
+  },
 };
 
 export const LOCAL_KEYS = {

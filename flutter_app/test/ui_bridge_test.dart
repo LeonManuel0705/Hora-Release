@@ -278,6 +278,41 @@ void main() {
     expect((await hub.handle(const UiBridgeRequest(method: 'GET', path: '/static/missing.js'))).status, 404);
   });
 
+  test('a backup holds what the pages no longer show', () async {
+    final hub = bridge();
+    const own = {'custom': true, 'name': 'Physik', 'short': 'Phy', 'hue': 'iris', 'type': 'GK', 'teacher': '', 'room': ''};
+    expect((await api(hub, 'PUT', '/api/ui/store/app-subjects', {'items': {'phy-own': own}, 'removed': []})).status, 200);
+    Map made(UiBridgeReply reply, String name) => (jsonDecode(reply.body as String) as Map)[name] as Map;
+    final grade = made(await api(hub, 'POST', '/api/ui/grades', {'subject': 'phy-own', 'points': 7, 'type': 'klausur', 'semester': 'Q1', 'date': '2025-03-04', 'title': 'Optik'}), 'grade');
+    final written = made(await api(hub, 'POST', '/api/ui/deadlines', {'kind': 'Klausur', 'title': 'Mechanik', 'subject': 'phy-own', 'date': '2025-03-11', 'detail': 'Kapitel 4', 'time': '08:00'}), 'deadline');
+    final homework = made(await api(hub, 'POST', '/api/ui/deadlines', {'kind': 'Hausaufgabe', 'title': 'Blatt 3', 'date': '2025-03-12', 'status': 'abgegeben'}), 'deadline');
+    final task = made(await api(hub, 'POST', '/api/ui/tasks', {'title': 'Protokoll abgeben', 'subject': 'phy-own', 'date': '2025-03-13'}), 'task');
+    final event = made(await api(hub, 'POST', '/api/ui/events', {'title': 'Exkursion', 'date': '2025-03-14', 'start': '09:00', 'place': 'Sternwarte', 'kind': 'school'}), 'event');
+    expect((await api(hub, 'POST', '/api/ui/notes', {'title': 'Frage für Ben', 'details': 'Brennweite', 'type': 'idea'})).status, 200);
+    expect((await api(hub, 'PUT', '/api/ui/places/home', {'name': 'Hauptstraße 1', 'area': '12345 Musterstadt', 'lat': 52.5, 'lon': 13.4, 'stop': ''})).status, 200);
+
+    final school = pageData((await hub.handle(const UiBridgeRequest(method: 'GET', path: '/hub/school', navigate: true))).body as String);
+    expect((school['deadlines'] as List).where((item) => (item as Map)['id'] == written['id']), isEmpty);
+    expect(((school['page'] as Map)['grades'] as List).where((item) => (item as Map)['id'] == grade['id']), isEmpty);
+
+    final reply = await api(hub, 'GET', '/api/ui/export');
+    expect(reply.status, 200);
+    final data = (jsonDecode(reply.body as String) as Map)['data'] as Map;
+    Map one(String kind, Object? id) => (data[kind] as List).cast<Map>().singleWhere((item) => item['id'] == id);
+    expect(one('grades', grade['id']), grade);
+    expect(one('deadlines', written['id']), containsPair('time', '08:00'));
+    expect(one('deadlines', written['id']), containsPair('subject', 'phy-own'));
+    expect(one('deadlines', homework['id']), containsPair('status', 'abgegeben'));
+    expect(one('tasks', task['id']), containsPair('date', '2025-03-13'));
+    expect(one('events', event['id']), containsPair('place', 'Sternwarte'));
+    final note = (data['notes'] as List).cast<Map>().singleWhere((item) => item['title'] == 'Frage für Ben');
+    expect(note, containsPair('details', 'Brennweite'));
+    expect(note, containsPair('type', 'idea'));
+    expect(data['places'], {
+      'home': {'name': 'Hauptstraße 1, 12345 Musterstadt', 'area': '', 'lat': 52.5, 'lon': 13.4, 'stop': ''},
+    });
+  });
+
   test('worker messages become bridge requests', () {
     final request = UiBridgeRequest.fromMessage({
       'type': 'hub-request',

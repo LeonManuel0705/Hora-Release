@@ -551,15 +551,16 @@ class UiData {
     return view;
   }
 
+  Future<List<Map<String, Object?>>> _ownEvents() => db.query(
+        'events',
+        where: "category NOT IN ('holiday', 'vacation') AND id NOT LIKE 'iserv\\_%' ESCAPE '\\'",
+      );
+
   Future<List<Map<String, Object?>>> events() async {
     final start = isoOf(today.subtract(const Duration(days: 42)));
     final end = isoOf(today.add(const Duration(days: 120)));
-    final rows = await db.query(
-      'events',
-      where: "category NOT IN ('holiday', 'vacation') AND id NOT LIKE 'iserv\\_%' ESCAPE '\\'",
-    );
     final result = <Map<String, Object?>>[];
-    for (final row in rows) {
+    for (final row in await _ownEvents()) {
       final view = eventView(row);
       if (view == null) continue;
       final last = (view['endDate'] as String?) ?? view['date'] as String;
@@ -653,30 +654,34 @@ class UiData {
 
   static String gradeType(Object? stored) => uiGradeTypes[stored] ?? 'sonstiges';
 
+  Map<String, Object?>? gradeView(Map<String, Object?> row, School setup, String semester) {
+    final subjectKey = '${row['subject_id']}';
+    if (!setup.known.containsKey(subjectKey)) return null;
+    final value = row['value'];
+    final points = row['grade_system'] == 'marks' && value is num ? pointsOfMark(value) : row['points'];
+    if (points is! num) return null;
+    return {
+      'id': 'g-${row['id']}',
+      'subject': subjectKey,
+      'points': points.round(),
+      'type': gradeType(row['type']),
+      'semester': text(row['semester']).isEmpty ? semester : text(row['semester']),
+      'date': localDay(row['date']) ?? todayIso,
+      'title': text(row['notes']),
+    };
+  }
+
   Future<Map<String, Object?>> pageSchool(School setup) async {
     final semester = semesterFor(today, classLevel);
     final grades = <Map<String, Object?>>[];
     final history = <String, Map<String, List<int>>>{};
     for (final row in await db.query('grades', orderBy: 'date ASC')) {
-      final subjectKey = '${row['subject_id']}';
-      if (!setup.known.containsKey(subjectKey)) continue;
-      final value = row['value'];
-      final points = row['grade_system'] == 'marks' && value is num ? pointsOfMark(value) : row['points'];
-      if (points is! num) continue;
-      final term = text(row['semester']).isEmpty ? semester : text(row['semester']);
-      final entry = {
-        'id': 'g-${row['id']}',
-        'subject': subjectKey,
-        'points': points.round(),
-        'type': gradeType(row['type']),
-        'semester': term,
-        'date': localDay(row['date']) ?? todayIso,
-        'title': text(row['notes']),
-      };
-      if (term == semester) {
+      final entry = gradeView(row, setup, semester);
+      if (entry == null) continue;
+      if (entry['semester'] == semester) {
         grades.add(entry);
       } else {
-        history.putIfAbsent(subjectKey, () => {}).putIfAbsent(term, () => []).add(entry['points'] as int);
+        history.putIfAbsent(entry['subject'] as String, () => {}).putIfAbsent(entry['semester'] as String, () => []).add(entry['points'] as int);
       }
     }
     final averages = {
@@ -725,6 +730,60 @@ class UiData {
     if (home != null) places['home'] = home;
     if (schoolPlace != null) places['school'] = schoolPlace;
     return {'places': places, 'attribution': 'Transitous, DELFI e.V. und Verkehrsverbünde'};
+  }
+
+  static Map<String, Object?>? placeRecord(Map<String, Object?>? row) {
+    if (row == null || text(row['name']).isEmpty) return null;
+    final lat = row['latitude'], lon = row['longitude'];
+    if (lat is! num || lon is! num) return null;
+    return {'name': text(row['name'], 200), 'area': '', 'lat': lat, 'lon': lon, 'stop': row['type'] == 'stop' ? text(row['vbb_id'], 120) : ''};
+  }
+
+  static Map<String, Object?>? noteView(Map<String, Object?> row) {
+    var title = text(row['title']);
+    var details = text(row['content']);
+    if (title.isEmpty) {
+      final split = details.indexOf('\n');
+      final first = (split < 0 ? details : details.substring(0, split)).trim();
+      final rest = split < 0 ? '' : details.substring(split + 1);
+      title = first.length > 300 ? first.substring(0, 300) : first;
+      details = '${first.length > 300 ? first.substring(300) : ''}\n$rest'.trim();
+    }
+    if (title.isEmpty) return null;
+    final created = text(row['created_at']);
+    return {
+      'id': '${row['id']}',
+      'type': row['type'] == 'idea' ? 'idea' : 'note',
+      'title': title,
+      'details': details,
+      'created': created.length > 19 ? created.substring(0, 19) : created,
+    };
+  }
+
+  Future<Map<String, Object?>> exportRecords() async {
+    final setup = await school();
+    final semester = semesterFor(today, classLevel);
+    final dated = <Map<String, Object?>>[];
+    for (final entry in uiDeadlineTables.entries) {
+      for (final row in await db.query(entry.value)) {
+        final view = deadlineView(entry.key, row, setup);
+        if (view != null) dated.add(view);
+      }
+    }
+    final known = await knownPlaces();
+    final places = <String, Object?>{};
+    for (final key in const ['home', 'school']) {
+      final place = placeRecord(known[key]);
+      if (place != null) places[key] = place;
+    }
+    return {
+      'tasks': [for (final row in await db.query('tasks', orderBy: 'created_at ASC')) taskView(row, setup.known)],
+      'deadlines': dated,
+      'grades': [for (final row in await db.query('grades', orderBy: 'date ASC')) gradeView(row, setup, semester)].nonNulls.toList(),
+      'notes': [for (final row in await db.query('quick_notes', orderBy: 'created_at DESC')) noteView(row)].nonNulls.toList(),
+      'events': [for (final row in await _ownEvents()) eventView(row)].nonNulls.toList(),
+      'places': places,
+    };
   }
 
   Map<String, Object?> pageEmail() => {'messages': <Object?>[], 'contacts': <Object?>[], 'native': true};

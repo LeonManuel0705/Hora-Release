@@ -999,3 +999,45 @@ def test_the_source_of_the_assistant_can_be_chosen(client, tmp_path, monkeypatch
     assert ai.load_config()["claude_api_key"] == "sk-ant-test-0123456789abcdef"
     assert client.post("/api/hub/assistant/config", json={"claude_api_key": ""}).get_json()["claude_api_key_set"] is False
 
+
+
+def test_a_backup_holds_what_the_pages_no_longer_show(client, monkeypatch):
+    saved = {}
+
+    class Places:
+        def save_known_location(self, key, location):
+            saved[key] = location
+
+        def get_known_locations(self):
+            return {"locations": saved}
+
+    from app import vbb_service
+    monkeypatch.setattr(vbb_service, "get_vbb_service", lambda: Places())
+    own_subject(client, "bio-own")
+    long_ago = (date.today() - timedelta(days=500)).isoformat()
+    grade = client.post("/api/ui/grades", json={"subject": "bio-own", "points": 7, "type": "klausur", "semester": "Q1", "date": long_ago, "title": "Zellatmung"}).get_json()["grade"]
+    written = client.post("/api/ui/deadlines", json={"kind": "Klausur", "title": "Genetik", "subject": "bio-own", "date": long_ago, "detail": "Kapitel 4", "time": "08:00"}).get_json()["deadline"]
+    homework = client.post("/api/ui/deadlines", json={"kind": "Hausaufgabe", "title": "Arbeitsblatt 3", "date": long_ago, "status": "abgegeben"}).get_json()["deadline"]
+    task = client.post("/api/ui/tasks", json={"title": "Mikroskop zurückbringen", "subject": "bio-own", "done": True}).get_json()["task"]
+    event = client.post("/api/ui/events", json={"title": "Exkursion", "date": long_ago, "start": "09:00", "place": "Botanischer Garten", "kind": "school"}).get_json()["event"]
+    note = client.post("/api/ui/notes", json={"title": "Frage für Lea", "details": "Protokoll", "type": "idea"}).get_json()["note"]
+    place = {"name": "Hauptstraße 1", "area": "12345 Musterstadt", "lat": 52.5, "lon": 13.4, "stop": ""}
+    assert client.put("/api/ui/places/home", json=place).status_code == 200
+
+    shown = page_data(client, "/hub/school")
+    assert written["id"] not in [item["id"] for item in shown["deadlines"]] and grade not in shown["page"]["grades"]
+
+    data = client.get("/api/ui/export").get_json()["data"]
+    assert grade in data["grades"]
+    assert {key: value for key, value in written.items() if key != "block"} in [{key: value for key, value in item.items() if key != "block"} for item in data["deadlines"]]
+    assert homework["id"] in [item["id"] for item in data["deadlines"] if item["status"] == "abgegeben"]
+    assert task in data["tasks"] and event in data["events"] and note in data["notes"]
+    assert data["places"] == {"home": place}
+
+
+def test_a_backup_fails_rather_than_leave_out_what_it_cannot_read(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(ui_data, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(ui_data, "_cache", {})
+    assert client.get("/api/ui/export").status_code == 200
+    (tmp_path / "school_grades.json").write_text("not what was written here")
+    assert client.get("/api/ui/export").status_code == 500
