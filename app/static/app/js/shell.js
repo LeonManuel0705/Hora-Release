@@ -379,11 +379,22 @@ document.querySelectorAll("[data-notify]").forEach((button) =>
 );
 
 let lastInvoker = null;
+let byFinger = false;
 const invokerSelector = "[popovertarget], [data-open-note], [data-open-weather]";
+const pressable = "a, button, summary, label, [role='button'], [role='option'], [role='tab'], [role='switch']";
 document.addEventListener("pointerdown", (event) => {
+  byFinger = event.pointerType !== "mouse";
   const trigger = event.target.closest(invokerSelector);
   if (trigger) lastInvoker = trigger;
 });
+document.addEventListener("touchstart", () => {}, { passive: true });
+document.addEventListener("click", (event) => {
+  if (!byFinger || !event.target.closest) return;
+  const pressed = [event.target.closest(pressable), event.target.closest(".is-interactive")]
+    .filter((node) => node && !node.matches(":disabled, [aria-disabled='true']"));
+  pressed.forEach((node) => node.classList.add("is-pressed"));
+  setTimeout(() => pressed.forEach((node) => node.classList.remove("is-pressed")), 180);
+}, true);
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
   const trigger = event.target.closest?.(invokerSelector);

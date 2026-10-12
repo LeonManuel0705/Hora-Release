@@ -1,3 +1,5 @@
+import { weakDevice, attentive, onAttention } from "./attention.js";
+
 const LOADER_FX = '<i class="tinte-sync"><svg viewBox="38.5 63.4 12 12"><path d="M41.7 68.8A2.9 2.9 0 0 1 46.8 67.6M46.8 67.6l.1 -1.6M46.8 67.6l-1.6 .1M47.3 70A2.9 2.9 0 0 1 42.2 71.2M42.2 71.2l-.1 1.6M42.2 71.2l1.6 -.1"/></svg></i>'
   + [51.5, 55.5, 59.5].map((x) => `<i class="tinte-dot"><svg viewBox="${x - 6} 63.4 12 12"><circle cx="${x}" cy="69.4" r="1.1"/></svg></i>`).join("")
   + '<i class="tinte-fill"><svg viewBox="40 72 40 12"><rect x="41" y="76" width="38" height="4.2" rx="2.1"/></svg></i>';
@@ -394,14 +396,10 @@ const rigs = new Set();
 let booted = false, running = false, lastFrame = 0, acc = 0, lastInput = performance.now();
 let pointerX = -1, pointerY = -1, eyesQueued = false, observer = null;
 
-const weakDevice = () => new URLSearchParams(location.search).has("lite")
-  || !!navigator.connection?.saveData
-  || (navigator.hardwareConcurrency || 8) <= 2
-  || (navigator.deviceMemory || 8) <= 2;
 const motionAllowed = () => !matchMedia("(prefers-reduced-motion: reduce)").matches
   && document.documentElement.dataset.motion !== "minimal"
   && !weakDevice();
-const awake = () => document.visibilityState === "visible" && document.hasFocus();
+const awake = attentive;
 const wants = (rig) => rig.visible && (rig.mode === "think" || rig.mode === "cheer" || performance.now() - lastInput < SETTLE_AFTER);
 
 function holdAll() {
@@ -521,9 +519,7 @@ function boot() {
     }
   }, { passive: true });
   for (const type of ["pointerdown", "keydown", "wheel", "touchstart", "scroll"]) addEventListener(type, input, { passive: true, capture: true });
-  document.addEventListener("visibilitychange", () => (awake() ? wake() : holdAll()));
-  addEventListener("focus", wake);
-  addEventListener("blur", holdAll);
+  onAttention(() => (awake() ? wake() : holdAll()));
   document.addEventListener("click", (event) => {
     const svg = event.target.closest?.("svg.tinte-art[data-st=idle]");
     if (svg) poke(svg);

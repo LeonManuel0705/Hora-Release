@@ -1041,3 +1041,25 @@ def test_a_backup_fails_rather_than_leave_out_what_it_cannot_read(client, tmp_pa
     assert client.get("/api/ui/export").status_code == 200
     (tmp_path / "school_grades.json").write_text("not what was written here")
     assert client.get("/api/ui/export").status_code == 500
+
+
+@pytest.mark.parametrize("path, tab", [("/hub", 0), ("/hub/tasks", 1), ("/hub/calendar", 2), ("/hub/school", 3), ("/hub/vbb", 4), ("/hub/settings", 4)])
+def test_the_tab_bar_marks_the_open_section_and_more_for_every_other_page(client, path, tab):
+    html = client.get(path).get_data(as_text=True)
+    assert f'<nav class="tabbar" aria-label="Navigation" data-tab="{tab}">' in html
+    assert f"var tab = {tab};" in html
+    more = re.search(r'<button class="tab([^"]*)" type="button" popovertarget="moreSheet">', html).group(1)
+    assert ("is-current" in more) == (tab == 4)
+    assert html.count('class="tab-indicator"') == 1
+
+
+def test_every_pressed_look_also_shows_after_a_tap():
+    bare = re.compile(r"(?<!\():active(?![-\w])")
+    styles = sorted((ROOT / "app" / "static" / "app" / "css").rglob("*.css"))
+    assert styles
+    for path in styles:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            selector = line.split("{")[0]
+            assert "view-transition" in selector or not bare.search(selector), f"{path.name}:{number} needs :is(:active, .is-pressed)"
+    shell = (ROOT / "app" / "static" / "app" / "js" / "shell.js").read_text(encoding="utf-8")
+    assert 'classList.add("is-pressed")' in shell and 'classList.remove("is-pressed")' in shell

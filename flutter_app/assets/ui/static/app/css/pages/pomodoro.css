@@ -49,7 +49,7 @@
 .pomo-subject-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pomo-subject select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
 .pomo-subject:has(select:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
-.pomo-subject:active { scale: var(--scale-press); transition-duration: var(--dur-press); transition-timing-function: var(--ease-out); }
+.pomo-subject:is(:active, .is-pressed) { scale: var(--scale-press); transition-duration: var(--dur-press); transition-timing-function: var(--ease-out); }
 
 @media (hover: hover) and (pointer: fine) {
   .pomo-subject:hover { background: var(--surface-hover); transition-duration: var(--dur-hover-in); }
@@ -171,7 +171,7 @@
 }
 
 .stepper-button .icon { --s: 16; }
-.stepper-button:active { scale: var(--scale-press-sm); transition-duration: var(--dur-press); transition-timing-function: var(--ease-out); }
+.stepper-button:is(:active, .is-pressed) { scale: var(--scale-press-sm); transition-duration: var(--dur-press); transition-timing-function: var(--ease-out); }
 .stepper-button:disabled { cursor: not-allowed; }
 
 @media (hover: hover) and (pointer: fine) {

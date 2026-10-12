@@ -4,6 +4,47 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{% block title %}{{ brand_name }}{% endblock %}</title>
+    {% set tab_index = {"home": 0, "tasks": 1, "calendar": 2, "school": 3}.get(active, 4) %}
+    <script nonce="{{ g.csp_nonce }}">
+        (function () {
+            var root = document.documentElement;
+            var tab = {{ tab_index }};
+            var here = location.pathname;
+            var last = null;
+            var remember = function () {
+                try { sessionStorage.setItem("app-nav", tab + " " + here); } catch (error) {}
+            };
+            var settle = function () {
+                delete root.dataset.navFrom;
+                delete root.dataset.navDir;
+                delete root.dataset.navVt;
+            };
+            try { last = sessionStorage.getItem("app-nav"); } catch (error) {}
+            var from = last ? parseInt(last, 10) : -1;
+            if (from >= 0 && from <= 4 && last.slice(2) !== here) {
+                root.dataset.navFrom = from;
+                if (from !== tab) root.dataset.navDir = tab > from ? "forward" : "back";
+            }
+            remember();
+            addEventListener("pagereveal", function (event) {
+                var transition = event.viewTransition;
+                if (!transition) return;
+                root.dataset.navVt = "1";
+                transition.ready.then(function () {
+                    transition.finished.then(settle, settle);
+                }, function () {
+                    delete root.dataset.navVt;
+                    setTimeout(settle, 1200);
+                });
+            });
+            addEventListener("pageshow", function () {
+                remember();
+                setTimeout(function () {
+                    if (!root.dataset.navVt) settle();
+                }, 1200);
+            });
+        })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
     <link rel="preload" href="/static/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/static/app/css/tokens.css?v={{ asset_version }}">
@@ -110,13 +151,14 @@
     </main>
 </div>
 
-<nav class="tabbar" aria-label="Navigation">
+<nav class="tabbar" aria-label="Navigation" data-tab="{{ tab_index }}">
+    <span class="tab-indicator" aria-hidden="true"></span>
     {% for key, label, icon in [("home", "Übersicht", "house"), ("tasks", "Aufgaben", "list-checks"), ("calendar", "Kalender", "calendar-days"), ("school", "Schule", "graduation-cap")] %}
     <a class="tab" href="{{ routes.get(key, '/hub/' ~ key) }}" data-page="{{ key }}"{% if active == key %} aria-current="page"{% endif %}>
         <svg class="icon"><use href="#i-{{ icon }}"/></svg><span>{{ label }}</span>
     </a>
     {% endfor %}
-    <button class="tab" type="button" popovertarget="moreSheet">
+    <button class="tab{% if tab_index == 4 %} is-current{% endif %}" type="button" popovertarget="moreSheet">
         <svg class="icon"><use href="#i-ellipsis"/></svg><span>Mehr</span>
     </button>
 </nav>

@@ -195,7 +195,7 @@
   .lesson:hover { --tile-mix: var(--tile-hover); transition-duration: var(--dur-hover-in); }
 }
 
-.lesson:active { transform: scale(var(--scale-press)); transition-duration: var(--dur-press), var(--dur-press), var(--dur-state); transition-timing-function: var(--ease-out); }
+.lesson:is(:active, .is-pressed) { transform: scale(var(--scale-press)); transition-duration: var(--dur-press), var(--dur-press), var(--dur-state); transition-timing-function: var(--ease-out); }
 
 .lesson.is-past { background: transparent; }
 .lesson.is-past::before { background: color-mix(in oklab, var(--hue) 55%, transparent); }
@@ -305,7 +305,7 @@
 }
 .plan-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
 .plan-thumb::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--desk-card-edge), inset 0 -28px 24px -18px rgb(20 28 21 / 0.18); pointer-events: none; }
-.plan-thumb:active { scale: var(--scale-press); transition-duration: var(--dur-press); }
+.plan-thumb:is(:active, .is-pressed) { scale: var(--scale-press); transition-duration: var(--dur-press); }
 .plan-thumb.is-file { display: flex; align-items: center; justify-content: center; gap: 8px; height: 64px; background: var(--tile); font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--ink); cursor: pointer; }
 .plan-thumb.is-file::after { content: none; }
 .plan-thumb.is-file .icon { --s: 18; color: var(--ink-soft); }
@@ -415,7 +415,9 @@
   .ov-item:hover .chev-end { translate: 2px 0; color: var(--ink-soft); }
 }
 
-.change-row:active, .ov-item:active { background: color-mix(in oklab, var(--ink) 8%, transparent); }
+.ov-item:is(:active, .is-pressed) .chev-end { translate: 2px 0; color: var(--ink-soft); }
+
+.change-row:is(:active, .is-pressed), .ov-item:is(:active, .is-pressed) { background: color-mix(in oklab, var(--ink) 8%, transparent); }
 
 .school-panel { padding: 18px 18px 16px; }
 .school-panel-head { grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 10px; }
@@ -464,6 +466,8 @@
   .note-tools .icon-button.is-danger:hover, .grade-remove:hover { color: var(--urgent-ink); }
 }
 
+.note-tools .icon-button.is-danger:is(:active, .is-pressed), .grade-remove:is(:active, .is-pressed) { color: var(--urgent-ink); }
+
 .school-fields { margin-top: 10px; }
 .school-fields .field + .field { margin-top: 0; }
 .school-fields .field { padding: 11px 0; }
@@ -506,6 +510,8 @@
   .link-button:hover { text-decoration-color: currentColor; transition-duration: var(--dur-hover-in); }
 }
 
+.link-button:is(:active, .is-pressed) { text-decoration-color: currentColor; }
+
 .mini-list { display: grid; gap: 2px; margin: 0 -8px; }
 
 .mini-due {
@@ -531,6 +537,8 @@
 @media (hover: hover) and (pointer: fine) {
   .mini-due:hover { background: color-mix(in oklab, var(--ink) 5%, transparent); transition-duration: var(--dur-hover-in); }
 }
+
+.mini-due:is(:active, .is-pressed) { background: color-mix(in oklab, var(--ink) 9%, transparent); }
 
 .grade-average { font-size: var(--text-sm); color: var(--ink-soft); }
 .grade-average b { font-weight: var(--weight-strong); color: var(--ink); }
@@ -618,6 +626,9 @@
   .grade-bar.is-retired:hover { background: transparent; }
 }
 
+.grade-bar:is(:active, .is-pressed) { background: color-mix(in oklab, var(--ink) 9%, transparent); }
+.grade-bar.is-retired:is(:active, .is-pressed) { background: transparent; }
+
 .calc { margin-top: 14px; border-top: 1px solid color-mix(in oklab, var(--ink) 9%, transparent); }
 .calc + .calc { margin-top: 0; }
 
@@ -645,6 +656,8 @@
 @media (hover: hover) and (pointer: fine) {
   .calc-summary:hover { background: color-mix(in oklab, var(--ink) 5%, transparent); transition-duration: var(--dur-hover-in); }
 }
+
+.calc-summary:is(:active, .is-pressed) { background: color-mix(in oklab, var(--ink) 9%, transparent); }
 
 .calc-body { display: grid; gap: 12px; padding: 4px 0 16px; }
 .calc-switch { width: 100%; background: color-mix(in oklab, var(--ink) 6%, transparent); box-shadow: none; }
@@ -726,6 +739,8 @@
   .inline-link:hover { text-decoration-color: currentColor; transition-duration: var(--dur-hover-in); }
 }
 
+.inline-link:is(:active, .is-pressed) { text-decoration-color: currentColor; }
+
 .seminar-card {
   margin-top: 6px;
   padding: 18px 20px 16px;
@@ -750,6 +765,8 @@
 @media (hover: hover) and (pointer: fine) {
   .seminar-open:hover { background: var(--surface-hover); transition-duration: var(--dur-hover-in); }
 }
+
+.seminar-open:is(:active, .is-pressed) { background: var(--surface-press); }
 
 .seminar-kicker { font-size: var(--text-sm); color: var(--ink-soft); }
 .seminar-title { font-size: var(--text-xl); font-weight: var(--weight-strong); letter-spacing: -0.015em; line-height: 1.2; color: var(--ink); text-wrap: balance; }

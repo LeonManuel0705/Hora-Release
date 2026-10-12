@@ -60,7 +60,7 @@
 .cw-day.is-focus .cw-num { background: var(--ink); color: var(--on-inverse); }
 .cw-day.is-today.is-focus .cw-num { background: var(--now-fill); color: var(--now-ink); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
 .cw-day:focus-visible { outline-offset: -2px; }
-.cw-day:active { background: var(--surface-press); }
+.cw-day:is(:active, .is-pressed) { background: var(--surface-press); }
 .cw-dots { display: flex; justify-content: center; gap: 3px; min-height: 7px; }
 .cw-dots .cal-dot { width: 6px; height: 6px; }
 
@@ -105,6 +105,10 @@
   .cw-chip.is-due:hover, .cw-chip.is-holiday:hover { background: var(--surface-hover); transition-duration: var(--dur-hover-in); }
   .cw-chip.is-event:hover { background: color-mix(in oklab, var(--k) 26%, var(--surface)); transition-duration: var(--dur-hover-in); }
 }
+
+.cw-chip.is-test:is(:active, .is-pressed), .cw-chip.is-overdue:is(:active, .is-pressed) { background: color-mix(in oklab, var(--urgent) 24%, var(--surface)); }
+.cw-chip.is-due:is(:active, .is-pressed), .cw-chip.is-holiday:is(:active, .is-pressed) { background: var(--surface-press); }
+.cw-chip.is-event:is(:active, .is-pressed) { background: color-mix(in oklab, var(--k) 34%, var(--surface)); }
 
 .cw-body { padding-top: 12px; padding-bottom: 14px; }
 .cw-hours { position: relative; height: calc(var(--hours) * var(--hour-h)); }
@@ -195,7 +199,7 @@
 .ev.is-stacked.is-past { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--k) 20%, transparent), 0 0 0 2px var(--col-bg); }
 .ev.is-selected, .ev.is-stacked.is-selected { box-shadow: inset 0 0 0 2px var(--ink), 0 0 0 2px var(--col-bg); }
 .ev:focus-visible { z-index: 3; outline-offset: 1px; }
-.ev:active { scale: var(--scale-press); transition-duration: var(--dur-press); transition-timing-function: var(--ease-out); }
+.ev:is(:active, .is-pressed) { scale: var(--scale-press); transition-duration: var(--dur-press); transition-timing-function: var(--ease-out); }
 
 @media (hover: hover) and (pointer: fine) {
   .ev:hover { background: color-mix(in oklab, var(--k) 26%, var(--surface)); transition-duration: var(--dur-hover-in); }
@@ -263,7 +267,7 @@
 }
 
 .cm-day:focus-visible { outline-offset: -3px; border-radius: 12px; }
-.cm-day:active { background: var(--surface-press); }
+.cm-day:is(:active, .is-pressed) { background: var(--surface-press); }
 .cm-num { display: inline-grid; place-items: center; align-self: flex-start; min-width: 26px; height: 26px; padding: 0 3px; border-radius: 99px; font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; transition: background-color var(--dur-state) var(--ease-out), color var(--dur-state) var(--ease-out); }
 .cm-cell.is-weekend .cm-num { color: var(--ink-soft); font-weight: var(--weight-medium); }
 .cm-cell.is-outside .cm-num { color: var(--ink-muted); font-weight: var(--weight-regular); }
@@ -276,6 +280,9 @@
   .cm-item[data-item]:hover { background: color-mix(in oklab, var(--ink) 7%, transparent); }
   .cm-item.is-test[data-item]:hover, .cm-item.is-overdue[data-item]:hover { background: color-mix(in oklab, var(--urgent) 18%, var(--surface)); }
 }
+
+.cm-item[data-item]:is(:active, .is-pressed) { background: color-mix(in oklab, var(--ink) 11%, transparent); }
+.cm-item.is-test[data-item]:is(:active, .is-pressed), .cm-item.is-overdue[data-item]:is(:active, .is-pressed) { background: color-mix(in oklab, var(--urgent) 24%, var(--surface)); }
 
 .cm-body, .cm-items { display: grid; gap: 2px; min-width: 0; }
 .cm-item { position: relative; display: flex; align-items: center; gap: 5px; min-width: 0; height: 20px; padding: 0 5px; border-radius: 6px; font-size: var(--text-xs); line-height: 1; color: var(--ink); white-space: nowrap; overflow: hidden; }
@@ -321,7 +328,7 @@
 
 .cl-rows li + li .cl-row::before { content: ""; position: absolute; top: 0; left: 72px; right: 8px; height: 1px; background: var(--line-soft); }
 .cl-row.is-selected { background: var(--surface-hover); }
-.cl-row:active { background: var(--surface-press); }
+.cl-row:is(:active, .is-pressed) { background: var(--surface-press); }
 .cl-row:focus-visible { outline-offset: -2px; }
 
 @media (hover: hover) and (pointer: fine) {
@@ -367,12 +374,14 @@
   transition: background-color var(--dur-hover-out) var(--ease-hover);
 }
 
-.cal-agenda-item:active { background: color-mix(in oklab, var(--ink) 9%, transparent); }
+.cal-agenda-item:is(:active, .is-pressed) { background: color-mix(in oklab, var(--ink) 9%, transparent); }
 .cal-agenda-item.is-selected { background: color-mix(in oklab, var(--ink) 8%, transparent); }
 
 @media (hover: hover) and (pointer: fine) {
   .cal-agenda-item:hover, .cal-next-card:hover { background: color-mix(in oklab, var(--ink) 6%, transparent); transition-duration: var(--dur-hover-in); }
 }
+
+.cal-next-card:is(:active, .is-pressed) { background: color-mix(in oklab, var(--ink) 9%, transparent); }
 
 .cal-agenda-time { font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: 1.35; color: var(--ink); font-variant-numeric: tabular-nums; }
 .cal-agenda-time .icon { --s: 16; color: var(--ink-soft); }
@@ -398,6 +407,8 @@
 @media (hover: hover) and (pointer: fine) {
   .cal-next-prep:hover { color: var(--ink); transition-duration: var(--dur-hover-in); }
 }
+
+.cal-next-prep:is(:active, .is-pressed) { color: var(--ink); }
 
 .cal-panel { padding: 18px 18px 16px; }
 .cal-panel:focus { outline: none; }
@@ -442,7 +453,7 @@
 }
 
 .cal-route .icon { --s: 16; }
-.cal-route:active { background: var(--surface-press); }
+.cal-route:is(:active, .is-pressed) { background: var(--surface-press); }
 .cal-kind .cal-dot { width: 8px; height: 8px; }
 .cal-link { display: inline-flex; align-items: center; gap: 2px; font-weight: var(--weight-medium); color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 .cal-link .icon { --s: 14; }

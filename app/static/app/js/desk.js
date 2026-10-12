@@ -1,5 +1,5 @@
 import { animates, travels, token } from "./motion.js";
-import { flags } from "./core.js";
+import { weakDevice, attentive, onAttention } from "./attention.js";
 
 const NS = "http://www.w3.org/2000/svg";
 
@@ -490,16 +490,10 @@ function poke(event) {
 
 const FPS = 12;
 
-export const liteDevice = () => flags.lite
-  || matchMedia("(pointer: coarse)").matches
-  || (navigator.hardwareConcurrency || 8) <= 4
-  || (navigator.deviceMemory || 8) <= 4
-  || !!navigator.connection?.saveData;
-
 function watch(host) {
   if (host.dataset.watched) return;
   host.dataset.watched = "1";
-  const lite = liteDevice();
+  const lite = weakDevice();
   host.classList.toggle("is-lite", lite);
   host.addEventListener("click", poke);
   let time = 4;
@@ -512,7 +506,7 @@ function watch(host) {
     host.style.setProperty("--t", time.toFixed(3));
   };
   const sync = () => {
-    const live = travels() && !document.hidden && document.hasFocus() && host.dataset.visible !== "0";
+    const live = travels() && attentive() && host.dataset.visible !== "0";
     host.classList.toggle("is-still", !live);
     host.classList.toggle("is-static", !travels());
     const ambient = live && !lite;
@@ -528,9 +522,7 @@ function watch(host) {
     host.dataset.visible = entry.isIntersecting ? "1" : "0";
     sync();
   }).observe(host);
-  document.addEventListener("visibilitychange", sync);
-  addEventListener("focus", sync);
-  addEventListener("blur", sync);
+  onAttention(sync);
   matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", sync);
 }
 

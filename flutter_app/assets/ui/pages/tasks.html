@@ -4,11 +4,52 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Aufgaben · __APP_BRAND__</title>
+    
+    <script nonce="__APP_NONCE__">
+        (function () {
+            var root = document.documentElement;
+            var tab = 1;
+            var here = location.pathname;
+            var last = null;
+            var remember = function () {
+                try { sessionStorage.setItem("app-nav", tab + " " + here); } catch (error) {}
+            };
+            var settle = function () {
+                delete root.dataset.navFrom;
+                delete root.dataset.navDir;
+                delete root.dataset.navVt;
+            };
+            try { last = sessionStorage.getItem("app-nav"); } catch (error) {}
+            var from = last ? parseInt(last, 10) : -1;
+            if (from >= 0 && from <= 4 && last.slice(2) !== here) {
+                root.dataset.navFrom = from;
+                if (from !== tab) root.dataset.navDir = tab > from ? "forward" : "back";
+            }
+            remember();
+            addEventListener("pagereveal", function (event) {
+                var transition = event.viewTransition;
+                if (!transition) return;
+                root.dataset.navVt = "1";
+                transition.ready.then(function () {
+                    transition.finished.then(settle, settle);
+                }, function () {
+                    delete root.dataset.navVt;
+                    setTimeout(settle, 1200);
+                });
+            });
+            addEventListener("pageshow", function () {
+                remember();
+                setTimeout(function () {
+                    if (!root.dataset.navVt) settle();
+                }, 1200);
+            });
+        })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
     <link rel="preload" href="/static/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/static/app/css/tokens.css?v=49940f8060">
-    <link rel="stylesheet" href="/static/app/css/app.css?v=49940f8060">
-    <link rel="stylesheet" href="/static/css/tour.css?v=49940f8060">
+    <link rel="stylesheet" href="/static/app/css/tokens.css?v=435ed098cc">
+    <link rel="stylesheet" href="/static/app/css/app.css?v=435ed098cc">
+    <link rel="stylesheet" href="/static/css/tour.css?v=435ed098cc">
     
     <script nonce="__APP_NONCE__">
         (function () {
@@ -24,7 +65,7 @@
             if (root.dataset.themeMode === "auto") root.dataset.theme = system.matches ? "dark" : "light";
         })();
     </script>
-    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=49940f8060"></script>
+    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=435ed098cc"></script>
 </head>
 <body data-tour-auto="__APP_TOUR__" data-server-behind="0">
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -311,7 +352,8 @@
     </main>
 </div>
 
-<nav class="tabbar" aria-label="Navigation">
+<nav class="tabbar" aria-label="Navigation" data-tab="1">
+    <span class="tab-indicator" aria-hidden="true"></span>
     
     <a class="tab" href="/hub" data-page="home">
         <svg class="icon"><use href="#i-house"/></svg><span>Übersicht</span>
@@ -464,8 +506,8 @@
 <div class="tooltip" id="tooltip" role="tooltip"></div>
 
 <script type="application/json" id="appStore">__APP_STORE__</script>
-<script nonce="__APP_NONCE__" src="/static/js/tinte.js?v=49940f8060" defer></script>
-<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=49940f8060" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/tinte.js?v=435ed098cc" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=435ed098cc" defer></script>
 
 
 <script type="application/json" id="appData">__APP_DATA__</script>
