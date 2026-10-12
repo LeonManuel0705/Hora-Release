@@ -54,7 +54,7 @@ globalThis.matchMedia = () => ({ matches: false, addEventListener() {} });
 globalThis.addEventListener = () => {};
 globalThis.dispatchEvent = () => true;
 
-const { ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, assessmentCount } = await import(script("core.js"));
+const { ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, assessmentCount, data } = await import(script("core.js"));
 const { dueReminders, readPrefs } = await import(script("reminders.js"));
 
 const kinds = (...names) => names.map((kind) => ({ kind }));
@@ -104,6 +104,28 @@ const tests = {
   "it follows the switch and the lead time of tests"() {
     assert.deepEqual(reminded({ categories: { tests: { on: false } } }), [["Hausaufgabe: Atlas S. 24", "Fällig morgen, Geografie"]]);
     assert.deepEqual(reminded({ categories: { tests: { lead: 3 }, homework: { on: false } } }).map(([title]) => title), ["Vortrag: Stadtklima", "Vortrag: Klimazonen", "Test: Vektoren"]);
+  },
+  "a test is announced with what to learn and a presentation with its note"() {
+    const kept = data.deadlines;
+    const due = (id, kind, subject, detail, time) => ({ id, kind, title: id, subject, date: "2026-10-13", status: "offen", detail, ...(time ? { time } : {}) });
+    data.deadlines = [
+      due("test-9", "Test", "geo", "Buch S. 40 bis 62\n- Arbeitsblatt 3,\n\n  \u2022 Begriffe aus dem Glossar.\n\u2013 Formelblatt", "09:50"),
+      due("exam-9", "Klausur", "mathe", "x".repeat(400)),
+      due("talk-9", "Vortrag", "geo", "10 Minuten, mit Handout"),
+      due("test-8", "Test", "mathe", " \n  "),
+      due("hw-9", "Hausaufgabe", "geo", "Nr. 3 und 4"),
+    ];
+    try {
+      assert.deepEqual(reminded({}).map(([, body]) => body), [
+        "Morgen um 9:50, Geografie\nLernstoff: Buch S. 40 bis 62, Arbeitsblatt 3, Begriffe aus dem Glossar. Formelblatt",
+        `Morgen, Mathe\nLernstoff: ${"x".repeat(159)}…`,
+        "Morgen, Geografie\nNotiz: 10 Minuten, mit Handout",
+        "Morgen, Mathe",
+        "Fällig morgen, Geografie",
+      ]);
+    } finally {
+      data.deadlines = kept;
+    }
   },
 };
 

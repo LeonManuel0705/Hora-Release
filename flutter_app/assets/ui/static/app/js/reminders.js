@@ -6,6 +6,7 @@ const TICK = 30000;
 const GRACE = 5;
 const KEEP_DAYS = 3;
 const MORNING = 7 * 60;
+const NOTE_LIMIT = 160;
 
 export const CATEGORY_DEFAULTS = {
   lessons: { on: true, lead: 10 },
@@ -48,6 +49,14 @@ const whenText = (days) => (days === 0 ? "heute" : days === 1 ? "morgen" : `in $
 const capitalized = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const courseOf = (key) => (key ? `, ${subject(key).label}` : "");
 
+function noteOf(item) {
+  const lines = String(item.detail || "").split("\n").map((line) => line.replace(/^\s*[-\u2013\u2022*]\s+/, "").trim().replace(/[,;]$/, "")).filter(Boolean);
+  if (!lines.length) return "";
+  const text = lines.reduce((all, line) => `${all}${/[.:!?]$/.test(all) ? " " : ", "}${line}`);
+  const word = item.kind === "Test" || item.kind === "Klausur" ? "Lernstoff" : "Notiz";
+  return `\n${word}: ${text.length > NOTE_LIMIT ? `${text.slice(0, NOTE_LIMIT - 1).replace(/[\uD800-\uDBFF]$/, "").trimEnd()}…` : text}`;
+}
+
 function lessonReminders(prefs, day, minute) {
   const lead = Number(prefs.categories.lessons.lead) || CATEGORY_DEFAULTS.lessons.lead;
   return lessonsFor(day)
@@ -72,7 +81,7 @@ function deadlineReminders(prefs, day) {
       title: `${item.kind}: ${item.title}`,
       body: homework
         ? `Fällig ${whenText(days)}${courseOf(item.subject)}`
-        : `${capitalized(whenText(days))}${item.time ? ` um ${hm(item.time)}` : ""}${courseOf(item.subject)}`,
+        : `${capitalized(whenText(days))}${item.time ? ` um ${hm(item.time)}` : ""}${courseOf(item.subject)}${noteOf(item)}`,
     });
   }
   return reminders;
