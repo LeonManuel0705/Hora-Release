@@ -891,6 +891,14 @@ $("shortcuts")?.addEventListener("click", (event) => {
 
 export const typing = (target) => target.closest?.("input, textarea, select, [contenteditable='true']");
 
+export function keepOneLine(field) {
+  if (!/[\r\n]/.test(field.value)) return;
+  const flat = (text) => text.replace(/\s*[\r\n]+\s*/g, " ");
+  const caret = flat(field.value.slice(0, field.selectionStart)).length;
+  field.value = flat(field.value);
+  field.setSelectionRange(caret, caret);
+}
+
 const NO_TEXT = ["checkbox", "radio", "range", "button", "submit", "reset", "file", "color", "image"];
 
 function takesText(target) {

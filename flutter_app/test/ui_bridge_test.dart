@@ -249,6 +249,21 @@ void main() {
     }
   });
 
+  test('the task form takes no more text than is kept and a task keeps what the form gives it', () async {
+    final source = File('assets/ui/static/app/js/tasks.js').readAsStringSync();
+    final limits = RegExp(r'const TASK_LIMITS = \{ title: (\d+), notes: (\d+) \};').firstMatch(source)!;
+    final title = int.parse(limits.group(1)!), notes = int.parse(limits.group(2)!);
+    final hub = bridge();
+    final created = await api(hub, 'POST', '/api/ui/tasks', {'title': 'T' * title, 'notes': 'N' * notes, 'date': null, 'someday': true, 'priority': true, 'repeat': 'weekly', 'minutes': 20, 'source': 'own', 'done': false});
+    expect(created.status, 200);
+    final saved = (jsonDecode(created.body as String) as Map)['task'] as Map;
+    expect([(saved['title'] as String).length, (saved['notes'] as String).length], [title, notes]);
+    expect([saved['someday'], saved['date'], saved['priority'], saved['repeat']], [true, null, true, 'weekly']);
+    final edited = await api(hub, 'PATCH', '/api/ui/tasks/${Uri.encodeComponent('${saved['id']}')}', {'title': 'U' * title, 'notes': 'M' * notes});
+    final changed = (jsonDecode(edited.body as String) as Map)['task'] as Map;
+    expect([(changed['title'] as String).length, (changed['notes'] as String).length], [title, notes]);
+  });
+
   test('broken or oversized requests are refused like on the device server', () async {
     final hub = bridge();
     final invalid = await api(hub, 'POST', '/api/ui/tasks', '{"title": ');

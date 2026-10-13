@@ -113,6 +113,40 @@ def test_task_needs_a_title(client):
     assert response.status_code == 400
 
 
+def test_the_task_button_opens_a_form_next_to_the_quick_field(client):
+    page = client.get("/hub/tasks").get_data(as_text=True)
+    assert re.search(r'<button[^>]*id="newTask"[^>]*aria-controls="taskPanel"', page)
+    assert 'id="quickInput"' in page and 'id="taskPanel"' in page
+    source = (ROOT / "app" / "static" / "app" / "js" / "tasks.js").read_text(encoding="utf-8")
+    assert '$("newTask").addEventListener("click", openDraft);' in source
+    form = source.split("function renderDraft() {", 1)[1].split("\nfunction ", 1)[0]
+    for part in ('id="draftTitle"', 'id="panelSubject"', "repeatField(draft)", "dueField(draft", "priorityField(draft)", 'id="draftNotes"', 'type="submit"'):
+        assert part in form, part
+
+
+def test_a_task_from_the_form_keeps_everything_it_was_given(client):
+    own_subject(client, "geo-form")
+    body = {"title": "Referat vorbereiten", "subject": "geo-form", "priority": True, "repeat": "weekly", "notes": "Quellen suchen\nGliederung", "minutes": 20, "source": "own", "done": False}
+    when = (date.today() + timedelta(days=1)).isoformat()
+    dated = client.post("/api/ui/tasks", json={**body, "date": when, "someday": False}).get_json()["task"]
+    assert (dated["subject"], dated["date"], dated["priority"], dated["repeat"], dated["notes"]) == ("geo-form", when, True, "weekly", "Quellen suchen\nGliederung")
+    assert "someday" not in dated
+    open_ended = client.post("/api/ui/tasks", json={**body, "date": None, "someday": True}).get_json()["task"]
+    assert open_ended["someday"] is True and open_ended["date"] is None
+    listed = {item["id"]: item for item in [*page_data(client, "/hub/tasks")["tasks"], *page_data(client, "/hub/tasks").get("taskPool", [])]}
+    assert listed[dated["id"]]["repeat"] == "weekly" and listed[open_ended["id"]]["someday"] is True
+
+
+def test_the_task_form_takes_no_more_text_than_is_kept(client):
+    source = (ROOT / "app" / "static" / "app" / "js" / "tasks.js").read_text(encoding="utf-8")
+    title, notes = map(int, re.search(r"const TASK_LIMITS = \{ title: (\d+), notes: (\d+) \};", source).groups())
+    assert title >= 300 and notes >= 5000
+    saved = client.post("/api/ui/tasks", json={"title": "T" * title, "notes": "N" * notes}).get_json()["task"]
+    assert (len(saved["title"]), len(saved["notes"])) == (title, notes)
+    changed = client.patch(f"/api/ui/tasks/{saved['id']}", json={"title": "U" * title, "notes": "M" * notes}).get_json()["task"]
+    assert (len(changed["title"]), len(changed["notes"])) == (title, notes)
+
+
 def test_homework_deadline_round_trip(client):
     when = (date.today() + timedelta(days=3)).isoformat()
     deadline = client.post("/api/ui/deadlines", json={"kind": "Hausaufgabe", "title": "Diercke S. 24", "date": when}).get_json()["deadline"]

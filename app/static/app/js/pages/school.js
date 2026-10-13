@@ -4,7 +4,7 @@ import {
   abWeeks, gradeScale, activeSubjectKeys, ASSESSMENTS, isAssessment, assessmentCount, pastText, pastWord, homeworkDate,
 } from "../core.js";
 import { animates, travels, token, ms } from "../motion.js";
-import { toast, registerSearch, syncTime, typing, overlayOpen, pageUrl } from "../shell.js";
+import { toast, registerSearch, syncTime, typing, overlayOpen, pageUrl, keepOneLine } from "../shell.js";
 import { deadlines as deadlineApi, grades as gradeApi } from "../api.js";
 
 const $ = (id) => document.getElementById(id);
@@ -1354,14 +1354,6 @@ function countHtml(field, text) {
 function showCount(field, text) {
   const node = document.querySelector(`#schoolPanel [data-count="${field}"]`);
   if (node) node.outerHTML = countHtml(field, text);
-}
-
-function keepOneLine(field) {
-  if (!/[\r\n]/.test(field.value)) return;
-  const flat = (text) => text.replace(/\s*[\r\n]+\s*/g, " ");
-  const caret = flat(field.value.slice(0, field.selectionStart)).length;
-  field.value = flat(field.value);
-  field.setSelectionRange(caret, caret);
 }
 
 function testFormHtml() {

@@ -1,6 +1,6 @@
 import { data, esc, icon, tinte, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, relativeDay, now, minutesOf, subject, hueVar, glue, nextRepeatDate, homeworkDate, followLinks, ASSESSMENTS, isAssessment, WEEKDAYS, WEEKDAYS_SHORT, storage } from "./core.js";
 import { animates, travels, flipKeyed, exitInPlace, enterInPlace, token } from "./motion.js";
-import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen } from "./shell.js";
+import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen, keepOneLine } from "./shell.js";
 import { tasks as taskApi, deadlines as deadlineApi, debounced, serverId } from "./api.js";
 import { initNoteList } from "./notes.js";
 
@@ -17,6 +17,7 @@ const effort = (min) => {
 
 const REPEAT_WORDS = { daily: "täglich", weekly: "wöchentlich", monthly: "monatlich" };
 const FILTER_WORDS = { heute: "Heute", woche: "Woche", alle: "Alle" };
+const TASK_LIMITS = { title: 300, notes: 5000 };
 
 const state = {
   tasks: [],
@@ -24,6 +25,8 @@ const state = {
   filter: ["heute", "woche", "alle"].includes(storage.get("app-task-filter")) ? storage.get("app-task-filter") : "heute",
   subject: null,
   selected: null,
+  draft: null,
+  parked: null,
   doneOpen: false,
   loading: false,
   pending: new Set(),
@@ -434,24 +437,50 @@ function subjectOptions(current) {
   return `<option value="">Kein Fach</option>${keys.map((key) => `<option value="${esc(key)}"${key === current ? " selected" : ""}>${esc(subject(key).name)}</option>`).join("")}`;
 }
 
+function dueChoices() {
+  const start = startOfDay(now());
+  return [
+    ["today", "Heute", today()],
+    ["tomorrow", "Morgen", isoDate(addDays(start, 1))],
+    ["nextweek", "Nächste Woche", isoDate(addDays(start, 8 - (start.getDay() || 7)))],
+    ["none", "Ohne Datum", null],
+  ];
+}
+
+function dueField(item, dates, fixed = "") {
+  const custom = !!item.date && !dates.some(([, , value]) => value === item.date);
+  return `<div class="field"><span class="field-label" id="panelDateLabel">Fällig</span>
+        <div class="field-body" role="group" aria-labelledby="panelDateLabel">
+          ${dates.map(([key, text, value]) => `<button type="button" class="pill" data-date="${key}" aria-pressed="${item.date === value}"${fixed}>${text}</button>`).join("")}
+          <button type="button" class="pill" data-date="pick" aria-pressed="${custom}"${fixed}>${icon("calendar-days")}${custom ? esc(shortDate(parseDate(item.date))) : "Datum wählen"}</button>
+          <input class="date-proxy" type="date" id="panelDate" value="${esc(item.date || "")}" tabindex="-1" aria-hidden="true">
+        </div>
+      </div>`;
+}
+
+function priorityField(item) {
+  return `<div class="field is-inline"><span class="field-label" id="panelPrioLabel">Wichtig</span><button type="button" class="switch" role="switch" id="panelPriority" aria-checked="${!!item.priority}" aria-labelledby="panelPrioLabel"><span></span></button></div>`;
+}
+
+function repeatField(item) {
+  return `<label class="field"><span class="field-label">Wiederholen</span><select class="field-control" id="panelRepeat">
+        <option value="">Nie</option>${Object.entries(REPEAT_WORDS).map(([key, word]) => `<option value="${key}"${item.repeat === key ? " selected" : ""}>${word[0].toUpperCase()}${word.slice(1)}</option>`).join("")}
+      </select></label>`;
+}
+
 function renderPanel() {
   const task = findTask(state.selected);
   const panel = $("taskPanel");
   if (!task) return;
   const linked = deadlineOf(task);
-  const dates = [
-    ["today", "Heute", today()],
-    ["tomorrow", "Morgen", isoDate(addDays(startOfDay(now()), 1))],
-    ["nextweek", "Nächste Woche", isoDate(addDays(startOfDay(now()), 8 - (startOfDay(now()).getDay() || 7)))],
-    ["none", "Ohne Datum", null],
-  ];
+  const dates = dueChoices();
   const homework = !!task.synced;
   const fixed = task.source === "iserv" ? " disabled" : "";
   if (homework) dates.pop();
-  const custom = !!task.date && !dates.some(([, , value]) => value === task.date);
+  panel.setAttribute("aria-label", "Aufgabe bearbeiten");
   panel.innerHTML = `<div class="panel-head">
       <button class="check" type="button" role="checkbox" aria-checked="${task.done}" aria-label="Erledigt: ${esc(task.title)}" data-panel-check>${icon("check")}</button>
-      <textarea class="panel-title" id="panelTitle" rows="2" aria-label="Titel"${fixed ? " readonly" : ""}>${esc(task.title)}</textarea>
+      <textarea class="panel-title" id="panelTitle" rows="2" maxlength="${TASK_LIMITS.title}" aria-label="Titel"${fixed ? " readonly" : ""}>${esc(task.title)}</textarea>
       <div class="panel-tools">
         <button class="icon-button is-danger" type="button" data-panel-delete aria-label="Aufgabe löschen" data-tip="Löschen">${icon("trash-2")}</button>
         <button class="icon-button" type="button" data-panel-close aria-label="Details schließen" data-tip="Schließen">${icon("x")}</button>
@@ -459,47 +488,140 @@ function renderPanel() {
     </div>
     <div class="panel-fields">
       <label class="field"><span class="field-label">Fach</span><select class="field-control" id="panelSubject"${fixed}>${subjectOptions(task.subject)}</select></label>
-      <div class="field"><span class="field-label" id="panelDateLabel">Fällig</span>
-        <div class="field-body" role="group" aria-labelledby="panelDateLabel">
-          ${dates.map(([key, text, value]) => `<button type="button" class="pill" data-date="${key}" aria-pressed="${task.date === value}"${fixed}>${text}</button>`).join("")}
-          <button type="button" class="pill" data-date="pick" aria-pressed="${custom}"${fixed}>${icon("calendar-days")}${custom ? esc(shortDate(parseDate(task.date))) : "Datum wählen"}</button>
-          <input class="date-proxy" type="date" id="panelDate" value="${esc(task.date || "")}" tabindex="-1" aria-hidden="true">
-        </div>
-      </div>
-      ${homework ? "" : `<div class="field is-inline"><span class="field-label" id="panelPrioLabel">Wichtig</span><button type="button" class="switch" role="switch" id="panelPriority" aria-checked="${!!task.priority}" aria-labelledby="panelPrioLabel"><span></span></button></div>
-      <label class="field"><span class="field-label">Wiederholen</span><select class="field-control" id="panelRepeat">
-        <option value="">Nie</option>${Object.entries(REPEAT_WORDS).map(([key, word]) => `<option value="${key}"${task.repeat === key ? " selected" : ""}>${word[0].toUpperCase()}${word.slice(1)}</option>`).join("")}
-      </select></label>`}
-      ${task.source === "iserv" ? "" : `<label class="field"><span class="field-label">Notizen</span><textarea class="field-control" id="panelNotes" rows="3" placeholder="Seiten, Links, was du nicht vergessen willst">${esc(task.notes || "")}</textarea></label>`}
+      ${dueField(task, dates, fixed)}
+      ${homework ? "" : `${priorityField(task)}
+      ${repeatField(task)}`}
+      ${task.source === "iserv" ? "" : `<label class="field"><span class="field-label">Notizen</span><textarea class="field-control" id="panelNotes" rows="3" maxlength="${TASK_LIMITS.notes}" placeholder="Seiten, Links, was du nicht vergessen willst">${esc(task.notes || "")}</textarea></label>`}
       ${linked ? `<div class="field"><span class="field-label">Gehört zu</span><span class="field-value">${icon(ASSESSMENTS[linked.kind]?.icon || "calendar-days")}${esc(linked.kind)}: ${esc(linked.title)}, ${esc(shortDate(parseDate(linked.date)))}</span></div>` : ""}
       ${task.source === "iserv" ? `<p class="panel-source">${icon("graduation-cap")}Aus IServ${task.detail ? `, ${esc(task.detail)}` : ""}</p>` : homework ? `<p class="panel-source">${icon("notebook-pen")}Hausaufgabe, steht auch unter Schule</p>` : ""}
     </div>`;
 }
 
-function openPanel(id) {
-  const opening = state.selected == null;
-  state.selected = id;
-  document.querySelectorAll("#taskGroups .row.is-selected, #tasksDoneList .row.is-selected").forEach((row) => row.classList.remove("is-selected"));
-  rowOf(id)?.classList.add("is-selected");
-  renderPanel();
+function renderDraft() {
+  const draft = state.draft;
+  const panel = $("taskPanel");
+  panel.setAttribute("aria-label", "Neue Aufgabe");
+  panel.innerHTML = `<form id="taskForm" class="task-form" autocomplete="off" novalidate>
+    <div class="panel-head">
+      <div class="panel-heading"><h2 class="panel-name">Neue Aufgabe</h2></div>
+      <div class="panel-tools"><button class="icon-button" type="button" data-panel-close aria-label="Schließen" data-tip="Schließen">${icon("x")}</button></div>
+    </div>
+    <div class="panel-fields">
+      <label class="field"><span class="field-label">Titel</span><textarea class="field-control is-line" id="draftTitle" rows="1" maxlength="${TASK_LIMITS.title}" enterkeyhint="done" aria-required="true" placeholder="z. B. Vokabeln Unit 3 lernen">${esc(draft.title)}</textarea></label>
+      <div class="field-pair">
+        <label class="field"><span class="field-label">Fach</span><select class="field-control" id="panelSubject">${subjectOptions(draft.subject)}</select></label>
+        ${repeatField(draft)}
+      </div>
+      ${dueField(draft, dueChoices())}
+      ${priorityField(draft)}
+      <label class="field"><span class="field-label">Notizen</span><textarea class="field-control" id="draftNotes" rows="2" maxlength="${TASK_LIMITS.notes}" placeholder="Seiten, Links, was du nicht vergessen willst">${esc(draft.notes)}</textarea></label>
+    </div>
+    <div class="panel-actions"><button type="button" class="btn btn-quiet" data-panel-close>Abbrechen</button><button type="submit" class="btn btn-primary" id="draftSave"${draft.title.trim() ? "" : " disabled"}>Anlegen</button></div>
+  </form>`;
+}
+
+function showPanel(opening) {
   const panel = $("taskPanel");
   panel.hidden = false;
   $("weekLoad").hidden = true;
   $("tasksPage").classList.add("has-panel");
+  $("newTask").setAttribute("aria-expanded", String(!!state.draft));
   if (opening && animates()) panel.animate(travels() ? [{ opacity: 0, transform: "translateX(12px)" }, { opacity: 1, transform: "none" }] : [{ opacity: 0 }, { opacity: 1 }], { duration: 240, easing: token("--ease-out") });
+}
+
+function openPanel(id) {
+  const opening = state.selected == null && !state.draft;
+  if (state.draft) state.parked = state.draft;
+  state.draft = null;
+  state.selected = id;
+  document.querySelectorAll("#taskGroups .row.is-selected, #tasksDoneList .row.is-selected").forEach((row) => row.classList.remove("is-selected"));
+  rowOf(id)?.classList.add("is-selected");
+  renderPanel();
+  showPanel(opening);
+}
+
+function openDraft() {
+  if (state.draft) {
+    $("draftTitle").focus();
+    return;
+  }
+  const opening = state.selected == null;
+  const input = $("quickInput");
+  const text = input.value.trim();
+  const info = text ? parseNote(text) : {};
+  const fresh = {
+    title: text ? cleanTitle(text, info) : "",
+    subject: info.subject || state.subject || undefined,
+    date: info.date || today(),
+    someday: false,
+    anchor: info.block ? `vor dem ${info.block}. Block` : "",
+    priority: false,
+    repeat: undefined,
+    notes: "",
+  };
+  state.draft = text || !state.parked ? fresh : state.parked;
+  state.parked = null;
+  state.selected = null;
+  document.querySelectorAll(".row.is-selected").forEach((row) => row.classList.remove("is-selected"));
+  if (text) {
+    input.value = "";
+    renderChips();
+  }
+  renderDraft();
+  showPanel(opening);
+  const title = $("draftTitle");
+  title.focus();
+  title.setSelectionRange(title.value.length, title.value.length);
+}
+
+function submitDraft() {
+  const draft = state.draft;
+  if (!draft) return;
+  const title = draft.title.replace(/\s+/g, " ").trim();
+  if (!title) {
+    $("draftTitle").focus();
+    return;
+  }
+  closePanel({ refocus: true });
+  addTask({
+    id: `new-${Date.now()}`,
+    title,
+    subject: draft.subject,
+    date: draft.date,
+    someday: draft.date == null,
+    anchor: draft.anchor,
+    minutes: 20,
+    source: "own",
+    notes: draft.notes.trim(),
+    priority: draft.priority,
+    repeat: draft.repeat,
+    done: false,
+  });
 }
 
 function closePanel({ refocus = false } = {}) {
   const id = state.selected;
+  const drafting = !!state.draft;
   state.selected = null;
+  state.draft = null;
   $("taskPanel").hidden = true;
   $("weekLoad").hidden = false;
   $("tasksPage").classList.remove("has-panel");
+  $("newTask").setAttribute("aria-expanded", "false");
   document.querySelectorAll(".row.is-selected").forEach((row) => row.classList.remove("is-selected"));
-  if (refocus && id) rowOf(id)?.querySelector(".row-open")?.focus({ preventScroll: true });
+  if (!refocus) return;
+  if (drafting) $("newTask").focus({ preventScroll: true });
+  else if (id) rowOf(id)?.querySelector(".row-open")?.focus({ preventScroll: true });
 }
 
+const edited = () => state.draft || findTask(state.selected);
+const repaint = () => (state.draft ? renderDraft() : renderPanel());
+
 function updateTask(changes) {
+  if (state.draft) {
+    Object.assign(state.draft, changes);
+    return;
+  }
   const task = findTask(state.selected);
   if (!task || task.source === "iserv") return;
   Object.assign(task, changes);
@@ -515,19 +637,17 @@ function bindPanel() {
     else if (event.target.closest("[data-panel-check]")) toggleTask(state.selected, { via: event.pointerType || "keyboard" });
     else if (event.target.closest("[data-panel-delete]")) removeTask(state.selected, "delete");
     else if (event.target.closest("#panelPriority")) {
-      const task = findTask(state.selected);
-      updateTask({ priority: !task.priority });
-      renderPanel();
+      updateTask({ priority: !edited().priority });
+      repaint();
       $("panelPriority").focus();
     } else if (event.target.closest("[data-date=pick]")) {
       const input = $("panelDate");
       try { input.showPicker(); } catch { input.focus(); }
     } else if (event.target.closest("[data-date]")) {
       const key = event.target.closest("[data-date]").dataset.date;
-      const start = startOfDay(now());
-      const value = key === "today" ? today() : key === "tomorrow" ? isoDate(addDays(start, 1)) : key === "nextweek" ? isoDate(addDays(start, 8 - (start.getDay() || 7))) : null;
+      const value = dueChoices().find(([name]) => name === key)[2];
       updateTask({ date: value, someday: value == null });
-      renderPanel();
+      repaint();
       panel.querySelector(`[data-date="${key}"]`)?.focus();
     }
   });
@@ -536,11 +656,31 @@ function bindPanel() {
     if (event.target.id === "panelRepeat") updateTask({ repeat: event.target.value || undefined });
     if (event.target.id === "panelDate" && event.target.value) {
       updateTask({ date: event.target.value, someday: false });
-      renderPanel();
+      repaint();
       panel.querySelector("[data-date=pick]")?.focus();
     }
   });
+  panel.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitDraft();
+  });
+  panel.addEventListener("beforeinput", (event) => {
+    if (event.target.id !== "draftTitle" || event.isComposing || !["insertLineBreak", "insertParagraph"].includes(event.inputType)) return;
+    event.preventDefault();
+    if (document.documentElement.classList.contains("is-touch")) event.target.blur();
+    else event.target.form.requestSubmit();
+  });
   panel.addEventListener("input", (event) => {
+    if (state.draft) {
+      if (event.target.id === "draftTitle") {
+        keepOneLine(event.target);
+        state.draft.title = event.target.value;
+        $("draftSave").disabled = !state.draft.title.trim();
+      } else if (event.target.id === "draftNotes") {
+        state.draft.notes = event.target.value;
+      }
+      return;
+    }
     const task = findTask(state.selected);
     if (!task || task.source === "iserv") return;
     if (event.target.id === "panelNotes") {
@@ -558,6 +698,9 @@ function bindPanel() {
     if (event.target.id === "panelTitle" && event.key === "Enter") {
       event.preventDefault();
       event.target.blur();
+    } else if (event.target.id === "draftNotes" && event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      event.target.form.requestSubmit();
     }
   });
 }
@@ -662,11 +805,11 @@ function bind() {
     input.value = "";
     renderChips();
   });
-  $("newTask").addEventListener("click", () => $("quickInput").focus());
+  $("newTask").addEventListener("click", openDraft);
   $("syncButton").addEventListener("click", startSync);
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && state.selected && !overlayOpen()) {
+    if (event.key === "Escape" && (state.selected || state.draft) && !overlayOpen()) {
       closePanel({ refocus: true });
       return;
     }
