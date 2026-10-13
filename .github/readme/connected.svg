@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" width="1280" height="360" role="img"><title>One change in the timetable updates the route and the tasks</title><style>
+text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.ct{font-size:14px;font-weight:600;letter-spacing:.08em;fill:#5E665B}
+.tm{font-size:15px;fill:#5E665B}
+.nm{font-size:18px;font-weight:600;letter-spacing:-.01em;fill:#2E3A2F}
+.ch{font-size:13px;font-weight:600;text-anchor:middle}
+.strike,.l1,.l2{stroke-dashoffset:0}
+.strike{stroke-dasharray:132;animation:strike 12s cubic-bezier(.23,1,.32,1) infinite}
+.l1{stroke-dasharray:66;animation:l1 12s cubic-bezier(.23,1,.32,1) infinite}
+.l2{stroke-dasharray:66;animation:l2 12s cubic-bezier(.23,1,.32,1) infinite}
+.rowtxt{animation:rowtxt 12s cubic-bezier(.23,1,.32,1) infinite}
+.chipc{animation:chipc 12s cubic-bezier(.23,1,.32,1) infinite}
+.a1{animation:a1 12s cubic-bezier(.23,1,.32,1) infinite}
+.a2{animation:a2 12s cubic-bezier(.23,1,.32,1) infinite}
+.rold{animation:rold 12s cubic-bezier(.23,1,.32,1) infinite}
+.rnew{animation:rnew 12s cubic-bezier(.23,1,.32,1) infinite}
+.wed{animation:wed 12s cubic-bezier(.23,1,.32,1) infinite}
+.thu{animation:thu 12s cubic-bezier(.23,1,.32,1) infinite}
+@keyframes strike{0%,10%{stroke-dashoffset:132;opacity:1}18%,94%{stroke-dashoffset:0;opacity:1}100%{stroke-dashoffset:0;opacity:0}}
+@keyframes rowtxt{0%,10%{opacity:1}18%,94%{opacity:.5}100%{opacity:1}}
+@keyframes chipc{0%,13%{opacity:0;transform:translateY(4px)}18%,94%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(0)}}
+@keyframes l1{0%,20%{stroke-dashoffset:66;opacity:1}28%,94%{stroke-dashoffset:0;opacity:1}100%{stroke-dashoffset:0;opacity:0}}
+@keyframes a1{0%,26%{opacity:0}28%,94%{opacity:1}100%{opacity:0}}
+@keyframes rold{0%,30%{opacity:1;transform:translateY(0)}36%,94%{opacity:0;transform:translateY(-5px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes rnew{0%,30%{opacity:0;transform:translateY(5px)}36%,94%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(5px)}}
+@keyframes l2{0%,40%{stroke-dashoffset:66;opacity:1}48%,94%{stroke-dashoffset:0;opacity:1}100%{stroke-dashoffset:0;opacity:0}}
+@keyframes a2{0%,46%{opacity:0}48%,94%{opacity:1}100%{opacity:0}}
+@keyframes wed{0%,50%{opacity:1}56%,94%{opacity:0}100%{opacity:1}}
+@keyframes thu{0%,50%{opacity:0}56%,94%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<rect x=".5" y=".5" width="1279" height="359" rx="27.5" fill="#F8F6EE" stroke="#E4DFD4"/>
+<g fill="none" stroke="#E4DFD4" stroke-width="2"><path d="M392 180H458"/><path d="M822 180H888"/></g>
+<g fill="none" stroke="#2E3A2F" stroke-width="2" stroke-linecap="butt"><path class="l1" d="M392 180H458"/><path class="l2" d="M822 180H888"/></g>
+<g fill="none" stroke="#2E3A2F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path class="a1" d="M452 174L458 180L452 186"/><path class="a2" d="M882 174L888 180L882 186"/></g>
+
+<rect x="40.5" y="70.5" width="339" height="219" rx="20" fill="#FCFCF9" stroke="#E4DFD4"/>
+<text class="ct" x="64" y="106">Timetable</text>
+<rect x="64.5" y="126.5" width="291" height="53" rx="12" fill="#F8F6EE" stroke="#E4DFD4"/>
+<g class="rowtxt" opacity=".5"><text class="tm" x="80" y="159">08:00</text><text class="nm" x="136" y="159">Physics</text></g>
+<path class="strike" d="M76 153H208" fill="none" stroke="#C96F4F" stroke-width="2.5" stroke-linecap="butt"/>
+<g class="chipc"><rect x="272" y="140" width="72" height="26" rx="13" fill="#C96F4F" fill-opacity=".14"/><text class="ch" x="308" y="157.5" fill="#C96F4F">cancelled</text></g>
+<rect x="64.5" y="192.5" width="291" height="53" rx="12" fill="#F8F6EE" stroke="#E4DFD4"/>
+<text class="tm" x="80" y="225">09:45</text><text class="nm" x="136" y="225">English</text>
+
+<rect x="470.5" y="70.5" width="339" height="219" rx="20" fill="#FCFCF9" stroke="#E4DFD4"/>
+<text class="ct" x="494" y="106">Route</text>
+<rect x="494" y="128" width="46" height="30" rx="9" fill="#2E3A2F"/><text x="517" y="148.5" font-size="15" font-weight="700" text-anchor="middle" fill="#F8F6EE">M4</text>
+<g class="rold" opacity="0"><text x="556" y="152" font-size="30" font-weight="650" letter-spacing="-.02em" fill="#2E3A2F">Leave 07:12</text><text class="tm" x="494" y="196">First lesson 08:00</text></g>
+<g class="rnew"><text x="556" y="152" font-size="30" font-weight="650" letter-spacing="-.02em" fill="#2E3A2F">Leave 08:55</text><text class="tm" x="494" y="196">First lesson 09:45</text></g>
+<path d="M494 240H786" stroke="#E4DFD4" stroke-width="3" stroke-linecap="round"/><circle cx="494" cy="240" r="5" fill="#86A36F"/><circle cx="640" cy="240" r="5" fill="#86A36F"/><circle cx="786" cy="240" r="6.5" fill="#2E3A2F"/>
+
+<rect x="900.5" y="70.5" width="339" height="219" rx="20" fill="#FCFCF9" stroke="#E4DFD4"/>
+<text class="ct" x="924" y="106">Tasks</text>
+<rect x="924.5" y="126.5" width="291" height="53" rx="12" fill="#F8F6EE" stroke="#E4DFD4"/>
+<rect x="940" y="143" width="20" height="20" rx="6" fill="none" stroke="#5E665B" stroke-width="2"/>
+<text x="972" y="159" font-size="16" font-weight="600" fill="#2E3A2F">Physics worksheet</text>
+<g class="wed" opacity="0"><rect x="1146" y="140" width="56" height="26" rx="13" fill="#C96F4F" fill-opacity=".14"/><text class="ch" x="1174" y="157.5" fill="#C96F4F">Wed</text></g>
+<g class="thu"><rect x="1146" y="140" width="56" height="26" rx="13" fill="#A3B690" fill-opacity=".38"/><text class="ch" x="1174" y="157.5" fill="#3A4E37">Thu</text></g>
+<rect x="924.5" y="192.5" width="291" height="53" rx="12" fill="#F8F6EE" stroke="#E4DFD4"/>
+<rect x="940" y="209" width="20" height="20" rx="6" fill="#86A36F"/><path d="M945 219.5L949 223.5L956 214.5" fill="none" stroke="#F8F6EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="972" y="225" font-size="16" font-weight="600" fill="#5E665B">Read chapter 4</text>
+<rect x="1146" y="206" width="56" height="26" rx="13" fill="#E4DFD4" fill-opacity=".7"/><text class="ch" x="1174" y="223.5" fill="#5E665B">Mon</text>
+</svg>
