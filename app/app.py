@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session, g
 from flask_cors import CORS

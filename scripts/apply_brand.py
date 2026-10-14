@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import argparse
 import json
@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parent.parent
 BRAND_FILE = ROOT / "brand" / "brand.json"
 APPLIED_FILE = ROOT / "app" / "brand.py"
 
-SPDX_HASH = "# SPDX-FileCopyrightText: 2026 Leon Manuel Töpper\n# SPDX-License-Identifier: AGPL-3.0-only\n\n"
-SPDX_SLASH = "// SPDX-FileCopyrightText: 2026 Leon Manuel Töpper\n// SPDX-License-Identifier: AGPL-3.0-only\n\n"
+SPDX_HASH = "# SPDX-FileCopyrightText: 2026 Leon Manuel Töpper\n# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0\n\n"
+SPDX_SLASH = "// SPDX-FileCopyrightText: 2026 Leon Manuel Töpper\n// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0\n\n"
 
 PROSE_FILES = [
     "README.md",

@@ -1,11 +1,11 @@
 # Contributor License Agreement
 
-Hora is dual licensed: AGPL-3.0 for everyone, and a commercial license for
-organisations that need different terms. That only works while one person holds
-the rights to all of the code. If a contribution arrives under the AGPL alone,
-nobody can include it in a commercially licensed build, and the project loses the
-ability to ship to the Apple App Store, to sign an agreement with a school, or to
-change license later.
+Hora is dual licensed: the PolyForm Noncommercial License 1.0.0 for everyone, and
+a commercial license for anyone who wants to earn money with it. That only works
+while one person holds the rights to all of the code. If a contribution arrives
+under the noncommercial license alone, nobody can include it in a commercially
+licensed build, and the project loses the ability to ship to the Apple App Store,
+to sign an agreement with a school or a company, or to change license later.
 
 This agreement keeps that possible. You keep the copyright to what you write.
 You grant a license wide enough to keep dual licensing working.
@@ -41,8 +41,9 @@ their permission, or that they have waived those rights.
 
 **5. Third party material.** If your contribution includes work you did not write
 yourself, say so in the pull request, name the source and name its license. Do
-not submit code you copied from a project under a license incompatible with the
-AGPL, and do not submit code generated from a source you cannot identify.
+not submit code you copied from a project under a copyleft license such as the
+GPL or the AGPL, since neither of Hora's licenses can include it, and do not
+submit code generated from a source you cannot identify.
 
 **6. No warranty.** You provide your contribution as is, without warranty of any
 kind, to the extent the law allows.

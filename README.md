@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://hora-app.netlify.app/download"><img src="https://img.shields.io/badge/version-0.5.2_closed_beta-2E3A2F?style=flat-square&labelColor=86A36F" alt="Version 0.5.2, closed beta"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0_or_commercial-2E3A2F?style=flat-square&labelColor=86A36F" alt="License: AGPL-3.0 or commercial"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm_Noncommercial_or_commercial-2E3A2F?style=flat-square&labelColor=86A36F" alt="License: PolyForm Noncommercial or commercial"></a>
   <img src="https://img.shields.io/badge/platforms-macOS_·_Windows_·_Linux_·_Android_·_Web-2E3A2F?style=flat-square&labelColor=86A36F" alt="Platforms: macOS, Windows, Linux, Android, Web">
   <img src="https://img.shields.io/badge/cloud-none-2E3A2F?style=flat-square&labelColor=C96F4F" alt="No cloud">
 </p>
@@ -227,18 +227,19 @@ cd desktop && npm test
 
 Hora is dual licensed.
 
-**[AGPL-3.0](LICENSE)** for everyone. Free to use, study, modify and run. If you
-modify Hora and let other people use your modified version over a network,
-section 13 requires you to offer them your source. Running it unmodified triggers
-nothing.
+**[PolyForm Noncommercial 1.0.0](LICENSE)** for everyone who does not earn money
+with it. Free to use, study, change and share, for students, teachers, schools
+and school authorities alike. Changed versions and every part of the code fall
+under the same terms: pass them on free of charge or use them yourself.
 
-**[Commercial license](COMMERCIAL-LICENSE.md)** for schools, school authorities
-and service providers that need private modifications, closed redistribution or
-an operated service with support and a GDPR data processing agreement.
+**[Commercial license](COMMERCIAL-LICENSE.md)** for anyone who wants to earn
+money with Hora or with any part of its code, for example by selling it,
+hosting it for others as a paid service or building it into a product.
 
 Copyright (C) 2026 Leon Manuel Töpper. See [NOTICE](NOTICE) for the full
 statement, including the license history: Hora was published under the MIT
-License until 2026-09-20 and that offer has been withdrawn.
+License until 2026-09-20 and under the AGPL-3.0 up to version 0.5.2. Both offers
+have been withdrawn.
 
 Contributions require the [CLA](licensing/CLA.md), which is what keeps the dual
 license possible. See [CONTRIBUTING.md](CONTRIBUTING.md).

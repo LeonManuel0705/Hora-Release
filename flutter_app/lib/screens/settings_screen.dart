@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import 'dart:convert';
 import 'dart:io' show Platform;
@@ -1080,8 +1080,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: const Icon(Icons.balance, color: AppPalette.teal, size: 20),
                   ),
                   title: const Text('Lizenz'),
-                  subtitle: const Text('Quellcode offen einsehbar'),
-                  trailing: const Text('AGPL-3.0'),
+                  subtitle: const Text('PolyForm Noncommercial 1.0.0'),
+                  trailing: const Icon(Icons.open_in_new, size: 18),
                   onTap: () => _launchUrl('${Brand.repository}/blob/main/LICENSE'),
                 ),
                 const Divider(height: 1),

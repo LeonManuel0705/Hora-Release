@@ -8,70 +8,53 @@ agreement.
 
 | You are | License | Cost |
 |---|---|---|
-| A student or teacher using Hora privately | AGPL-3.0 | Free |
-| A school running Hora unmodified for its students | AGPL-3.0 | Free |
-| A school running Hora with private modifications | Commercial | Paid |
-| A school that wants hosting, support and an AVV | Commercial | Paid |
-| An IT provider or vendor offering Hora to third parties | Commercial | Paid |
-| Anyone redistributing Hora inside a closed product | Commercial | Paid |
+| A student or teacher using Hora privately | PolyForm Noncommercial | Free |
+| A school or school authority running Hora, changed or unchanged | PolyForm Noncommercial | Free |
+| Anyone sharing Hora or a changed version free of charge | PolyForm Noncommercial | Free |
+| A company or IT provider offering Hora to schools for money | Commercial | Paid |
+| Anyone selling Hora, or a product that contains any part of its code | Commercial | Paid |
+| Anyone running Hora with ads or as part of a paid service | Commercial | Paid |
 
-The AGPL is a real offer, not a trap. If you have the IT capacity to run Hora
-yourself and you do not modify it, you owe nothing and you never have to talk to
-anybody. The commercial license exists for the cases where the AGPL does not fit.
+The rule behind the table is simple. As long as nobody earns money with Hora,
+nobody pays. As soon as Hora, or any part of its code, is used to earn money, a
+commercial license is needed.
 
-## What the AGPL actually requires
+## What the noncommercial license allows
 
-Section 13 is the part people ask about. If you modify Hora and let users reach
-your modified version over a network, you have to offer those users the complete
-source of your modified version. That is the entire obligation.
+The [PolyForm Noncommercial License 1.0.0](LICENSE) lets you use, change and
+share Hora for any noncommercial purpose. Use by a school, a school authority or
+another charitable, educational or government institution counts as
+noncommercial, regardless of how it is funded. Changes may stay private.
+Whoever passes Hora on, changed or not, passes the license and the
+`Required Notice` line on with it.
 
-Running Hora as published, without changes, triggers nothing. The source is
-already public, so an unmodified deployment is already compliant.
-
-The obligation is about source code, not about your data. Student data, school
-configuration and anything else you put into Hora stays yours. The AGPL says
-nothing about it.
+Student data, school configuration and anything else you put into Hora stays
+yours. The license is about the code, not about your data.
 
 ## What a commercial license covers
 
-- The right to run Hora with private modifications you do not have to publish
-- The right to redistribute Hora as part of a closed product
-- Distribution through the Apple App Store, Google Play or an MDM fleet under
-  terms that the AGPL does not permit for third parties
-- Removal of the AGPL source offer requirement for your deployment
-
-## What schools normally buy
-
-Most schools do not need the commercial license for legal reasons. They buy the
-work around the software:
-
-- Hosting and operation, with an agreed availability target
-- Setup and integration with iServ, the school server, Google Workspace or CalDAV
-- A data processing agreement under Art. 28 GDPR
-- Support with a named contact and response times
-- Continued development, including features specific to the school
-- Migration and rollout onto managed tablets
-
-A school with no IT staff is buying an operated service. A school with strong IT
-that wants to fork Hora privately is buying the license. Both are available.
+- Selling Hora, a changed version of it or a product that contains any part of
+  its code
+- Offering Hora as a paid or ad funded service, hosted or installed for others
+- Building Hora or parts of it into a commercial product or platform
+- Distribution through the Apple App Store, Google Play or an MDM fleet as part
+  of a commercial offer
 
 ## Asking for a quote
 
 Open an issue titled `Licensing` or write to the address in the repository
 profile. Useful to include:
 
-- Number of students and staff
-- Whether you want Hora hosted by us or on your own infrastructure
-- Which systems it has to talk to
-- Whether you need private modifications
+- Who you are and what you want to offer with Hora
+- Who your customers are and roughly how many users they have
+- Whether you need changes to the code
 - Your timeline
 
 ## Notes
 
-Hora is developed by one person. Pricing reflects that and so does the roadmap.
-If continuity is a concern in your procurement process, the AGPL is the answer:
-the full source is public and stays public, so you are not stranded if
-development stops.
+Hora is developed by one person. The full source stays public, and schools may
+keep running and changing it under the noncommercial license, so nobody is
+stranded if development stops.
 
 The draft agreement used as a starting point is in
 [licensing/commercial-agreement-template.md](licensing/commercial-agreement-template.md).

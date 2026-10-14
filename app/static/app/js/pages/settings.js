@@ -3252,10 +3252,10 @@ function renderAbout() {
       <div><dt>Version</dt><dd>${version}</dd></div>
       <div><dt>Plattform</dt><dd>${esc(where)}</dd></div>
       <div><dt>Daten</dt><dd>Lokal auf diesem Gerät</dd></div>
-      <div><dt>Lizenz</dt><dd>${esc(about.license || "AGPL-3.0")}</dd></div>
+      <div><dt>Lizenz</dt><dd>${esc(about.license || "PolyForm Noncommercial 1.0.0")}</dd></div>
     </dl>
     <div class="about-links"><button class="pill" type="button" data-tour-start>${icon("presentation")}Tutorial mit Tinte</button>${browser}${links.map(([href, text, glyph]) => `<a class="pill" href="${esc(href)}" target="_blank" rel="noopener">${icon(glyph)}${text}${icon("arrow-up-right", "is-external")}<span class="visually-hidden">, öffnet in einem neuen Tab</span></a>`).join("")}</div>
-    <p class="about-note">${BRAND} steht unter der GNU Affero General Public License 3.0. Den vollständigen Quellcode dieser Version findest du über den Link.</p>`;
+    <p class="about-note">${BRAND} steht unter der PolyForm Noncommercial License 1.0.0. Du darfst es kostenlos nutzen, ändern und weitergeben, aber nicht damit Geld verdienen. Den vollständigen Quellcode dieser Version findest du über den Link.</p>`;
 }
 
 function renderAll() {

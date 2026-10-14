@@ -591,7 +591,7 @@
       "Kein {{BRAND_NAME}}-Server für deine Daten"
     ],
     "open_title": "Du musst mir nicht glauben",
-    "open_text": "{{BRAND_NAME}} ist Open Source unter der AGPL-3.0. Jede Zeile, die mit deinen Daten arbeitet, liegt öffentlich auf GitHub.",
+    "open_text": "Den Quellcode von {{BRAND_NAME}} kann jeder lesen. Jede Zeile, die mit deinen Daten arbeitet, liegt öffentlich auf GitHub.",
     "open_link": "Code ansehen",
     "legal_link": "Zur Datenschutzerklärung",
     "eyebrow": "Datenschutz",
@@ -604,7 +604,7 @@
     "faq": [
       {
         "q": "Kostet {{BRAND_NAME}} etwas?",
-        "a": "Nein. {{BRAND_NAME}} ist für dich kostenlos und Open Source unter der AGPL-3.0. Es gibt keine Abos und keine bezahlten Funktionen."
+        "a": "Nein. {{BRAND_NAME}} ist für dich kostenlos, und der Quellcode liegt offen auf GitHub. Es gibt keine Abos und keine bezahlten Funktionen."
       },
       {
         "q": "Wie bekomme ich Updates?",
@@ -645,12 +645,12 @@
     "open_title": "Offen und frei",
     "open": [
       {
-        "title": "AGPL-3.0 für alle",
-        "text": "Du darfst {{BRAND_NAME}} nutzen, lesen, verändern und weitergeben. Wer eine veränderte Version für andere betreibt, muss den Code dazu offenlegen."
+        "title": "Kostenlos für Schüler und Schulen",
+        "text": "Du darfst {{BRAND_NAME}} nutzen, lesen, verändern und kostenlos weitergeben. Das gilt auch für Schulen und Schulträger."
       },
       {
-        "title": "Lizenz für Schulen",
-        "text": "Schulen, Schulträger und Dienstleister, die eigene Änderungen nicht offenlegen können oder Betrieb mit Auftragsverarbeitung brauchen, bekommen eine kommerzielle Lizenz."
+        "title": "Kommerzielle Lizenz",
+        "text": "Wer mit {{BRAND_NAME}} oder Teilen des Codes Geld verdienen will, etwa als Anbieter für Schulen, braucht eine kommerzielle Lizenz."
       },
       {
         "title": "Mitmachen",
@@ -676,7 +676,7 @@
     "contact": "Kontakt",
     "terms": "Nutzungsbedingungen",
     "privacy_policy": "Datenschutzerklärung",
-    "sign": "Ein Schülerprojekt aus Brandenburg. Quellcode unter AGPL-3.0, kein Teil von IServ."
+    "sign": "Ein Schülerprojekt aus Brandenburg. Quellcode unter PolyForm Noncommercial, kein Teil von IServ."
   },
   "terms": {
     "nav_title": "Nutzungsbedingungen",

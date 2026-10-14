@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import 'dart:math' as math;
 
@@ -812,7 +812,7 @@ class UiData {
         'home': text(known['home']?['name']),
         'school': text(known['school']?['name']),
       },
-      'about': {'version': BuildInfo.version, 'license': 'AGPL-3.0', 'website': Brand.website, 'source': Brand.repository},
+      'about': {'version': BuildInfo.version, 'license': 'PolyForm Noncommercial 1.0.0', 'website': Brand.website, 'source': Brand.repository},
       'native': !browser,
     };
   }

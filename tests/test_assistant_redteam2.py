@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 """Round-2 red team — adversarial phrasings + Unicode/encoding attacks."""
 import os, sys

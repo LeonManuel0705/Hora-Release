@@ -1,18 +1,22 @@
 Hora
 Copyright (C) 2026 Leon Manuel Töpper
 
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU Affero General Public License as published by the Free
-Software Foundation, version 3.
+Required Notice: Copyright (C) 2026 Leon Manuel Töpper (https://github.com/LeonManuel0705)
 
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+This program is source available under the PolyForm Noncommercial License
+1.0.0, as found in the LICENSE file and at
+<https://polyformproject.org/licenses/noncommercial/1.0.0>.
 
-You should have received a copy of the GNU Affero General Public License along
-with this program. If not, see <https://www.gnu.org/licenses/>.
+You may use, change and share it for any noncommercial purpose. Use by a
+school, a school authority or another charitable, educational or government
+institution counts as noncommercial, regardless of how it is funded. Anyone who
+passes on a copy of any part of it has to pass on the license terms and the
+Required Notice line above with it.
 
-SPDX-License-Identifier: AGPL-3.0-only
+This program comes as is, without any warranty or condition. See the LICENSE
+file for details.
+
+SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 
 DUAL LICENSING
@@ -20,41 +24,46 @@ DUAL LICENSING
 Leon Manuel Töpper is the sole copyright holder of Hora and offers it under two
 separate licenses. You choose which one applies to you.
 
-1. GNU Affero General Public License v3.0 only, as found in the LICENSE file.
-   Free of charge. If you run a modified version of Hora and let other people
-   use it over a network, section 13 requires you to offer those users the
-   complete corresponding source code of your modified version.
+1. PolyForm Noncommercial License 1.0.0, as found in the LICENSE file. Free of
+   charge, for noncommercial purposes only. This covers changed versions and
+   every part of the code as well: you may pass them on free of charge or use
+   them yourself, but you may not earn money with them.
 
-2. A commercial license, for anyone who wants to use Hora without the
-   obligations of the AGPL. This covers schools, school authorities, service
-   providers and any other organisation that needs to keep modifications
-   private or redistribute Hora under different terms. See
+2. A commercial license, for anyone who wants to earn money with Hora or with
+   any part of its code, for example by selling it, by offering it as a paid or
+   ad funded service, or by building it into a commercial product. See
    COMMERCIAL-LICENSE.md.
 
-Using Hora without a commercial license means you accept the AGPL-3.0 terms in
-full.
+Using Hora without a commercial license means you accept the PolyForm
+Noncommercial License 1.0.0 terms in full.
 
 
 LICENSE HISTORY
 
 Up to and including 2026-09-20, Hora was published under the MIT License.
+After that, up to and including version 0.5.2, it was published under the GNU
+Affero General Public License v3.0 only (AGPL-3.0-only) and the commercial
+license.
 
-As of 2026-09-20 the MIT License is withdrawn and is no longer offered for any
-version of Hora, past or present. Every copy of Hora distributed from that
-date onward, including copies of earlier tags, commits and releases, is offered
-only under the two licenses named above.
+When this notice was first published in Hora's public repository, the MIT
+License and the AGPL-3.0 were both withdrawn. They are no longer offered for
+any version of Hora, past or present. Every copy of Hora distributed from then
+on, including copies of earlier tags, commits and releases, is offered only
+under the two licenses named above.
 
 This change cannot reach copies that were already distributed. Anyone who
-actually received a copy of Hora under the MIT License before 2026-09-20 keeps
-the MIT rights to that specific copy, and that grant cannot be revoked. It does
-not extend to any version released after that date.
+actually received a copy of Hora under the MIT License or the AGPL-3.0 before
+then keeps those rights to that specific copy, and that grant cannot be
+revoked. It does not extend to any later version.
 
 
 THIRD PARTY COMPONENTS
 
 Hora depends on third party software that remains under its own license.
-Notable licenses in the dependency tree are MIT, BSD-2-Clause and Apache-2.0,
-plus MPL-2.0 (enough_mail), LGPL with exceptions (psycopg2) and GPL-2.0 with a
-linking exception (PyInstaller, build tooling only). None of these restrict the
-licensing of Hora itself. Generated notices for the bundled web dependencies
-are in the NOTICES file produced by the Flutter build.
+Notable licenses in the dependency tree are MIT, BSD-2-Clause, BSD-3-Clause,
+ISC and Apache-2.0, plus MPL-2.0 (enough_mail, enough_convert, dbus, nm,
+certifi, bidict), LGPL with exceptions (psycopg2, only for an optional
+PostgreSQL database on servers) and GPL-2.0 with a linking exception
+(PyInstaller, build tooling only). None of these restrict the licensing of Hora
+itself. Generated notices for the bundled web dependencies are in the NOTICES
+file produced by the Flutter build.

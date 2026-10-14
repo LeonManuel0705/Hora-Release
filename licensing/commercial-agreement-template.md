@@ -17,7 +17,7 @@ between
 
 and
 
-**[SCHOOL OR ORGANISATION NAME], [ADDRESS]** (the "Licensee")
+**[SCHOOL, COMPANY OR ORGANISATION NAME], [ADDRESS]** (the "Licensee")
 
 ## 1. Subject matter
 
@@ -26,10 +26,11 @@ system for calendars, tasks, mail, timetables and transit information, comprisin
 a mobile application, a server backend, a desktop application and a web
 interface.
 
-1.2 The Software is also published under the GNU Affero General Public License
-version 3. This agreement grants rights **in addition to and independent of** that
-license. The Licensee may rely on either. Nothing here reduces any right the
-Licensee has under the AGPL.
+1.2 The Software is also published under the PolyForm Noncommercial License
+1.0.0, which permits noncommercial use only. This agreement grants rights **in
+addition to and independent of** that license, including use for commercial
+purposes. The Licensee may rely on either. Nothing here reduces any right the
+Licensee has under the noncommercial license.
 
 1.3 This agreement covers the version of the Software identified in Annex A and
 every update the Licensor supplies during the term.
@@ -37,16 +38,16 @@ every update the Licensor supplies during the term.
 ## 2. License grant
 
 2.1 The Licensor grants the Licensee a non-exclusive, non-transferable,
-time-limited right to use the Software for the term of this agreement, for the
-number of users stated in Annex A.
+time-limited right to use the Software, including for commercial purposes, for
+the term of this agreement, for the number of users stated in Annex A.
 
 2.2 The grant includes the right to:
 
   a) install and operate the Software on infrastructure of the Licensee's
      choosing, or use the instance operated by the Licensor under Annex B;
 
-  b) modify the Software for the Licensee's own use **without the obligation to
-     publish those modifications**, notwithstanding sections 5 and 13 of the AGPL;
+  b) modify the Software for the Licensee's own use and keep those modifications
+     private;
 
   c) distribute the client applications to devices the Licensee administers,
      including managed tablets, through an MDM system, Apple School Manager or a
@@ -59,9 +60,10 @@ number of users stated in Annex A.
 parties, to offer it as a service to organisations other than the Licensee, or
 to resell it. Those require a separate agreement.
 
-2.4 If the Licensee stops paying and this agreement ends, the rights under 2.2 b)
-and 2.2 c) end with it. The Licensee may continue to use the Software under the
-AGPL, on the AGPL's terms.
+2.4 If the Licensee stops paying and this agreement ends, the rights granted by
+it end with it. The Licensee may continue to use the Software under the PolyForm
+Noncommercial License 1.0.0, on that license's terms, which permit noncommercial
+use only.
 
 ## 3. Fees
 
@@ -100,13 +102,13 @@ otherwise and the Licensee has agreed to it in writing.
 
 ## 6. Source code and continuity
 
-6.1 The complete source code of the Software is public under the AGPL. The
-Licensee may audit it at any time and does not depend on the Licensor for access.
+6.1 The complete source code of the Software is public. The Licensee may audit
+it at any time and does not depend on the Licensor for access.
 
 6.2 If the Licensor ceases development or becomes unable to perform, the Licensee
 keeps the right to use, modify and operate the then current version under the
-AGPL indefinitely. No escrow arrangement is needed because the source is already
-public.
+PolyForm Noncommercial License 1.0.0 indefinitely, within that license's terms.
+No escrow arrangement is needed because the source is already public.
 
 6.3 On request the Licensor provides the Licensee with an export of the
 Licensee's data in a documented, machine readable format, at the latest within
@@ -179,14 +181,19 @@ economic purpose.
 
 1. Is an annual per pupil license workable in public school procurement in
    Brandenburg, or does the school need a fixed total?
-2. Does the AGPL publication of the same code undermine the enforceability of
-   clause 2.3, given that anyone may already fork the public version?
+2. Versions up to 0.5.2 were published under the AGPL-3.0, and copies received
+   back then keep those rights. Does that undermine the enforceability of clause
+   2.3 for those versions?
 3. Is the liability cap in 7.3 enforceable against a public institution, and does
    it survive AGB review under §§ 305 ff. BGB if this is used as a standard form
    contract?
-4. Does clause 2.2 b) need to name the AGPL sections it displaces more precisely
-   to be effective?
+4. The PolyForm Noncommercial License was written with US law in mind. Does its
+   notion of a noncommercial purpose work as intended under German copyright
+   law, and does this agreement need to define commercial use itself?
 5. What changes while the Licensor is a natural person rather than a UG, and at
    what revenue does the legal form need to change?
 6. Does the Licensor need professional indemnity insurance before the first
    school signs?
+7. Clause 6.2 only gives continuity within the noncommercial license. Should a
+   commercial licensee get a perpetual right to the then current version if the
+   Licensor ceases development?

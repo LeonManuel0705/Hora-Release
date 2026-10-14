@@ -93,7 +93,7 @@ BEGIN
             VALUE "FileDescription", "Hora" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "hora" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 Leon Manuel Toepper. Licensed under AGPL-3.0." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Leon Manuel Toepper. Licensed under PolyForm Noncommercial 1.0.0." "\0"
             VALUE "OriginalFilename", "hora.exe" "\0"
             VALUE "ProductName", "Hora" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

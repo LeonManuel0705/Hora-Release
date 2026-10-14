@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 """A local copy of the connected Google calendar for a window around today.
 

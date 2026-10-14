@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import colorsys
 import copy
@@ -1193,7 +1193,7 @@ def page_settings(data, school, settings, today, iserv):
             'home': place_line(known.get('home')),
             'school': place_line(known.get('school')),
         },
-        'about': {'version': '', 'license': 'AGPL-3.0', 'website': brand.WEBSITE, 'source': brand.REPOSITORY},
+        'about': {'version': '', 'license': 'PolyForm Noncommercial 1.0.0', 'website': brand.WEBSITE, 'source': brand.REPOSITORY},
     }
 
 
