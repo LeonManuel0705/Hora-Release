@@ -1,4 +1,4 @@
-import { data, flags, icon, esc, safeMarkup, root, subject, hueVar, now, addDays, startOfDay, isoDate, parseDate, shortDate, clock, minutesOf, pinnedTime, platform, storage, homeworkDate, BRAND } from "./core.js";
+import { data, flags, icon, esc, safeMarkup, root, subject, hueVar, now, addDays, startOfDay, isoDate, parseDate, shortDate, clock, minutesOf, pinnedTime, platform, storage, homeworkDate, stretchOf, BRAND } from "./core.js";
 import { animates, travels, rich } from "./motion.js";
 import { tasks as taskApi, deadlines as deadlineApi, notes as noteApi } from "./api.js";
 import { switchRemindersOn } from "./reminders.js";
@@ -525,9 +525,12 @@ const weekdayWords = [
   [/^(donnerstag|do)$/i, 4], [/^(freitag|fr)$/i, 5], [/^(samstag|sa)$/i, 6], [/^(sonntag|so)$/i, 0],
 ];
 
+const STRETCH = /(?<![\p{L}\p{N}.])(?:(?:vom|von)\s+)?(?<d1>\d{1,2})\.(?:(?<m1>\d{1,2})\.(?<y1>\d{2,4})?)?\s*(?<tail>(?:bis(?:\s+zum)?|-|–)\s*(?<d2>\d{1,2})\.(?<m2>\d{1,2})\.(?<y2>\d{2,4})?)(?!\d)/iu;
+const DATED_THING = /(?:protokoll|mitschrift|notizen|hefteintrag|tafelbild|blatt|hausaufgaben?|aufgaben?|übung(?:en)?|zusammenfassung|brief|mail|nachricht|rechnung|quelle|text|artikel|zeitung|bericht|aufsatz|test|klausur|arbeit|stunde|unterricht|sitzung|besprechung|vortrag|präsentation|folien|video|aufnahme|fotos?|stoff)\s*$/i;
+
 export function parseNote(text) {
   const result = { phrases: {} };
-  const clean = text.replace(/\b(S\.|Seite|Nr\.|Nummer|Aufgabe|Aufg\.|Unit|Kapitel)\s*\d+[a-z]?(\s*(f\.|ff\.|bis\s*\d+))?/gi, (match) => " ".repeat(match.length));
+  const clean = text.replace(/\b(S\.|Seite|Nr\.|Nummer|Aufgabe|Aufg\.|Unit|Kapitel)\s*\d+[a-z]?(\s*(f\.|ff\.|bis\s*\d+(?!\d|\.\d)))?/gi, (match) => " ".repeat(match.length));
   for (const [pattern, key] of subjectAliases()) {
     if (data?.subjects?.[key] && !data.subjects[key].retired && pattern.test(clean)) {
       result.subject = key;
@@ -552,6 +555,19 @@ export function parseNote(text) {
   if (!date && nextWeek) {
     date = addDays(base, 8 - (base.getDay() || 7));
     phrase = nextWeek[0];
+  }
+  const stretch = clean.match(STRETCH);
+  if (!date && stretch) {
+    const last = [Number(stretch.groups.d2), Number(stretch.groups.m2) - 1];
+    const first = [Number(stretch.groups.d1), stretch.groups.m1 ? Number(stretch.groups.m1) - 1 : last[1]];
+    const found = stretchOf(first, last, base, stretch.groups.y1 || stretch.groups.y2 ? Number(stretch.groups.y1 || stretch.groups.y2) : null);
+    if (found && found.begun && DATED_THING.test(clean.slice(0, stretch.index))) {
+      date = found.end;
+      phrase = stretch.groups.tail.trim();
+    } else if (found) {
+      date = found.date;
+      phrase = stretch[0];
+    }
   }
   const explicit = clean.match(/\b(?:(?:bis|am|zum|ab)\s+)?(\d{1,2})\.(\d{1,2})\.(\d{2,4})?(?!\d)/i);
   if (!date && explicit) {

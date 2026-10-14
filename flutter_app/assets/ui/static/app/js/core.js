@@ -93,6 +93,20 @@ export function now() {
 
 export const pinnedTime = () => params.has("t");
 
+export function stretchOf(first, last, today, year = null) {
+  const base = startOfDay(today);
+  const full = year != null && year < 100 ? year + 2000 : year;
+  if (full != null && (full < base.getFullYear() - 1 || full > base.getFullYear() + 10)) return null;
+  const valid = (date, [day, month]) => date.getDate() === day && date.getMonth() === month;
+  const later = last[1] < first[1] || (last[1] === first[1] && last[0] < first[0]);
+  for (const startYear of full != null ? [full] : [base.getFullYear() - 1, base.getFullYear(), base.getFullYear() + 1]) {
+    const start = new Date(startYear, first[1], first[0]);
+    const end = new Date(startYear + (later ? 1 : 0), last[1], last[0]);
+    if (valid(start, first) && valid(end, last) && end >= base) return { date: start < base ? base : start, end, begun: start < base };
+  }
+  return null;
+}
+
 export function weekType(date) {
   if (!abWeeks()) return "A";
   const monday = addDays(startOfDay(date), 1 - (date.getDay() || 7));

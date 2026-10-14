@@ -48,10 +48,36 @@ globalThis.matchMedia = () => ({ matches: false, addEventListener() {} });
 globalThis.addEventListener = () => {};
 globalThis.dispatchEvent = () => true;
 
-const { homeworkDate, nextRepeatDate } = await import(source);
+const { homeworkDate, nextRepeatDate, stretchOf, isoDate } = await import(source);
 const noon = (iso) => new Date(`${iso}T12:00:00`);
 
+const stretch = (first, last, today, year) => {
+  const found = stretchOf(first, last, noon(today), year);
+  return found && [isoDate(found.date), isoDate(found.end), found.begun];
+};
+
 const tests = {
+  "a stretch of days stands for its first day, today while it lasts, and the next one when it is over"() {
+    assert.deepEqual(stretch([12, 9], [16, 9], "2026-10-05"), ["2026-10-12", "2026-10-16", false]);
+    assert.deepEqual(stretch([12, 9], [16, 9], "2026-10-12"), ["2026-10-12", "2026-10-16", false]);
+    assert.deepEqual(stretch([12, 9], [16, 9], "2026-10-14"), ["2026-10-14", "2026-10-16", true]);
+    assert.deepEqual(stretch([12, 9], [16, 9], "2026-10-16"), ["2026-10-16", "2026-10-16", true]);
+    assert.deepEqual(stretch([12, 9], [16, 9], "2026-10-17"), ["2027-10-12", "2027-10-16", false]);
+  },
+  "a stretch across the turn of the year ends in the next one"() {
+    assert.deepEqual(stretch([28, 11], [3, 0], "2026-12-20"), ["2026-12-28", "2027-01-03", false]);
+    assert.deepEqual(stretch([28, 11], [3, 0], "2026-12-30"), ["2026-12-30", "2027-01-03", true]);
+    assert.deepEqual(stretch([28, 11], [3, 0], "2027-01-02"), ["2027-01-02", "2027-01-03", true]);
+  },
+  "a stretch with a year is that one or none"() {
+    assert.deepEqual(stretch([12, 9], [16, 9], "2026-10-14", 2026), ["2026-10-14", "2026-10-16", true]);
+    assert.deepEqual(stretch([12, 9], [16, 9], "2026-10-14", 26), ["2026-10-14", "2026-10-16", true]);
+    assert.equal(stretch([12, 9], [16, 9], "2026-10-20", 2026), null);
+    assert.equal(stretch([12, 9], [16, 9], "2026-10-20", 2050), null);
+  },
+  "a day that does not exist makes no stretch"() {
+    assert.equal(stretch([31, 3], [2, 4], "2026-03-01"), null);
+  },
   "a task done on its day comes back the day after"() {
     assert.equal(nextRepeatDate("2026-10-05", "daily", "2026-10-05"), "2026-10-06");
   },

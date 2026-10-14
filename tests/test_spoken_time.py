@@ -105,6 +105,27 @@ def test_the_words_for_when_are_read_and_taken_out(text, rest, day, clock):
     assert read(text) == (rest, day, clock)
 
 
+@pytest.mark.parametrize('today, text, rest, day', [
+    (date(2026, 10, 5), 'Praktikum vom 12.10. bis 16.10.', 'Praktikum', '2026-10-12'),
+    (date(2026, 10, 12), 'Praktikum vom 12.10. bis 16.10.', 'Praktikum', '2026-10-12'),
+    (date(2026, 10, 14), 'Praktikum vom 12.10. bis 16.10.', 'Praktikum', '2026-10-14'),
+    (date(2026, 10, 16), 'Praktikum vom 12.10. bis 16.10.', 'Praktikum', '2026-10-16'),
+    (date(2026, 10, 17), 'Praktikum vom 12.10. bis 16.10.', 'Praktikum', '2027-10-12'),
+    (date(2026, 10, 14), 'Praktikum 12.-16.10.', 'Praktikum', '2026-10-14'),
+    (date(2026, 10, 14), 'Praktikum vom 12. bis 16. Oktober', 'Praktikum', '2026-10-14'),
+    (date(2026, 10, 20), 'Praktikum vom 12. bis 16. Oktober', 'Praktikum', '2027-10-12'),
+    (date(2026, 12, 20), 'Skifahren vom 28.12. bis 3.1.', 'Skifahren', '2026-12-28'),
+    (date(2026, 12, 30), 'Skifahren vom 28.12. bis 3.1.', 'Skifahren', '2026-12-30'),
+    (date(2027, 1, 2), 'Skifahren vom 28.12. bis 3.1.', 'Skifahren', '2027-01-02'),
+    (date(2026, 10, 14), 'Praktikum vom 12.10.2026 bis 16.10.2026', 'Praktikum', '2026-10-14'),
+    (date(2026, 10, 20), 'Praktikum vom 12.10.2026 bis 16.10.2026', 'Praktikum vom 12.10.2026 bis 16.10.2026', None),
+    (date(2026, 10, 14), 'Protokoll vom 12.10. bis 16.10. abtippen', 'Protokoll vom 12.10. abtippen', '2026-10-16'),
+    (date(2026, 10, 5), 'Protokoll vom 12.10. bis 16.10. abtippen', 'Protokoll abtippen', '2026-10-12'),
+])
+def test_a_stretch_of_days_stands_for_its_first_day_or_for_today_while_it_lasts(today, text, rest, day):
+    assert read(text, today)[:2] == (rest, day)
+
+
 @pytest.mark.parametrize('text', [
     'Seiten von 3 bis 5 lesen',
     'Aufgaben von 1 bis 10 lösen',

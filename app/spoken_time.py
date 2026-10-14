@@ -75,6 +75,14 @@ _NUMBERED_BEFORE = re.compile(rf'{_NUMBERED}\s*$')
 _NUMBERED_STRETCH_BEFORE = re.compile(rf'{_NUMBERED}\s*(?:\d{{1,3}}\s*)?$')
 _RATIO_BEFORE = re.compile(r'(?<![\w.])(?:maßstab|verhältnis|stand|spielstand|ergebnis|quote|vers|kapitel|seite|s\.|bestzeit|rekord|pace|tempo|laufzeit|dauer)\s*$')
 _NOT_A_SPAN_BEFORE = re.compile(r'(?<![\w.])(?:vom|am|den|zum)\s*$')
+# Things that carry a date of their own. In "Protokoll vom 30.9. bis 12.10. abtippen" the first date names the protocol and only
+# the second one says when, so a stretch behind such a word that has already begun is read that way. "Praktikum vom 12.10. bis
+# 16.10." stays a stretch of days.
+_DATED_THING_BEFORE = re.compile(
+    r'(?:protokoll|mitschrift|notizen|hefteintrag|tafelbild|blatt|hausaufgaben?|aufgaben?|übung(?:en)?|zusammenfassung|brief|mail'
+    r'|nachricht|rechnung|quelle|text|artikel|zeitung|bericht|aufsatz|test|klausur|arbeit|stunde|unterricht|sitzung|besprechung'
+    r'|vortrag|präsentation|folien|video|aufnahme|fotos?|stoff)\s*$'
+)
 _NOT_PM_BEFORE = re.compile(rf'(?:{_LABEL}|(?<![\w.])(?:und|oder|zwischen|bis))\s*$')
 
 _RELATIVE = re.compile(
@@ -176,6 +184,25 @@ def _written_day(today, day, month, year):
     return found
 
 
+def _stretch(today, first, last, year=None):
+    """The day a stretch of days stands for, as (day, begun), or None when it lies behind us.
+
+    That is its first day, or today while it lasts. Without a year the stretch
+    still to come counts, the running one included, and one across the turn of
+    the year ends in the next year.
+    """
+    if year is not None:
+        year += 2000 if year < 100 else 0
+        if not today.year - 1 <= year <= today.year + 10:
+            return None
+    for start_year in [year] if year is not None else [today.year - 1, today.year, today.year + 1]:
+        start = _dated(start_year, first[1], first[0])
+        end = _dated(start_year + (1 if (last[1], last[0]) < (first[1], first[0]) else 0), last[1], last[0])
+        if start and end and end >= today:
+            return max(start, today), start < today
+    return None
+
+
 def _relative_days(low, today):
     for match in _RELATIVE.finditer(low):
         word, rank = match.group('word'), _rank(match.group('lead'))
@@ -272,15 +299,16 @@ def _numeric_day(low, today, match, refused):
     if _NOT_A_DAY_AFTER.match(after):
         return False
     year = int(match.group('y')) if match.group('y') else None
-    first = match.group('first')
-    day = _written_day(today, number, int(match.group('m')), year)
-    if not day:
-        return False
-    reaches = match.group('range') or first
-    if reaches and year is None:
-        start = _dated(today.year, int(match.group('m')), number)
-        last = _dated(today.year, int(match.group('m2') or match.group('m')), int(match.group('d2') or match.group('d')))
-        if start and last and start < today <= last:
+    reaches = match.group('range') or match.group('first')
+    if reaches:
+        last = (int(match.group('d2') or match.group('d')), int(match.group('m2') or match.group('m')))
+        found = _stretch(today, (number, int(match.group('m'))), last, year)
+        if not found or (found[1] and _DATED_THING_BEFORE.search(before)):
+            return False
+        day = found[0]
+    else:
+        day = _written_day(today, number, int(match.group('m')), year)
+        if not day:
             return False
     if rank is None and not reaches:
         return not match.group('close')
@@ -291,12 +319,14 @@ def _month_days(low, today):
     for match in _MONTH.finditer(low):
         rank, first, month = _rank(match.group('lead')), match.group('first'), MONTHS[match.group('month')]
         year = int(match.group('y')) if match.group('y') else None
-        day = _written_day(today, int(first or match.group('d')), month, year)
-        if not day or (rank is None and not first):
-            continue
-        if first and year is None:
-            start, last = _dated(today.year, month, int(first)), _dated(today.year, month, int(match.group('d')))
-            if start and last and start < today <= last:
+        if first:
+            found = _stretch(today, (int(first), month), (int(match.group('d')), month), year)
+            if not found or (found[1] and _DATED_THING_BEFORE.search(low[:match.start()])):
+                continue
+            day = found[0]
+        else:
+            day = _written_day(today, int(match.group('d')), month, year)
+            if not day or rank is None:
                 continue
         yield Day(day, match.span(), _PLAIN if rank is None else rank, None)
 

@@ -28,6 +28,15 @@ def coming(number, month):
     return (this_year if this_year >= date.today() else date(this_year.year + 1, month, number)).isoformat()
 
 
+def stretch(first, last):
+    today = date.today()
+    for year in (today.year - 1, today.year, today.year + 1):
+        start = date(year, first[1], first[0])
+        end = date(year + ((last[1], last[0]) < (first[1], first[0])), last[1], last[0])
+        if end >= today:
+            return max(start, today).isoformat()
+
+
 @pytest.fixture
 def tasks(tmp_path, monkeypatch):
     monkeypatch.setattr(db, 'DATABASE_PATH', str(tmp_path / 'hub.db'))
@@ -189,7 +198,7 @@ def test_a_message_that_is_no_command_changes_nothing(tasks, school, message):
     ('Neue Aufgabe: Salat 5 pm kaufen', 'Salat kaufen', None, '17:00'),
     ('Erstelle eine Aufgabe "Tims Geschenk kaufen"', 'Tims Geschenk kaufen', None, None),
     ('Erstelle eine Aufgabe: herausfinden, wer Goethe war', 'herausfinden, wer Goethe war', None, None),
-    ('Neue Aufgabe: Praktikum vom 12.10. bis 16.10.', 'Praktikum', coming(12, 10), None),
+    ('Neue Aufgabe: Praktikum vom 12.10. bis 16.10.', 'Praktikum', stretch((12, 10), (16, 10)), None),
     ('Neue Aufgabe: Montag bis Freitag Vokabeln lernen', 'Vokabeln lernen', next_weekday(0), None),
     ('Neue Aufgabe um 15:30: Zahnarzt anrufen', 'Zahnarzt anrufen', None, '15:30'),
     ('Erinnere mich um 18 Uhr ans Training', 'Training', None, '18:00'),
