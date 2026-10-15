@@ -3,12 +3,13 @@
 
 import 'dart:async';
 import 'dart:collection';
-import 'dart:io' show Platform;
+import 'dart:io' show PathAccessException, Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../brand.dart';
+import '../services/downloads.dart';
 import '../services/flask_server_service.dart';
 import '../services/notification_service.dart';
 import '../services/update_service.dart';
@@ -50,9 +51,28 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
     });
   };
   window.Notification = Reminder;
+  function encoded(blob) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var text = String(reader.result || "");
+        resolve(text.slice(text.lastIndexOf(",") + 1));
+      };
+      reader.onerror = function () { reject(reader.error); };
+      reader.readAsDataURL(blob);
+    });
+  }
+  function saveFile(name, content) {
+    var blob = content instanceof Blob ? content : new Blob([content == null ? "" : content]);
+    if (blob.size > ${Downloads.maxBytes}) return Promise.resolve(null);
+    return encoded(blob).then(function (data) {
+      return bridge("saveFile", { name: String(name || ""), data: data });
+    });
+  }
   window.hubShell = Object.freeze({
     nativeNotifications: true,
-    openInBrowser: function () { return bridge("openInBrowser", true); }
+    openInBrowser: function () { return bridge("openInBrowser", true); },
+    saveFile: saveFile${Platform.isMacOS ? ',\n    showFile: function (path) { return bridge("showFile", String(path || "")); }' : ''}
   });
 })();
 ''';
@@ -469,6 +489,21 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
             controller.addJavaScriptHandler(
               handlerName: 'openInBrowser',
               callback: (args) => _openHubInBrowser(),
+            );
+            controller.addJavaScriptHandler(
+              handlerName: 'saveFile',
+              callback: (args) async {
+                final value = args.isNotEmpty && args.first is Map ? args.first as Map : const {};
+                try {
+                  return (await Downloads.saveEncoded(value['name'], value['data']))?.toJson();
+                } on PathAccessException {
+                  return Platform.isMacOS ? const {'error': 'denied'} : null;
+                }
+              },
+            );
+            controller.addJavaScriptHandler(
+              handlerName: 'showFile',
+              callback: (args) => args.isNotEmpty && args.first is String ? Downloads.show(args.first as String) : false,
             );
 
             if (!await _flask.confirmBackend()) return;

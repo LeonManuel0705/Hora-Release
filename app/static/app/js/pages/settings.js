@@ -2971,6 +2971,25 @@ async function exportData() {
     payload.data = fileRecords((await request("GET", "/api/ui/export")).data, keys);
   } catch {}
   const name = `${slug(BRAND) || "app"}-sicherung-${isoDate(now())}.json`;
+  const missing = payload.data ? "" : ", aber ohne Noten, Aufgaben und Termine. Sie ließen sich gerade nicht lesen.";
+  const shell = window.hubShell;
+  if (typeof shell?.saveFile === "function") {
+    let saved = null;
+    try {
+      saved = await shell.saveFile(name, JSON.stringify(payload, null, 2));
+    } catch {}
+    if (saved?.error === "denied") {
+      toast(`${BRAND} darf nicht in „Downloads“ speichern. Erlaube es unter Systemeinstellungen › Datenschutz & Sicherheit › Dateien und Ordner.`, { icon: "circle-alert", duration: 12000 });
+      return;
+    }
+    if (!saved?.name) {
+      toast("Die Sicherung ließ sich nicht im Ordner „Downloads“ speichern.", { icon: "circle-alert" });
+      return;
+    }
+    const reveal = typeof shell.showFile === "function" ? { label: "Im Finder zeigen", run: () => shell.showFile(saved.path) } : undefined;
+    toast(`Gesichert in „${esc(saved.folder)}“ als „${esc(saved.name)}“${missing}`, { icon: missing ? "triangle-alert" : "download", action: reveal });
+    return;
+  }
   const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
   const link = document.createElement("a");
   link.href = url;
@@ -2979,8 +2998,7 @@ async function exportData() {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
-  if (payload.data) toast(`Gesichert als „${esc(name)}“`, { icon: "download" });
-  else toast(`Gesichert als „${esc(name)}“, aber ohne Noten, Aufgaben und Termine. Sie ließen sich gerade nicht lesen.`, { icon: "triangle-alert" });
+  toast(`Gesichert als „${esc(name)}“${missing}`, { icon: missing ? "triangle-alert" : "download" });
 }
 
 const RECORD_NAMES = { deadlines: "deadline", tasks: "task", grades: "grade", notes: "note", events: "event" };
