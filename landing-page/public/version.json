@@ -1,8 +1,8 @@
 {
   "version": "0.5.2",
   "versionName": "0.5.2 Closed Beta",
-  "buildNumber": 39,
-  "releaseDate": "2026-10-07",
+  "buildNumber": 40,
+  "releaseDate": "2026-10-14",
   "minSupportedVersion": "0.1",
   "updateUrl": "https://hora-app.netlify.app/download",
   "platformUrls": {
