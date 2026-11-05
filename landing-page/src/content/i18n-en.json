@@ -754,7 +754,7 @@
   "start": {
     "intro": "Introducing",
     "title": "{{BRAND_NAME}} 0.5",
-    "lede": "Your first lesson and its room in the morning, your IServ homework in the afternoon.*",
+    "lede": "Your first lesson and its room in the morning, your IServ homework in the afternoon.¹",
     "cta": "Download free",
     "cta_web": "Open web app",
     "cta_generic": "Get {{BRAND_NAME}}",
@@ -776,7 +776,7 @@
       {
         "id": "aufgaben",
         "label": "Tasks",
-        "title": "Homework straight from IServ.*",
+        "title": "Homework straight from IServ.¹",
         "text": "With subject and due date. Overdue work sits at the top, and you can add your own tasks.",
         "alt": "The tasks (German): an overdue lab report and four tasks for today, two of them from IServ."
       },
@@ -810,7 +810,7 @@
     "get_text": "Free for Mac, Windows, Linux and Android. On iPhone, {{BRAND_NAME}} runs as a web app.",
     "get_all": "All downloads and instructions",
     "fine": "Version 0.5 is out for every platform. All data in the pictures is made up.",
-    "footnote": "*** Applies to the Mac: 24.0 MB in version 0.5 instead of 39.4 MB for the last Mac download (Nexus 0.3.0).",
+    "footnote": "³ Applies to the Mac: 24.0 MB in version 0.5 instead of 39.4 MB for the last Mac download (Nexus 0.3.0).",
     "high_title": "What else is inside.",
     "high_label": "More features",
     "high_prev": "Previous card",
@@ -839,7 +839,7 @@
       },
       {
         "id": "size",
-        "lead": "39 % smaller.***",
+        "lead": "39 % smaller.³",
         "text": "Downloads faster, starts leaner and leaves less to attack."
       },
       {
@@ -948,7 +948,7 @@
     "lock_label": "A lock closes.",
     "agent_eyebrow": "Tinte",
     "agent_title": "Just ask Tinte.",
-    "agent_text": "Tinte is the assistant in {{BRAND_NAME}}. He knows your timetable, your tasks and your grades, adds homework for you and plans with you up to the exam. By default he works entirely on your device.**",
+    "agent_text": "Tinte is the assistant in {{BRAND_NAME}}. He knows your timetable, your tasks and your grades, adds homework for you and plans with you up to the exam. By default he works entirely on your device.²",
     "agent_name": "Tinte",
     "agent_role": "Your assistant",
     "agent_time": "Thursday, 20:15",
@@ -1008,7 +1008,7 @@
     "free_title": "Not with {{BRAND_NAME}}.",
     "free_text": "I get nothing from you, no money and no data. I build {{BRAND_NAME}} for fun and out of conviction: a school app does not belong behind a paywall, and your data belongs neither to advertisers nor to anyone else. It belongs to you. That is why it stays on your device, and not even I can get to it.",
     "free_label": "Price: 0 euros",
-    "footnote_iserv": "* IServ works in the apps for Mac, Windows, Linux and Android. On iPhone, {{BRAND_NAME}} runs as a web app, where IServ is not available.",
-    "footnote_agent": "** {{BRAND_NAME}} downloads the assistant's language model only when you first open it, about 3 GB."
+    "footnote_iserv": "¹ IServ works in the apps for Mac, Windows, Linux and Android. On iPhone, {{BRAND_NAME}} runs as a web app, where IServ is not available.",
+    "footnote_agent": "² {{BRAND_NAME}} downloads the assistant's language model only when you first open it, about 3 GB."
   }
 }
