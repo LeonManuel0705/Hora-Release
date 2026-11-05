@@ -12,7 +12,7 @@
   </head>
   <body class="not-found">
     <main class="nf wrap">
-      <div class="nf-tinte" data-tinte aria-hidden="true"></div>
+      <div class="nf-luna" data-luna aria-hidden="true"></div>
       <h1 class="nf-title">Diese Seite gibt es nicht.</h1>
       <p class="nf-text">Vielleicht ein alter Link. Auf der Startseite von {{BRAND_NAME}} geht es weiter.</p>
       <p class="nf-text nf-en" lang="en">This page doesn't exist. The {{BRAND_NAME}} home page is one click away.</p>
@@ -22,8 +22,8 @@
       </a>
     </main>
     <script type="module">
-      import { tinte } from "/js/lib/tinte.js";
-      document.querySelector("[data-tinte]").innerHTML = tinte("schlaeft", 170);
+      import { luna } from "/js/lib/luna.js";
+      document.querySelector("[data-luna]").innerHTML = luna("schlaeft", 170);
     </script>
   </body>
 </html>

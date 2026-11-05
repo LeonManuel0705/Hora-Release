@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../brand.dart';
 import '../providers/app_provider.dart';
 import '../theme.dart';
-import 'tinte.dart';
+import 'luna.dart';
 
 enum _Wait { none, dialog, created }
 
@@ -37,7 +37,7 @@ class _Step {
 
   final String id;
   final String Function(bool phone) text;
-  final TinteMode Function(bool phone)? mode;
+  final LunaMode Function(bool phone)? mode;
   final String? Function(bool phone)? target;
   final String primary;
   final String? secondary;
@@ -51,13 +51,13 @@ class _Step {
   final bool tabletOnly;
 }
 
-TinteMode _point(bool _) => TinteMode.point;
+LunaMode _point(bool _) => LunaMode.point;
 
 final _steps = <_Step>[
   _Step(
     'hello',
-    mode: (_) => TinteMode.hello,
-    text: (_) => 'Hi, ich bin Tinte! Ich zeige dir in einer Minute, wo in ${Brand.name} was ist. Unterwegs legen wir zusammen deine erste Aufgabe an.',
+    mode: (_) => LunaMode.hello,
+    text: (_) => 'Hi, ich bin Luna! Ich zeige dir in einer Minute, wo in ${Brand.name} was ist. Unterwegs legen wir zusammen deine erste Aufgabe an.',
     primary: 'Los geht’s',
     secondary: 'Später',
     onSecondary: 'skip',
@@ -102,7 +102,7 @@ final _steps = <_Step>[
   _Step(
     'task-form',
     page: 1,
-    mode: (_) => TinteMode.watch,
+    mode: (_) => LunaMode.watch,
     target: (_) => 'task-dialog',
     dim: false,
     text: (phone) => phone
@@ -115,7 +115,7 @@ final _steps = <_Step>[
   _Step(
     'task-done',
     page: 1,
-    mode: (_) => TinteMode.cheer,
+    mode: (_) => LunaMode.cheer,
     back: null,
     text: (_) => 'Geschafft, deine erste Aufgabe steht! Ist sie erledigt, hakst du sie mit einem Tipp ab.',
   ),
@@ -137,7 +137,7 @@ final _steps = <_Step>[
   _Step(
     'more',
     dot: true,
-    mode: (phone) => phone ? TinteMode.point : TinteMode.present,
+    mode: (phone) => phone ? LunaMode.point : LunaMode.present,
     target: (phone) => phone ? 'nav-more' : 'nav',
     text: (phone) => phone
         ? 'Unter „Mehr“ findest du alles Weitere: E-Mail, Notizen, Pomodoro, Training, Fahrplan und die Einstellungen. Dort kannst du mich jederzeit wieder rufen.'
@@ -153,7 +153,7 @@ final _steps = <_Step>[
   ),
   _Step(
     'bye',
-    mode: (_) => TinteMode.present,
+    mode: (_) => LunaMode.present,
     text: (_) => 'Das war’s schon! Viel Spaß mit ${Brand.name}.',
     primary: 'Fertig',
     done: true,
@@ -223,7 +223,7 @@ class TutorialHost extends StatefulWidget {
 class _Run {
   _Run(this.rig, this.phone);
 
-  final TinteRig rig;
+  final LunaRig rig;
   final bool phone;
   _Step? step;
   int token = 0;
@@ -313,7 +313,7 @@ class _TutorialHostState extends State<TutorialHost> with TickerProviderStateMix
   void _start() {
     if (_run != null) return;
     final phone = Tutorial._keys['nav']?.currentContext == null || Tutorial._keys['nav-more']?.currentContext != null;
-    final rig = TinteRig(size: phone ? 96 : 120);
+    final rig = LunaRig(size: phone ? 96 : 120);
     setState(() {
       _run = _Run(rig, phone);
       _guideGone = false;
@@ -361,7 +361,7 @@ class _TutorialHostState extends State<TutorialHost> with TickerProviderStateMix
     } else {
       _pulse.stop();
     }
-    run.rig.setMode(TinteMode.float);
+    run.rig.setMode(LunaMode.float);
     if (first) {
       _placeGuide(placement.guide);
       run.rig.appear();
@@ -370,10 +370,10 @@ class _TutorialHostState extends State<TutorialHost> with TickerProviderStateMix
       await _swimTo(placement.guide);
     }
     if (!mounted || token != run.token) return;
-    final mode = step.mode?.call(run.phone) ?? TinteMode.float;
+    final mode = step.mode?.call(run.phone) ?? LunaMode.float;
     final aim = rect == null ? null : _aimAt(rect, placement.guide, run.rig.size);
-    if ((mode == TinteMode.point || mode == TinteMode.watch) && aim == null) {
-      run.rig.setMode(TinteMode.float);
+    if ((mode == LunaMode.point || mode == LunaMode.watch) && aim == null) {
+      run.rig.setMode(LunaMode.float);
     } else {
       run.rig.setMode(mode, target: aim);
     }
@@ -798,7 +798,7 @@ class _TutorialHostState extends State<TutorialHost> with TickerProviderStateMix
       ),
       Positioned.fill(
         child: IgnorePointer(
-          child: CustomPaint(painter: TinteBubblesPainter(run.rig, dark ? TintePalette.dark.bubble : TintePalette.light.bubble)),
+          child: CustomPaint(painter: LunaBubblesPainter(run.rig, dark ? LunaPalette.dark.bubble : LunaPalette.light.bubble)),
         ),
       ),
       Positioned(
@@ -807,7 +807,7 @@ class _TutorialHostState extends State<TutorialHost> with TickerProviderStateMix
         child: AnimatedOpacity(
           opacity: _guideGone ? 0 : 1,
           duration: const Duration(milliseconds: 260),
-          child: TinteView(rig: run.rig, onTap: run.rig.excite),
+          child: LunaView(rig: run.rig, onTap: run.rig.excite),
         ),
       ),
       if (placement != null)

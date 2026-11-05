@@ -7,15 +7,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:app/tutorial/tinte.dart';
+import 'package:app/tutorial/luna.dart';
 import 'package:app/tutorial/tutorial.dart';
 
 void main() {
-  group('TinteRig', () {
+  group('LunaRig', () {
     test('runs every motion without throwing', () {
-      final rig = TinteRig(size: 120, random: math.Random(1))..origin = const Offset(100, 100);
-      for (final mode in TinteMode.values) {
-        if (mode == TinteMode.bye) continue;
+      final rig = LunaRig(size: 120, random: math.Random(1))..origin = const Offset(100, 100);
+      for (final mode in LunaMode.values) {
+        if (mode == LunaMode.bye) continue;
         rig.setMode(mode, target: const Offset(20, 160));
         for (var i = 0; i < 120; i++) {
           rig.step(1 / 30);
@@ -26,7 +26,7 @@ void main() {
       for (var i = 0; i < 30; i++) {
         rig.step(1 / 30);
       }
-      rig.say('Hallo, ich bin Tinte');
+      rig.say('Hallo, ich bin Luna');
       rig.excite();
       for (var i = 0; i < 30; i++) {
         rig.step(1 / 30);
@@ -34,7 +34,7 @@ void main() {
     });
 
     test('says goodbye and disappears', () async {
-      final rig = TinteRig(size: 96, random: math.Random(2));
+      final rig = LunaRig(size: 96, random: math.Random(2));
       var done = false;
       rig.bye().then((_) => done = true);
       for (var i = 0; i < 4 * 30 && !done; i++) {
@@ -46,19 +46,19 @@ void main() {
     });
 
     test('returns to floating after the somersault', () {
-      final rig = TinteRig(random: math.Random(3));
-      rig.setMode(TinteMode.cheer);
+      final rig = LunaRig(random: math.Random(3));
+      rig.setMode(LunaMode.cheer);
       for (var i = 0; i < 3 * 30; i++) {
         rig.step(1 / 30);
       }
-      expect(rig.mode, TinteMode.float);
+      expect(rig.mode, LunaMode.float);
     });
 
     test('points with the arm on the side of the target', () {
-      final rig = TinteRig(size: 100, random: math.Random(4))..origin = const Offset(200, 200);
-      rig.setMode(TinteMode.point, target: const Offset(20, 240));
+      final rig = LunaRig(size: 100, random: math.Random(4))..origin = const Offset(200, 200);
+      rig.setMode(LunaMode.point, target: const Offset(20, 240));
       expect(rig.side, -1);
-      rig.setMode(TinteMode.point, target: const Offset(520, 240));
+      rig.setMode(LunaMode.point, target: const Offset(520, 240));
       expect(rig.side, 1);
     });
   });
@@ -107,7 +107,7 @@ void main() {
       await settle(tester);
       expect(Tutorial.running, isTrue);
       expect(find.text('Los geht’s'), findsOneWidget);
-      expect(find.byType(TinteView), findsOneWidget);
+      expect(find.byType(LunaView), findsOneWidget);
 
       await tester.tap(find.text('Los geht’s'));
       await settle(tester);

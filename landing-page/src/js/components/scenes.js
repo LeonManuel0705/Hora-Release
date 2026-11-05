@@ -1,7 +1,7 @@
 import { brandName, escapeHtml, getLang, raw, t } from "../lib/i18n.js";
 import { icon } from "../lib/icons.js";
 import { reducedMotion } from "../lib/motion.js";
-import { tinte } from "../lib/tinte.js";
+import { luna } from "../lib/luna.js";
 import { iphoneHTML } from "./device.js";
 
 const EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
@@ -79,7 +79,7 @@ function weatherScene() {
 function tourScene() {
   const dots = Array.from({ length: 12 }, (_, i) => `<i${i === 0 ? ' class="is-on"' : ""}></i>`).join("");
   return `<div class="sc sc-tour" data-scene="tour" role="img" aria-label="${s("tour_alt")}">
-    <div class="sc-tour-mascot">${tinte("ruhe", 170, "", { still: true })}</div>
+    <div class="sc-tour-mascot">${luna("ruhe", 170, "", { still: true })}</div>
     <div class="sc-app sc-bubble">
       <p class="sc-bubble-steps"><span class="sc-dots">${dots}</span><span>${s("tour_step")}</span></p>
       <p class="sc-bubble-text">${s("tour_text")}</p>
@@ -123,7 +123,7 @@ function sizeScene() {
 
 function guardScene() {
   return `<div class="sc sc-guard" data-scene="guard" role="img" aria-label="${s("guard_alt")}">
-    <div class="sc-guard-mascot">${tinte("geschafft", 118, "", { still: true })}</div>
+    <div class="sc-guard-mascot">${luna("geschafft", 118, "", { still: true })}</div>
     <div class="sc-app sc-actions">
       <div class="sc-action is-done"><span class="sc-action-glyph">${icon("tasks", { size: 18 })}</span><p>${s("guard_done")}<span>${s("guard_task")}</span></p><span class="sc-check is-big">${icon("check", { size: 16, stroke: 3 })}</span></div>
       <div class="sc-action is-denied"><span class="sc-action-glyph">${icon("circle-check", { size: 18 })}</span><p>${s("guard_check")}<span>${s("guard_yours")}</span></p><span class="sc-deny">${icon("ban", { size: 18 })}</span></div>
@@ -177,7 +177,7 @@ export const SCENES = {
   tour: tourScene,
   security: securityScene,
   size: sizeScene,
-  tinte: guardScene,
+  luna: guardScene,
   move: moveScene,
   phone: phoneScene,
   holidays: calendarScene,

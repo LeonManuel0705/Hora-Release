@@ -139,11 +139,11 @@
     const sparks = [[8, 36, 't-l'], [112, 30, 't-t'], [114, 80, 't-l'], [6, 84, 't-t']]
       .map(([x, y, c], i) => `<g transform="translate(${x} ${y})"><path class="t-spark ${c}" data-spark="${i * .05}" d="${SPARK}"/></g>`).join('');
     const tips = `<g class="t-tip" data-hand="hl"><path class="t-spark t-t" d="${SPARK}"/></g><g class="t-tip" data-hand="hr"><path class="t-spark t-l" d="${SPARK}"/></g>`;
-    return `<svg class="tinte-art" viewBox="0 0 120 120" focusable="false">`
-      + `<defs><clipPath id="tinte-guide-${id}"><path d="${MANTLE}"/></clipPath></defs>`
+    return `<svg class="luna-art" viewBox="0 0 120 120" focusable="false">`
+      + `<defs><clipPath id="luna-guide-${id}"><path d="${MANTLE}"/></clipPath></defs>`
       + `<g class="t-wrap"><g class="t-body">${arms}`
       + `<g class="t-mantle"><path class="t-lav" d="${MANTLE}"/>`
-      + `<g clip-path="url(#tinte-guide-${id})"><ellipse class="t-lav-s" cx="60" cy="71" rx="32" ry="10" opacity=".55"/></g>`
+      + `<g clip-path="url(#luna-guide-${id})"><ellipse class="t-lav-s" cx="60" cy="71" rx="32" ry="10" opacity=".55"/></g>`
       + `<ellipse class="t-lav-h" cx="46" cy="29" rx="8.5" ry="4.5" transform="rotate(-30 46 29)" opacity=".85"/>`
       + `<circle class="t-mint" cx="72" cy="27" r="2.4"/><circle class="t-mint" cx="78" cy="36" r="1.6"/><circle class="t-mint" cx="43" cy="42" r="1.3"/>`
       + face + `</g></g></g>`
@@ -201,7 +201,7 @@
   function bubble(x, y, size) {
     if (!bubbleLayer || !bubbleLayer.isConnected) {
       bubbleLayer = document.createElement('div');
-      bubbleLayer.className = 'tinte-bubbles';
+      bubbleLayer.className = 'luna-bubbles';
       bubbleLayer.setAttribute('aria-hidden', 'true');
       document.body.appendChild(bubbleLayer);
     }
@@ -218,7 +218,7 @@
       const opts = options || {};
       this.size = opts.size || 128;
       const el = document.createElement('div');
-      el.className = 'tinte-guide';
+      el.className = 'luna-guide';
       el.setAttribute('aria-hidden', 'true');
       el.style.width = el.style.height = px(this.size);
       el.innerHTML = guideSvg(++uid);
@@ -794,7 +794,7 @@
     }
   }
 
-  self.AppTinte = {
+  self.AppLuna = {
     guide: options => new Guide(options),
     motionAllowed
   };

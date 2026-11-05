@@ -1,5 +1,5 @@
 import {
-  data, flags, params, esc, icon, tinte, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
+  data, flags, params, esc, icon, luna, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, abWeeks, isoWeek, subject, hueVar, blockOf, lessonsFor, inDays, duration, shortDate, longDate, storage, ASSESSMENTS, isAssessment, isOverdue, assessmentCount,
   WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "../core.js";
 import { animates, travels, flipKeyed, exitInPlace, crossfade, token, ms } from "../motion.js";
@@ -376,7 +376,7 @@ function ownSource(item) {
 }
 
 function loadingHtml(inline = false) {
-  return `<div class="loading-card cal-loading${inline ? " is-inline" : ""}" role="status">${tinte("laedt", 96)}<div><p class="empty-title">Hole Termine aus ${sourceWord()}</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
+  return `<div class="loading-card cal-loading${inline ? " is-inline" : ""}" role="status">${luna("laedt", 96)}<div><p class="empty-title">Hole Termine aus ${sourceWord()}</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
 }
 
 function nextEntryAfter(iso) {
@@ -394,7 +394,7 @@ function emptyHtml(title, span) {
   const action = next
     ? `<button type="button" class="empty-action" data-jump="${next.date}">Nächster Termin am ${esc(shortDate(parseDate(next.date)))}${icon("chevron-right")}</button>`
     : `<p class="empty-text">Neue Termine legst du oben an.</p>`;
-  return `<div class="empty-state cal-empty">${tinte(kind)}<p class="empty-title">${esc(title)}</p>${action}</div>`;
+  return `<div class="empty-state cal-empty">${luna(kind)}<p class="empty-title">${esc(title)}</p>${action}</div>`;
 }
 
 function renderWeek() {

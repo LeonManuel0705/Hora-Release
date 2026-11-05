@@ -2,7 +2,7 @@ import { brandName, escapeHtml, getLang, raw, t } from "../lib/i18n.js";
 import { reducedMotion } from "../lib/motion.js";
 import { detectPlatform, megabytes, PLATFORMS } from "../lib/platform.js";
 import { clamp, onScroll, revealOnce, wordReveal } from "../lib/scroll.js";
-import { tinte } from "../lib/tinte.js";
+import { luna } from "../lib/luna.js";
 import { macHTML, showScreen } from "../components/device.js";
 import { mountDownloads, platformMark } from "../components/downloads.js";
 import { cta, SHORT } from "../components/cta.js";
@@ -64,25 +64,25 @@ function agent() {
   const day = raw("start.day") || [];
   const bubbles = chat.map((message, i) => `<li class="ap-msg is-${message.from}" data-msg="${i}"${message.mood ? ` data-mood="${message.mood}"` : ""}><p>${escapeHtml(message.text)}</p></li>`).join("");
   const moments = day.map((moment) => `<li class="ap-moment ap-reveal">
-      <div class="ap-moment-tinte">${tinte(moment.mood, 132, "", { still: true })}</div>
+      <div class="ap-moment-luna">${luna(moment.mood, 132, "", { still: true })}</div>
       <p class="ap-moment-time">${escapeHtml(moment.time)}</p>
       <p class="ap-moment-text">${escapeHtml(moment.text)}</p>
     </li>`).join("");
-  return `<section class="ap-agent" id="tinte" aria-labelledby="ap-agent-title">
+  return `<section class="ap-agent" id="luna" aria-labelledby="ap-agent-title">
     <div class="ap-agent-head">
       <p class="ap-eyebrow ap-reveal">${escapeHtml(t("start.agent_eyebrow"))}</p>
       <h2 class="ap-h2 ap-reveal" id="ap-agent-title">${escapeHtml(t("start.agent_title"))}</h2>
       <p class="ap-sub ap-reveal">${escapeHtml(t("start.agent_text"))}</p>
     </div>
     <div class="ap-agent-stage ap-reveal">
-      <div class="ap-agent-avatar" data-avatar>${tinte("ruhe", 280, t("start.tile_tinte_label"))}</div>
+      <div class="ap-agent-avatar" data-avatar>${luna("ruhe", 280, t("start.tile_luna_label"))}</div>
       <div class="ap-chat" data-chat>
         <div class="ap-chat-head">
-          <span class="ap-chat-face" aria-hidden="true">${tinte("ruhe", 40, "", { still: true })}</span>
+          <span class="ap-chat-face" aria-hidden="true">${luna("ruhe", 40, "", { still: true })}</span>
           <div><p class="ap-chat-name">${escapeHtml(t("start.agent_name"))}</p><p class="ap-chat-role">${escapeHtml(t("start.agent_role"))}</p></div>
           <p class="ap-chat-time">${escapeHtml(t("start.agent_time"))}</p>
         </div>
-        <ol class="ap-chat-list" role="log" aria-label="${escapeHtml(t("start.agent_label"))}">${bubbles}<li class="ap-msg is-tinte is-typing" data-typing aria-hidden="true"><p><i></i><i></i><i></i></p></li></ol>
+        <ol class="ap-chat-list" role="log" aria-label="${escapeHtml(t("start.agent_label"))}">${bubbles}<li class="ap-msg is-luna is-typing" data-typing aria-hidden="true"><p><i></i><i></i><i></i></p></li></ol>
         <div class="ap-chat-input" aria-hidden="true"><span>${escapeHtml(t("start.agent_input"))}</span><i></i></div>
       </div>
     </div>
@@ -171,7 +171,7 @@ function mountChat(root) {
   if (!chat || !avatar) return () => {};
   const messages = [...chat.querySelectorAll("[data-msg]")];
   const typing = chat.querySelector("[data-typing]");
-  const label = t("start.tile_tinte_label");
+  const label = t("start.tile_luna_label");
   if (reducedMotion() || !("IntersectionObserver" in window)) {
     messages.forEach((message) => message.classList.add("is-in"));
     return () => {};
@@ -180,9 +180,9 @@ function mountChat(root) {
   const at = (ms, fn) => timers.push(setTimeout(fn, ms));
   const ease = getComputedStyle(avatar).getPropertyValue("--ap-ease").trim() || "ease";
   const mood = (kind) => {
-    const current = avatar.querySelector(".tinte:not(.is-leaving)");
+    const current = avatar.querySelector(".luna:not(.is-leaving)");
     if (current?.classList.contains(`is-${kind}`)) return;
-    avatar.insertAdjacentHTML("beforeend", tinte(kind, 280, label));
+    avatar.insertAdjacentHTML("beforeend", luna(kind, 280, label));
     if (!current) return;
     current.classList.add("is-leaving");
     current.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(0.94)" }], { duration: 480, easing: ease, fill: "forwards" })

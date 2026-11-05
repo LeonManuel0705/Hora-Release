@@ -1,4 +1,4 @@
-import { data, esc, icon, tinte, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, relativeDay, now, minutesOf, subject, hueVar, glue, nextRepeatDate, homeworkDate, followLinks, ASSESSMENTS, isAssessment, WEEKDAYS, WEEKDAYS_SHORT, storage } from "./core.js";
+import { data, esc, icon, luna, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, relativeDay, now, minutesOf, subject, hueVar, glue, nextRepeatDate, homeworkDate, followLinks, ASSESSMENTS, isAssessment, WEEKDAYS, WEEKDAYS_SHORT, storage } from "./core.js";
 import { animates, travels, flipKeyed, exitInPlace, enterInPlace, token } from "./motion.js";
 import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen, keepOneLine } from "./shell.js";
 import { tasks as taskApi, deadlines as deadlineApi, debounced, serverId } from "./api.js";
@@ -136,7 +136,7 @@ function emptyHtml() {
   const hour = minutesOf(now()) / 60;
   if (state.subject) {
     const name = subject(state.subject).name;
-    return `<div class="empty-state">${tinte("ruhe")}<p class="empty-title">In ${esc(name)} ist gerade nichts offen.</p><button type="button" class="empty-action" data-clear-subject>Alle Fächer zeigen${icon("chevron-right")}</button></div>`;
+    return `<div class="empty-state">${luna("ruhe")}<p class="empty-title">In ${esc(name)} ist gerade nichts offen.</p><button type="button" class="empty-action" data-clear-subject>Alle Fächer zeigen${icon("chevron-right")}</button></div>`;
   }
   if (state.filter === "heute") {
     const doneToday = state.tasks.some((task) => task.done && bucketOf(task) === "today");
@@ -144,15 +144,15 @@ function emptyHtml() {
     const next = tomorrow ? `<button type="button" class="empty-action" data-filter-to="woche">${tomorrow === 1 ? "1 Aufgabe für morgen ansehen" : `${tomorrow} Aufgaben für morgen ansehen`}${icon("chevron-right")}</button>` : "";
     if (doneToday) {
       const kind = hour >= 21 || hour < 5 ? "schlaeft" : "geschafft";
-      return `<div class="empty-state">${tinte(kind)}<p class="empty-title">Alles für heute erledigt.</p>${next}</div>`;
+      return `<div class="empty-state">${luna(kind)}<p class="empty-title">Alles für heute erledigt.</p>${next}</div>`;
     }
-    return `<div class="empty-state">${tinte("ruhe")}<p class="empty-title">Für heute ist nichts geplant.</p>${next}</div>`;
+    return `<div class="empty-state">${luna("ruhe")}<p class="empty-title">Für heute ist nichts geplant.</p>${next}</div>`;
   }
-  return `<div class="empty-state">${tinte("ruhe")}<p class="empty-title">Keine offenen Aufgaben.</p><p class="empty-text">Neue legst du oben an.</p></div>`;
+  return `<div class="empty-state">${luna("ruhe")}<p class="empty-title">Keine offenen Aufgaben.</p><p class="empty-text">Neue legst du oben an.</p></div>`;
 }
 
 function loadingHtml() {
-  return `<div class="loading-card" role="status">${tinte("laedt", 96)}<div><p class="empty-title">Hole Hausaufgaben aus IServ</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
+  return `<div class="loading-card" role="status">${luna("laedt", 96)}<div><p class="empty-title">Hole Hausaufgaben aus IServ</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
 }
 
 function groupsHtml() {

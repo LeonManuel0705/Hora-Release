@@ -1,5 +1,5 @@
 import {
-  data, flags, params, esc, icon, tinte, now, pinnedTime, toMin, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
+  data, flags, params, esc, icon, luna, now, pinnedTime, toMin, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, isoWeek, subject, hueVar, blockOf, glue, relativeDay, inDays, duration, shortDate, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT,
   abWeeks, gradeScale, activeSubjectKeys, ASSESSMENTS, isAssessment, assessmentCount, pastText, pastWord, homeworkDate,
 } from "../core.js";
@@ -644,7 +644,7 @@ function vplanHtml() {
   }
   if (!plan.files.length) {
     if (plan.loading || !plan.loaded) {
-      return `${head}<div class="ov-loading" role="status">${tinte("laedt", 84)}<div><p class="empty-title">Hole Vertretungsplan aus IServ</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
+      return `${head}<div class="ov-loading" role="status">${luna("laedt", 84)}<div><p class="empty-title">Hole Vertretungsplan aus IServ</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
     }
     return `${head}<p class="ov-calm is-quiet">${icon("graduation-cap")}<span>${esc(plan.message || "IServ zeigt gerade keinen Vertretungsplan.")}</span></p>`;
   }
@@ -791,7 +791,7 @@ function renderTests() {
     if (!list.length) {
       const hour = time.min / 60;
       const kind = hour >= 21 || hour < 5 ? "schlaeft" : "ruhe";
-      body.innerHTML = `<div class="empty-state">${tinte(kind)}<p class="empty-title">Keine Tests in Sicht.</p><p class="empty-text">Angekündigte Tests, Klausuren und Vorträge trägst du hier ein.</p><button type="button" class="empty-action" data-new-test="">Test eintragen${icon("chevron-right")}</button></div>${past}`;
+      body.innerHTML = `<div class="empty-state">${luna(kind)}<p class="empty-title">Keine Tests in Sicht.</p><p class="empty-text">Angekündigte Tests, Klausuren und Vorträge trägst du hier ein.</p><button type="button" class="empty-action" data-new-test="">Test eintragen${icon("chevron-right")}</button></div>${past}`;
       return;
     }
     body.innerHTML = `<ul class="rows" aria-labelledby="testsTitle">${list.map((item) => dueRow(item, time)).join("")}</ul>${past}`;

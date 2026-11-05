@@ -118,10 +118,10 @@ Path _sparkPath() => Path()
   ..cubicTo(-1.6, -.9, -.9, -1.6, 0, -7)
   ..close();
 
-enum TinteMode { float, hello, point, watch, cheer, present, bye }
+enum LunaMode { float, hello, point, watch, cheer, present, bye }
 
-class TintePalette {
-  const TintePalette({
+class LunaPalette {
+  const LunaPalette({
     required this.lav,
     required this.lavShade,
     required this.lavHigh,
@@ -137,7 +137,7 @@ class TintePalette {
 
   final Color lav, lavShade, lavHigh, mint, mintShade, rose, ink, apricot, inkCloud, inkSoft, bubble;
 
-  static const light = TintePalette(
+  static const light = LunaPalette(
     lav: Color(0xFFB7A6F6),
     lavShade: Color(0xFF9F8CEF),
     lavHigh: Color(0xFFDAD1FC),
@@ -151,7 +151,7 @@ class TintePalette {
     bubble: Color(0xFF9580E8),
   );
 
-  static const dark = TintePalette(
+  static const dark = LunaPalette(
     lav: Color(0xFFAE9CF5),
     lavShade: Color(0xFF9380EA),
     lavHigh: Color(0xFFCFC4FB),
@@ -199,8 +199,8 @@ class _Bubble {
   final double size, drift, born;
 }
 
-class TinteRig extends ChangeNotifier {
-  TinteRig({this.size = 120, math.Random? random}) : _rnd = random ?? math.Random() {
+class LunaRig extends ChangeNotifier {
+  LunaRig({this.size = 120, math.Random? random}) : _rnd = random ?? math.Random() {
     _ph = List.generate(10, (_) => _rnd.nextDouble() * _tau);
     t = _rnd.nextDouble() * 20;
     _nextBlink = t + .8 + _rnd.nextDouble() * 2.2;
@@ -218,7 +218,7 @@ class TinteRig extends ChangeNotifier {
   Offset velocity = Offset.zero;
   bool moving = false;
 
-  TinteMode mode = TinteMode.float;
+  LunaMode mode = LunaMode.float;
   double t = 0;
   double modeT = 0;
   Offset? target;
@@ -250,8 +250,8 @@ class TinteRig extends ChangeNotifier {
 
   Offset get center => origin + Offset(size / 2, size * .44);
 
-  void setMode(TinteMode next, {Offset? target}) {
-    if (_bye != null && next != TinteMode.bye) {
+  void setMode(LunaMode next, {Offset? target}) {
+    if (_bye != null && next != LunaMode.bye) {
       _bye!.complete();
       _bye = null;
     }
@@ -260,7 +260,7 @@ class TinteRig extends ChangeNotifier {
     mode = next;
     modeT = 0;
     this.target = target;
-    if (next != TinteMode.watch) lookTarget = null;
+    if (next != LunaMode.watch) lookTarget = null;
     _pickSide();
     if (still) _pose(frozen: true);
     notifyListeners();
@@ -284,7 +284,7 @@ class TinteRig extends ChangeNotifier {
 
   Future<void> bye() {
     alpha = 1;
-    setMode(TinteMode.bye);
+    setMode(LunaMode.bye);
     if (still) {
       alpha = 0;
       notifyListeners();
@@ -394,15 +394,15 @@ class TinteRig extends ChangeNotifier {
       return (math.cos(a), math.sin(a), a);
     }
 
-    if (mode == TinteMode.hello || (mode == TinteMode.bye && mt < 1.35)) {
+    if (mode == LunaMode.hello || (mode == LunaMode.bye && mt < 1.35)) {
       hr = frozen ? _hrWave : _lerpPose(_hrUp, _hrWave, .5 + .5 * math.sin(_tau * mt / .52));
       j = 1;
       bw = -1.8;
       mRot -= 3;
-      if (mode == TinteMode.hello && mt > 2.5 && !frozen) setMode(TinteMode.float);
+      if (mode == LunaMode.hello && mt > 2.5 && !frozen) setMode(LunaMode.float);
     }
 
-    if (mode == TinteMode.point && target != null) {
+    if (mode == LunaMode.point && target != null) {
       final (dx, dy, a) = dir(target!);
       final tap = (mt % 1.3) / 1.3;
       final ext = frozen ? 1.0 : 1 + .11 * (tap < .24 ? math.sin(math.pi * tap / .24) : 0);
@@ -418,7 +418,7 @@ class TinteRig extends ChangeNotifier {
       bw = -1;
     }
 
-    if (mode == TinteMode.watch) {
+    if (mode == LunaMode.watch) {
       final focus = lookTarget ?? target;
       if (focus != null) {
         final (dx, dy, _) = dir(focus);
@@ -442,7 +442,7 @@ class TinteRig extends ChangeNotifier {
       }
     }
 
-    if (mode == TinteMode.present) {
+    if (mode == LunaMode.present) {
       hl = frozen ? _hlTada : _wob(_hlTada, time, .7, 2.9, ph[2]);
       hr = frozen ? _hrTada : _wob(_hrTada, time, .7, 3.3, ph[6]);
       if (mt < 1) j = 1;
@@ -453,7 +453,7 @@ class TinteRig extends ChangeNotifier {
       tipK = -1;
     }
 
-    if (mode == TinteMode.cheer) {
+    if (mode == LunaMode.cheer) {
       final u = mt;
       if (u < .18) {
         final k = _ease(_inout, u / .18);
@@ -492,7 +492,7 @@ class TinteRig extends ChangeNotifier {
         bw = -2;
         if (u > 2.6 && !frozen) {
           _joyUntil = t + .5;
-          setMode(TinteMode.float);
+          setMode(LunaMode.float);
           return;
         }
       }
@@ -507,7 +507,7 @@ class TinteRig extends ChangeNotifier {
     }
     _burst();
 
-    if (mode == TinteMode.bye) {
+    if (mode == LunaMode.bye) {
       if (mt >= 1.35 && mt < 1.8) {
         wk = true;
         j = 0;
@@ -566,7 +566,7 @@ class TinteRig extends ChangeNotifier {
       scy *= 1 + .04 * math.sin(math.pi * hop / .45);
     }
 
-    if (lk == null && lookTarget != null && mode != TinteMode.watch) {
+    if (lk == null && lookTarget != null && mode != LunaMode.watch) {
       final (dx, dy, _) = dir(lookTarget!);
       lk = Offset(dx, dy);
     }
@@ -658,11 +658,11 @@ class TinteRig extends ChangeNotifier {
   }
 }
 
-class TintePainter extends CustomPainter {
-  TintePainter(this.rig, this.palette) : super(repaint: rig);
+class LunaPainter extends CustomPainter {
+  LunaPainter(this.rig, this.palette) : super(repaint: rig);
 
-  final TinteRig rig;
-  final TintePalette palette;
+  final LunaRig rig;
+  final LunaPalette palette;
 
   static final Path _mantle = _mantlePath();
   static final Path _spark = _sparkPath();
@@ -862,13 +862,13 @@ class TintePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(TintePainter oldDelegate) => oldDelegate.rig != rig || oldDelegate.palette != palette;
+  bool shouldRepaint(LunaPainter oldDelegate) => oldDelegate.rig != rig || oldDelegate.palette != palette;
 }
 
-class TinteBubblesPainter extends CustomPainter {
-  TinteBubblesPainter(this.rig, this.color) : super(repaint: rig);
+class LunaBubblesPainter extends CustomPainter {
+  LunaBubblesPainter(this.rig, this.color) : super(repaint: rig);
 
-  final TinteRig rig;
+  final LunaRig rig;
   final Color color;
 
   @override
@@ -894,20 +894,20 @@ class TinteBubblesPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(TinteBubblesPainter oldDelegate) => oldDelegate.rig != rig || oldDelegate.color != color;
+  bool shouldRepaint(LunaBubblesPainter oldDelegate) => oldDelegate.rig != rig || oldDelegate.color != color;
 }
 
-class TinteView extends StatefulWidget {
-  const TinteView({super.key, required this.rig, this.onTap});
+class LunaView extends StatefulWidget {
+  const LunaView({super.key, required this.rig, this.onTap});
 
-  final TinteRig rig;
+  final LunaRig rig;
   final VoidCallback? onTap;
 
   @override
-  State<TinteView> createState() => _TinteViewState();
+  State<LunaView> createState() => _LunaViewState();
 }
 
-class _TinteViewState extends State<TinteView> with SingleTickerProviderStateMixin {
+class _LunaViewState extends State<LunaView> with SingleTickerProviderStateMixin {
   static const _frame = 1 / 30;
   late final Ticker _ticker;
   Duration _last = Duration.zero;
@@ -959,7 +959,7 @@ class _TinteViewState extends State<TinteView> with SingleTickerProviderStateMix
         child: RepaintBoundary(
           child: CustomPaint(
             size: Size.square(size),
-            painter: TintePainter(widget.rig, dark ? TintePalette.dark : TintePalette.light),
+            painter: LunaPainter(widget.rig, dark ? LunaPalette.dark : LunaPalette.light),
           ),
         ),
       ),

@@ -11,7 +11,7 @@ UI_STATIC = [
     'fonts/bricolage-grotesque.woff2',
     'fonts/OFL-Bricolage.txt',
     'css/tour.css',
-    'js/tinte.js',
+    'js/luna.js',
     'js/tour.js',
 ]
 

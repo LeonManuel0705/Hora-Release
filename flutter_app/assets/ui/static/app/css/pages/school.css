@@ -286,7 +286,7 @@
 .side-meta .icon { --s: 14; }
 
 .ov-loading { display: flex; align-items: center; gap: 12px; margin: 8px 0 4px -6px; }
-.ov-loading .tinte { width: 84px; height: 84px; margin: 0; flex: none; }
+.ov-loading .luna { width: 84px; height: 84px; margin: 0; flex: none; }
 .ov-loading .empty-title { font-size: var(--text-sm); }
 .ov-loading .empty-text { font-size: var(--text-xs); }
 

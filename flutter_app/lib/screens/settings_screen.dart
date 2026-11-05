@@ -973,7 +973,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Icon(Icons.play_arrow_rounded, color: AppTheme.primaryColor, size: 20),
                   ),
                   title: const Text('Tutorial starten'),
-                  subtitle: const Text('Tinte zeigt dir in einer Minute, wo was ist.'),
+                  subtitle: const Text('Luna zeigt dir in einer Minute, wo was ist.'),
                   onTap: Tutorial.start,
                 ),
               ),

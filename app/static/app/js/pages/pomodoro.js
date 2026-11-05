@@ -1,4 +1,4 @@
-import { BRAND, activeSubjectKeys, data, duration, esc, hueVar, subject, tinte } from "../core.js";
+import { BRAND, activeSubjectKeys, data, duration, esc, hueVar, subject, luna } from "../core.js";
 import { animates, token, travels } from "../motion.js";
 import { sceneParts, playIntro } from "../desk.js";
 import { readPrefs } from "../reminders.js";
@@ -25,13 +25,13 @@ const PHASE = {
 };
 
 const SCENE_LABEL = {
-  ready: "Tinte wartet am Schreibtisch",
-  work: "Tinte arbeitet am Schreibtisch",
-  paused: "Tinte hat den Stift kurz abgelegt",
-  rest: "Tinte macht Pause",
-  done: "Tinte ruht sich aus",
-  cheer: "Tinte freut sich",
-  back: "Tinte ist wieder bereit",
+  ready: "Luna wartet am Schreibtisch",
+  work: "Luna arbeitet am Schreibtisch",
+  paused: "Luna hat den Stift kurz abgelegt",
+  rest: "Luna macht Pause",
+  done: "Luna ruht sich aus",
+  cheer: "Luna freut sich",
+  back: "Luna ist wieder bereit",
 };
 
 const view = {
@@ -40,7 +40,7 @@ const view = {
   stage: "",
   scene: "",
   books: 0,
-  tinte: "",
+  luna: "",
   cheering: false,
   cheerTimer: 0,
   tick: 0,
@@ -183,13 +183,13 @@ function paintScene(state, mood, at) {
   if (added && travels()) added.animate([{ opacity: 0, translate: "0 -24px" }, { opacity: 1, translate: "0 0" }], { duration: 560, delay: 120, easing: token("--spring-tactile"), fill: "backwards" });
 }
 
-function paintTinte(mood, delay = 0) {
+function paintLuna(mood, delay = 0) {
   const kind = mood === "cheer" ? "geschafft" : mood === "rest" ? "schlaeft" : "ruhe";
-  if (kind === view.tinte) return;
-  const first = !view.tinte;
-  view.tinte = kind;
-  const host = $("pomoTinte");
-  host.innerHTML = tinte(kind, 240);
+  if (kind === view.luna) return;
+  const first = !view.luna;
+  view.luna = kind;
+  const host = $("pomoLuna");
+  host.innerHTML = luna(kind, 240);
   if (!animates()) return;
   host.firstElementChild.animate(
     travels() ? [{ opacity: 0, transform: "translateY(6%) scale(0.94)" }, { opacity: 1, transform: "none" }] : [{ opacity: 0 }, { opacity: 1 }],
@@ -386,7 +386,7 @@ function render() {
     paintRhythm(state);
     paintHeader();
     paintScene(state, mood, at);
-    paintTinte(mood, view.introduced ? 0 : 700);
+    paintLuna(mood, view.introduced ? 0 : 700);
   } else {
     paintScene(state, mood, at);
   }
@@ -485,8 +485,8 @@ function handle(event) {
   render();
 }
 
-function nudgeTinte() {
-  const art = $("pomoTinte").querySelector("svg.tinte-art[data-st=idle]");
+function nudgeLuna() {
+  const art = $("pomoLuna").querySelector("svg.luna-art[data-st=idle]");
   if (art && travels()) art.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
 
@@ -508,7 +508,7 @@ function bind() {
       actions.start();
       const next = read();
       say(state.status === "paused" ? "Weiter." : `${next.phase === "work" ? "Arbeitsphase" : "Pause"} gestartet, ${minutesWord(next.minutes[next.phase])}.`);
-      nudgeTinte();
+      nudgeLuna();
     }
   });
   $("pomoSide").addEventListener("click", () => {

@@ -1,7 +1,7 @@
 import { escapeHtml, raw, t } from "../lib/i18n.js";
 import { brand, icon } from "../lib/icons.js";
 import { revealOnce } from "../lib/scroll.js";
-import { tinte } from "../lib/tinte.js";
+import { luna } from "../lib/luna.js";
 import { macHTML } from "../components/device.js";
 import { CHEVRON, pageHeroHTML, zoomHTML } from "../components/page.js";
 
@@ -27,7 +27,7 @@ function feature(area, i) {
       <ul class="ap-facts ap-reveal">${facts}</ul>
       <p class="ap-devices ap-reveal">${escapeHtml(t(`home_features.devices_${area.devices}`))}</p>
     </div>
-    ${area.id === "tinte" ? `<div class="ap-feature-tinte ap-reveal">${tinte("ruhe", 280, t("start.tile_tinte_label"))}</div>` : zoomHTML(screen, region, t(`features_page.shots.${area.id}`), { max })}
+    ${area.id === "luna" ? `<div class="ap-feature-luna ap-reveal">${luna("ruhe", 280, t("start.tile_luna_label"))}</div>` : zoomHTML(screen, region, t(`features_page.shots.${area.id}`), { max })}
   </article>`;
 }
 

@@ -1,8 +1,8 @@
 import { weakDevice, attentive, onAttention } from "./attention.js";
 
-const LOADER_FX = '<i class="tinte-sync"><svg viewBox="38.5 63.4 12 12"><path d="M41.7 68.8A2.9 2.9 0 0 1 46.8 67.6M46.8 67.6l.1 -1.6M46.8 67.6l-1.6 .1M47.3 70A2.9 2.9 0 0 1 42.2 71.2M42.2 71.2l-.1 1.6M42.2 71.2l1.6 -.1"/></svg></i>'
-  + [51.5, 55.5, 59.5].map((x) => `<i class="tinte-dot"><svg viewBox="${x - 6} 63.4 12 12"><circle cx="${x}" cy="69.4" r="1.1"/></svg></i>`).join("")
-  + '<i class="tinte-fill"><svg viewBox="40 72 40 12"><rect x="41" y="76" width="38" height="4.2" rx="2.1"/></svg></i>';
+const LOADER_FX = '<i class="luna-sync"><svg viewBox="38.5 63.4 12 12"><path d="M41.7 68.8A2.9 2.9 0 0 1 46.8 67.6M46.8 67.6l.1 -1.6M46.8 67.6l-1.6 .1M47.3 70A2.9 2.9 0 0 1 42.2 71.2M42.2 71.2l-.1 1.6M42.2 71.2l1.6 -.1"/></svg></i>'
+  + [51.5, 55.5, 59.5].map((x) => `<i class="luna-dot"><svg viewBox="${x - 6} 63.4 12 12"><circle cx="${x}" cy="69.4" r="1.1"/></svg></i>`).join("")
+  + '<i class="luna-fill"><svg viewBox="40 72 40 12"><rect x="41" y="76" width="38" height="4.2" rx="2.1"/></svg></i>';
 
 let uid = 0;
 const r2 = n => Math.round(n * 100) / 100;
@@ -149,7 +149,7 @@ function confetti() {
   return `<g>${out}</g>`;
 }
 
-function tinteFace(st) {
+function lunaFace(st) {
   const brows = st === "think"
     ? `<path class="t-brow" d="M45.4 39.4q5 -1.2 9.8 1.2"/><path class="t-brow" d="M64.8 40.6q5 -2.4 9.8 -1.2"/>`
     : `<path class="t-brow" d="M44.6 38.2q5.2 -3.4 10.4 -1"/><path class="t-brow" d="M65 37.2q5.2 -2.4 10.4 1"/>`;
@@ -159,11 +159,11 @@ function tinteFace(st) {
   return `<g class="t-brows">${brows}</g>` + eyes(50, 70, 47, 1.05) + blush(42.5, 77.5, 55.5, 1) + mouth;
 }
 
-const SLEEP_FX = ["M3.2 5.6h5.2L3.2 10.6h5.2", "M3.2 5.6h5.2L3.2 10.6h5.2", "M2.4 2.8h7.2L2.4 10.6h7.2"].map((d) => `<i class="tinte-z"><svg viewBox="0 0 12 12"><path d="${d}"/></svg></i>`).join("");
+const SLEEP_FX = ["M3.2 5.6h5.2L3.2 10.6h5.2", "M3.2 5.6h5.2L3.2 10.6h5.2", "M2.4 2.8h7.2L2.4 10.6h7.2"].map((d) => `<i class="luna-z"><svg viewBox="0 0 12 12"><path d="${d}"/></svg></i>`).join("");
 const SEATED = { g1: T.g1, g2: T.g2, g3: P.g3, g4: P.g4, hl: T.hl, hr: P.hr };
 const STATES = { ruhe: "idle", geschafft: "cheer", laedt: "think", schlaeft: "sleep" };
 
-function drawTinte(id, st) {
+function drawLuna(id, st) {
   const night = st === "sleep";
   const seated = armSvg("g1", T.g1, 9, 2, 1) + armSvg("g2", T.g2, 9.5, 2, 1) + armSvg("g3", P.g3, 9.5, 2, -1) + armSvg("g4", P.g4, 9, 2, -1);
   const hands = armSvg("hl", T.hl, 7.5, 2.4, 0) + armSvg("hr", P.hr, 7.5, 2.4, 0);
@@ -187,14 +187,14 @@ function drawTinte(id, st) {
       + `<path class="t-band" d="M36.5 32C43 26.6 77 26.6 83.5 32C84.6 33.2 83.6 35.2 82 34.6C74.5 31.2 45.5 31.2 38 34.6C36.4 35.2 35.4 33.2 36.5 32Z"/>`
       + `<circle class="t-pom" cx="96" cy="33.5" r="4.3"/>`;
   }
-  return `<defs><clipPath id="tinte-mt${id}"><path d="${MANTLE}"/></clipPath></defs>`
+  return `<defs><clipPath id="luna-mt${id}"><path d="${MANTLE}"/></clipPath></defs>`
     + (night ? "" : `<ellipse class="t-shadow" cx="60" cy="103.5" rx="46" ry="4.2"/>`)
     + `<g class="t-pokewrap"><g class="t-body">${arms}`
     + `<g class="t-mantle"><path class="t-lav" d="${MANTLE}"/>`
-    + `<g clip-path="url(#tinte-mt${id})"><ellipse class="t-lav-s" cx="60" cy="71" rx="32" ry="10" opacity=".55"/></g>`
+    + `<g clip-path="url(#luna-mt${id})"><ellipse class="t-lav-s" cx="60" cy="71" rx="32" ry="10" opacity=".55"/></g>`
     + `<ellipse class="t-lav-h" cx="46" cy="29" rx="8.5" ry="4.5" transform="rotate(-30 46 29)" opacity=".85"/>`
     + `<circle class="t-mint" cx="72" cy="27" r="2.4"/><circle class="t-mint" cx="78" cy="36" r="1.6"/><circle class="t-mint" cx="43" cy="42" r="1.3"/>`
-    + cap + tinteFace(st) + `</g>${front}</g></g>${after}`;
+    + cap + lunaFace(st) + `</g>${front}</g></g>${after}`;
 }
 
 const px = (n) => `${n.toFixed(2)}px`;
@@ -462,23 +462,23 @@ function trackEyes() {
 }
 
 function activate(root) {
-  const list = root.matches("svg.tinte-art") ? [root] : root.querySelectorAll("svg.tinte-art");
+  const list = root.matches("svg.luna-art") ? [root] : root.querySelectorAll("svg.luna-art");
   for (const svg of list) {
-    if (svg._tinte !== undefined) continue;
+    if (svg._luna !== undefined) continue;
     if (!motionAllowed()) {
-      svg._tinte = null;
+      svg._luna = null;
       svg.parentElement.classList.add("is-static");
       continue;
     }
     const rig = new Rig(svg);
-    svg._tinte = rig;
+    svg._luna = rig;
     rigs.add(rig);
     observer.observe(svg);
   }
 }
 
 function poke(svg) {
-  const rig = svg._tinte;
+  const rig = svg._luna;
   if (!rig) return;
   const wrap = svg.querySelector(".t-pokewrap");
   wrap.classList.remove("t-poke");
@@ -492,7 +492,7 @@ function boot() {
   booted = true;
   observer = new IntersectionObserver((entries) => {
     for (const entry of entries) {
-      const rig = entry.target._tinte;
+      const rig = entry.target._luna;
       if (!rig) continue;
       rig.visible = entry.isIntersecting;
       if (!rig.visible) rig.hold(true);
@@ -521,12 +521,12 @@ function boot() {
   for (const type of ["pointerdown", "keydown", "wheel", "touchstart", "scroll"]) addEventListener(type, input, { passive: true, capture: true });
   onAttention(() => (awake() ? wake() : holdAll()));
   document.addEventListener("click", (event) => {
-    const svg = event.target.closest?.("svg.tinte-art[data-st=idle]");
+    const svg = event.target.closest?.("svg.luna-art[data-st=idle]");
     if (svg) poke(svg);
   });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;
-    const svg = event.target.closest?.("svg.tinte-art[data-st=idle]");
+    const svg = event.target.closest?.("svg.luna-art[data-st=idle]");
     if (!svg) return;
     event.preventDefault();
     poke(svg);
@@ -536,9 +536,9 @@ function boot() {
   });
 }
 
-export function tinte(kind, size = 150) {
+export function luna(kind, size = 150) {
   boot();
   const st = STATES[kind] || "idle";
-  const button = st === "idle" ? ' role="button" tabindex="0" aria-label="Tinte antippen, dann winkt er"' : ' aria-hidden="true" focusable="false"';
-  return `<span class="tinte is-${kind}"${st === "idle" ? "" : ' aria-hidden="true"'}><svg class="tinte-art" data-st="${st}" viewBox="0 0 120 120" width="${size}" height="${size}"${button}>${drawTinte(++uid, st)}</svg>${st === "think" ? LOADER_FX : st === "sleep" ? SLEEP_FX : ""}</span>`;
+  const button = st === "idle" ? ' role="button" tabindex="0" aria-label="Luna antippen, dann winkt sie"' : ' aria-hidden="true" focusable="false"';
+  return `<span class="luna is-${kind}"${st === "idle" ? "" : ' aria-hidden="true"'}><svg class="luna-art" data-st="${st}" viewBox="0 0 120 120" width="${size}" height="${size}"${button}>${drawLuna(++uid, st)}</svg>${st === "think" ? LOADER_FX : st === "sleep" ? SLEEP_FX : ""}</span>`;
 }

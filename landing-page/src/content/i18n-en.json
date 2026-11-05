@@ -109,11 +109,11 @@
         "devices": "all"
       },
       {
-        "id": "tinte",
+        "id": "luna",
         "icon": "chat",
         "hue": "iris",
-        "title": "Tinte",
-        "text": "Tinte is the assistant in {{BRAND_NAME}}. Ask him what is on tomorrow, tell him „Maths p. 38 for Monday“ and he adds the homework. Before an exam he builds you a study plan.",
+        "title": "Luna",
+        "text": "Luna is the assistant in {{BRAND_NAME}}. Ask her what is on tomorrow, tell her „Maths p. 38 for Monday“ and she adds the homework. Before an exam she builds you a study plan.",
         "facts": [
           "Answers from your timetable, tasks and grades",
           "Adds tasks and homework from a sentence",
@@ -126,7 +126,7 @@
   "home_download": {
     "done_title": "Download started",
     "done_close": "Close",
-    "tinte_label": "Tap Tinte and he waves"
+    "luna_label": "Tap Luna and she waves"
   },
   "platforms": {
     "macos": {
@@ -287,7 +287,7 @@
         "title": "Planning",
         "rows": [
           {
-            "name": "Tinte, the assistant",
+            "name": "Luna, the assistant",
             "note": "on the computer optionally with a local language model",
             "d": "yes",
             "a": "yes",
@@ -424,8 +424,8 @@
         "text": "Live via Transitous, with delays and platforms."
       },
       {
-        "title": "Tinte",
-        "text": "Tinte is your assistant: he answers questions about your day, adds homework and helps you study."
+        "title": "Luna",
+        "text": "Luna is your assistant: she answers questions about your day, adds homework and helps you study."
       }
     ],
     "cta": "Get {{BRAND_NAME}} 0.5",
@@ -441,7 +441,7 @@
       "iserv": "Sign in once, the rest arrives on its own.",
       "fahrplan": "Delays before you leave.",
       "kalender": "Holidays you never type in.",
-      "tinte": "Just ask Tinte."
+      "luna": "Just ask Luna."
     },
     "shots": {
       "stundenplan": "The A-week timetable (German) with subjects, rooms and periods.",
@@ -450,7 +450,7 @@
       "iserv": "Substitution plan from IServ, the next test and the grade average (German).",
       "fahrplan": "The next departures at the Lindenallee stop (German).",
       "kalender": "The calendar week (German) with timetable, events and a project day.",
-      "tinte": "Tinte, the assistant in {{BRAND_NAME}}."
+      "luna": "Luna, the assistant in {{BRAND_NAME}}."
     },
     "cta_title": "Get {{BRAND_NAME}}.",
     "cta_text": "Free for Mac, Windows, Linux and Android."
@@ -524,7 +524,7 @@
       {
         "icon": "chat",
         "to": "Claude by Anthropic",
-        "what": "your question to Tinte and the data he needs to answer it",
+        "what": "your question to Luna and the data she needs to answer it",
         "when": "only with your own Claude key (computer)",
         "tone": "warn"
       },
@@ -802,7 +802,7 @@
         "alt": "The grades (German): 11.3 points on average and the grade calculator showing 13 points."
       }
     ],
-    "tile_tinte_label": "Tap Tinte and he waves",
+    "tile_luna_label": "Tap Luna and she waves",
     "privacy_title": "Your grades are your business.",
     "privacy_text": "There is no account and no {{BRAND_NAME}} server. What happens to your data is in the source code, line by line.",
     "privacy_link": "More on privacy",
@@ -829,8 +829,8 @@
       },
       {
         "id": "tour",
-        "lead": "Tinte shows you around.",
-        "text": "Nexus had no tour. Tinte walks you through {{BRAND_NAME}} in 12 steps."
+        "lead": "Luna shows you around.",
+        "text": "Nexus had no tour. Luna walks you through {{BRAND_NAME}} in 12 steps."
       },
       {
         "id": "security",
@@ -843,9 +843,9 @@
         "text": "Downloads faster, starts leaner and leaves less to attack."
       },
       {
-        "id": "tinte",
-        "lead": "Tinte adds, but never deletes.",
-        "text": "He only creates tasks. He cannot delete or tick anything off, even if a mail tells him to."
+        "id": "luna",
+        "lead": "Luna adds, but never deletes.",
+        "text": "She only creates tasks. She cannot delete or tick anything off, even if a mail tells her to."
       },
       {
         "id": "move",
@@ -894,10 +894,10 @@
       "weather_rain": "Rain, 60 %",
       "weather_alt": "The overview in {{BRAND_NAME}}: home by bus 612 at 13:20, dry until 5 pm. Rain from 5 pm, training at 17:00 with a 60 % chance of rain.",
       "tour_step": "Step 1 of 12",
-      "tour_text": "Hi, I am Tinte! In one minute I will show you where everything is in {{BRAND_NAME}}. On the way we will set up your first task together.",
+      "tour_text": "Hi, I am Luna! In one minute I will show you where everything is in {{BRAND_NAME}}. On the way we will set up your first task together.",
       "tour_go": "Let’s go",
       "tour_later": "Later",
-      "tour_alt": "Tinte greets you on the first start and walks you through {{BRAND_NAME}} in 12 steps.",
+      "tour_alt": "Luna greets you on the first start and walks you through {{BRAND_NAME}} in 12 steps.",
       "security": {
         "login": "Sign in and session",
         "mail": "Mail and connections",
@@ -920,8 +920,8 @@
       "guard_check": "Tick off tasks",
       "guard_yours": "Only you do that.",
       "guard_delete": "Delete tasks",
-      "guard_never": "Tinte is not allowed to.",
-      "guard_alt": "Tinte creates a task. Ticking off or deleting tasks is not allowed for Tinte.",
+      "guard_never": "Luna is not allowed to.",
+      "guard_alt": "Luna creates a task. Ticking off or deleting tasks is not allowed for Luna.",
       "move_from": "Nexus",
       "move_tasks": "Tasks",
       "move_events": "Events",
@@ -946,21 +946,21 @@
       "cal_alt": "October in {{BRAND_NAME}} with the autumn break and German Unity Day filled in."
     },
     "lock_label": "A lock closes.",
-    "agent_eyebrow": "Tinte",
-    "agent_title": "Just ask Tinte.",
-    "agent_text": "Tinte is the assistant in {{BRAND_NAME}}. He knows your timetable, your tasks and your grades, adds homework for you and plans with you up to the exam. By default he works entirely on your device.²",
-    "agent_name": "Tinte",
+    "agent_eyebrow": "Luna",
+    "agent_title": "Just ask Luna.",
+    "agent_text": "Luna is the assistant in {{BRAND_NAME}}. She knows your timetable, your tasks and your grades, adds homework for you and plans with you up to the exam. By default she works entirely on your device.²",
+    "agent_name": "Luna",
     "agent_role": "Your assistant",
     "agent_time": "Thursday, 20:15",
-    "agent_input": "Ask Tinte something",
-    "agent_label": "Example conversation with Tinte",
+    "agent_input": "Ask Luna something",
+    "agent_label": "Example conversation with Luna",
     "chat": [
       {
         "from": "me",
         "text": "What do I have tomorrow?"
       },
       {
-        "from": "tinte",
+        "from": "luna",
         "text": "Tomorrow is an A week. English first in A109, then biology in B214. After the second block you are free."
       },
       {
@@ -968,7 +968,7 @@
         "text": "Add maths p. 38 for Monday."
       },
       {
-        "from": "tinte",
+        "from": "luna",
         "text": "Done. Maths p. 38 is in your homework, due on Monday.",
         "mood": "cheer"
       },
@@ -977,7 +977,7 @@
         "text": "Can I still make the maths test?"
       },
       {
-        "from": "tinte",
+        "from": "luna",
         "text": "Yes, there are five days until Tuesday. Page 58 tonight, two-way tables tomorrow, tree diagrams at the weekend."
       }
     ],

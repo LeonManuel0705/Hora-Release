@@ -1,5 +1,5 @@
 import {
-  data, root, variant, flags, platform, esc, icon, tinte, storage, now, subject, hueVar, toMin, clock, hm, weekType, isoWeek,
+  data, root, variant, flags, platform, esc, icon, luna, storage, now, subject, hueVar, toMin, clock, hm, weekType, isoWeek,
   isoDate, minutesOf, lessonsFor, nextSchoolDay, WEEKDAYS, WEEKDAYS_SHORT,
   LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, activeSubjectKeys, motionDefault, slug, teacherLabel, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
@@ -56,7 +56,7 @@ const switchHtml = (id, on, labelId, { disabled = false, describedBy = "" } = {}
   `<button type="button" class="switch" role="switch" id="${id}" aria-checked="${on}" aria-labelledby="${labelId}"${describedBy ? ` aria-describedby="${describedBy}"` : ""}${disabled ? " disabled" : ""}><span></span></button>`;
 
 const loadingHtml = (title, text) =>
-  `<div class="loading-card set-loading" role="status">${tinte("laedt", 96)}<div><p class="empty-title">${esc(title)}</p><p class="empty-text">${esc(text)}</p></div></div>`;
+  `<div class="loading-card set-loading" role="status">${luna("laedt", 96)}<div><p class="empty-title">${esc(title)}</p><p class="empty-text">${esc(text)}</p></div></div>`;
 
 const errorHtml = (id, text) => `<p class="field-error" id="${id}"${text ? "" : " hidden"}>${text ? `${icon("circle-alert")}<span>${esc(text)}</span>` : ""}</p>`;
 
@@ -1256,7 +1256,7 @@ function renderIserv() {
   if (accounts.connecting === "iserv") {
     html = loadingHtml("Verbinde mit IServ", "Stundenplan, Aufgaben und Mails kommen gleich.");
   } else if (info.unavailable) {
-    html = `<div class="empty-state set-empty">${tinte("ruhe", 110)}<p class="empty-title">IServ geht im Browser nicht.</p><p class="empty-text">Stundenplan, Aufgaben und Mails holt ${BRAND} aus IServ in der App für Mac, Windows, Linux und Android.</p></div>`;
+    html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">IServ geht im Browser nicht.</p><p class="empty-text">Stundenplan, Aufgaben und Mails holt ${BRAND} aus IServ in der App für Mac, Windows, Linux und Android.</p></div>`;
   } else if (prefs.iserv.connected) {
     const stand = accounts.syncedAt || syncTime();
     const offline = flags.offline;
@@ -1293,9 +1293,9 @@ function renderGoogle() {
   if (accounts.connecting === "google") {
     html = `${loadingHtml("Warte auf Google", "Melde dich im Browser an. Danach geht es hier von selbst weiter.")}<div class="set-form-actions"><button type="button" class="btn btn-quiet" id="googleCancel">Abbrechen</button></div>`;
   } else if (page.accounts?.google?.unavailable) {
-    html = `<div class="empty-state set-empty">${tinte("ruhe", 110)}<p class="empty-title">Google-Kalender gibt es in der App noch nicht.</p><p class="empty-text">Termine, die du hier einträgst, bleiben auf diesem Gerät.</p></div>`;
+    html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">Google-Kalender gibt es in der App noch nicht.</p><p class="empty-text">Termine, die du hier einträgst, bleiben auf diesem Gerät.</p></div>`;
   } else if (!prefs.google.connected) {
-    html = `<div class="empty-state set-empty">${tinte("ruhe", 110)}<p class="empty-title">Kein Google-Kalender verbunden.</p><p class="empty-text">Gym, Fahrstunden und private Termine stehen dann neben dem Stundenplan.</p><button type="button" class="empty-action" id="googleConnect">Konto verbinden${icon("chevron-right")}</button></div>`;
+    html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">Kein Google-Kalender verbunden.</p><p class="empty-text">Gym, Fahrstunden und private Termine stehen dann neben dem Stundenplan.</p><button type="button" class="empty-action" id="googleConnect">Konto verbinden${icon("chevron-right")}</button></div>`;
   } else {
     const shown = calendars.filter((item) => prefs.google.calendars[item.id] !== false).length;
     html = row({
@@ -3272,7 +3272,7 @@ function renderAbout() {
       <div><dt>Daten</dt><dd>Lokal auf diesem Gerät</dd></div>
       <div><dt>Lizenz</dt><dd>${esc(about.license || "PolyForm Noncommercial 1.0.0")}</dd></div>
     </dl>
-    <div class="about-links"><button class="pill" type="button" data-tour-start>${icon("presentation")}Tutorial mit Tinte</button>${browser}${links.map(([href, text, glyph]) => `<a class="pill" href="${esc(href)}" target="_blank" rel="noopener">${icon(glyph)}${text}${icon("arrow-up-right", "is-external")}<span class="visually-hidden">, öffnet in einem neuen Tab</span></a>`).join("")}</div>
+    <div class="about-links"><button class="pill" type="button" data-tour-start>${icon("presentation")}Tutorial mit Luna</button>${browser}${links.map(([href, text, glyph]) => `<a class="pill" href="${esc(href)}" target="_blank" rel="noopener">${icon(glyph)}${text}${icon("arrow-up-right", "is-external")}<span class="visually-hidden">, öffnet in einem neuen Tab</span></a>`).join("")}</div>
     <p class="about-note">${BRAND} steht unter der PolyForm Noncommercial License 1.0.0. Du darfst es kostenlos nutzen, ändern und weitergeben, aber nicht damit Geld verdienen. Den vollständigen Quellcode dieser Version findest du über den Link.</p>`;
 }
 

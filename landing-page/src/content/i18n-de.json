@@ -109,11 +109,11 @@
         "devices": "all"
       },
       {
-        "id": "tinte",
+        "id": "luna",
         "icon": "chat",
         "hue": "iris",
-        "title": "Tinte",
-        "text": "Tinte ist der Assistent in {{BRAND_NAME}}. Frag ihn, was morgen ansteht, sag ihm „Mathe S. 38 bis Montag“, und er trägt die Hausaufgabe ein. Bis zur Klausur baut er dir einen Lernplan.",
+        "title": "Luna",
+        "text": "Luna ist die Assistentin in {{BRAND_NAME}}. Frag sie, was morgen ansteht, sag ihr „Mathe S. 38 bis Montag“, und sie trägt die Hausaufgabe ein. Bis zur Klausur baut sie dir einen Lernplan.",
         "facts": [
           "Antwortet aus deinem Plan, deinen Aufgaben und Noten",
           "Legt Aufgaben und Hausaufgaben per Satz an",
@@ -126,7 +126,7 @@
   "home_download": {
     "done_title": "Download läuft",
     "done_close": "Schließen",
-    "tinte_label": "Tinte antippen, dann winkt er"
+    "luna_label": "Luna antippen, dann winkt sie"
   },
   "platforms": {
     "macos": {
@@ -287,7 +287,7 @@
         "title": "Planen",
         "rows": [
           {
-            "name": "Assistent Tinte",
+            "name": "Assistentin Luna",
             "note": "am Computer auf Wunsch mit lokalem Sprachmodell",
             "d": "yes",
             "a": "yes",
@@ -424,8 +424,8 @@
         "text": "Live über Transitous, mit Verspätungen und Gleis."
       },
       {
-        "title": "Tinte",
-        "text": "Tinte ist dein Assistent: Er beantwortet Fragen zu deinem Tag, trägt Hausaufgaben ein und hilft beim Lernen."
+        "title": "Luna",
+        "text": "Luna ist deine Assistentin: Sie beantwortet Fragen zu deinem Tag, trägt Hausaufgaben ein und hilft beim Lernen."
       }
     ],
     "cta": "{{BRAND_NAME}} 0.5 laden",
@@ -441,7 +441,7 @@
       "iserv": "Einmal anmelden, der Rest kommt von selbst.",
       "fahrplan": "Verspätungen, bevor du losgehst.",
       "kalender": "Ferien, die du nicht abtippen musst.",
-      "tinte": "Frag einfach Tinte."
+      "luna": "Frag einfach Luna."
     },
     "shots": {
       "stundenplan": "Der Stundenplan der A-Woche mit Fächern, Räumen und Blockzeiten.",
@@ -450,7 +450,7 @@
       "iserv": "Vertretungsplan aus IServ, der nächste Test und der Notenschnitt.",
       "fahrplan": "Die nächsten Abfahrten an der Haltestelle Lindenallee.",
       "kalender": "Die Kalenderwoche mit Stundenplan, Terminen und dem Projekttag.",
-      "tinte": "Tinte, der Assistent in {{BRAND_NAME}}."
+      "luna": "Luna, die Assistentin in {{BRAND_NAME}}."
     },
     "cta_title": "Hol dir {{BRAND_NAME}}.",
     "cta_text": "Kostenlos für Mac, Windows, Linux und Android."
@@ -524,7 +524,7 @@
       {
         "icon": "chat",
         "to": "Claude von Anthropic",
-        "what": "deine Frage an Tinte und die Daten, die er zum Antworten braucht",
+        "what": "deine Frage an Luna und die Daten, die sie zum Antworten braucht",
         "when": "nur mit deinem eigenen Claude-Schlüssel (Computer)",
         "tone": "warn"
       },
@@ -802,7 +802,7 @@
         "alt": "Die Noten: 11,3 Punkte im Schnitt und der Notenrechner mit dem Ergebnis 13 Punkte."
       }
     ],
-    "tile_tinte_label": "Tinte antippen, dann winkt er",
+    "tile_luna_label": "Luna antippen, dann winkt sie",
     "privacy_title": "Deine Noten gehen nur dich was an.",
     "privacy_text": "Es gibt kein Konto und keinen {{BRAND_NAME}}-Server. Was mit deinen Daten passiert, kannst du im Quellcode nachlesen, Zeile für Zeile.",
     "privacy_link": "Mehr zum Datenschutz",
@@ -829,8 +829,8 @@
       },
       {
         "id": "tour",
-        "lead": "Tinte zeigt dir alles.",
-        "text": "Nexus hatte keine Tour. Tinte führt dich in 12 Schritten durch {{BRAND_NAME}}."
+        "lead": "Luna zeigt dir alles.",
+        "text": "Nexus hatte keine Tour. Luna führt dich in 12 Schritten durch {{BRAND_NAME}}."
       },
       {
         "id": "security",
@@ -843,9 +843,9 @@
         "text": "Lädt schneller herunter, startet schlanker und bietet weniger Angriffsfläche."
       },
       {
-        "id": "tinte",
-        "lead": "Tinte trägt ein, löscht aber nie.",
-        "text": "Er legt nur Aufgaben an. Löschen oder abhaken kann er nicht, auch wenn es in einer Mail steht."
+        "id": "luna",
+        "lead": "Luna trägt ein, löscht aber nie.",
+        "text": "Sie legt nur Aufgaben an. Löschen oder abhaken kann sie nicht, auch wenn es in einer Mail steht."
       },
       {
         "id": "move",
@@ -894,10 +894,10 @@
       "weather_rain": "Regen, 60 %",
       "weather_alt": "Die Übersicht in {{BRAND_NAME}}: Heimweg mit dem Bus 612 um 13:20, trocken bis 17 Uhr. Ab 17 Uhr Regen, Training um 17:00 mit 60 % Regen.",
       "tour_step": "Schritt 1 von 12",
-      "tour_text": "Hi, ich bin Tinte! Ich zeige dir in einer Minute, wo in {{BRAND_NAME}} was ist. Unterwegs legen wir zusammen deine erste Aufgabe an.",
+      "tour_text": "Hi, ich bin Luna! Ich zeige dir in einer Minute, wo in {{BRAND_NAME}} was ist. Unterwegs legen wir zusammen deine erste Aufgabe an.",
       "tour_go": "Los geht’s",
       "tour_later": "Später",
-      "tour_alt": "Tinte begrüßt dich beim ersten Start und führt dich in 12 Schritten durch {{BRAND_NAME}}.",
+      "tour_alt": "Luna begrüßt dich beim ersten Start und führt dich in 12 Schritten durch {{BRAND_NAME}}.",
       "security": {
         "login": "Anmeldung und Sitzung",
         "mail": "Mails und Verbindungen",
@@ -920,8 +920,8 @@
       "guard_check": "Aufgaben abhaken",
       "guard_yours": "Das machst nur du.",
       "guard_delete": "Aufgaben löschen",
-      "guard_never": "Das darf Tinte nicht.",
-      "guard_alt": "Tinte legt eine Aufgabe an. Aufgaben abhaken oder löschen darf Tinte nicht.",
+      "guard_never": "Das darf Luna nicht.",
+      "guard_alt": "Luna legt eine Aufgabe an. Aufgaben abhaken oder löschen darf Luna nicht.",
       "move_from": "Nexus",
       "move_tasks": "Aufgaben",
       "move_events": "Termine",
@@ -946,21 +946,21 @@
       "cal_alt": "Der Oktober in {{BRAND_NAME}} mit eingetragenen Herbstferien und dem Tag der Deutschen Einheit."
     },
     "lock_label": "Ein Schloss schließt sich.",
-    "agent_eyebrow": "Tinte",
-    "agent_title": "Frag einfach Tinte.",
-    "agent_text": "Tinte ist der Assistent in {{BRAND_NAME}}. Er kennt deinen Stundenplan, deine Aufgaben und deine Noten, trägt Hausaufgaben für dich ein und plant mit dir bis zur Klausur. Standardmäßig arbeitet er komplett auf deinem Gerät.²",
-    "agent_name": "Tinte",
-    "agent_role": "Dein Assistent",
+    "agent_eyebrow": "Luna",
+    "agent_title": "Frag einfach Luna.",
+    "agent_text": "Luna ist die Assistentin in {{BRAND_NAME}}. Sie kennt deinen Stundenplan, deine Aufgaben und deine Noten, trägt Hausaufgaben für dich ein und plant mit dir bis zur Klausur. Standardmäßig arbeitet sie komplett auf deinem Gerät.²",
+    "agent_name": "Luna",
+    "agent_role": "Deine Assistentin",
     "agent_time": "Donnerstag, 20:15",
-    "agent_input": "Frag Tinte etwas",
-    "agent_label": "Beispielgespräch mit Tinte",
+    "agent_input": "Frag Luna etwas",
+    "agent_label": "Beispielgespräch mit Luna",
     "chat": [
       {
         "from": "me",
         "text": "Was hab ich morgen?"
       },
       {
-        "from": "tinte",
+        "from": "luna",
         "text": "Morgen ist A-Woche. Erst Englisch in A109, danach Biologie LK in B214. Nach dem zweiten Block hast du frei."
       },
       {
@@ -968,7 +968,7 @@
         "text": "Trag Mathe S. 38 bis Montag ein."
       },
       {
-        "from": "tinte",
+        "from": "luna",
         "text": "Erledigt. Mathe S. 38 steht bei deinen Hausaufgaben, fällig am Montag.",
         "mood": "cheer"
       },
@@ -977,7 +977,7 @@
         "text": "Schaff ich den Mathetest noch?"
       },
       {
-        "from": "tinte",
+        "from": "luna",
         "text": "Ja, bis Dienstag sind es fünf Tage. Heute noch die Aufgaben auf S. 58, morgen Vierfeldertafeln, am Wochenende Baumdiagramme."
       }
     ],

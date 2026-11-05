@@ -1,4 +1,4 @@
-import { data, flags, esc, icon, tinte, now, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, subject, hueVar, minutesOf, platform, root, storage, WEEKDAYS, WEEKDAYS_SHORT, MONTHS_SHORT, BRAND } from "../core.js";
+import { data, flags, esc, icon, luna, now, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, subject, hueVar, minutesOf, platform, root, storage, WEEKDAYS, WEEKDAYS_SHORT, MONTHS_SHORT, BRAND } from "../core.js";
 import { animates, travels, flipKeyed, enterInPlace, exitInPlace, token, ms } from "../motion.js";
 import { toast, typing, shortcutsEnabled, overlayOpen, registerSearch, syncTime } from "../shell.js";
 
@@ -371,7 +371,7 @@ function lateHour() {
 }
 
 function loadingHtml() {
-  return `<div class="loading-card" role="status" data-flip="mail-loading">${tinte("laedt", 96)}<div><p class="empty-title">Hole neue Mails</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
+  return `<div class="loading-card" role="status" data-flip="mail-loading">${luna("laedt", 96)}<div><p class="empty-title">Hole neue Mails</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
 }
 
 function emptyHtml() {
@@ -384,11 +384,11 @@ function emptyHtml() {
     const action = elsewhere
       ? `<p class="empty-text">${elsewhere.count === 1 ? "1 Treffer" : `${elsewhere.count} Treffer`} ${elsewhere.item.where}.</p><button type="button" class="empty-action" data-empty="folder" data-folder="${elsewhere.item.key}">${esc(elsewhere.item.label)} ansehen${icon("chevron-right")}</button>`
       : `<button type="button" class="empty-action" data-empty="search">Suche leeren${icon("x")}</button>`;
-    return `<div class="empty-state" data-flip="mail-empty">${tinte("ruhe")}<p class="empty-title">Nichts gefunden für „${esc(state.query.trim())}“ ${folder.where}.</p>${action}</div>`;
+    return `<div class="empty-state" data-flip="mail-empty">${luna("ruhe")}<p class="empty-title">Nichts gefunden für „${esc(state.query.trim())}“ ${folder.where}.</p>${action}</div>`;
   }
   if (state.filters.size) {
     const title = state.filters.size === 1 ? FILTERS[[...state.filters][0]].empty : "Keine Mails für diese Filter";
-    return `<div class="empty-state" data-flip="mail-empty">${tinte("ruhe")}<p class="empty-title">${esc(title)} ${folder.where}.</p><button type="button" class="empty-action" data-empty="filters">${state.filters.size === 1 ? "Filter entfernen" : "Alle Filter entfernen"}${icon("x")}</button></div>`;
+    return `<div class="empty-state" data-flip="mail-empty">${luna("ruhe")}<p class="empty-title">${esc(title)} ${folder.where}.</p><button type="button" class="empty-action" data-empty="filters">${state.filters.size === 1 ? "Filter entfernen" : "Alle Filter entfernen"}${icon("x")}</button></div>`;
   }
   const copy = {
     inbox: state.cleared ? ["Posteingang leer.", "Alles gelesen und einsortiert."] : state.accounts.length ? ["Keine Mails im Posteingang.", "Neue Mails landen hier."] : native ? ["E-Mail gibt es in der App noch nicht.", "Deine Mails liest du vorerst in IServ oder deiner Mail-App."] : ["Noch kein Postfach verbunden.", "Verbinde IServ in den Einstellungen oder füge ein Postfach hinzu."],
@@ -403,7 +403,7 @@ function emptyHtml() {
     : state.folder === "inbox" && !state.accounts.length && !state.loading && !native
       ? `<a class="empty-action" href="/hub/klassisch/email">Postfach hinzufügen${icon("chevron-right")}</a>`
       : "";
-  return `<div class="empty-state" data-flip="mail-empty">${tinte(kind)}<p class="empty-title">${copy[0]}</p><p class="empty-text">${copy[1]}</p>${action}</div>`;
+  return `<div class="empty-state" data-flip="mail-empty">${luna(kind)}<p class="empty-title">${copy[0]}</p><p class="empty-text">${copy[1]}</p>${action}</div>`;
 }
 
 function groupsHtml() {

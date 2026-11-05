@@ -72,9 +72,9 @@ It checks the checksum of the download, moves Hora into `/Applications` and remo
 | **Focus** | A Pomodoro timer, notes, bookmarks, spaced repetition and a training tracker. |
 | **Backup** | One file carries timetable, subjects, grades, tests, tasks, events and places to another device, without doubling what is already there. |
 
-<img src=".github/readme/tinte.svg" alt="Tinte, a small octopus" width="96" align="right">
+<img src=".github/readme/luna.svg" alt="Luna, a small octopus" width="96" align="right">
 
-**And Tinte.** The small octopus shows new users around, keeps you company while something loads and sleeps when the day is done.
+**And Luna.** The small octopus shows new users around, keeps you company while something loads and sleeps when the day is done.
 
 ## How it is built
 
@@ -105,7 +105,7 @@ Hora/
     ui_pages.py         Pages and API of the interface
     ui_data.py          What the pages show, read from the database
     templates/app/      The pages themselves
-    static/app/         Their styles, scripts and Tinte
+    static/app/         Their styles, scripts and Luna
     assistant_service.py  What the assistant understands and may do
     local_ai.py         On-demand install and runtime of the local assistant
     database.py         SQLite/PostgreSQL models (16 tables)
@@ -122,7 +122,7 @@ Hora/
       screens/          Classic native screens
       providers/        State management
       services/         Sync, notifications, database, IServ, ...
-      tutorial/         Tinte's tour
+      tutorial/         Luna's tour
     scripts/            Build scripts for the apps
   desktop/              Electron shell for Windows/Linux
   landing-page/         Vite marketing site

@@ -1,4 +1,4 @@
-import { data, esc, icon, tinte, now, params, storage, platform, LOCAL_KEYS } from "../core.js";
+import { data, esc, icon, luna, now, params, storage, platform, LOCAL_KEYS } from "../core.js";
 import { animates, travels, token, ms } from "../motion.js";
 import { MAPS, price, rides, ownTickets, ticketState, matchFare, usualFare, mapsApp, walkUrl } from "../transit-rules.js";
 import { toast } from "../shell.js";
@@ -219,15 +219,15 @@ function renderResults() {
   }
   const title = `<h2 class="group-head" id="resultsTitle"><span>Verbindungen</span><small>${esc(state.from.detail || state.from.name)} nach ${esc(state.to.detail || state.to.name)}</small></h2>`;
   if (state.searching) {
-    host.innerHTML = `${title}<div class="loading-card" role="status">${tinte("laedt", 96)}<div><p class="empty-title">Suche Verbindungen</p><p class="empty-text">Live-Daten aus ganz Deutschland.</p></div></div>`;
+    host.innerHTML = `${title}<div class="loading-card" role="status">${luna("laedt", 96)}<div><p class="empty-title">Suche Verbindungen</p><p class="empty-text">Live-Daten aus ganz Deutschland.</p></div></div>`;
     return;
   }
   if (state.error) {
-    host.innerHTML = `${title}<div class="empty-state">${tinte("ruhe", 130)}<p class="empty-title">${esc(state.error)}</p><p class="empty-text">Die Daten kommen von einem freien Dienst, manchmal hakt er kurz.</p><button type="button" class="empty-action" data-retry>Nochmal versuchen${icon("chevron-right")}</button></div>`;
+    host.innerHTML = `${title}<div class="empty-state">${luna("ruhe", 130)}<p class="empty-title">${esc(state.error)}</p><p class="empty-text">Die Daten kommen von einem freien Dienst, manchmal hakt er kurz.</p><button type="button" class="empty-action" data-retry>Nochmal versuchen${icon("chevron-right")}</button></div>`;
     return;
   }
   if (!state.journeys.length) {
-    host.innerHTML = `${title}<div class="empty-state">${tinte("ruhe", 130)}<p class="empty-title">Keine Verbindung gefunden.</p><p class="empty-text">Probier eine andere Uhrzeit oder eine Haltestelle in der Nähe.</p></div>`;
+    host.innerHTML = `${title}<div class="empty-state">${luna("ruhe", 130)}<p class="empty-title">Keine Verbindung gefunden.</p><p class="empty-text">Probier eine andere Uhrzeit oder eine Haltestelle in der Nähe.</p></div>`;
     return;
   }
   host.innerHTML = `${title}<ol class="journeys">${state.journeys.map(journeyHtml).join("")}</ol>`;

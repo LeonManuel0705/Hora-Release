@@ -54,7 +54,7 @@ export function safeMarkup(markup, allowed = ["B", "BR", "STRONG", "EM"]) {
 
 export const icon = (name, cls = "") => `<svg class="icon ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
-export { tinte } from "./tinte.js";
+export { luna } from "./luna.js";
 
 export const toMin = (hhmm) => {
   const [h, m] = hhmm.split(":").map(Number);

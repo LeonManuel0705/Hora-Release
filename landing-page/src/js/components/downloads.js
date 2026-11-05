@@ -2,7 +2,7 @@ import { t, raw, escapeHtml } from "../lib/i18n.js";
 import { brand, icon, tux } from "../lib/icons.js";
 import { reducedMotion } from "../lib/motion.js";
 import { megabytes, PLATFORMS } from "../lib/platform.js";
-import { tinte } from "../lib/tinte.js";
+import { luna } from "../lib/luna.js";
 
 export function platformMark(id, size = 20) {
   const p = PLATFORMS[id];
@@ -31,7 +31,7 @@ function openToast(id) {
   const el = document.createElement("div");
   el.className = "dl-toast";
   el.setAttribute("role", "status");
-  el.innerHTML = `<div class="dl-toast-tinte">${tinte("geschafft", 104)}</div>
+  el.innerHTML = `<div class="dl-toast-luna">${luna("geschafft", 104)}</div>
     <div class="dl-toast-body">
       <p class="dl-toast-title">${escapeHtml(t("home_download.done_title"))}</p>
       <p class="dl-toast-file mono">${escapeHtml(p.file)}, ${megabytes(p.bytes)} MB</p>
@@ -43,8 +43,8 @@ function openToast(id) {
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("is-open")));
   el.querySelector(".dl-toast-close").addEventListener("click", closeToast);
   toastTimer = setTimeout(() => {
-    const slot = el.querySelector(".dl-toast-tinte");
-    if (slot && el.isConnected) slot.innerHTML = tinte("ruhe", 104, t("home_download.tinte_label"));
+    const slot = el.querySelector(".dl-toast-luna");
+    if (slot && el.isConnected) slot.innerHTML = luna("ruhe", 104, t("home_download.luna_label"));
   }, 4200);
 }
 

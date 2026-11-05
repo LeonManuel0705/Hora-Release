@@ -1,4 +1,4 @@
-import { BRAND, data, esc, icon, tinte } from "../core.js";
+import { BRAND, data, esc, icon, luna } from "../core.js";
 import { toast } from "../shell.js";
 import { travels } from "../motion.js";
 
@@ -106,7 +106,7 @@ function memoryNote(current) {
 function renderFigure(kind) {
   if (kind === figure) return;
   figure = kind;
-  $("aiFigure").innerHTML = tinte(kind, 116);
+  $("aiFigure").innerHTML = luna(kind, 116);
 }
 
 function renderSteps(job) {

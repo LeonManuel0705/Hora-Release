@@ -8,7 +8,7 @@
   const brand = () => self.BRAND_NAME || document.documentElement.dataset.brand || '';
   const q = s => document.querySelector(s);
   const narrow = () => matchMedia('(max-width: 759px)').matches;
-  const still = () => !(self.AppTinte && self.AppTinte.motionAllowed());
+  const still = () => !(self.AppLuna && self.AppLuna.motionAllowed());
   const moreButton = () => narrow() ? q('.tabbar [popovertarget="moreSheet"]') : q('#navMore');
   const navItem = key => (narrow() ? q(`.tabbar .tab[data-page="${key}"]`) : q(`.sidebar .nav-item[data-page="${key}"]`)) || moreButton();
   const shown = el => {
@@ -31,7 +31,7 @@
   const STEPS = [
     {
       id: 'hello', mode: 'hello',
-      text: () => `Hi, ich bin Tinte! Ich zeige dir in einer Minute, wo in ${brand()} was ist. Unterwegs legen wir zusammen deine erste Aufgabe an.`,
+      text: () => `Hi, ich bin Luna! Ich zeige dir in einer Minute, wo in ${brand()} was ist. Unterwegs legen wir zusammen deine erste Aufgabe an.`,
       primary: 'Los geht’s', secondary: 'Später', onSecondary: 'skip'
     },
     {
@@ -153,13 +153,13 @@
     measure.querySelector('.tour-text').removeAttribute('id');
     document.body.appendChild(measure);
     const size = narrow() ? 96 : 124;
-    const guide = self.AppTinte.guide({ size });
+    const guide = self.AppLuna.guide({ size });
     return { scrim, spot, rings, bubble, measure, guide, size };
   }
 
   function start(fromId, resumed) {
     if (run) return;
-    if (!self.AppTinte) return;
+    if (!self.AppLuna) return;
     run = { ui: buildUi(), step: null, token: 0, offs: [], title: resumed && resumed.title };
     const { scrim, bubble } = run.ui;
     bubble.addEventListener('click', onBubbleClick);
