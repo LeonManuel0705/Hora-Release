@@ -122,19 +122,19 @@ flutter:
     - assets/ui/static/js/
 
   fonts:
-    - family: Bricolage Grotesque
+    - family: Plus Jakarta Sans
       fonts:
-        - asset: assets/fonts/BricolageGrotesque-Light.ttf
+        - asset: assets/fonts/PlusJakartaSans-Light.ttf
           weight: 300
-        - asset: assets/fonts/BricolageGrotesque-Regular.ttf
+        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
           weight: 400
-        - asset: assets/fonts/BricolageGrotesque-Medium.ttf
+        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
           weight: 500
-        - asset: assets/fonts/BricolageGrotesque-SemiBold.ttf
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
           weight: 600
-        - asset: assets/fonts/BricolageGrotesque-Bold.ttf
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
           weight: 700
-        - asset: assets/fonts/BricolageGrotesque-ExtraBold.ttf
+        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
           weight: 800
     - family: Inter
       fonts:

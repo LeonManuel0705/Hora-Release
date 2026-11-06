@@ -59,7 +59,6 @@
   margin-top: 6px;
   font-size: clamp(68px, 8.4vw, 104px);
   font-weight: var(--weight-numeral);
-  font-stretch: var(--wdth-numeral);
   line-height: 1;
   letter-spacing: 0;
   color: var(--ink);
@@ -189,7 +188,6 @@
   color: var(--ink);
   font-size: var(--text-xl);
   font-weight: var(--weight-numeral);
-  font-stretch: var(--wdth-numeral);
   text-align: right;
   font-variant-numeric: tabular-nums;
   appearance: textfield;
@@ -228,7 +226,7 @@
 .pomo-figure { padding: 16px 18px 15px; border-radius: 22px; background: var(--desk-card); box-shadow: inset 0 0 0 1px var(--desk-card-edge); }
 .pomo-figure span { display: block; margin-top: 4px; font-size: var(--text-sm); color: var(--ink-muted); }
 .pomo-number { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 4px; line-height: 1.05; color: var(--ink); }
-.pomo-number b { font-size: clamp(30px, 3.4vw, 40px); font-weight: var(--weight-numeral); font-stretch: var(--wdth-numeral); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.pomo-number b { font-size: clamp(30px, 3.4vw, 40px); font-weight: var(--weight-numeral); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .pomo-number small { margin-right: 6px; font-size: var(--text-base); font-weight: var(--weight-medium); color: var(--ink-soft); }
 .pomo-number small:last-child { margin-right: 0; }
 .pomo-figures.is-empty .pomo-number { color: var(--ink-muted); }

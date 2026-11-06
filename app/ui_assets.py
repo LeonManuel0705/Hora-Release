@@ -8,8 +8,8 @@ STATIC_ROOT = Path(__file__).resolve().parent / 'static'
 
 UI_STATIC = [
     'app',
-    'fonts/bricolage-grotesque.woff2',
-    'fonts/OFL-Bricolage.txt',
+    'fonts/plus-jakarta-sans.woff2',
+    'fonts/OFL-PlusJakartaSans.txt',
     'css/tour.css',
     'js/luna.js',
     'js/tour.js',

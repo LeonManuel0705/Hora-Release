@@ -346,7 +346,6 @@ kbd .icon { --s: 12; }
   font-size: var(--text-2xl);
   line-height: 1;
   font-weight: var(--weight-numeral);
-  font-stretch: var(--wdth-numeral);
   letter-spacing: -0.01em;
   color: var(--on-hero);
   font-variant-numeric: tabular-nums;
@@ -1216,7 +1215,7 @@ label.switch:is(:active, .is-pressed) input:checked + .switch-track::after { tra
   .sidebar { padding: calc(12px + var(--safe-top)) 8px 10px; }
   .brand { justify-content: center; padding: 0; }
   .brand-name, .nav-count, .nav-more .chev, .sidebar .sync-line span, .sidebar-foot .text-button span { display: none; }
-  .nav-item { flex-direction: column; justify-content: center; gap: 4px; height: 56px; padding: 6px 0; font-size: var(--text-xs); font-stretch: 87.5%; text-align: center; white-space: normal; line-height: 1.15; }
+  .nav-item { flex-direction: column; justify-content: center; gap: 4px; height: 56px; padding: 6px 0; font-size: var(--text-xs); text-align: center; white-space: normal; line-height: 1.15; }
   .nav-item .icon { --s: 20; }
   .nav-indicator { height: 56px; }
   .sidebar .sync-line, .sidebar-foot .text-button { justify-content: center; }
@@ -1312,10 +1311,6 @@ label.switch:is(:active, .is-pressed) input:checked + .switch-track::after { tra
   .more-sheet { inset: auto calc(8px + var(--safe-right)) calc(78px + var(--safe-bottom)) calc(8px + var(--safe-left)); width: auto; transform-origin: bottom center; }
 }
 
-@media (max-width: 359px) {
-  .tab { font-stretch: 87.5%; }
-}
-
 .more-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
 :root[data-shell] .more-tile[data-page="email"], :root[data-shell] .nav-item[data-page="email"] { display: none; }
 :root[data-shell][data-keyboard] .tabbar { display: none; }
@@ -1349,7 +1344,7 @@ label.switch:is(:active, .is-pressed) input:checked + .switch-track::after { tra
 .today.is-desk .today-title { margin-top: 6px; color: var(--ink); }
 .today.is-desk .today-meta { margin-top: 10px; color: var(--ink-soft); }
 .today.is-desk .today-meta b { color: var(--ink); }
-.today.is-desk .today-count { margin: 0; font-size: 1em; font-weight: var(--weight-strong); font-stretch: 100%; letter-spacing: 0; color: var(--ink); }
+.today.is-desk .today-count { margin: 0; font-size: 1em; font-weight: var(--weight-strong); letter-spacing: 0; color: var(--ink); }
 .today-nextline { margin-top: 14px; font-size: var(--text-base); color: var(--ink-soft); }
 .today-nextline b { font-weight: var(--weight-strong); color: var(--ink); }
 .today.is-desk .today-change { margin: 0 0 12px; }

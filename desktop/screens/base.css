@@ -1,8 +1,7 @@
 @font-face {
-  font-family: "Bricolage Grotesque";
-  src: url("../resources/fonts/bricolage-grotesque.woff2") format("woff2");
+  font-family: "Plus Jakarta Sans";
+  src: url("../resources/fonts/plus-jakarta-sans.woff2") format("woff2");
   font-weight: 200 800;
-  font-stretch: 75% 100%;
   font-style: normal;
   font-display: block;
 }
@@ -33,7 +32,7 @@
   --mark-b: light-dark(#A3B690, #86A36F);
   --mark-c: light-dark(#2E3A2F, #F8F6EE);
 
-  --font: "Bricolage Grotesque", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font: "Plus Jakarta Sans", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
   --ease-spring: cubic-bezier(0.25, 0.9, 0.3, 1);
   --dur-press: 110ms;

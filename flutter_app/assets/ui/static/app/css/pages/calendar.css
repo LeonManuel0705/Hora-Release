@@ -114,7 +114,7 @@
 .cw-hours { position: relative; height: calc(var(--hours) * var(--hour-h)); }
 .cw-hours li { position: absolute; right: 10px; top: calc(var(--i) * var(--hour-h)); translate: 0 -50%; font-size: var(--text-xs); line-height: 1; color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cw-hours li.is-covered { visibility: hidden; }
-.cw-hours .cw-now-label { z-index: 1; right: 4px; padding: 3px 5px; border-radius: 7px; background: var(--now-fill); color: var(--now-ink); font-weight: var(--weight-numeral); }
+.cw-hours .cw-now-label { z-index: 1; right: 3px; padding: 3px 4px; border-radius: 7px; background: var(--now-fill); color: var(--now-ink); font-weight: var(--weight-numeral); }
 
 .cw-col {
   position: relative;

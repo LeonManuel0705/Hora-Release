@@ -197,7 +197,7 @@ On Windows and Linux the first start looks for data from the previous names in `
 
 | Layer | Technology |
 |:---|:---|
-| Interface | Server rendered HTML, plain CSS and JavaScript, Bricolage Grotesque |
+| Interface | Server rendered HTML, plain CSS and JavaScript, Plus Jakarta Sans |
 | Backend | Flask, Flask SocketIO, SQLite/PostgreSQL, Fernet |
 | Phone | Flutter, Dart, SQLite, Hive, Provider, WorkManager |
 | Desktop | Flutter (macOS), Electron and electron builder (Windows, Linux) |

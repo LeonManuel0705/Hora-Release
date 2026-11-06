@@ -1,8 +1,7 @@
 @font-face {
-    font-family: 'Bricolage Grotesque';
-    src: url('/static/fonts/bricolage-grotesque.woff2') format('woff2');
+    font-family: 'Plus Jakarta Sans';
+    src: url('/static/fonts/plus-jakarta-sans.woff2') format('woff2');
     font-weight: 200 800;
-    font-stretch: 75% 100%;
     font-style: normal;
     font-display: swap;
 }
@@ -10,7 +9,7 @@
 :root {
     color-scheme: light;
 
-    --font-sans: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
     --bg-primary: #F8F6EE;
     --bg-secondary: #FCFCF9;

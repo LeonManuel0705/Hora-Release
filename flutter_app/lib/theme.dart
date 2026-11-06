@@ -73,7 +73,7 @@ class AppPalette {
 class AppTheme {
   AppTheme._();
 
-  static const String fontFamily = 'Bricolage Grotesque';
+  static const String fontFamily = 'Plus Jakarta Sans';
 
   static bool _dark = false;
 
