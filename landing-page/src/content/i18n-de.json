@@ -457,7 +457,7 @@
   },
   "privacy_page": {
     "title": "Was {{BRAND_NAME}} mit deinen Daten macht",
-    "lede": "{{BRAND_NAME}} hat kein Konto und keinen eigenen Server für deine Daten. Alles, was du eingibst, liegt auf deinem Gerät. Hier steht genau, was trotzdem ins Netz geht und was verschlüsselt ist.",
+    "lede": "Alles, was du in {{BRAND_NAME}} eingibst, liegt auf deinem Gerät, einen eigenen Server für deine Daten gibt es nicht. Hier steht genau, was trotzdem ins Netz geht und was verschlüsselt ist.",
     "where_title": "Wo deine Daten liegen",
     "where": [
       {
@@ -584,11 +584,11 @@
     "lock_number_label": "PBKDF2-Runden für deine Zugangsdaten am Computer",
     "no_title": "Was es nicht gibt",
     "no": [
-      "Kein Konto und keine E-Mail-Adresse",
-      "Keine Werbung",
-      "Kein Tracking, keine Analyse, keine Absturzberichte",
-      "Keine Cloud-Synchronisierung",
-      "Kein {{BRAND_NAME}}-Server für deine Daten"
+      "Konto und E-Mail-Adresse",
+      "Werbung",
+      "Tracking, Nutzungsanalyse und Absturzberichte",
+      "Cloud-Synchronisierung",
+      "{{BRAND_NAME}}-Server für deine Daten"
     ],
     "open_title": "Du musst mir nicht glauben",
     "open_text": "Den Quellcode von {{BRAND_NAME}} kann jeder lesen. Jede Zeile, die mit deinen Daten arbeitet, liegt öffentlich auf GitHub.",
@@ -598,13 +598,13 @@
     "lock_label": "Ein Schloss schließt sich."
   },
   "download_page": {
-    "lede": "{{BRAND_NAME}} ist noch eine Beta. Kostenlos, ohne Konto und ohne Werbung.",
+    "lede": "{{BRAND_NAME}} bleibt kostenlos, auch wenn die Beta vorbei ist. Ein Konto brauchst du nicht, nach dem Download geht es direkt los.",
     "name_note": "Version 0.5 gibt es für alle Plattformen unter dem neuen Namen. Bis September 2026 hieß {{BRAND_NAME}} Nexus.",
     "faq_title": "Fragen zum Laden",
     "faq": [
       {
         "q": "Kostet {{BRAND_NAME}} etwas?",
-        "a": "Nein. {{BRAND_NAME}} ist für dich kostenlos, und der Quellcode liegt offen auf GitHub. Es gibt keine Abos und keine bezahlten Funktionen."
+        "a": "Nein. {{BRAND_NAME}} ist für dich kostenlos, und der Quellcode liegt offen auf GitHub. Bezahlte Funktionen und Abos gibt es nicht."
       },
       {
         "q": "Wie bekomme ich Updates?",
@@ -696,9 +696,9 @@
     "s4_p1": "Alle Rechte an der App, einschließlich Design, Code, Grafiken und Texte, liegen beim Anbieter. Die Marke „{{BRAND_NAME}}“ sowie das zugehörige Logo sind Eigentum des Anbieters.",
     "s5_title": "§ 5 Haftungsausschluss",
     "s5_p1": "Die App wird ohne jegliche ausdrückliche oder stillschweigende Gewährleistung bereitgestellt. Der Anbieter übernimmt keinerlei Gewähr für die Richtigkeit, Vollständigkeit, Aktualität oder Zuverlässigkeit der in der App angezeigten Daten. Dies gilt insbesondere für ÖPNV-Fahrplandaten, Preisinformationen und sonstige Drittanbieterdaten (z. B. von VBB oder Deutsche Bahn), auf die der Anbieter keinen Einfluss hat.",
-    "s5_p2": "Der Anbieter haftet nicht für Schäden jeglicher Art, die aus der Nutzung oder Unmöglichkeit der Nutzung der App entstehen — einschließlich, aber nicht beschränkt auf direkte, indirekte, zufällige oder Folgeschäden, entgangenen Gewinn oder Datenverlust. Hiervon unberührt bleibt die Haftung für Schäden aus der Verletzung des Lebens, des Körpers oder der Gesundheit sowie die Haftung für Vorsatz und grobe Fahrlässigkeit gemäß den zwingenden gesetzlichen Vorschriften.",
+    "s5_p2": "Der Anbieter haftet nicht für Schäden jeglicher Art, die aus der Nutzung oder Unmöglichkeit der Nutzung der App entstehen (einschließlich, aber nicht beschränkt auf direkte, indirekte, zufällige oder Folgeschäden, entgangenen Gewinn oder Datenverlust). Hiervon unberührt bleibt die Haftung für Schäden aus der Verletzung des Lebens, des Körpers oder der Gesundheit sowie die Haftung für Vorsatz und grobe Fahrlässigkeit gemäß den zwingenden gesetzlichen Vorschriften.",
     "s5_p3": "Der Anbieter übernimmt keine Garantie für die ununterbrochene, fehlerfreie oder sichere Verfügbarkeit der App. Die Nutzung erfolgt auf eigenes Risiko des Nutzers.",
-    "s5_p4": "Da alle Daten ausschließlich lokal auf dem Gerät des Nutzers gespeichert werden, liegt die alleinige Verantwortung für die Sicherung und Wiederherstellung dieser Daten beim Nutzer. Der Anbieter haftet nicht für Datenverlust — gleich aus welchem Grund.",
+    "s5_p4": "Da alle Daten ausschließlich lokal auf dem Gerät des Nutzers gespeichert werden, liegt die alleinige Verantwortung für die Sicherung und Wiederherstellung dieser Daten beim Nutzer. Der Anbieter haftet nicht für Datenverlust, gleich aus welchem Grund.",
     "s6_title": "§ 6 Datenschutz",
     "s6_p1": "Der Schutz deiner Daten ist uns besonders wichtig. Einzelheiten zur Datenverarbeitung findest du in unserer",
     "s6_link": "Datenschutzerklärung",
@@ -720,12 +720,12 @@
     "s1_email_label": "E-Mail:",
     "s2_title": "§ 2 Grundsatz",
     "s2_p1": "{{BRAND_NAME}} wurde nach dem Prinzip „Local-First“ entwickelt. Das bedeutet: Alle Daten, die du in der App eingibst, werden ausschließlich lokal auf deinem Endgerät gespeichert. Es findet keine Übertragung an Server des Anbieters oder Dritter statt.",
-    "s2_p2": "Wir erheben, speichern oder verarbeiten keine personenbezogenen Daten über die App — es sei denn, du nutzt Funktionen, die eine Internetverbindung erfordern (z. B. ÖPNV-Echtzeitdaten).",
+    "s2_p2": "Wir erheben, speichern oder verarbeiten keine personenbezogenen Daten über die App, es sei denn, du nutzt Funktionen, die eine Internetverbindung erfordern (z. B. ÖPNV-Echtzeitdaten).",
     "s3_title": "§ 3 Datenverarbeitung in der App",
     "s3_sub1_title": "a) Lokal gespeicherte Daten",
     "s3_sub1_p1": "Sämtliche von dir eingegebenen Daten (Stundenpläne, Noten, Aufgaben, Trainingsdaten, Notizen etc.) werden ausschließlich auf deinem Gerät in einer verschlüsselten lokalen Datenbank gespeichert. Der Anbieter hat zu keinem Zeitpunkt Zugriff auf diese Daten.",
     "s3_sub2_title": "b) ÖPNV-Echtzeitdaten",
-    "s3_sub2_p1": "Wenn du die Echtzeit-Fahrplanfunktion nutzt, werden Anfragen an die öffentlichen Schnittstellen von VBB (Verkehrsverbund Berlin-Brandenburg) und Deutsche Bahn gesendet. Dabei werden ausschließlich die von dir eingegebenen Haltestellennamen oder Routeninformationen übermittelt — keine persönlichen Daten, Geräte-IDs oder Standortdaten.",
+    "s3_sub2_p1": "Wenn du die Echtzeit-Fahrplanfunktion nutzt, werden Anfragen an die öffentlichen Schnittstellen von VBB (Verkehrsverbund Berlin-Brandenburg) und Deutsche Bahn gesendet. Dabei werden ausschließlich die von dir eingegebenen Haltestellennamen oder Routeninformationen übermittelt. Persönliche Daten, Geräte-IDs oder Standortdaten werden nicht übermittelt.",
     "s3_sub3_title": "c) Keine Telemetrie",
     "s3_sub3_p1": "{{BRAND_NAME}} enthält keine Analytics, kein Tracking, keine Crash-Reporter und keine Telemetrie. Es werden keinerlei Nutzungsstatistiken erhoben.",
     "s4_title": "§ 4 Datenverarbeitung auf der Website",
@@ -734,7 +734,7 @@
     "s4_list2": "Datum und Uhrzeit des Zugriffs",
     "s4_list3": "Aufgerufene Seite",
     "s4_list4": "Browsertyp und Betriebssystem",
-    "s4_p2": "Diese Daten werden ausschließlich zur Sicherstellung des Betriebs und zur Abwehr von Missbrauch erhoben (Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO — berechtigtes Interesse) und nach kurzer Zeit automatisch gelöscht. Eine Zuordnung zu einzelnen Personen findet nicht statt.",
+    "s4_p2": "Diese Daten werden ausschließlich zur Sicherstellung des Betriebs und zur Abwehr von Missbrauch erhoben (Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, berechtigtes Interesse) und nach kurzer Zeit automatisch gelöscht. Eine Zuordnung zu einzelnen Personen findet nicht statt.",
     "s5_title": "§ 5 Cookies",
     "s5_p1": "Die Website verwendet keine Tracking-Cookies und keine Analyse-Tools. Es werden ausschließlich technisch notwendige Cookies eingesetzt, sofern diese für die Funktionalität der Website erforderlich sind (z. B. Spracheinstellung).",
     "s6_title": "§ 6 Deine Rechte",
@@ -752,7 +752,7 @@
     "s8_p1": "Der Anbieter behält sich vor, diese Datenschutzerklärung jederzeit anzupassen, um sie an geänderte rechtliche Anforderungen oder Funktionsänderungen der App anzupassen. Die aktuelle Fassung ist stets über die Website abrufbar."
   },
   "start": {
-    "intro": "Introducing",
+    "intro": "Das neue",
     "title": "{{BRAND_NAME}} 0.5",
     "lede": "Morgens die erste Stunde mit Raum, nachmittags die Hausaufgaben aus IServ.¹",
     "cta": "Kostenlos laden",
@@ -761,9 +761,9 @@
     "cta_note": "Für {platform}, {size} MB. Auch für {others}.",
     "cta_note_web": "Auf dem iPhone läuft {{BRAND_NAME}} als Web-App. Auch für Mac, Windows, Linux und Android.",
     "cta_note_generic": "Für Mac, Windows, Linux, Android und iPhone.",
-    "more": "Mehr erfahren",
+    "more": "Schultag ansehen",
     "hero_alt": "Die Übersicht von {{BRAND_NAME}} um 7:12 Uhr: Gleich Chemie in Raum B206, darunter die Aufgaben für heute und die nächsten Abgaben.",
-    "statement": "{{BRAND_NAME}} weiß schon morgens, in welchem Raum du sitzt, was heute fällig ist und ob dein Bus pünktlich kommt.",
+    "statement": "Bevor du morgens losgehst, weiß {{BRAND_NAME}} schon, in welchem Raum du sitzt und ob dein Bus pünktlich kommt.",
     "show_title": "Von der ersten Stunde bis zum Bus nach Hause.",
     "steps": [
       {
@@ -804,7 +804,7 @@
     ],
     "tile_luna_label": "Luna antippen, dann winkt sie",
     "privacy_title": "Deine Noten gehen nur dich was an.",
-    "privacy_text": "Es gibt kein Konto und keinen {{BRAND_NAME}}-Server. Was mit deinen Daten passiert, kannst du im Quellcode nachlesen, Zeile für Zeile.",
+    "privacy_text": "Deine Daten bleiben auf deinem Gerät, weil es keinen {{BRAND_NAME}}-Server gibt. Was mit ihnen passiert, kannst du im Quellcode nachlesen, Zeile für Zeile.",
     "privacy_link": "Mehr zum Datenschutz",
     "get_title": "Hol dir {{BRAND_NAME}}.",
     "get_text": "Kostenlos für Mac, Windows, Linux und Android. Aufs iPhone kommt {{BRAND_NAME}} als Web-App.",
@@ -849,8 +849,8 @@
       },
       {
         "id": "move",
-        "lead": "Von Nexus umgestiegen?",
-        "text": "{{BRAND_NAME}} übernimmt beim ersten Start alles. Du tippst nichts neu ein."
+        "lead": "Alles aus Nexus kommt mit.",
+        "text": "Aufgaben, Termine, Noten und Zugänge übernimmt {{BRAND_NAME}} beim ersten Start. Du tippst nichts neu ein."
       },
       {
         "id": "phone",
@@ -948,7 +948,7 @@
     "lock_label": "Ein Schloss schließt sich.",
     "agent_eyebrow": "Luna",
     "agent_title": "Frag einfach Luna.",
-    "agent_text": "Luna ist die Assistentin in {{BRAND_NAME}}. Sie kennt deinen Stundenplan, deine Aufgaben und deine Noten, trägt Hausaufgaben für dich ein und plant mit dir bis zur Klausur. Standardmäßig arbeitet sie komplett auf deinem Gerät.²",
+    "agent_text": "Luna ist die Assistentin in {{BRAND_NAME}} und kennt deinen Stundenplan, deine Aufgaben und deine Noten. Sie trägt Hausaufgaben für dich ein und plant vor einer Klausur mit dir, was du wann lernst. Standardmäßig arbeitet sie komplett auf deinem Gerät.²",
     "agent_name": "Luna",
     "agent_role": "Deine Assistentin",
     "agent_time": "Donnerstag, 20:15",

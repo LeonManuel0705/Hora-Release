@@ -457,7 +457,7 @@
   },
   "privacy_page": {
     "title": "What {{BRAND_NAME}} does with your data",
-    "lede": "{{BRAND_NAME}} has no account and no server of its own for your data. Everything you enter stays on your device. Here is exactly what still goes online and what is encrypted.",
+    "lede": "Everything you enter stays on your device, because {{BRAND_NAME}} has no server of its own for your data. Here is exactly what still goes online and what is encrypted.",
     "where_title": "Where your data lives",
     "where": [
       {
@@ -584,11 +584,11 @@
     "lock_number_label": "PBKDF2 rounds for your login details on the computer",
     "no_title": "What doesn't exist",
     "no": [
-      "No account and no email address",
-      "No ads",
-      "No tracking, no analytics, no crash reports",
-      "No cloud sync",
-      "No {{BRAND_NAME}} server for your data"
+      "An account or email address",
+      "Ads",
+      "Tracking, usage analytics or crash reports",
+      "Cloud sync",
+      "A {{BRAND_NAME}} server for your data"
     ],
     "open_title": "You don't have to take my word for it",
     "open_text": "Anyone can read the source code of {{BRAND_NAME}}. Every line that touches your data is public on GitHub.",
@@ -598,13 +598,13 @@
     "lock_label": "A lock closes."
   },
   "download_page": {
-    "lede": "{{BRAND_NAME}} is still a beta. Free, no account and no ads.",
+    "lede": "{{BRAND_NAME}} stays free, even once the beta is over. You don't need an account; you can start right after the download.",
     "name_note": "Version 0.5 is out for every platform under the new name. Until September 2026, {{BRAND_NAME}} was called Nexus.",
     "faq_title": "Questions about installing",
     "faq": [
       {
         "q": "Does {{BRAND_NAME}} cost anything?",
-        "a": "No. {{BRAND_NAME}} is free for you, and its source code is public on GitHub. There are no subscriptions and no paid features."
+        "a": "No. {{BRAND_NAME}} is free for you, and its source code is public on GitHub. There are no paid features or subscriptions."
       },
       {
         "q": "How do I get updates?",
@@ -696,9 +696,9 @@
     "s4_p1": "All rights to the App, including design, code, graphics, and text, belong to the Provider. The trademark \"{{BRAND_NAME}}\" and the associated logo are the property of the Provider.",
     "s5_title": "§ 5 Disclaimer of Liability",
     "s5_p1": "The App is provided without any express or implied warranties of any kind. The Provider makes no warranties regarding the accuracy, completeness, timeliness, or reliability of any data displayed in the App. This applies in particular to public transit schedules, pricing information, and other third-party data (e.g., from VBB or Deutsche Bahn) over which the Provider has no control.",
-    "s5_p2": "The Provider shall not be liable for any damages of any kind arising from the use or inability to use the App — including but not limited to direct, indirect, incidental, or consequential damages, loss of profits, or loss of data. This does not affect liability for damages resulting from injury to life, body, or health, or liability for intent and gross negligence under mandatory statutory provisions.",
+    "s5_p2": "The Provider shall not be liable for any damages of any kind arising from the use or inability to use the App (including but not limited to direct, indirect, incidental, or consequential damages, loss of profits, or loss of data). This does not affect liability for damages resulting from injury to life, body, or health, or liability for intent and gross negligence under mandatory statutory provisions.",
     "s5_p3": "The Provider makes no guarantee of uninterrupted, error-free, or secure availability of the App. Use of the App is at the user's own risk.",
-    "s5_p4": "Since all data is stored exclusively on the user's device, the user bears sole responsibility for backing up and restoring their data. The Provider is not liable for data loss — regardless of the cause.",
+    "s5_p4": "Since all data is stored exclusively on the user's device, the user bears sole responsibility for backing up and restoring their data. The Provider is not liable for data loss, regardless of the cause.",
     "s6_title": "§ 6 Data Protection",
     "s6_p1": "The protection of your data is particularly important to us. Details on data processing can be found in our",
     "s6_link": "Privacy Policy",
@@ -720,12 +720,12 @@
     "s1_email_label": "Email:",
     "s2_title": "§ 2 Principle",
     "s2_p1": "{{BRAND_NAME}} was built on a \"Local-First\" principle. This means: All data you enter in the App is stored exclusively on your device. No data is transmitted to servers of the Provider or third parties.",
-    "s2_p2": "We do not collect, store, or process any personal data through the App — unless you use features that require an internet connection (e.g., real-time public transit data).",
+    "s2_p2": "We do not collect, store, or process any personal data through the App, unless you use features that require an internet connection (e.g., real-time public transit data).",
     "s3_title": "§ 3 Data Processing in the App",
     "s3_sub1_title": "a) Locally Stored Data",
     "s3_sub1_p1": "All data you enter (timetables, grades, tasks, training data, notes, etc.) is stored exclusively on your device in an encrypted local database. The Provider has no access to this data at any time.",
     "s3_sub2_title": "b) Real-Time Transit Data",
-    "s3_sub2_p1": "When you use the real-time transit feature, requests are sent to the public APIs of VBB (Verkehrsverbund Berlin-Brandenburg) and Deutsche Bahn. Only the stop names or route information you enter are transmitted — no personal data, device IDs, or location data.",
+    "s3_sub2_p1": "When you use the real-time transit feature, requests are sent to the public APIs of VBB (Verkehrsverbund Berlin-Brandenburg) and Deutsche Bahn. Only the stop names or route information you enter are transmitted. No personal data, device IDs, or location data are transmitted.",
     "s3_sub3_title": "c) No Telemetry",
     "s3_sub3_p1": "{{BRAND_NAME}} contains no analytics, no tracking, no crash reporters, and no telemetry. No usage statistics are collected whatsoever.",
     "s4_title": "§ 4 Data Processing on the Website",
@@ -734,7 +734,7 @@
     "s4_list2": "Date and time of access",
     "s4_list3": "Page visited",
     "s4_list4": "Browser type and operating system",
-    "s4_p2": "This data is collected solely to ensure operation and prevent misuse (legal basis: Art. 6(1)(f) GDPR — legitimate interest) and is automatically deleted after a short period. No identification of individual persons takes place.",
+    "s4_p2": "This data is collected solely to ensure operation and prevent misuse (legal basis: Art. 6(1)(f) GDPR, legitimate interest) and is automatically deleted after a short period. No identification of individual persons takes place.",
     "s5_title": "§ 5 Cookies",
     "s5_p1": "The Website does not use tracking cookies or analytics tools. Only technically necessary cookies are used, if required for website functionality (e.g., language preference).",
     "s6_title": "§ 6 Your Rights",
@@ -761,9 +761,9 @@
     "cta_note": "For {platform}, {size} MB. Also for {others}.",
     "cta_note_web": "On iPhone, {{BRAND_NAME}} runs as a web app. Also for Mac, Windows, Linux and Android.",
     "cta_note_generic": "For Mac, Windows, Linux, Android and iPhone.",
-    "more": "Learn more",
+    "more": "See a school day",
     "hero_alt": "{{BRAND_NAME}} at 7:12 in the morning (German): chemistry in room B206 next, with today's tasks and upcoming deadlines below.",
-    "statement": "Before you leave home, {{BRAND_NAME}} knows which room you are in, what is due today and whether your bus is on time.",
+    "statement": "Before you leave home, {{BRAND_NAME}} already knows which room you are in and whether your bus is on time.",
     "show_title": "From first period to the bus home.",
     "steps": [
       {
@@ -804,7 +804,7 @@
     ],
     "tile_luna_label": "Tap Luna and she waves",
     "privacy_title": "Your grades are your business.",
-    "privacy_text": "There is no account and no {{BRAND_NAME}} server. What happens to your data is in the source code, line by line.",
+    "privacy_text": "Your data stays on your device, because there is no {{BRAND_NAME}} server. What happens to it is in the source code, line by line.",
     "privacy_link": "More on privacy",
     "get_title": "Get {{BRAND_NAME}}.",
     "get_text": "Free for Mac, Windows, Linux and Android. On iPhone, {{BRAND_NAME}} runs as a web app.",
@@ -849,8 +849,8 @@
       },
       {
         "id": "move",
-        "lead": "Coming from Nexus?",
-        "text": "{{BRAND_NAME}} takes everything over on the first start. Nothing to type in again."
+        "lead": "Everything from Nexus comes along.",
+        "text": "{{BRAND_NAME}} takes over your tasks, events, grades and logins on the first start. Nothing to type in again."
       },
       {
         "id": "phone",
@@ -948,7 +948,7 @@
     "lock_label": "A lock closes.",
     "agent_eyebrow": "Luna",
     "agent_title": "Just ask Luna.",
-    "agent_text": "Luna is the assistant in {{BRAND_NAME}}. She knows your timetable, your tasks and your grades, adds homework for you and plans with you up to the exam. By default she works entirely on your device.²",
+    "agent_text": "Luna is the assistant in {{BRAND_NAME}} and knows your timetable, your tasks and your grades. She adds homework for you and, before an exam, plans with you what to study when. By default she works entirely on your device.²",
     "agent_name": "Luna",
     "agent_role": "Your assistant",
     "agent_time": "Thursday, 20:15",
