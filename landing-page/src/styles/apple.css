@@ -1,4 +1,4 @@
-@font-face { font-family: "Bricolage Grotesque"; src: url("/fonts/bricolage-grotesque.woff2") format("woff2"); font-weight: 200 800; font-stretch: 75% 100%; font-style: normal; font-display: swap; }
+@font-face { font-family: "Plus Jakarta Sans"; src: url("/fonts/plus-jakarta-sans.woff2") format("woff2"); font-weight: 200 800; font-style: normal; font-display: swap; }
 
 :root {
   --ap-bg: #000000;
@@ -383,7 +383,7 @@ body[data-theme="dark"] .menu-lines i { background: var(--ap-text); }
 .hl-phone { --tile: linear-gradient(180deg, #F8EFDF 0%, #EACFA0 100%); --cap-lead: #2E3A2F; --cap-text: rgb(46 58 47 / 0.72); }
 .hl-holidays { --tile: linear-gradient(180deg, #08504F 0%, #168D8C 100%); }
 
-.sc { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; padding: 24px 0 40px; font-family: "Bricolage Grotesque", var(--font-sans); font-variant-numeric: tabular-nums; color: #2E3A2F; }
+.sc { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; padding: 24px 0 40px; font-family: "Plus Jakarta Sans", var(--font-sans); font-variant-numeric: tabular-nums; color: #2E3A2F; }
 .ap .sc p, .sc ul, .sc ol { margin: 0; padding: 0; list-style: none; }
 .sc .icon { flex: none; }
 .sc-app {
@@ -442,7 +442,7 @@ body[data-theme="dark"] .menu-lines i { background: var(--ap-text); }
 .ap .sc-report-title { display: grid; font-size: 20px; font-weight: 740; letter-spacing: -0.015em; }
 .sc-report-title span { font-size: 14px; font-weight: 560; color: #A9AAA0; }
 .ap .sc-report-count { display: grid; justify-items: end; margin-left: auto; line-height: 1; }
-.sc-report-count b { font-size: 48px; font-weight: 800; font-stretch: 80%; letter-spacing: -0.02em; color: #E7C694; }
+.sc-report-count b { font-size: 48px; font-weight: 800; letter-spacing: -0.02em; color: #E7C694; }
 .sc-report-count i { font-style: normal; }
 .sc-report-count small { margin-top: 4px; font-size: 13px; font-weight: 620; color: #A9AAA0; }
 .sc-check-list { display: grid; }
