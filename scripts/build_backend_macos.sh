@@ -24,10 +24,12 @@ case "$ARCH" in
   arm64)
     TRIPLE="aarch64-apple-darwin"
     PYTHON_SHA256="f3e1cd83a7f1d70e58b0d69102c18bd6867d2f973068dc5cbfd5822e445c66df"
+    MINIMUM_MACOS="11.0"
     ;;
   x86_64)
     TRIPLE="x86_64-apple-darwin"
     PYTHON_SHA256="d38edc2df25e7e7f886c802bf2fa552422b097c509dbdcbae828827470356095"
+    MINIMUM_MACOS="10.15"
     ;;
   *)
     echo "usage: $0 [arm64|x86_64]" >&2
@@ -74,8 +76,22 @@ rm -rf "$WORK"
 mkdir -p "$WORK"
 tar -xzf "$ARCHIVE" -C "$WORK"
 run "$WORK/python/bin/python3" -m venv "$WORK/venv"
+# protobuf 7 tags its macOS wheel for 10.9 but builds its extension for macOS
+# 12, and no other build of it exists; 6.33 still runs on macOS 10.9.
 run "$WORK/venv/bin/python" -m pip install --quiet --disable-pip-version-check \
-  -r "$PROJECT_ROOT/requirements-desktop.txt" "pyinstaller==$PYINSTALLER_VERSION"
+  -r "$PROJECT_ROOT/requirements-desktop.txt" "pyinstaller==$PYINSTALLER_VERSION" "protobuf<7"
+
+# pip picks wheels for the macOS of the build machine, and some are built for a
+# newer one (numpy links Accelerate from macOS 14 on). Those are swapped for
+# the build of the same version that runs on MINIMUM_MACOS.
+CHECK="$PROJECT_ROOT/scripts/check_macos_minimum.py"
+PLATFORM_TAG="macosx_${MINIMUM_MACOS/./_}_$ARCH"
+SITE="$(run "$WORK/venv/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+for requirement in $("$WORK/python/bin/python3" -I "$CHECK" --packages "$SITE" "$MINIMUM_MACOS"); do
+  echo "=== Replacing $requirement with its build for macOS $MINIMUM_MACOS ==="
+  run "$WORK/venv/bin/python" -m pip install --quiet --disable-pip-version-check --no-deps --upgrade \
+    --only-binary=:all: --platform "$PLATFORM_TAG" --target "$SITE" "$requirement"
+done
 
 echo "=== Freezing the backend for $ARCH ==="
 cd "$PROJECT_ROOT"
@@ -89,6 +105,10 @@ if [ ! -x "$SERVER" ]; then
 fi
 if [ "$(lipo -archs "$SERVER")" != "$ARCH" ]; then
   echo "ERROR: $SERVER was built for $(lipo -archs "$SERVER"), not $ARCH" >&2
+  exit 1
+fi
+if ! "$WORK/python/bin/python3" -I "$CHECK" "$WORK/dist/server" "$MINIMUM_MACOS"; then
+  echo "ERROR: parts of the frozen server need a newer macOS than $MINIMUM_MACOS" >&2
   exit 1
 fi
 echo "=== Done: $SERVER ($(du -sh "$WORK/dist/server" | cut -f1)) ==="
