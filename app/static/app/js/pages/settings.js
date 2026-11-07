@@ -1364,6 +1364,7 @@ function gmailRow(info) {
   if (!info.configured || info.state === "login") return "";
   return row({
     id: "rowGmail",
+    cls: "is-stack",
     label: "Gmail",
     desc: `Lies und schreib deine Gmail-Mails in ${BRAND}. Dafür fragt Google einmal nach.`,
     control: `<button class="btn btn-quiet" type="button" id="gmailAdd">Gmail hinzufügen</button>`,
