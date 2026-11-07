@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/iserv.dart';
 import 'database_service.dart';
@@ -225,6 +226,9 @@ class IServService {
 
   Future<void> disconnect() async {
     _dio = null;
+    try {
+      await (await SharedPreferences.getInstance()).remove(homeworkSyncedKey);
+    } catch (_) {}
     _cookieJar = null;
     _session = null;
     _signInCause = null;
@@ -511,6 +515,35 @@ class IServService {
     }
   }
 
+  Future<Response<dynamic>> _askExercises() => _dio!.get(
+        '/iserv/exercise/api/exercises',
+        options: Options(
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          responseType: ResponseType.json,
+        ),
+      );
+
+  static List<IServExercise>? _exercisesFrom(Object? data) {
+    if (data is! Map || data['data'] is! List) return null;
+    final now = DateTime.now();
+    return [
+      for (final item in data['data'] as List)
+        IServExercise(
+          id: item['id']?.toString() ?? '',
+          title: item['title'] ?? '',
+          description: item['description'],
+          course: item['course']?['name'] ?? item['course'],
+          teacher: item['teacher']?['name'] ?? item['teacher'],
+          dueDate: item['endDate'] != null ? DateTime.parse(item['endDate']) : null,
+          status: item['status'] ?? 'open',
+          cachedAt: now,
+        ),
+    ];
+  }
+
   Future<List<IServExercise>> getExercises() async {
     if (!isConnected || _dio == null) return getCachedExercises();
 
@@ -519,38 +552,67 @@ class IServService {
 
       if (response == null || response.statusCode != 200) return await getCachedExercises();
 
-      final data = response.data;
-
-      if (data is! Map || data['data'] is! List) {
+      final exercises = _exercisesFrom(response.data);
+      if (exercises == null) {
         if (kDebugMode) print('IServ: Exercises response is not valid, returning cached');
         return await getCachedExercises();
       }
 
-      final List<IServExercise> exercises = [];
-      final now = DateTime.now();
-
-      for (final item in data['data']) {
-        exercises.add(IServExercise(
-          id: item['id']?.toString() ?? '',
-          title: item['title'] ?? '',
-          description: item['description'],
-          course: item['course']?['name'] ?? item['course'],
-          teacher: item['teacher']?['name'] ?? item['teacher'],
-          dueDate: item['endDate'] != null
-              ? DateTime.parse(item['endDate'])
-              : null,
-          status: item['status'] ?? 'open',
-          cachedAt: now,
-        ));
-      }
-
       await _cacheExercises(exercises);
+      await _noteHomeworkSynced();
 
       return exercises;
     } catch (e) {
 
       return getCachedExercises();
     }
+  }
+
+  /// When IServ last gave its homework list. An empty list leaves no row to tell the time by, so it is kept here.
+  static const homeworkSyncedKey = 'iserv_homework_synced';
+
+  Future<void> _noteHomeworkSynced() async {
+    try {
+      await (await SharedPreferences.getInstance()).setString(homeworkSyncedKey, DateTime.now().toIso8601String());
+    } catch (_) {}
+  }
+
+  static final _loginField = RegExp(r'''name=["']_(?:username|password)["']''');
+
+  /// Fetches the exercises now and says what came of it: null when IServ gave its list, an empty one too, otherwise
+  /// setup, login, offline or format. Unlike [getExercises] it keeps an empty list, so finished homework leaves.
+  Future<String?> refreshExercises() async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (!await autoReconnect() || _dio == null) return _signInCause ?? 'offline';
+      final Response<dynamic> response;
+      try {
+        response = await _askExercises();
+      } catch (_) {
+        return 'offline';
+      }
+      final status = response.statusCode ?? 0;
+      final data = response.data;
+      if (status == 401 || (status >= 300 && status < 400) || (data is String && _loginField.hasMatch(data))) {
+        if (attempt == 0 && await _reconnect()) continue;
+        return _signInCause ?? 'login';
+      }
+      final List<IServExercise>? exercises;
+      try {
+        exercises = status == 200 ? _exercisesFrom(data) : null;
+      } catch (_) {
+        return 'format';
+      }
+      if (exercises == null) return 'format';
+      final db = await _db.database;
+      final batch = db.batch()..delete('iserv_exercises');
+      for (final exercise in exercises) {
+        batch.insert('iserv_exercises', exercise.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
+      await _noteHomeworkSynced();
+      return null;
+    }
+    return _signInCause ?? 'login';
   }
 
   Future<List<IServEvent>> getEvents({int? userGrade}) async {

@@ -8,6 +8,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 
 from . import brand
 
@@ -305,6 +306,44 @@ def nearby(args):
     for stop in stops:
         unique.setdefault(stop["name"], stop)
     return {"stops": list(unique.values())[:6]}, 200
+
+
+def _moment(stamp):
+    try:
+        moment = datetime.fromisoformat(str(stamp or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment.astimezone() if moment.tzinfo else moment
+
+
+def way_home(found, target):
+    """The departures for the home page: the first ride of the next connections home, of the line and stop the soonest one takes.
+
+    Connections with another line or stop and cancelled ones are left out, so every time listed is one to the same stop.
+    """
+    rides = []
+    for journey in found:
+        legs = journey.get("legs") or []
+        index = next((number for number, leg in enumerate(legs) if leg["category"] not in ("fuss", "rad")), None)
+        if index is None or journey.get("cancelled"):
+            continue
+        rides.append((legs[index], sum(leg["minutes"] for leg in legs[:index])))
+    if not rides:
+        return None
+    first, walk = rides[0]
+    departures, delays = [], {}
+    for leg, _ in rides:
+        if leg["line"] != first["line"] or leg["from"]["name"] != first["from"]["name"]:
+            continue
+        planned, actual = _moment(leg["from"]["planned"] or leg["from"]["time"]), _moment(leg["from"]["time"])
+        if not planned or f"{planned.hour}:{planned.minute:02d}" in departures:
+            continue
+        text = f"{planned.hour}:{planned.minute:02d}"
+        departures.append(text)
+        late = round((actual - planned).total_seconds() / 60) if actual else 0
+        if late > 0:
+            delays[text] = late
+    return {"line": first["line"], "mode": first["category"], "from": first["from"]["name"], "to": target, "walkMinutes": walk, "departures": departures, "delays": delays}
 
 
 ACTIONS = {"suche": search, "abfahrten": departures, "verbindungen": journeys, "naehe": nearby, "tarif": fares}

@@ -1376,9 +1376,11 @@ def get_timetable_settings():
 
     user_id = request.args.get('user_id')
     settings = db.get_timetable_settings(user_id=user_id)
+    # "A und B tauschen" of the new pages lives in their store. The classic pages count with it too.
+    swapped = db.get_ui_store().get('app-ab-swap') is True
     if settings:
-        return jsonify({'success': True, 'settings': settings})
-    return jsonify({'success': True, 'settings': None, 'setup_required': True})
+        return jsonify({'success': True, 'settings': settings, 'ab_swap': swapped})
+    return jsonify({'success': True, 'settings': None, 'setup_required': True, 'ab_swap': swapped})
 
 @app.route('/api/hub/school/timetable/settings', methods=['POST'])
 def save_timetable_settings():
@@ -2199,6 +2201,8 @@ def remove_email_account_route(email):
         success = remove_email_account(email)
 
     if success:
+        from . import ui_data
+        ui_data.forget_mailbox(email)
         return jsonify({'success': True})
     return jsonify({'error': 'Account not found'}), 404
 
@@ -2469,8 +2473,11 @@ def list_google_accounts():
 @app.route('/api/email/google/remove/<path:email>', methods=['DELETE'])
 def remove_google_account_route(email):
 
+    from . import ui_data
     from .google_oauth import remove_google_account
     success = remove_google_account(email)
+    if success:
+        ui_data.forget_mailbox(email)
     return jsonify({'success': success})
 
 @app.route('/api/calendar/events', methods=['GET'])
@@ -2715,9 +2722,11 @@ def iserv_status():
 @app.route('/api/iserv/connect', methods=['POST'])
 def iserv_connect():
 
+    from . import ui_data
     from .iserv_service import get_iserv_service
     data = request.get_json() or {}
     service = get_iserv_service()
+    before = ui_data.iserv_key()
 
     result = service.connect(
         username=data.get('username'),
@@ -2726,15 +2735,18 @@ def iserv_connect():
     )
 
     if result.get('success'):
+        ui_data.note_iserv_account(ui_data.iserv_key(), before)
         return jsonify(result)
     return jsonify(result), 400
 
 @app.route('/api/iserv/disconnect', methods=['POST'])
 def iserv_disconnect():
 
+    from . import ui_data
     from .iserv_service import get_iserv_service
     service = get_iserv_service()
     service.delete_credentials()
+    ui_data.forget_iserv()
     return jsonify({'success': True})
 
 @app.route('/api/iserv/notifications', methods=['GET'])

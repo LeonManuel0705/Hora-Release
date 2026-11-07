@@ -1,7 +1,7 @@
 import {
   data, flags, params, esc, icon, luna, now, pinnedTime, toMin, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, isoWeek, subject, hueVar, blockOf, glue, relativeDay, inDays, duration, shortDate, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT,
-  abWeeks, gradeScale, activeSubjectKeys, ASSESSMENTS, isAssessment, assessmentCount, pastText, pastWord, homeworkDate,
+  abWeeks, gradeScale, activeSubjectKeys, ASSESSMENTS, isAssessment, assessmentCount, pastText, pastWord, homeworkDate, BRAND,
 } from "../core.js";
 import { animates, travels, token, ms } from "../motion.js";
 import { toast, registerSearch, syncTime, typing, overlayOpen, pageUrl, keepOneLine } from "../shell.js";
@@ -610,9 +610,10 @@ function planStand() {
 
 function changesHtml(head) {
   const time = clockState();
+  const synced = syncTime();
   const stand = flags.offline
-    ? `<p class="side-meta is-offline">${icon("wifi-off")}Offline, Stand ${esc(syncTime())} Uhr</p>`
-    : `<p class="side-meta">Stand ${esc(syncTime())} Uhr</p>`;
+    ? `<p class="side-meta is-offline">${icon("wifi-off")}${synced ? `Offline, Stand ${esc(synced)} Uhr` : "Offline"}</p>`
+    : synced ? `<p class="side-meta">Stand ${esc(synced)} Uhr</p>` : "";
   const days = changeDays();
   const groups = days.map((day) => {
     const changed = lessonsOn(day).filter((lesson) => lesson.changed);
@@ -637,6 +638,9 @@ function changesHtml(head) {
 function vplanHtml() {
   const plan = state.vplan;
   const title = `<h2 class="side-title" id="vplanTitle">Vertretungsplan</h2>`;
+  if (data.status?.iservAvailable === false) {
+    return `<div class="ov-head">${title}</div><p class="ov-calm is-quiet">${icon("graduation-cap")}<span>Den Vertretungsplan holt ${esc(BRAND)} in der App für Mac, Windows, Linux und Android aus IServ.</span></p>`;
+  }
   if (!data.status?.iserv) {
     return `<div class="ov-head">${title}</div><p class="ov-calm is-quiet">${icon("graduation-cap")}<span>Verbinde IServ unter <a class="inline-link" href="${esc(pageUrl("settings", "/hub/settings#konten"))}" data-page="settings">Einstellungen, Konten</a>, dann erscheint hier der Vertretungsplan.</span></p>`;
   }
@@ -815,7 +819,7 @@ function renderHomework() {
   keepFocus(body, () => {
     body.innerHTML = list.length
       ? `<ul class="rows" aria-labelledby="homeworkTitle">${list.map((item) => dueRow(item, time)).join("")}</ul>`
-      : `<p class="empty-line">Keine offenen Hausaufgaben.<small>Neue kommen automatisch aus IServ.</small></p>`;
+      : `<p class="empty-line">Keine offenen Hausaufgaben.${data.status?.iserv && data.status.iservParts?.homework ? "<small>Neue aus IServ kommen von selbst dazu.</small>" : ""}</p>`;
   });
 }
 

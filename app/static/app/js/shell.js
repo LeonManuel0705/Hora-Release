@@ -1,4 +1,4 @@
-import { data, flags, icon, esc, safeMarkup, root, subject, hueVar, now, addDays, startOfDay, isoDate, parseDate, shortDate, clock, minutesOf, pinnedTime, platform, storage, homeworkDate, stretchOf, BRAND } from "./core.js";
+import { data, flags, icon, esc, safeMarkup, root, subject, hueVar, now, addDays, startOfDay, isoDate, parseDate, shortDate, dayDiff, clock, minutesOf, pinnedTime, platform, storage, homeworkDate, stretchOf, BRAND } from "./core.js";
 import { animates, travels, rich } from "./motion.js";
 import { tasks as taskApi, deadlines as deadlineApi, notes as noteApi } from "./api.js";
 import { switchRemindersOn } from "./reminders.js";
@@ -312,33 +312,47 @@ function renderCounts() {
   });
 }
 
-export function syncTime() {
-  return pinnedTime() ? clock(Math.max(0, minutesOf(now()) - 4)) : data.status.lastSync;
+// IServ counts first: the school data comes from there. Google only shows when IServ has not synced.
+export const syncSource = () => (data?.status?.iserv && data.status.synced?.iserv ? "iserv" : data?.status?.synced?.google ? "google" : null);
+
+// When the shown data is from: the last sync of a connected source, or offline the time this copy of the page was made.
+// "7:36", "gestern, 7:36" or "Do., 5.11. 7:36", and empty while nothing has synced.
+export function syncTime(source = syncSource()) {
+  const stamp = flags.offline ? data?.status?.rendered : source ? data.status.synced?.[source] : null;
+  const date = stamp ? new Date(stamp) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  if (pinnedTime()) return clock(Math.max(0, minutesOf(now()) - 4));
+  const time = clock(minutesOf(date));
+  const diff = dayDiff(now(), isoDate(date));
+  return diff === 0 ? time : diff === -1 ? `gestern, ${time}` : `${shortDate(date)} ${time}`;
 }
 
-function renderSync() {
-  const time = syncTime();
-  const text = flags.offline ? `Offline, Stand ${time} Uhr` : data.status?.iserv ? `IServ, Stand ${time} Uhr` : `Stand ${time} Uhr`;
+export function renderSync() {
+  const source = syncSource();
+  const time = syncTime(source);
+  const text = flags.offline ? (time ? `Offline, Stand ${time} Uhr` : "Offline") : time ? `${source === "google" ? "Google" : "IServ"}, Stand ${time} Uhr` : "";
   const line = $("syncLine");
   if (line) {
+    line.hidden = !text;
     line.classList.toggle("is-offline", flags.offline);
     line.querySelector("span").textContent = text;
     line.querySelector("use").setAttribute("href", flags.offline ? "#i-wifi-off" : "#i-refresh-cw");
   }
   document.querySelectorAll("[data-sync-mirror]").forEach((node) => {
+    node.hidden = !text;
     node.classList.toggle("is-offline", flags.offline);
     node.querySelector("span").textContent = text;
   });
   const head = $("headSync");
   if (head) {
-    head.textContent = flags.offline ? `offline, Stand ${time}` : `Stand ${time}`;
+    head.textContent = flags.offline ? (time ? `offline, Stand ${time}` : "offline") : time ? `Stand ${time}` : "";
     head.classList.toggle("is-offline", flags.offline);
   }
   if (flags.offline) {
     const alert = $("headAlert");
     if (alert) {
       alert.hidden = false;
-      $("headAlertText").textContent = `Keine Verbindung zu IServ. ${BRAND} zeigt den Stand von ${time} Uhr. Abhaken und Notizen werden übertragen, sobald IServ wieder erreichbar ist.`;
+      $("headAlertText").textContent = `Keine Verbindung zu ${BRAND}. ${time ? `Das ist die Übersicht vom Stand ${time} Uhr. ` : ""}Änderungen lassen sich gerade nicht speichern.`;
     }
   }
 }
@@ -744,7 +758,6 @@ function saveNote(detail) {
     job = noteApi.create({ type: detail.type, title: detail.title, details: detail.details });
   }
   job.then((saved) => {
-    // Only the desktop server answers with the whole note, and only there the task page lists notes.
     const listed = (detail.type === "note" || detail.type === "idea") && !!saved?.id && !!saved.title;
     const action = listed && !document.getElementById("notesList") ? { label: "Anzeigen", run: () => openPage("tasks", `${ROUTES.tasks}#notizen`) } : undefined;
     toast(`${words[detail.type]}${when} angelegt: „${esc(detail.title)}“`, { icon: "check", action });

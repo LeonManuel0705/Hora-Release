@@ -326,11 +326,45 @@ def create_deadline():
     return jsonify({'success': True, 'deadline': view})
 
 
+def _change_iserv_homework(item_id):
+    """Homework from IServ stays as IServ has it. Here it is only ticked off or hidden, and brought back."""
+    account = ui_data.iserv_key()
+    state = ui_data.iserv_homework_state(account)
+    item = next((entry for entry in state['items'] if f"{ui_data.ISERV_PREFIX}{entry['id']}" == item_id), None)
+    if not item:
+        return _error('Eintrag nicht gefunden', 404)
+    payload = {} if request.method == 'DELETE' else _payload()
+    if payload is None:
+        return _error('JSON erwartet')
+
+    def mark(stored, key, present):
+        marks = {value for value in stored.get(key) or [] if isinstance(value, str)}
+        (marks.add if present else marks.discard)(item_id)
+        stored[key] = sorted(marks)
+
+    def change(stored):
+        if request.method == 'DELETE':
+            mark(stored, 'hidden', True)
+            return
+        if payload.get('hidden') is False:
+            mark(stored, 'hidden', False)
+        if 'status' in payload:
+            mark(stored, 'done', payload['status'] == 'abgegeben')
+
+    ui_data.change_iserv_homework(account, change)
+    if request.method == 'DELETE':
+        return jsonify({'success': True})
+    school = ui_data.school_setup(db.get_timetable_settings() or {})
+    return jsonify({'success': True, 'deadline': ui_data.iserv_homework_view(item, school, ui_data.iserv_homework_state(account)['done'])})
+
+
 @bp.route('/api/ui/deadlines/<ref>', methods=['PATCH', 'DELETE'])
 def change_deadline(ref):
     prefix, item_id = _deadline_ref(ref)
     if not prefix:
         return _error('Unbekannter Eintrag', 404)
+    if prefix == 'hw' and item_id.startswith(ui_data.ISERV_PREFIX):
+        return _change_iserv_homework(item_id)
     name = ui_data.DEADLINE_KINDS[prefix][0]
     school = ui_data.school_setup(db.get_timetable_settings() or {})
     payload = None
@@ -756,16 +790,25 @@ def _plan_problem(result):
     return 'offline'
 
 
+def _refresh_plan(service):
+    """Fetches the plan and notes the time when IServ answered, with a plan or with none for now."""
+    try:
+        problem = _plan_problem(service.get_vertretungsplan_pdfs())
+    except Exception:
+        return 'offline'
+    account = ui_data.iserv_key()
+    if problem in (None, 'empty') and account:
+        ui_data.mark_synced('iserv', 'plan', account)
+    return problem
+
+
 @bp.route('/api/ui/vplan')
 def substitution_plan():
     from .iserv_service import get_iserv_service
     service = get_iserv_service()
     problem = None
     if request.args.get('frisch') == '1':
-        try:
-            problem = _plan_problem(service.get_vertretungsplan_pdfs())
-        except Exception:
-            problem = 'offline'
+        problem = _refresh_plan(service)
     cache = service.plan_cache() or {'files': [], 'cached_at': None}
     stamp = re.sub(r'\D', '', str(cache['cached_at'] or ''))[:14]
     files = [
@@ -779,6 +822,65 @@ def substitution_plan():
         'problem': problem,
         'message': PLAN_PROBLEMS.get(problem, ''),
     })
+
+
+HOMEWORK_PROBLEMS = {
+    'setup': 'IServ ist nicht verbunden.',
+    'login': 'Die Anmeldung bei IServ ist abgelaufen. Verbinde IServ in den Einstellungen neu.',
+    'offline': 'IServ ist gerade nicht erreichbar.',
+    'format': 'Die Hausaufgaben aus IServ lassen sich hier nicht lesen.',
+}
+
+
+def _iserv_homework_views():
+    school = ui_data.school_setup(db.get_timetable_settings() or {})
+    homework = ui_data.iserv_homework_state(ui_data.iserv_key())
+    return [view for view in ui_data.deadlines(school, date.today(), homework) if view.get('origin') == 'iserv']
+
+
+def _homework_answer(result, views):
+    """What came of a fetch, counted as the pages list it: open homework that is not hidden here."""
+    problem = None if result.get('success') else result.get('cause') if result.get('cause') in HOMEWORK_PROBLEMS else 'offline'
+    count = sum(1 for view in views if view['status'] != 'abgegeben')
+    return {'ok': problem is None, 'problem': problem, 'message': HOMEWORK_PROBLEMS.get(problem, ''), 'count': count}
+
+
+@bp.route('/api/ui/iserv/homework', methods=['POST'])
+def iserv_homework():
+    """Fetches the homework from IServ now and answers with what the pages list of it."""
+    result = ui_data.refresh_iserv_homework()
+    views = _iserv_homework_views()
+    return jsonify({'success': True, **_homework_answer(result, views), 'deadlines': views, 'status': _status_now()})
+
+
+def _status_now():
+    return ui_data.sync_status(ui_data.iserv_account(), datetime.now())
+
+
+@bp.route('/api/ui/iserv/sync', methods=['POST'])
+def iserv_sync():
+    """Fetches what IServ gives on this computer, one part after the other, and tells what came of each."""
+    from .iserv_service import get_iserv_service
+    service = get_iserv_service()
+    account = ui_data.iserv_key()
+    if not account:
+        return _error(HOMEWORK_PROBLEMS['setup'], 409)
+    problem = _refresh_plan(service)
+    cache = service.plan_cache() or {'files': []}
+    parts = {'plan': {'ok': problem in (None, 'empty'), 'problem': problem, 'message': PLAN_PROBLEMS.get(problem, ''), 'count': len(cache['files']) if problem is None else 0}}
+    result = ui_data.refresh_iserv_homework()
+    views = _iserv_homework_views()
+    parts['homework'] = _homework_answer(result, views)
+    mailbox = {'email': f"{ui_data.iserv_account()['name']}@iserv", 'kind': 'iserv', 'name': 'IServ'}
+    try:
+        ok, items = _fetch_inbox(mailbox, 40)
+    except Exception:
+        ok, items = False, []
+    if ok:
+        ui_data.mark_synced('iserv', 'mail', account)
+        ui_data.note_unread([_mail_view(mailbox, item) for item in items if item.get('id') is not None], [mailbox['email']])
+    parts['mail'] = {'ok': ok, 'problem': None if ok else 'offline', 'message': '' if ok else 'Die IServ-Mails sind gerade nicht erreichbar.', 'count': sum(1 for item in items if not item.get('read'))}
+    return jsonify({'success': True, 'parts': parts, 'deadlines': views, 'status': _status_now()})
 
 
 @bp.route('/api/ui/vplan/datei/<int:page>')
@@ -942,7 +1044,8 @@ def mail_inbox():
         accounts = _mail_accounts()
     except Exception:
         return _error('Postfächer ließen sich nicht lesen', 500)
-    messages, failed = [], []
+    messages, failed, answered = [], [], set()
+    iserv_account = ui_data.iserv_key()
     for account in accounts:
         try:
             ok, items = _fetch_inbox(account, 40)
@@ -950,6 +1053,10 @@ def mail_inbox():
             ok, items = False, []
         if not ok:
             failed.append(account['name'])
+            continue
+        answered.add(account['email'])
+        if account['kind'] == 'iserv' and iserv_account:
+            ui_data.mark_synced('iserv', 'mail', iserv_account)
         messages.extend(_mail_view(account, item) for item in items if item.get('id') is not None)
     archived = ui_data.archived_mails()
     sent_along = set()
@@ -967,6 +1074,10 @@ def mail_inbox():
         view = _mail_view(connected[address], {**kept, 'id': uid, 'read': True})
         view.update(folder='archive', old=True)
         messages.append(view)
+    try:
+        ui_data.note_unread(messages, answered, set(connected))
+    except Exception:
+        pass
     return jsonify({'success': True, 'accounts': accounts, 'messages': messages, 'failed': failed})
 
 
@@ -1069,6 +1180,8 @@ def mail_archive():
         ui_data.modify_list('mail_archive', change)
     except ui_data.StoreError:
         return _error('Das Archiv ließ sich nicht lesen', 500)
+    if entry:
+        ui_data.note_read([key])
     return jsonify({'success': True})
 
 
@@ -1094,6 +1207,8 @@ def mail_message():
             if account.endswith('@iserv'):
                 return _error('IServ-Mails lassen sich hier noch nicht löschen', 400)
             result = delete_gmail_message(account, uid, permanent=False) if account in google else delete_email(account, uid)
+            if result.get('success'):
+                ui_data.note_read([f'{account}|{uid}'])
             return jsonify({'success': True}) if result.get('success') else _error('Die Mail ließ sich nicht löschen')
         if account.endswith('@iserv'):
             service = get_iserv_service()
@@ -1110,6 +1225,7 @@ def mail_message():
         return jsonify({'success': False, 'error': 'Diese Mail gibt es im Postfach nicht mehr', 'gone': True}), 404
     if not result.get('success'):
         return _error('Die Mail ließ sich nicht laden', 502)
+    ui_data.note_read([f'{account}|{uid}'])
     detail = result.get('email') or {}
     return jsonify({'success': True, 'body': str(detail.get('body') or ''), 'to': str(detail.get('to') or '')})
 

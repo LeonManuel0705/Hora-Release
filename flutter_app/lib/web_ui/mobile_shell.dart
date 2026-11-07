@@ -23,6 +23,7 @@ import '../theme.dart';
 import 'ui_server.dart';
 import 'ui_shell.dart';
 import 'ui_weather.dart';
+import 'week_question.dart';
 
 String mobileStartScript({required bool ios, required String insets, required String permission}) => '''
 (function () {
@@ -428,6 +429,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     if (!mounted) return;
     // A force stop drops every alarm without a trace, so each launch sets them all again.
     if (Platform.isAndroid) unawaited(ReminderScheduler.instance.reschedule(whole: true));
+    if (await askWeekOnce(context) && mounted) await reloadPage();
     unawaited(_checkForUpdates());
   }
 

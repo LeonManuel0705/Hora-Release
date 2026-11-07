@@ -55,13 +55,16 @@
         })();
     </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
-    <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/static/app/css/tokens.css?v=922161750a">
-    <link rel="stylesheet" href="/static/app/css/app.css?v=922161750a">
-    <link rel="stylesheet" href="/static/app/css/dialog.css?v=922161750a">
-    <link rel="stylesheet" href="/static/css/tour.css?v=922161750a">
-    <link rel="stylesheet" href="/static/app/css/setup.css?v=922161750a">
     
+    <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
+    
+    <link rel="stylesheet" href="/static/app/css/tokens.css?v=a36f8d82c4">
+    <link rel="stylesheet" href="/static/app/css/app.css?v=a36f8d82c4">
+    <link rel="stylesheet" href="/static/app/css/dialog.css?v=a36f8d82c4">
+    <link rel="stylesheet" href="/static/css/tour.css?v=a36f8d82c4">
+    <link rel="stylesheet" href="/static/app/css/setup.css?v=a36f8d82c4">
+    
+    <link rel="stylesheet" href="/static/app/css/touch.css?v=a36f8d82c4">
     <script nonce="__APP_NONCE__">
         (function () {
             var root = document.documentElement;
@@ -76,7 +79,7 @@
             if (root.dataset.themeMode === "auto") root.dataset.theme = system.matches ? "dark" : "light";
         })();
     </script>
-    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=922161750a"></script>
+    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=a36f8d82c4"></script>
 </head>
 <body data-tour-auto="__APP_TOUR__" data-server-behind="0" data-app-version="__APP_VERSION__">
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -290,7 +293,7 @@
             </div>
         </nav>
         <div class="sidebar-foot">
-            <p class="sync-line" id="syncLine"><svg class="icon"><use href="#i-refresh-cw"/></svg><span id="syncText">IServ abgeglichen</span></p>
+            <p class="sync-line" id="syncLine" hidden><svg class="icon"><use href="#i-refresh-cw"/></svg><span id="syncText"></span></p>
             <a class="nav-item" href="/hub/settings" data-page="settings">
                 <svg class="icon"><use href="#i-settings"/></svg>
                 <span>Einstellungen</span>
@@ -308,7 +311,7 @@
                 <span class="head-week" id="tasksCount"></span>
             </div>
             <div class="head-actions">
-                <button class="icon-button" type="button" id="syncButton" aria-label="Hausaufgaben aus IServ neu laden" data-tip="Aus IServ neu laden">
+                <button class="icon-button" type="button" id="syncButton" aria-label="Hausaufgaben aus IServ neu laden" data-tip="Aus IServ neu laden" hidden>
                     <svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
                 </button>
                 <button class="btn btn-primary" type="button" id="newTask" aria-controls="taskPanel" aria-expanded="false">
@@ -414,7 +417,7 @@
         
     </div>
     <div class="more-foot">
-        <p class="sync-line" data-sync-mirror><svg class="icon"><use href="#i-refresh-cw"/></svg><span>IServ abgeglichen</span></p>
+        <p class="sync-line" data-sync-mirror hidden><svg class="icon"><use href="#i-refresh-cw"/></svg><span></span></p>
         <button class="text-button" type="button" data-notify>
             <svg class="icon"><use href="#i-bell"/></svg><span data-notify-text>Erinnerungen aktivieren</span>
         </button>
@@ -510,8 +513,8 @@
 <div class="tooltip" id="tooltip" role="tooltip"></div>
 
 <script type="application/json" id="appStore">__APP_STORE__</script>
-<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=922161750a" defer></script>
-<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=922161750a" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=a36f8d82c4" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=a36f8d82c4" defer></script>
 
 
 <script type="application/json" id="appData">__APP_DATA__</script>

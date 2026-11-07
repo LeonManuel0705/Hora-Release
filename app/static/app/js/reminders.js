@@ -138,17 +138,19 @@ function eventReminders(prefs, day, minute) {
 
 function taskReminders(day, minute) {
   const today = isoDate(day);
-  const open = (data.tasks || []).filter((task) => !task.done && (!task.date || task.date === today));
-  const reminders = open
+  const open = (data.tasks || []).filter((task) => !task.done);
+  const dueToday = open.filter((task) => !task.date || task.date === today);
+  const overdue = open.filter((task) => task.date && task.date < today).sort((a, b) => a.date.localeCompare(b.date));
+  const reminders = dueToday
     .filter((task) => task.dueTime && dueAt(minute, toMin(task.dueTime)))
     .map((task) => ({ key: `task:${task.id}:${today}`, title: task.title, body: `Fällig um ${task.dueTime}` }));
-  const untimed = open.filter((task) => !task.dueTime);
-  if (untimed.length && minute >= MORNING) {
-    reminders.push({
-      key: `tasks:${today}`,
-      title: untimed.length === 1 ? "Heute fällig" : `${untimed.length} Aufgaben heute fällig`,
-      body: untimed.slice(0, 3).map((task) => task.title).join(", "),
-    });
+  const morning = [...overdue, ...dueToday.filter((task) => !task.dueTime)];
+  if (morning.length && minute >= MORNING) {
+    const count = `${morning.length} Aufgaben`;
+    let title = morning.length === 1 ? "Heute fällig" : `${count} heute fällig`;
+    if (overdue.length === morning.length) title = morning.length === 1 ? "Überfällig" : `${count} überfällig`;
+    else if (overdue.length) title = `${count} für heute, ${overdue.length} davon überfällig`;
+    reminders.push({ key: `tasks:${today}`, title, body: morning.slice(0, 3).map((task) => task.title).join(", ") });
   }
   return reminders;
 }

@@ -202,7 +202,8 @@ var AppNotifications = {
                 var s = data.settings || {};
                 self._schoolSettings = {
                     hasAbWeeks: s.has_ab_weeks !== undefined ? Boolean(s.has_ab_weeks) : true,
-                    referenceDate: s.reference_date ? new Date(s.reference_date) : new Date(2026, 0, 12),
+                    referenceDate: self._localDay(s.reference_date) || new Date(2026, 0, 12),
+                    swapped: data.ab_swap === true,
                     setupCompleted: Boolean(s.setup_completed)
                 };
             })
@@ -210,28 +211,33 @@ var AppNotifications = {
                 self._schoolSettings = {
                     hasAbWeeks: true,
                     referenceDate: new Date(2026, 0, 12),
+                    swapped: false,
                     setupCompleted: false
                 };
             });
     },
 
+    _localDay: function(value) {
+        var match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
+        return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null;
+    },
+
+    // As the new pages count: whole days first, so that a change to summer time cannot cost a week, and A and B swapped there.
     _getWeekType: function(date) {
         if (!this._schoolSettings || !this._schoolSettings.hasAbWeeks) return 'A';
 
         var d = new Date(date);
         var dayOfWeek = d.getDay();
         var mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        var monday = new Date(d);
-        monday.setDate(d.getDate() + mondayOffset);
-        monday.setHours(0, 0, 0, 0);
+        var monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + mondayOffset);
 
-        var refMonday = new Date(this._schoolSettings.referenceDate);
-        refMonday.setHours(0, 0, 0, 0);
+        var ref = new Date(this._schoolSettings.referenceDate);
+        var refMonday = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() + (this._schoolSettings.swapped ? 7 : 0));
 
-        var diffTime = monday.getTime() - refMonday.getTime();
-        var diffWeeks = Math.floor(diffTime / (7 * 24 * 60 * 60 * 1000));
+        var days = Math.round((monday.getTime() - refMonday.getTime()) / 86400000);
+        var weeks = Math.floor(days / 7);
 
-        return diffWeeks % 2 === 0 ? 'A' : 'B';
+        return ((weeks % 2) + 2) % 2 === 0 ? 'A' : 'B';
     },
 
 

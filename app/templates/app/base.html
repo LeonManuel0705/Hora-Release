@@ -55,13 +55,29 @@
         })();
     </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
+    {% if offline_worker %}
+    <script nonce="{{ g.csp_nonce }}">
+        // A page the offline worker serves gets the font from it. WebKit then never counts a preload as used and warns.
+        if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+            var font = document.createElement("link");
+            font.rel = "preload";
+            font.as = "font";
+            font.type = "font/woff2";
+            font.crossOrigin = "anonymous";
+            font.href = "/static/fonts/plus-jakarta-sans.woff2";
+            document.head.appendChild(font);
+        }
+    </script>
+    {% else %}
     <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
+    {% endif %}
     <link rel="stylesheet" href="/static/app/css/tokens.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/static/app/css/app.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/static/app/css/dialog.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/static/css/tour.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/static/app/css/setup.css?v={{ asset_version }}">
     {% block page_css %}{% endblock %}
+    <link rel="stylesheet" href="/static/app/css/touch.css?v={{ asset_version }}">
     <script nonce="{{ g.csp_nonce }}">
         (function () {
             var root = document.documentElement;
@@ -147,7 +163,7 @@
             </div>
         </nav>
         <div class="sidebar-foot">
-            <p class="sync-line" id="syncLine"><svg class="icon"><use href="#i-refresh-cw"/></svg><span id="syncText">IServ abgeglichen</span></p>
+            <p class="sync-line" id="syncLine" hidden><svg class="icon"><use href="#i-refresh-cw"/></svg><span id="syncText"></span></p>
             <a class="nav-item" href="/hub/settings" data-page="settings"{% if active == "settings" %} aria-current="page"{% endif %}>
                 <svg class="icon"><use href="#i-settings"/></svg>
                 <span>Einstellungen</span>
@@ -181,7 +197,7 @@
         {% endfor %}
     </div>
     <div class="more-foot">
-        <p class="sync-line" data-sync-mirror><svg class="icon"><use href="#i-refresh-cw"/></svg><span>IServ abgeglichen</span></p>
+        <p class="sync-line" data-sync-mirror hidden><svg class="icon"><use href="#i-refresh-cw"/></svg><span></span></p>
         <button class="text-button" type="button" data-notify>
             <svg class="icon"><use href="#i-bell"/></svg><span data-notify-text>Erinnerungen aktivieren</span>
         </button>

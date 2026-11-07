@@ -1087,6 +1087,7 @@ let BLOCK_TIMES = [
 ];
 
 let REFERENCE_A_WEEK = new Date(2026, 0, 12);
+let AB_SWAP = false;
 
 let TIMETABLE_A = { 1: [null, null, null, null], 2: [null, null, null, null], 3: [null, null, null, null], 4: [null, null, null, null], 5: [null, null, null, null] };
 let TIMETABLE_B = { 1: [null, null, null, null], 2: [null, null, null, null], 3: [null, null, null, null], 4: [null, null, null, null], 5: [null, null, null, null] };
@@ -1121,8 +1122,10 @@ async function loadTimetableSettings() {
                 reference_date: s.reference_date || null
             };
 
-            if (s.reference_date) {
-                REFERENCE_A_WEEK = new Date(s.reference_date);
+            AB_SWAP = data.ab_swap === true;
+            const reference = /^(\d{4})-(\d{2})-(\d{2})/.exec(s.reference_date || '');
+            if (reference) {
+                REFERENCE_A_WEEK = new Date(Number(reference[1]), Number(reference[2]) - 1, Number(reference[3]));
             }
 
             return timetableSettings;
@@ -2137,17 +2140,16 @@ function getWeekType(date) {
     const d = new Date(date);
     const dayOfWeek = d.getDay();
     const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const monday = new Date(d);
-    monday.setDate(d.getDate() + mondayOffset);
-    monday.setHours(0, 0, 0, 0);
+    const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + mondayOffset);
 
-    const refMonday = new Date(REFERENCE_A_WEEK);
-    refMonday.setHours(0, 0, 0, 0);
+    const ref = new Date(REFERENCE_A_WEEK);
+    const refMonday = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() + (AB_SWAP ? 7 : 0));
 
-    const diffTime = monday.getTime() - refMonday.getTime();
-    const diffWeeks = Math.floor(diffTime / (7 * 24 * 60 * 60 * 1000));
+    // Whole days first: a change to summer time must not cost a week. AB_SWAP is "A und B tauschen" of the new pages.
+    const days = Math.round((monday.getTime() - refMonday.getTime()) / 86400000);
+    const weeks = Math.floor(days / 7);
 
-    return diffWeeks % 2 === 0 ? 'A' : 'B';
+    return ((weeks % 2) + 2) % 2 === 0 ? 'A' : 'B';
 }
 
 function getScheduleForDay(date, forceWeekType = null) {

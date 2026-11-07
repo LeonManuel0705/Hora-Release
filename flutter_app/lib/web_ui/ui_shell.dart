@@ -20,6 +20,7 @@ import '../screens/training_screen.dart';
 import '../services/holiday_service.dart';
 import '../services/iserv_plan.dart';
 import '../services/reminder_scheduler.dart';
+import '../services/iserv_service.dart';
 import 'ui_api.dart';
 
 class UiNativePage {
@@ -37,7 +38,7 @@ final uiNativePages = <String, UiNativePage>{
   'review': UiNativePage('Review', () => const ReviewScreen()),
 };
 
-mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost {
+mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost, UiIservSync {
   final Set<String> _changes = {};
   Timer? _changeTimer;
 
@@ -126,6 +127,16 @@ mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost {
 
   @override
   Future<void> disconnectIserv() => context.read<IServProvider>().disconnect();
+
+  /// The homework answer comes from its own fetch, which tells why nothing came. Messages and dates follow as before,
+  /// also at a school without the homework module. Without an account, a login or a connection they would fail anyway.
+  @override
+  Future<String?> syncIserv() async {
+    final provider = context.read<IServProvider>();
+    final cause = await IServService().refreshExercises();
+    if (!const {'setup', 'login', 'offline'}.contains(cause)) await provider.syncData();
+    return cause;
+  }
 
   @override
   Map<String, Object?> iservStatus() {

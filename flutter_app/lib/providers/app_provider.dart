@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/task.dart';
@@ -31,7 +33,7 @@ class AppProvider extends ChangeNotifier {
   Timer? _scheduleTimer;
   bool _demoMode = false;
   bool _abWeeksEnabled = true;
-  bool _abWeekInverted = false;
+  DateTime _abReferenceDay = abReference;
   bool _timetableSetupCompleted = false;
   bool get timetableSetupCompleted => _timetableSetupCompleted;
 
@@ -50,7 +52,7 @@ class AppProvider extends ChangeNotifier {
   TimeOfDay get scheduleDarkTime => _scheduleDarkTime;
   bool get demoMode => _demoMode;
   bool get abWeeksEnabled => _abWeeksEnabled;
-  bool get abWeekInverted => _abWeekInverted;
+  bool get abWeekInverted => weekTypeFrom(abReference, _abReferenceDay) == 'B';
 
   Future<void> initialize() async {
     _isLoading = true;
@@ -79,7 +81,8 @@ class AppProvider extends ChangeNotifier {
       }
 
       _abWeeksEnabled = prefs.getBool('ab_weeks_enabled') ?? true;
-      _abWeekInverted = prefs.getBool('ab_week_inverted') ?? false;
+      await settleWeekRule(await _db.database, prefs);
+      _abReferenceDay = abReferenceOf(prefs);
 
       _timetableSetupCompleted = prefs.getBool('timetable_setup_completed') ?? false;
 
@@ -424,12 +427,94 @@ class AppProvider extends ChangeNotifier {
     await loadTimetablePeriods();
   }
 
-  static bool calculateIsAWeek(DateTime date) {
+  /// The Monday the A and B weeks count from, the same default as on the desktop.
+  static final abReference = DateTime.utc(2026, 1, 12);
+
+  /// The Monday this install counts from. Written once, it also marks the move to the desktop's rule as done.
+  static const abReferenceKey = 'ab_week_reference';
+
+  /// Set for installs that kept their week letter through that move and have different A and B weeks: they are asked once.
+  static const abAskKey = 'ab_week_ask';
+
+  static const _week = Duration(days: 7);
+
+  static String _isoDay(DateTime day) =>
+      '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+
+  /// The Monday this install counts from: its own where it keeps one, otherwise the desktop's.
+  static DateTime abReferenceOf(SharedPreferences prefs) {
+    final own = DateTime.tryParse(prefs.getString(abReferenceKey) ?? '');
+    return own == null ? abReference : DateTime.utc(own.year, own.month, own.day);
+  }
+
+  static Future<void> saveAbReference(SharedPreferences prefs, DateTime reference) => prefs.setString(abReferenceKey, _isoDay(reference));
+
+  /// The desktop's rule: the week of [date] is an A week when the whole weeks from [reference] to its Monday are even.
+  static String weekTypeFrom(DateTime date, DateTime reference) {
     final day = DateTime.utc(date.year, date.month, date.day);
-    final firstDayOfYear = DateTime.utc(date.year, 1, 1);
-    final daysSinceFirst = day.difference(firstDayOfYear).inDays;
-    final weekNumber = (daysSinceFirst + firstDayOfYear.weekday - 1) ~/ 7 + 1;
-    return weekNumber % 2 == 0;
+    final monday = day.subtract(Duration(days: day.weekday - 1));
+    final start = DateTime.utc(reference.year, reference.month, reference.day);
+    return (monday.difference(start).inDays / 7).floor() % 2 == 0 ? 'A' : 'B';
+  }
+
+  static bool calculateIsAWeek(DateTime date) => weekTypeFrom(date, abReference) == 'A';
+
+  static Future<void>? _weekRule;
+
+  /// Before this rule the phone called a week A when its number in the year was even, so it disagreed with the desktop on
+  /// most weeks. Every install from before keeps the letter of this week while A and B weeks are on. Where lessons differ
+  /// between A and B weeks it is asked once, since there the letter decides which lessons show. Only fresh installs count
+  /// like the desktop. One write settles it.
+  static Future<void> settleWeekRule(Database db, SharedPreferences prefs, [DateTime? now]) =>
+      _weekRule ??= _settleWeekRule(db, prefs, now ?? DateTime.now()).catchError((Object error) {
+        _weekRule = null;
+        throw error;
+      });
+
+  @visibleForTesting
+  static void forgetWeekRule() => _weekRule = null;
+
+  static Future<Map<String, Object?>> _storeValues(Database db, List<String> keys) async {
+    final values = <String, Object?>{};
+    try {
+      for (final row in await db.query('ui_store', columns: ['key', 'value'], where: 'key IN (${keys.map((_) => '?').join(', ')})', whereArgs: keys)) {
+        values[row['key'] as String] = jsonDecode(row['value'] as String);
+      }
+    } catch (_) {}
+    return values;
+  }
+
+  /// Settings an earlier version leaves behind. A fresh install has none of them when the rule is settled at its start.
+  static const _earlierPrefs = [
+    'timetable_setup_completed', 'ab_weeks_enabled', 'ab_week_inverted', 'user_bundesland', 'graduation_year', 'school_class_level', 'tour_state',
+  ];
+
+  static Future<bool> _any(Database db, String sql) async {
+    try {
+      return (Sqflite.firstIntValue(await db.rawQuery(sql)) ?? 0) > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> _settleWeekRule(Database db, SharedPreferences prefs, DateTime now) async {
+    if (prefs.containsKey(abReferenceKey)) return;
+    final inverted = prefs.getBool('ab_week_inverted') ?? false;
+    final edits = (await _storeValues(db, const ['app-timetable-edits']))['app-timetable-edits'];
+    final earlier = _earlierPrefs.any(prefs.containsKey) ||
+        await _any(db, 'SELECT COUNT(*) FROM lessons') ||
+        await _any(db, 'SELECT COUNT(*) FROM ui_store');
+    final weekly = await _any(db, "SELECT COUNT(*) FROM lessons WHERE week_type IN ('A', 'B')") || (edits is Map && edits.isNotEmpty);
+    final existing = (prefs.getBool('ab_weeks_enabled') ?? true) && earlier;
+    var reference = abReference;
+    if (existing) {
+      final monday = DateTime.utc(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+      final yearStart = DateTime.utc(monday.year, 1, 1);
+      final yearWeek = (monday.difference(yearStart).inDays + yearStart.weekday - 1) ~/ 7 + 1;
+      if ((yearWeek.isEven != inverted) != calculateIsAWeek(monday)) reference = abReference.add(_week);
+    }
+    await saveAbReference(prefs, reference);
+    if (existing && weekly) await prefs.setBool(abAskKey, true);
   }
 
   static String getWeekTypeForDate(DateTime date) {
@@ -540,24 +625,22 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool isCurrentlyAWeek([DateTime? date]) {
-    final raw = calculateIsAWeek(date ?? DateTime.now());
-    return _abWeekInverted ? !raw : raw;
-  }
+  bool isCurrentlyAWeek([DateTime? date]) => weekTypeFrom(date ?? DateTime.now(), _abReferenceDay) == 'A';
 
   String getEffectiveWeekType([DateTime? date]) {
     return isCurrentlyAWeek(date) ? 'A' : 'B';
   }
 
   Future<void> setAbWeekInverted(bool inverted) async {
-    _abWeekInverted = inverted;
+    if (inverted == abWeekInverted) return;
+    _abReferenceDay = inverted ? abReference.add(_week) : abReference;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('ab_week_inverted', inverted);
+    await saveAbReference(prefs, _abReferenceDay);
     notifyListeners();
   }
 
   Future<void> toggleAbWeekInversion() async {
-    await setAbWeekInverted(!_abWeekInverted);
+    await setAbWeekInverted(!abWeekInverted);
   }
 
   Future<List<Map<String, dynamic>>> getSubjects() async {

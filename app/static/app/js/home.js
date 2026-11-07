@@ -125,7 +125,9 @@ function heroCopy(day) {
   const place = (lesson) => (lesson.movedFrom ? `<b>${esc(lesson.room)}</b> statt ${esc(lesson.movedFrom)}` : lesson.room ? `<b>${esc(lesson.room)}</b>` : "");
   const where = (lesson) => [place(lesson), lesson.teacher && lesson.teacher !== NO_TEACHER ? esc(lesson.teacher) : ""].filter(Boolean).map((part) => `${part}, `).join("");
   const upNext = (lesson) => `Danach <b>${esc(label(lesson.subject))}</b>, ${lesson.room ? `${esc(lesson.room)}, ` : ""}${hm(lesson.start)}`;
-  const closing = (last) => `Danach Schulschluss um <b>${hm(last.end)}</b>`;
+  const ride = (bus) => `${bus.mode === "bus" ? "Bus " : bus.mode === "tram" ? "Tram " : ""}${esc(bus.line)} um ${esc(bus.time)}`;
+  const homeBus = day.kind === "afterSoon" ? reachableBus(day) : day.last ? nextDeparture(day.last.endMin) : null;
+  const closing = (last) => `Danach Schulschluss um <b>${hm(last.end)}</b>${homeBus ? `, ${ride(homeBus)}` : ""}`;
   const tomorrow = (school) => {
     if (!school) return "In den nächsten zehn Tagen steht nichts im Stundenplan";
     const first = school.lessons[0];
@@ -195,7 +197,7 @@ function heroCopy(day) {
     head: `${eyebrow(day.kind === "afterSoon" ? `Schule vorbei um ${hm(day.last.end)}` : evening ? "Heute Abend" : "Heute Nachmittag")}${title("Feierabend")}`,
     meta: workload,
     parts: { plain: "" },
-    next: tomorrow(school),
+    next: day.kind === "afterSoon" && homeBus ? `Heimweg mit <b>${ride(homeBus)}</b> ab ${esc(homeBus.from)}` : tomorrow(school),
   };
 }
 

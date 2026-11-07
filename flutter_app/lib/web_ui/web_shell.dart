@@ -23,6 +23,7 @@ import 'ui_pages.dart';
 import 'ui_shell.dart';
 import 'ui_weather.dart';
 import 'web_start_script.dart';
+import 'week_question.dart';
 
 Widget buildWebHome() => const WebShell();
 
@@ -125,6 +126,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
       if (!mounted) return;
       setState(() => _preparing = false);
     }
+    if (mounted) await askWeekOnce(context);
     if (!mounted || _elsewhere) return;
     _createFrame();
   }
