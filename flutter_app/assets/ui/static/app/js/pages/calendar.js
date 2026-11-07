@@ -1317,10 +1317,22 @@ function firstHint(problem) {
 }
 
 let freshAt = 0;
-addEventListener("app:google-fresh", () => {
-  if (!$("calendarPage") || sync.busy || Date.now() - freshAt < 60000) return;
+let freshWait = null;
+
+function takeFresh() {
+  clearTimeout(freshWait);
+  freshWait = null;
+  const rest = 60000 - (Date.now() - freshAt);
+  if (sync.busy || rest > 0) {
+    freshWait = setTimeout(takeFresh, sync.busy ? 2000 : rest);
+    return;
+  }
   freshAt = Date.now();
   startSync({ first: true });
+}
+
+addEventListener("app:google-fresh", () => {
+  if ($("calendarPage")) takeFresh();
 });
 
 function revealSynced() {

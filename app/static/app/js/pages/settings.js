@@ -1576,9 +1576,15 @@ async function reloadGoogle() {
 }
 
 async function googleConnected() {
+  const before = googleInfo();
   await reloadGoogle();
+  const after = googleInfo();
+  const lost = [
+    before.gmail && !after.gmail ? "Gmail" : "",
+    before.may_make_calendars && !after.may_make_calendars && before.school?.on ? "den Kalender für den Stundenplan" : "",
+  ].filter(Boolean);
   renderGoogle();
-  toast("Google-Kalender verbunden", { icon: "calendar-days" });
+  toast(lost.length ? `Google-Kalender verbunden, aber ohne ${joinWords(lost)}.` : "Google-Kalender verbunden", { icon: lost.length ? "circle-alert" : "calendar-days" });
   loadGoogleCalendars();
 }
 
