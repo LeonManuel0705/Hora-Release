@@ -346,3 +346,22 @@ def test_the_status_answers_in_german_when_google_is_not_set_up(app_window, monk
     monkeypatch.setattr(google_oauth, 'is_google_oauth_configured', lambda: False)
     status = app_window.get('/api/email/google/status').get_json()
     assert status['configured'] is False and status['message'] == 'Google ist in dieser Installation nicht eingerichtet'
+
+
+def test_an_extended_sign_in_keeps_what_was_granted_before_even_if_google_names_only_the_new_part(flows, monkeypatch):
+    saved, answer, _ = flows
+    monkeypatch.setattr(FakeService, 'getProfile', lambda self, userId: Call({'emailAddress': 'lea@example.com'}))
+    saved['lea@example.com'] = {'token': 'a', 'refresh_token': 'alt', 'scopes': [EVENTS, LISTING]}
+    answer.scopes, answer.refresh = list(GMAIL), None
+    assert google_oauth.complete_oauth_flow('code', ['gmail'])['success'] is True
+    assert saved['lea@example.com']['scopes'] == sorted([EVENTS, LISTING, *GMAIL])
+    assert google_oauth.calendar_account() == 'lea@example.com' and google_oauth.can('gmail')
+
+
+def test_a_new_sign_in_after_expiry_takes_only_what_google_granted_now(flows):
+    saved, answer, _ = flows
+    saved['kalender@example.com'] = {'token': 'a', 'refresh_token': 'alt', 'scopes': [*GMAIL, EVENTS, LISTING], 'expired': True}
+    answer.scopes = [EVENTS, LISTING]
+    assert google_oauth.complete_oauth_flow('code')['success'] is True
+    entry = saved['kalender@example.com']
+    assert entry['scopes'] == sorted([EVENTS, LISTING]) and 'expired' not in entry and entry['refresh_token'] == 'refresh'

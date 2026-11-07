@@ -487,7 +487,7 @@ def target_calendar(cache, account=None):
     Events already in Google stay in the calendar they were written to."""
     chosen = google_settings().get('target')
     for calendar in (cache or {}).get('calendars', []):
-        if chosen and calendar['id'] == chosen and _writable(calendar):
+        if chosen and calendar['id'] == chosen and _writable(calendar) and chosen not in _managed():
             return chosen
     return _primary(cache) or account or 'primary'
 
@@ -854,6 +854,7 @@ def settings_view():
         return view
     scopes = google.scopes_of(tokens[account])
     cache = _load(shared=True) or {}
+    managed = _managed()
     view.update(
         state=page_state()['google'],
         stand=stand(),
@@ -863,7 +864,7 @@ def settings_view():
                 'id': item['id'], 'name': item.get('summary') or 'Kalender', 'color': item.get('backgroundColor') or '',
                 'primary': bool(item.get('primary')), 'writable': _writable(item),
             }
-            for item in cache.get('calendars', []) if cache.get('account') == account
+            for item in cache.get('calendars', []) if cache.get('account') == account and item['id'] not in managed
         ],
         target=target_calendar(cache if cache.get('account') == account else None, account),
         school=_school().view(),

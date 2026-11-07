@@ -333,7 +333,9 @@ def _apply(service, state, ops):
         again = []
         for op in ops:
             kind, key, day, body, digest, identifier, generation = op
-            answer, error = answers.get(key, (None, None))
+            if key not in answers:
+                continue
+            answer, error = answers[key]
             status = _status_of(error) if error is not None else None
             if error is None and kind == 'delete':
                 events.pop(key, None)

@@ -352,7 +352,8 @@ def complete_oauth_flow(auth_code: str, features=('calendar',)) -> Dict:
         tokens = load_tokens()
         previous = tokens.get(email) if isinstance(tokens.get(email), dict) else {}
         kept = previous if previous.get('refresh_token') and not previous.get('expired') else {}
-        granted = reported or set(requested) | set(scopes_of(kept) if kept else ())
+        # An extended sign-in covers what was granted before, even where Google's answer names only the new part.
+        granted = (reported or set(requested)) | (set(scopes_of(kept)) if kept else set())
         tokens[email] = {
             'token': creds.token,
             'refresh_token': creds.refresh_token or kept.get('refresh_token'),

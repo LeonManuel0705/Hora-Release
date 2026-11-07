@@ -139,7 +139,31 @@ def test_a_sign_in_google_refuses_during_a_check_is_marked_expired_once(google, 
     assert calendar_cache.background_round() is False and google.calls == []
 
 
-def test_a_page_that_asks_joins_a_check_already_running(google):
+class WatchedLock:
+    """The sync lock, telling when someone starts to wait for it with a time limit, as a page does."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.waiting = threading.Event()
+
+    def acquire(self, blocking=True, timeout=-1):
+        if timeout != -1:
+            self.waiting.set()
+        return self._lock.acquire(blocking, timeout)
+
+    def release(self):
+        self._lock.release()
+
+    def __enter__(self):
+        return self.acquire()
+
+    def __exit__(self, *details):
+        self.release()
+
+
+def test_a_page_that_asks_joins_a_check_already_running(google, monkeypatch):
+    lock = WatchedLock()
+    monkeypatch.setattr(calendar_cache, '_sync_lock', lock)
     google.put('primary', 'Gym', day(1), '16:30', '18:00')
     entered, release = threading.Event(), threading.Event()
 
@@ -155,12 +179,12 @@ def test_a_page_that_asks_joins_a_check_already_running(google):
     answers = []
     asking = threading.Thread(target=lambda: answers.append(calendar_cache.refresh()))
     asking.start()
-    real_time.sleep(0.2)
+    assert lock.waiting.wait(5), 'the page waits for the running check'
     release.set()
     running.join(5)
     asking.join(5)
     assert answers == [None]
-    assert google.count('calendarList.list') == 1
+    assert checks(google) == 1, 'the page took the result of the running check instead of asking Google again'
     assert titles() == ['Gym']
 
 
@@ -215,3 +239,30 @@ def test_importing_and_serving_the_app_starts_no_thread(client):
     client.get('/hub')
     client.post('/api/ui/google/nudge')
     assert not [item for item in threading.enumerate() if item.name == 'calendar-sync']
+
+
+def test_the_app_still_goes_with_the_app_that_started_it_while_the_check_runs(tmp_path):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = (
+        "import threading, time\n"
+        "from app import local_ai\n"
+        "from app.app import start_background_jobs\n"
+        "local_ai.install_shutdown_hooks()\n"
+        "start_background_jobs()\n"
+        "print('ready', any(item.name == 'calendar-sync' for item in threading.enumerate()), flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    environment = dict(os.environ, HUB_EXIT_WITH_PARENT='1', HUB_DATA_DIR=str(tmp_path))
+    child = subprocess.Popen([sys.executable, '-c', script], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             cwd=str(Path(__file__).resolve().parent.parent), env=environment)
+    try:
+        assert child.stdout.readline().strip() == b'ready True'
+        child.stdin.close()
+        assert child.wait(timeout=20) == 0
+    finally:
+        if child.poll() is None:
+            child.kill()
