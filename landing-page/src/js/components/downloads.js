@@ -140,6 +140,7 @@ export function openSheet(id) {
 }
 
 const plainClick = (event) => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+const dialogs = typeof HTMLDialogElement === "function" && "showModal" in HTMLDialogElement.prototype;
 
 export function mountDownloads(root) {
   const onClick = (event) => {
@@ -157,7 +158,7 @@ export function mountDownloads(root) {
       return;
     }
     const install = event.target.closest("[data-install]");
-    if (install && plainClick(event) && PLATFORMS[install.dataset.install]) {
+    if (install && dialogs && plainClick(event) && PLATFORMS[install.dataset.install]) {
       event.preventDefault();
       openSheet(install.dataset.install);
       return;
