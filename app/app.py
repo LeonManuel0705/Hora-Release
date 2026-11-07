@@ -367,8 +367,9 @@ def _socketio_authorize(auth=None):
 
 @app.route('/')
 def landing():
-
-    return redirect(url_for('hub_home'))
+    target = url_for('ui.ui_page_home')
+    query = request.query_string.decode('latin-1')
+    return redirect(f'{target}?{query}' if query else target)
 
 @app.route('/welcome')
 def welcome_page():
