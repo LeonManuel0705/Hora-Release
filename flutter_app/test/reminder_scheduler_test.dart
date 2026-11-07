@@ -158,6 +158,27 @@ void main() {
     expect(await scheduler.covers('lesson:2026-11-09:1'), isTrue);
   });
 
+  test('the page copy of a reminder is judged by the plan that follows a change', () async {
+    await scheduler.reschedule();
+    now = DateTime(2026, 11, 9, 9, 36);
+    scheduler.markChanged();
+    var answered = false;
+    final answer = scheduler.covers('lesson:2026-11-09:2').whenComplete(() => answered = true);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(answered, isFalse, reason: 'it waits while a change has no plan yet');
+    plan[1] = _reminder('lesson:2026-11-09:2', DateTime(2026, 11, 9, 9, 35));
+    await scheduler.reschedule();
+    expect(await answer, isFalse, reason: 'the reminder moved into the past, so the page shows it');
+    expect(alarms.log, contains('cancel lesson:2026-11-09:2'));
+  });
+
+  test('a change without a following plan holds the page copy only briefly', () async {
+    final brief = ReminderScheduler(alarms: alarms, source: (_) async => List.of(plan), clock: () => now, patience: const Duration(milliseconds: 50));
+    await brief.reschedule();
+    brief.markChanged();
+    expect(await brief.covers('lesson:2026-11-09:1'), isTrue);
+  });
+
   test('an alarm is exact only where the system allows it', () async {
     alarms.precise = false;
     await scheduler.reschedule();

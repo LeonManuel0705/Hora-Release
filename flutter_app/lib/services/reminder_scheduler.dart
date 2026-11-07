@@ -61,7 +61,7 @@ class _Planned {
 }
 
 class ReminderScheduler {
-  ReminderScheduler({required this.alarms, ReminderSource? source, DateTime Function()? clock})
+  ReminderScheduler({required this.alarms, ReminderSource? source, DateTime Function()? clock, this.patience = const Duration(seconds: 3)})
       : _source = source ?? planFromDevice,
         _clock = clock ?? DateTime.now;
 
@@ -75,11 +75,14 @@ class ReminderScheduler {
   static const firstId = 0x40000000;
 
   final ReminderAlarms alarms;
+  final Duration patience;
   final ReminderSource _source;
   final DateTime Function() _clock;
   Future<void>? _running;
   bool _again = false;
   bool _againWhole = false;
+  bool _dirty = false;
+  Completer<void>? _caughtUp;
 
   static Future<List<UiReminder>> planFromDevice(DateTime now) async {
     final db = await UiDb.open();
@@ -110,6 +113,13 @@ class ReminderScheduler {
     return ids;
   }
 
+  /// Called the moment data changes, before the debounced plan runs, so the page's copy of a
+  /// reminder is judged by the plan that follows the change, not by the one before it.
+  void markChanged() {
+    _dirty = true;
+    _caughtUp ??= Completer<void>();
+  }
+
   Future<void> reschedule({bool whole = false}) {
     final running = _running;
     if (running != null) {
@@ -124,6 +134,7 @@ class ReminderScheduler {
     var next = whole;
     do {
       _again = false;
+      _dirty = false;
       try {
         await _sync(next);
       } catch (error) {
@@ -132,6 +143,10 @@ class ReminderScheduler {
       next = _againWhole;
       _againWhole = false;
     } while (_again);
+    if (!_dirty) {
+      _caughtUp?.complete();
+      _caughtUp = null;
+    }
   }
 
   Future<Map<String, _Planned>> _registry(SharedPreferences prefs) async {
@@ -201,6 +216,8 @@ class ReminderScheduler {
   }
 
   Future<bool> covers(String key) async {
+    final caughtUp = _caughtUp;
+    if (caughtUp != null) await caughtUp.future.timeout(patience, onTimeout: () {});
     final running = _running;
     if (running != null) await running;
     final entry = (await _registry(await SharedPreferences.getInstance()))[key];

@@ -180,6 +180,7 @@ mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost {
 
   @override
   void dataChanged(String area) {
+    if (!kIsWeb) ReminderScheduler.instance.markChanged();
     _changes.add(area);
     _changeTimer?.cancel();
     _changeTimer = Timer(const Duration(milliseconds: 700), () {

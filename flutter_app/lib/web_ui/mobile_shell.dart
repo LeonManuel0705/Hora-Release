@@ -188,6 +188,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
   }
 
   Future<void> _permissionChanged(String state) async {
+    ReminderScheduler.instance.markChanged();
     final controller = _controller;
     if (controller != null) {
       try {
