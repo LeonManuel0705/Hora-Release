@@ -133,3 +133,11 @@ def test_settings_offer_only_calendars_that_can_take_events_and_name_the_one_in_
     assert account['target'] == google.primary
     choose(client, 'schule@example.org')
     assert page_data(client, '/hub/settings')['page']['accounts']['google']['target'] == 'schule@example.org'
+
+
+def test_the_calendar_page_knows_how_the_copy_stands_before_it_asks(google, client, monkeypatch):
+    calendar_cache.sync()
+    sync = page_data(client, '/hub/calendar')['page']['sync']
+    assert sync['state'] == 'ok' and sync['stand']
+    monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {google.primary: {'token': 'x', 'expired': True}})
+    assert page_data(client, '/hub/calendar')['page']['sync']['state'] == 'login'

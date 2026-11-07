@@ -1,6 +1,6 @@
 import {
   data, root, variant, flags, platform, esc, icon, luna, storage, now, subject, hueVar, toMin, clock, hm, weekType, isoWeek,
-  isoDate, minutesOf, lessonsFor, nextSchoolDay, WEEKDAYS, WEEKDAYS_SHORT,
+  isoDate, minutesOf, lessonsFor, nextSchoolDay, shortDate, WEEKDAYS, WEEKDAYS_SHORT,
   LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, activeSubjectKeys, motionDefault, slug, teacherLabel, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
 import { toast, setTheme, syncTime } from "../shell.js";
@@ -15,7 +15,6 @@ const KEYS_KEY = "app-single-keys";
 const phone = matchMedia("(max-width: 759px)");
 const COURSE_GROUPS = [["LK", "Leistungskurse"], ["GK", "Grundkurse"], ["SK", "Seminarkurs"]];
 const COURSE_WORDS = { LK: "Leistungskurs", GK: "Grundkurs", SK: "Seminarkurs" };
-const KIND_COLORS = { private: "var(--kind-private)", training: "var(--kind-training)", school: "var(--kind-school)" };
 const GRADES = [5, 6, 7, 8, 9, 10, 11, 12, 13];
 const HUE_NAMES = { rose: "Rosa", ochre: "Ocker", olive: "Oliv", moss: "Moos", jade: "Jade", teal: "Petrol", lake: "Seeblau", slate: "Taubenblau", iris: "Iris", orchid: "Orchidee", brick: "Ziegelrot", plum: "Pflaume" };
 const TITLES = [["Frau", "Frau"], ["Herr", "Herr"], ["", "Ohne Anrede"]];
@@ -1286,30 +1285,117 @@ function renderIserv() {
   renderAccountsMeta();
 }
 
+const googleInfo = () => page.accounts?.google || {};
+const schoolUi = { choice: false, busy: false };
+const SAFE_COLOR = /^#[0-9a-f]{3,8}$/i;
+
+function standText(stamp) {
+  const when = stamp ? new Date(stamp) : null;
+  if (!when || Number.isNaN(when.getTime())) return "";
+  const time = `${clock(when.getHours() * 60 + when.getMinutes())} Uhr`;
+  return isoDate(when) === isoDate(now()) ? time : `${shortDate(when)}, ${time}`;
+}
+
+function googleHeader(info) {
+  const stand = standText(info.stand);
+  const states = {
+    ok: [`<span class="status is-ok">${icon("circle-check")}Verbunden</span>`, stand ? `Stand ${stand}.` : "Der erste Abgleich läuft."],
+    login: [
+      `<span class="status is-warn">${icon("circle-alert")}Abgelaufen</span>`,
+      `Die Anmeldung ist abgelaufen${stand ? `, du siehst den Stand von ${stand}` : ""}. ${info.configured ? `Verbinde Google neu, dann gleicht ${BRAND} wieder ab.` : "Neu verbinden geht in dieser Version nicht."}`,
+    ],
+    offline: [`<span class="status is-offline">${icon("wifi-off")}Offline</span>`, `Google ist gerade nicht erreichbar${stand ? `, du siehst den Stand von ${stand}` : ""}.`],
+  };
+  const [status, detail] = states[info.state] || states.ok;
+  const renew = info.state === "login" && info.configured ? `<button class="btn btn-primary" type="button" id="googleRenew">Neu verbinden</button>` : "";
+  return row({
+    id: "rowGoogle",
+    cls: "is-stack",
+    label: `Google-Kalender ${status}`,
+    desc: `${info.account ? `Angemeldet als ${esc(info.account)}. ` : ""}${detail}`,
+    control: `${renew}<button class="btn btn-quiet" type="button" id="googleDisconnect">Trennen</button>`,
+  });
+}
+
+function targetRow(info) {
+  const writable = (info.calendars || []).filter((item) => item.writable);
+  if (prefs.google.write === false || writable.length < 2) return "";
+  const chosen = writable.some((item) => item.id === prefs.google.target) ? prefs.google.target : info.target;
+  const options = writable.map((item) => `<option value="${esc(item.id)}"${item.id === chosen ? " selected" : ""}>${esc(item.name)}</option>`).join("");
+  return row({ id: "rowGoogleTarget", cls: "is-stack", label: "Kalender für neue Termine", forId: "googleTarget", control: `<select class="field-control" id="googleTarget">${options}</select>` });
+}
+
+function schoolDesc(info, school) {
+  const name = `„${esc(school.name)}“`;
+  if (schoolUi.choice) return `Soll der Kalender ${name} in Google bleiben?`;
+  if (!school.on) {
+    if (school.removing) return `Der Kalender ${name} wird gelöscht, sobald Google erreichbar ist.`;
+    if (school.notice === "gone") return `Du hast den Kalender ${name} in Google gelöscht. Schalte das wieder ein, dann legt ${BRAND} ihn neu an.`;
+    if (!info.configured && !info.may_make_calendars) return "Geht in dieser Version nicht.";
+    if (info.state === "login") return "Geht wieder, sobald Google neu verbunden ist.";
+    return `${BRAND} legt dafür den Kalender ${name} an und trägt die nächsten vier Wochen ein.`;
+  }
+  if (school.problem === "limit") return `Google bremst gerade. Den Rest trägt ${BRAND} etwas später ein.`;
+  if (school.problem === "offline") return `Google ist gerade nicht erreichbar. ${BRAND} versucht es weiter.`;
+  if (school.problem === "scope") return "Google erlaubt den eigenen Kalender nicht mehr. Schalte das aus und wieder ein.";
+  if (school.busy) return `Wird in ${name} eingetragen …`;
+  return `${plural(school.count, "Eintrag", "Einträge")} in ${name}${school.stand ? `, Stand ${standText(school.stand)}` : ""}.`;
+}
+
+function schoolRow(info) {
+  const school = info.school || { on: false, name: `${BRAND} Schule` };
+  const blocked = !school.on && (info.state === "login" || (!info.configured && !info.may_make_calendars));
+  const choice = schoolUi.choice
+    ? `<div class="set-form-actions"><button type="button" class="btn btn-quiet" id="schoolCancel">Abbrechen</button><button type="button" class="btn btn-quiet danger-button" id="schoolDelete">Löschen</button><button type="button" class="btn btn-primary" id="schoolKeep">Behalten</button></div>`
+    : "";
+  return row({
+    id: "rowGoogleSchool",
+    cls: schoolUi.choice ? "is-stack" : "",
+    label: "Stundenplan und Tests in Google eintragen",
+    desc: schoolDesc(info, school),
+    control: choice || switchHtml("googleSchool", !!school.on, "rowGoogleSchoolLabel", { describedBy: "rowGoogleSchoolDesc", disabled: blocked || schoolUi.busy }),
+  });
+}
+
+function gmailRow(info) {
+  if (info.gmail) {
+    return row({ id: "rowGmail", label: `Gmail <span class="status is-ok">${icon("circle-check")}Verbunden</span>`, desc: "Deine Mails stehen unter E-Mail." });
+  }
+  if (!info.configured || info.state === "login") return "";
+  return row({
+    id: "rowGmail",
+    label: "Gmail",
+    desc: `Lies und schreib deine Gmail-Mails in ${BRAND}. Dafür fragt Google einmal nach.`,
+    control: `<button class="btn btn-quiet" type="button" id="gmailAdd">Gmail hinzufügen</button>`,
+  });
+}
+
+function calendarList(info) {
+  const calendars = info.calendars || [];
+  if (!calendars.length) return "";
+  const swatch = (item) => (SAFE_COLOR.test(item.color || "") ? item.color : "var(--line-strong)");
+  return `<div class="set-sub" role="group" aria-label="Kalender">${calendars.map((item) => `<div class="set-row"><span class="cal-swatch" style="--k:${swatch(item)}" aria-hidden="true"></span><span class="set-row-label" id="gcal-${esc(item.id)}-label">${esc(item.name)}</span>${switchHtml(`gcal-${esc(item.id)}`, prefs.google.calendars[item.id] !== false, `gcal-${esc(item.id)}-label`)}</div>`).join("")}</div>`;
+}
+
 function renderGoogle() {
   const card = $("googleCard");
-  const calendars = page.accounts?.google?.calendars || [];
+  const info = googleInfo();
   let html;
   if (accounts.connecting === "google") {
     html = `${loadingHtml("Warte auf Google", "Melde dich im Browser an. Danach geht es hier von selbst weiter.")}<div class="set-form-actions"><button type="button" class="btn btn-quiet" id="googleCancel">Abbrechen</button></div>`;
-  } else if (page.accounts?.google?.unavailable) {
+  } else if (info.unavailable) {
     html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">Google-Kalender gibt es in der App noch nicht.</p><p class="empty-text">Termine, die du hier einträgst, bleiben auf diesem Gerät.</p></div>`;
+  } else if (!prefs.google.connected && !info.configured) {
+    html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">Google-Kalender gibt es in dieser Version nicht.</p><p class="empty-text">Termine, die du in ${BRAND} einträgst, bleiben auf diesem Gerät.</p></div>`;
   } else if (!prefs.google.connected) {
     html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">Kein Google-Kalender verbunden.</p><p class="empty-text">Gym, Fahrstunden und private Termine stehen dann neben dem Stundenplan.</p><button type="button" class="empty-action" id="googleConnect">Konto verbinden${icon("chevron-right")}</button></div>`;
   } else {
-    const shown = calendars.filter((item) => prefs.google.calendars[item.id] !== false).length;
-    html = row({
-      id: "rowGoogle",
-      cls: "is-stack",
-      label: `Google-Kalender <span class="status is-ok">${icon("circle-check")}Verbunden</span>`,
-      desc: `${shown} von ${plural(calendars.length, "Kalender", "Kalendern")} erscheinen im Kalender von ${BRAND}.`,
-      control: `<button class="btn btn-quiet" type="button" id="googleDisconnect">Trennen</button>`,
-    }) + row({
+    html = googleHeader(info) + row({
       id: "rowGoogleWrite",
       label: "Eigene Termine eintragen",
-      desc: `Was du in ${BRAND} anlegst, änderst oder löschst, steht auch in deinem Google-Kalender.`,
+      desc: `Was du in ${BRAND} einträgst oder änderst, steht auch in deinem Google-Kalender.`,
       control: switchHtml("googleWrite", prefs.google.write !== false, "rowGoogleWriteLabel", { describedBy: "rowGoogleWriteDesc" }),
-    }) + `<div class="set-sub" role="group" aria-label="Kalender">${calendars.map((item) => `<div class="set-row"><span class="cal-swatch" style="--k:${KIND_COLORS[item.kind] || "var(--line-strong)"}" aria-hidden="true"></span><span class="set-row-label" id="gcal-${item.id}-label">${esc(item.name)}</span>${switchHtml(`gcal-${item.id}`, prefs.google.calendars[item.id] !== false, `gcal-${item.id}-label`)}</div>`).join("")}</div>`;
+    }) + targetRow(info) + schoolRow(info) + gmailRow(info) + calendarList(info);
   }
   keepFocus(card, () => (card.innerHTML = html));
   renderAccountsMeta();
@@ -1318,7 +1404,8 @@ function renderGoogle() {
 function renderAccountsMeta() {
   const iserv = prefs.iserv.connected;
   const google = prefs.google.connected;
-  $("accountsMeta").textContent = iserv && google ? "IServ und Google verbunden" : iserv ? "IServ verbunden, Google nicht" : google ? "Google verbunden, IServ nicht" : "Nichts verbunden";
+  const offered = google || googleInfo().configured;
+  $("accountsMeta").textContent = iserv && google ? "IServ und Google verbunden" : iserv ? (offered ? "IServ verbunden, Google nicht" : "IServ verbunden") : google ? "Google verbunden, IServ nicht" : "Nichts verbunden";
 }
 
 function validateIserv(formNode) {
@@ -1401,14 +1488,17 @@ async function disconnectIserv() {
 }
 
 async function loadGoogleCalendars() {
-  if (!prefs.google.connected) return;
+  const info = googleInfo();
+  if (!prefs.google.connected || info.calendars?.length) return;
   try {
     const result = await request("GET", "/api/calendar/google/calendars");
-    page.accounts.google.calendars = (result.calendars || []).map((item) => ({
+    const school = info.school?.on ? info.school.name : null;
+    info.calendars = (result.calendars || []).filter((item) => item.name !== school).map((item) => ({
       id: item.id,
       name: item.name,
-      kind: /schule|school|iserv|kurs/i.test(item.name) ? "school" : /training|sport|gym|fitness/i.test(item.name) ? "training" : "private",
-      on: true,
+      color: item.color,
+      primary: !!item.primary,
+      writable: item.access_role === "owner" || item.access_role === "writer",
     }));
     renderGoogle();
   } catch {}
@@ -1421,7 +1511,7 @@ function stopGoogleWait() {
   googleWait = null;
 }
 
-function waitForGoogle(state) {
+function waitForGoogle(state, done) {
   const until = Date.now() + 10 * 60 * 1000;
   const check = async () => {
     googleWait = null;
@@ -1434,7 +1524,7 @@ function waitForGoogle(state) {
     if (!progress?.done && Date.now() < until) {
       googleWait = setTimeout(check, 1500);
     } else if (progress?.ok) {
-      googleConnected();
+      granted(done, progress.email);
     } else {
       stopGoogleWait();
       accounts.connecting = null;
@@ -1445,15 +1535,46 @@ function waitForGoogle(state) {
   googleWait = setTimeout(check, 1500);
 }
 
-function googleConnected() {
-  if (accounts.connecting !== "google") return;
+function granted(done, email) {
   stopGoogleWait();
   accounts.connecting = null;
-  page.accounts.google = { connected: true, calendars: [] };
+  fetch("/api/ui/google/nudge", { method: "POST", credentials: "same-origin" }).catch(() => {});
+  done(email);
+}
+
+async function grantGoogle(features, done) {
+  stopGoogleWait();
+  accounts.connecting = "google";
+  renderGoogle();
+  try {
+    const result = await request("POST", "/api/email/google/auth", { features });
+    if (result.granted) {
+      granted(done, result.email);
+      return;
+    }
+    if (platform.desktop || !window.open(result.auth_url, "google-login", "width=600,height=700,popup=yes")) location.assign(result.auth_url);
+    waitForGoogle(result.state, done);
+  } catch (error) {
+    accounts.connecting = null;
+    renderGoogle();
+    toast(`Google-Anmeldung ließ sich nicht starten${error.message ? `: ${esc(error.message)}` : ""}.`, { icon: "circle-alert" });
+  }
+}
+
+function googleConnected(email) {
+  const info = googleInfo();
+  page.accounts.google = { ...info, connected: true, account: email || info.account || "", state: "ok", stand: info.state === "login" ? info.stand : null };
   prefs.google.connected = true;
   renderGoogle();
   toast("Google-Kalender verbunden", { icon: "calendar-days" });
   loadGoogleCalendars();
+}
+
+function gmailAdded() {
+  page.accounts.google = { ...googleInfo(), gmail: true };
+  renderGoogle();
+  toast("Gmail ist verbunden", { icon: "mail" });
+  $("rowGmail")?.scrollIntoView({ block: "nearest" });
 }
 
 function cancelGoogle() {
@@ -1463,25 +1584,64 @@ function cancelGoogle() {
   $("googleConnect")?.focus({ preventScroll: true });
 }
 
-async function connectGoogle() {
-  stopGoogleWait();
-  accounts.connecting = "google";
+addEventListener("message", (event) => {
+  if (event.origin !== location.origin || event.data?.type !== "google-oauth-success") return;
+  if (accounts.connecting === "google" && !prefs.google.connected) granted(googleConnected, event.data.email);
+});
+
+let schoolWatch = null;
+
+function setSchool(school) {
+  page.accounts.google = { ...googleInfo(), school };
   renderGoogle();
+  clearTimeout(schoolWatch);
+  if (school.busy) schoolWatch = setTimeout(watchSchool, 2000);
+}
+
+async function watchSchool() {
   try {
-    const result = await request("POST", "/api/email/google/auth");
-    if (platform.desktop || !window.open(result.auth_url, "google-login", "width=600,height=700,popup=yes")) location.assign(result.auth_url);
-    waitForGoogle(result.state);
-  } catch (error) {
-    accounts.connecting = null;
+    const result = await request("GET", "/api/ui/google/school");
+    setSchool(result.school);
+  } catch {}
+}
+
+async function startSchool() {
+  schoolUi.busy = true;
+  renderGoogle();
+  const response = await fetch("/api/ui/google/school", { method: "POST", credentials: "same-origin" }).catch(() => null);
+  const payload = response ? await response.json().catch(() => ({})) : {};
+  schoolUi.busy = false;
+  if (response?.ok && payload.school) {
+    setSchool(payload.school);
+    say("Stundenplan und Tests werden in Google eingetragen");
+  } else if (payload.needs === "school") {
+    grantGoogle(["school"], () => startSchool());
+  } else {
     renderGoogle();
-    toast(`Google-Anmeldung ließ sich nicht starten${error.message ? `: ${esc(error.message)}` : ""}.`, { icon: "circle-alert" });
+    toast(esc(payload.error || "Google ist gerade nicht erreichbar."), { icon: "circle-alert" });
   }
 }
 
-addEventListener("message", (event) => {
-  if (event.origin !== location.origin || event.data?.type !== "google-oauth-success") return;
-  googleConnected();
-});
+async function stopSchool(keep) {
+  schoolUi.choice = false;
+  schoolUi.busy = true;
+  renderGoogle();
+  try {
+    const result = await request("DELETE", "/api/ui/google/school", { keep });
+    if (keep && result.calendar) {
+      prefs.google.calendars[result.calendar] = false;
+      savePrefs();
+    }
+    schoolUi.busy = false;
+    setSchool(result.school);
+    toast(keep ? "Der Kalender bleibt in Google, eingetragen wird nichts mehr." : "Der Kalender wird in Google gelöscht.", { icon: "calendar-days" });
+  } catch {
+    schoolUi.busy = false;
+    renderGoogle();
+    toast("Das ließ sich gerade nicht ausschalten.", { icon: "circle-alert" });
+  }
+  $("googleSchool")?.focus({ preventScroll: true });
+}
 
 async function disconnectGoogle() {
   try {
@@ -1489,7 +1649,7 @@ async function disconnectGoogle() {
     for (const account of result.accounts || []) {
       await request("DELETE", `/api/email/google/remove/${encodeURIComponent(account.email)}`);
     }
-    page.accounts.google = { connected: false, calendars: [] };
+    page.accounts.google = { configured: googleInfo().configured, connected: false, calendars: [] };
     prefs.google.connected = false;
     renderGoogle();
     toast("Google-Kalender getrennt", { icon: "calendar-days" });
@@ -1520,13 +1680,21 @@ function bindAccounts() {
     event.preventDefault();
     if (validateIserv(event.target)) connectIserv(event.target);
   });
+  $("googleCard").addEventListener("change", (event) => {
+    if (event.target.id !== "googleTarget") return;
+    prefs.google.target = event.target.value;
+    savePrefs();
+    const name = googleInfo().calendars?.find((item) => item.id === event.target.value)?.name || "";
+    say(`Neue Termine landen in ${name}`);
+  });
   iservCard.addEventListener("input", (event) => {
     const input = event.target.closest("#iservForm .field-control");
     if (input?.getAttribute("aria-invalid") === "true" && input.value.trim()) setError(input, $(`iserv-${input.name}-error`), "");
   });
   const googleCard = $("googleCard");
   googleCard.addEventListener("click", (event) => {
-    if (event.target.closest("#googleConnect")) connectGoogle();
+    if (event.target.closest("#googleConnect, #googleRenew")) grantGoogle(["calendar"], googleConnected);
+    else if (event.target.closest("#gmailAdd")) grantGoogle(["gmail"], gmailAdded);
     else if (event.target.closest("#googleCancel")) cancelGoogle();
     else if (event.target.closest("#googleDisconnect")) {
       if (confirmTwice("google", event.target.closest("#googleDisconnect"))) disconnectGoogle();
@@ -1536,6 +1704,20 @@ function bindAccounts() {
       renderGoogle();
       $("googleWrite")?.focus({ preventScroll: true });
       say(prefs.google.write ? "Eigene Termine werden in Google eingetragen" : "Eigene Termine bleiben in der App");
+    } else if (event.target.closest("#googleSchool")) {
+      if (googleInfo().school?.on) {
+        schoolUi.choice = true;
+        renderGoogle();
+        $("schoolKeep")?.focus({ preventScroll: true });
+      } else {
+        startSchool();
+      }
+    } else if (event.target.closest("#schoolKeep, #schoolDelete")) {
+      stopSchool(!!event.target.closest("#schoolKeep"));
+    } else if (event.target.closest("#schoolCancel")) {
+      schoolUi.choice = false;
+      renderGoogle();
+      $("googleSchool")?.focus({ preventScroll: true });
     } else {
       const toggle = event.target.closest('[role="switch"][id^="gcal-"]');
       if (!toggle) return;

@@ -707,6 +707,8 @@ def _checked_lately(seconds=CHECK_SECONDS):
 def refresh(force=False):
     if not connected():
         return None
+    if _google().login_expired():
+        return 'login'
     if not force and _load(shared=True) is not None and _checked_lately():
         return _status['problem']
     return sync(full=force, wait=REQUEST_WAIT)

@@ -926,6 +926,7 @@ def page_calendar(data, school, settings, today, iserv):
         'source': 'google' if google else None,
         'write': google and calendar_cache.write_enabled(),
         'stand': calendar_cache.stand() if google else None,
+        'state': calendar_cache.page_state()['google'] if google else None,
         'window': {'start': first.isoformat(), 'end': last.isoformat()},
     }
     return {'region': dict(STATES).get(code, ''), 'events': [], 'holidays': data['holidays'], 'notes': {}, 'sync': sync}
