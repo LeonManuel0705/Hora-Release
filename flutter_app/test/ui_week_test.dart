@@ -38,27 +38,23 @@ void main() {
     } catch (_) {}
   });
 
-  Future<(Database, SharedPreferences)> fresh(Map<String, Object> values, {bool swapped = false, bool weekly = false, bool edits = false}) async {
+  // An install as the update finds it. lesson is the week of its one lesson, null for no plan at all.
+  Future<(Database, SharedPreferences)> fresh(Map<String, Object> values, {bool swapped = false, String? lesson, bool edits = false}) async {
     AppProvider.forgetWeekRule();
     SharedPreferences.setMockInitialValues(values);
     final prefs = await SharedPreferences.getInstance();
     final db = await UiDb.open();
-    if (swapped) {
-      await UiDb.save(db, 'app-ab-swap', true);
-    } else {
-      await UiDb.remove(db, 'app-ab-swap');
-    }
-    if (edits) {
-      await UiDb.save(db, 'app-timetable-edits', {'B:2:1': {'subject': '1', 'room': 'R101'}});
-    } else {
-      await UiDb.remove(db, 'app-timetable-edits');
-    }
+    await db.delete('ui_store');
     await db.delete('lessons');
-    final stamp = DateTime(2026, 9, 1).toIso8601String();
-    await db.insert('lessons', {
-      'id': 'l1', 'subject': 'Mathe', 'day_of_week': 1, 'start_time': '08:00', 'end_time': '09:30', 'lesson_number': 1,
-      'week_type': weekly ? 'A' : 'both', 'created_at': stamp, 'updated_at': stamp,
-    });
+    if (swapped) await UiDb.save(db, 'app-ab-swap', true);
+    if (edits) await UiDb.save(db, 'app-timetable-edits', {'B:2:1': {'subject': '1', 'room': 'R101'}});
+    if (lesson != null) {
+      final stamp = DateTime(2026, 9, 1).toIso8601String();
+      await db.insert('lessons', {
+        'id': 'l1', 'subject': 'Mathe', 'day_of_week': 1, 'start_time': '08:00', 'end_time': '09:30', 'lesson_number': 1,
+        'week_type': lesson, 'created_at': stamp, 'updated_at': stamp,
+      });
+    }
     return (db, prefs);
   }
 
@@ -97,7 +93,7 @@ void main() {
   });
 
   test('with A/B weeks off every week is an A week and nothing is asked', () async {
-    final (db, prefs) = await fresh({'ab_weeks_enabled': false, 'ab_week_inverted': true}, weekly: true, swapped: true);
+    final (db, prefs) = await fresh({'ab_weeks_enabled': false, 'ab_week_inverted': true}, lesson: 'A', swapped: true);
     final school = await UiData(db, prefs, friday).school();
     expect(school.abWeeks, isFalse);
     expect({for (final item in cases) school.weekOf(DateTime.parse(item['day']!))}, {'A'});
@@ -105,37 +101,33 @@ void main() {
     expect(prefs.getBool(AppProvider.abAskKey), isNull);
   });
 
-  test('a plan with the same lessons in both weeks follows the desktop without a question', () async {
-    final (db, prefs) = await fresh({});
-    final school = await UiData(db, prefs, DateTime(2026, 11, 9, 8)).school();
-    expect(school.weekOf(DateTime(2026, 11, 9)), 'B');
-    expect(prefs.getBool(AppProvider.abAskKey), isNull);
-  });
-
-  final kept = <String, (Map<String, Object>, bool, bool, bool)>{
-    'week-specific lessons': ({}, false, true, false),
-    'edits from the settings page': ({}, false, false, true),
-    'the swap of the old screens': ({'ab_week_inverted': true}, false, false, false),
-    'the swap of the settings page': ({}, true, false, false),
-    'both swaps': ({'ab_week_inverted': true}, true, false, false),
-    'both swaps and a plan': ({'ab_week_inverted': true}, true, true, true),
+  // What an install from before has: prefs, a store, lessons. Asked are only those whose A and B weeks differ.
+  final kept = <String, (Map<String, Object>, bool, String?, bool, bool)>{
+    'week-specific lessons': ({}, false, 'A', false, true),
+    'edits from the settings page': ({}, false, null, true, true),
+    'both swaps and a plan with A and B weeks': ({'ab_week_inverted': true}, true, 'B', true, true),
+    'the same lessons in both weeks': ({}, false, 'both', false, false),
+    'no plan, only its settings': ({'timetable_setup_completed': true}, false, null, false, false),
+    'only the swap of the old screens': ({'ab_week_inverted': true}, false, null, false, false),
+    'only the swap of the settings page': ({}, true, null, false, false),
+    'both swaps': ({'ab_week_inverted': true}, true, 'both', false, false),
   };
   for (final entry in kept.entries) {
-    test('an install with ${entry.key} keeps the letter it showed and is asked once', () async {
-      final (values, swapped, weekly, edits) = entry.value;
+    final (values, swapped, lesson, edits, asked) = entry.value;
+    test('an install with ${entry.key} keeps the letter it showed${asked ? ' and is asked once' : ' without a question'}', () async {
       for (final now in days) {
-        final (db, prefs) = await fresh(values, swapped: swapped, weekly: weekly, edits: edits);
+        final (db, prefs) = await fresh(values, swapped: swapped, lesson: lesson, edits: edits);
         final school = await UiData(db, prefs, now).school();
         final inverted = values['ab_week_inverted'] == true;
         expect(school.weekOf(now), before(now, inverted: inverted, swapped: swapped), reason: '$now');
         expect(school.weekOf(now.add(const Duration(days: 7))), before(now.add(const Duration(days: 7)), inverted: inverted, swapped: swapped));
-        expect(prefs.getBool(AppProvider.abAskKey), isTrue);
+        expect(prefs.getBool(AppProvider.abAskKey), asked ? isTrue : isNull);
       }
     });
   }
 
   test('the move is written in one step, so running it again changes nothing', () async {
-    final (db, prefs) = await fresh({'ab_week_inverted': true}, swapped: true);
+    final (db, prefs) = await fresh({'ab_week_inverted': true}, swapped: true, lesson: 'A');
     final monday = DateTime(2026, 11, 9, 8);
     await UiData(db, prefs, monday).school();
     final reference = prefs.getString(AppProvider.abReferenceKey);

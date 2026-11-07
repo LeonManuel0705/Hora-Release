@@ -35,16 +35,15 @@ void main() {
     } catch (_) {}
   });
 
-  Future<(Database, SharedPreferences)> install(Map<String, Object> values, {bool swapped = false}) async {
+  // weekly gives the install a plan whose A and B weeks differ, the only kind that is asked.
+  Future<(Database, SharedPreferences)> install(Map<String, Object> values, {bool swapped = false, bool weekly = false}) async {
     AppProvider.forgetWeekRule();
     SharedPreferences.setMockInitialValues(values);
     final prefs = await SharedPreferences.getInstance();
     final db = await UiDb.open();
-    if (swapped) {
-      await UiDb.save(db, 'app-ab-swap', true);
-    } else {
-      await UiDb.remove(db, 'app-ab-swap');
-    }
+    await db.delete('ui_store');
+    if (swapped) await UiDb.save(db, 'app-ab-swap', true);
+    if (weekly) await UiDb.save(db, 'app-timetable-edits', {'B:2:1': {'subject': '1', 'room': 'R101'}});
     return (db, prefs);
   }
 
@@ -75,7 +74,7 @@ void main() {
   });
 
   test('an install that kept its letter is asked once, and the answer stays', () async {
-    final (db, prefs) = await install({'ab_week_inverted': true});
+    final (db, prefs) = await install({'ab_week_inverted': true}, weekly: true);
     final asked = <String>[];
     Future<String?> answer(String question) async {
       asked.add(question);
@@ -92,7 +91,7 @@ void main() {
   });
 
   test('dismissing the question keeps the letter and does not ask again', () async {
-    final (db, prefs) = await install({'ab_week_inverted': true}, swapped: true);
+    final (db, prefs) = await install({'ab_week_inverted': true}, swapped: true, weekly: true);
     final before = await shownWeekAfterMove(db, prefs, monday);
     var asked = 0;
     expect(await settleWeekQuestion(now: monday, ask: (question) async => (asked++, null).$2), isFalse);
@@ -101,12 +100,14 @@ void main() {
     expect(asked, 1);
   });
 
-  test('a fresh install and one with A/B weeks off are never asked', () async {
+  test('a fresh install, one without different weeks and one with A/B weeks off are never asked', () async {
     var asked = 0;
     Future<String?> answer(String question) async => (asked++, 'A').$2;
     await install({});
     expect(await settleWeekQuestion(now: monday, ask: answer), isFalse);
-    await install({'ab_weeks_enabled': false, 'ab_week_inverted': true});
+    await install({'timetable_setup_completed': true, 'ab_week_inverted': true}, swapped: true);
+    expect(await settleWeekQuestion(now: monday, ask: answer), isFalse);
+    await install({'ab_weeks_enabled': false, 'ab_week_inverted': true}, weekly: true);
     expect(await settleWeekQuestion(now: monday, ask: answer), isFalse);
     expect(asked, 0);
   });

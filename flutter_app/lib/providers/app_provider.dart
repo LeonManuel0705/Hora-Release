@@ -433,7 +433,7 @@ class AppProvider extends ChangeNotifier {
   /// The Monday this install counts from. Written once, it also marks the move to the desktop's rule as done.
   static const abReferenceKey = 'ab_week_reference';
 
-  /// Set for installs that kept their week letter through that move: they are asked once which week it is.
+  /// Set for installs that kept their week letter through that move and have different A and B weeks: they are asked once.
   static const abAskKey = 'ab_week_ask';
 
   static const _week = Duration(days: 7);
@@ -462,8 +462,9 @@ class AppProvider extends ChangeNotifier {
   static Future<void>? _weekRule;
 
   /// Before this rule the phone called a week A when its number in the year was even, so it disagreed with the desktop on
-  /// most weeks. An install that already had a plan with A and B weeks, or had swapped them, keeps the letter of this week
-  /// and is asked once. Fresh installs and plans without different weeks count like the desktop. One write settles it.
+  /// most weeks. Every install from before keeps the letter of this week while A and B weeks are on. Where lessons differ
+  /// between A and B weeks it is asked once, since there the letter decides which lessons show. Only fresh installs count
+  /// like the desktop. One write settles it.
   static Future<void> settleWeekRule(Database db, SharedPreferences prefs, [DateTime? now]) =>
       _weekRule ??= _settleWeekRule(db, prefs, now ?? DateTime.now()).catchError((Object error) {
         _weekRule = null;
@@ -483,17 +484,28 @@ class AppProvider extends ChangeNotifier {
     return values;
   }
 
+  /// Settings an earlier version leaves behind. A fresh install has none of them when the rule is settled at its start.
+  static const _earlierPrefs = [
+    'timetable_setup_completed', 'ab_weeks_enabled', 'ab_week_inverted', 'user_bundesland', 'graduation_year', 'school_class_level', 'tour_state',
+  ];
+
+  static Future<bool> _any(Database db, String sql) async {
+    try {
+      return (Sqflite.firstIntValue(await db.rawQuery(sql)) ?? 0) > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<void> _settleWeekRule(Database db, SharedPreferences prefs, DateTime now) async {
     if (prefs.containsKey(abReferenceKey)) return;
     final inverted = prefs.getBool('ab_week_inverted') ?? false;
-    final store = await _storeValues(db, const ['app-ab-swap', 'app-timetable-edits']);
-    final edits = store['app-timetable-edits'];
-    var weekly = false;
-    try {
-      weekly = (Sqflite.firstIntValue(await db.rawQuery("SELECT COUNT(*) FROM lessons WHERE week_type IN ('A', 'B')")) ?? 0) > 0;
-    } catch (_) {}
-    final enabled = prefs.getBool('ab_weeks_enabled') ?? true;
-    final existing = enabled && (inverted || store['app-ab-swap'] == true || weekly || (edits is Map && edits.isNotEmpty));
+    final edits = (await _storeValues(db, const ['app-timetable-edits']))['app-timetable-edits'];
+    final earlier = _earlierPrefs.any(prefs.containsKey) ||
+        await _any(db, 'SELECT COUNT(*) FROM lessons') ||
+        await _any(db, 'SELECT COUNT(*) FROM ui_store');
+    final weekly = await _any(db, "SELECT COUNT(*) FROM lessons WHERE week_type IN ('A', 'B')") || (edits is Map && edits.isNotEmpty);
+    final existing = (prefs.getBool('ab_weeks_enabled') ?? true) && earlier;
     var reference = abReference;
     if (existing) {
       final monday = DateTime.utc(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
@@ -502,7 +514,7 @@ class AppProvider extends ChangeNotifier {
       if ((yearWeek.isEven != inverted) != calculateIsAWeek(monday)) reference = abReference.add(_week);
     }
     await saveAbReference(prefs, reference);
-    if (existing) await prefs.setBool(abAskKey, true);
+    if (existing && weekly) await prefs.setBool(abAskKey, true);
   }
 
   static String getWeekTypeForDate(DateTime date) {
