@@ -1,6 +1,6 @@
 import { data, esc, icon, luna, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, relativeDay, now, minutesOf, subject, hueVar, glue, nextRepeatDate, homeworkDate, followLinks, ASSESSMENTS, isAssessment, WEEKDAYS, WEEKDAYS_SHORT, storage } from "./core.js";
 import { animates, travels, flipKeyed, exitInPlace, enterInPlace, token } from "./motion.js";
-import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen, keepOneLine } from "./shell.js";
+import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen, keepOneLine, renderSync } from "./shell.js";
 import { tasks as taskApi, deadlines as deadlineApi, debounced, serverId } from "./api.js";
 import { initNoteList } from "./notes.js";
 
@@ -736,7 +736,10 @@ async function startSync() {
     const linked = new Set(state.tasks.map((task) => task.deadline).filter(Boolean));
     data.deadlines = [...data.deadlines.filter((item) => item.origin !== "iserv"), ...views];
     state.tasks = [...state.tasks.filter((task) => task.source !== "iserv"), ...views.filter((item) => listedHomework(item, linked)).map(homeworkTask)];
-    if (result.status) data.status = result.status;
+    if (result.status) {
+      data.status = result.status;
+      renderSync();
+    }
   }
   render({ flip: true });
   toast(esc(syncText(result)), { icon: result?.ok ? "check" : "wifi-off" });
