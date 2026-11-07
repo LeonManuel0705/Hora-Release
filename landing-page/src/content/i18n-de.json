@@ -570,13 +570,6 @@
         "tone": "ok"
       },
       {
-        "icon": "languages",
-        "to": "Google Fonts",
-        "what": "eine Schriftdatei, die der Browser von Googles Schriftserver lädt",
-        "when": "nur in der Web-App, beim Öffnen",
-        "tone": "warn"
-      },
-      {
         "icon": "globe",
         "to": "Die verlinkten Seiten",
         "what": "ein Abruf der Seite, um ihr Logo neben dem Lesezeichen zu zeigen",
@@ -776,7 +769,6 @@
     "s3_list7": "Hugging Face und GitHub: der Abruf des Sprachmodells für den Assistenten",
     "s3_list8": "PyPI: der Abruf der Python-Pakete beim ersten Start der Mac-App auf Intel-Macs und nach Updates",
     "s3_list9": "Diese Website: die Frage nach der neuesten Version, beim Start und danach alle zwei Stunden (von selbst, Apps für Computer und Android)",
-    "s3_list10": "Google Fonts: eine Schriftdatei, die der Browser beim Öffnen der Web-App lädt (von selbst)",
     "s3_list11": "Die Websites deiner Lesezeichen: ein Abruf der Seite, um ihr Logo neben dem Lesezeichen zu zeigen",
     "s3_list12": "Diese Website oder GitHub: der Abruf der neuen Version der App, wenn du in der App „Aktualisieren“ antippst (Android)",
     "s4_title": "§ 4 Datenverarbeitung auf der Website",
