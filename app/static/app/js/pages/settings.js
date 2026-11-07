@@ -4,7 +4,8 @@ import {
   LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, activeSubjectKeys, motionDefault, slug, teacherLabel, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
 import { toast, setTheme, syncTime } from "../shell.js";
-import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary } from "../backup.js";
+import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, contents } from "../backup.js";
+import { askBackup, importFlow } from "../plan-share.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -2933,7 +2934,7 @@ function renderData() {
   keepFocus(card, () => {
     card.innerHTML = [
       row({ id: "rowExport", label: "Sichern", desc: "Stundenplan, Fächer, Noten, Tests, Klausuren, Aufgaben, Termine, Orte und Einstellungen als Datei", control: `<button class="btn btn-quiet" type="button" id="dataExport">${icon("download")}Exportieren</button>` }),
-      row({ id: "rowImport", label: "Wiederherstellen", desc: `Übernimmt eine gesicherte Datei von ${BRAND}, auch von einem anderen Gerät. Stundenplan und Einstellungen kommen aus der Datei, vorhandene Noten, Aufgaben und Termine bleiben.`, control: `<button class="btn btn-quiet" type="button" id="dataImport">${icon("upload")}Importieren</button>` }),
+      row({ id: "rowImport", label: "Wiederherstellen", desc: `Übernimmt eine gesicherte Datei von ${BRAND}, auch von einem anderen Gerät. Vorhandene Noten, Aufgaben und Termine bleiben. Stecken Noten oder Aufgaben in der Datei, kannst du vorher wählen, ob nur der Stundenplan kommt.`, control: `<button class="btn btn-quiet" type="button" id="dataImport">${icon("upload")}Importieren</button>` }),
       row({ id: "rowWipe", label: "Alles auf diesem Gerät löschen", desc: "Stundenplan, Fächer und Stundenraster wieder wie in IServ, alle Einstellungen wie beim ersten Start.", control: `<button class="btn btn-quiet danger-button" type="button" id="dataWipe">${icon("trash-2")}Löschen</button>` }),
     ].join("");
   });
@@ -3081,6 +3082,10 @@ async function importData(file) {
   const known = BRAND_NAMES.map((name) => name.toLowerCase());
   const prefix = new RegExp(`^(app|${known.map((name) => slug(name)).filter(Boolean).join("|")})-`);
   const ours = known.includes(String(payload?.app || "").toLowerCase());
+  if (ours && payload.kind === "plan") {
+    importFlow({ file });
+    return;
+  }
   const values = ours && payload.values && typeof payload.values === "object" ? payload.values : null;
   const entries = values ? Object.entries(values).filter(([key, value]) => prefix.test(key) && typeof value === "string").map(([key, value]) => [key.replace(prefix, "app-"), value]) : [];
   const records = ours && payload.data && typeof payload.data === "object" && !Array.isArray(payload.data) ? payload.data : null;
@@ -3093,7 +3098,10 @@ async function importData(file) {
   const button = $("dataImport");
   if (button) button.disabled = true;
   try {
-    await takeBackup(file, payload, entries, records);
+    const inside = records ? contents(records) : "";
+    const choice = inside ? await askBackup(inside) : "all";
+    if (choice === "plan") importFlow({ backup: payload });
+    else if (choice === "all") await takeBackup(file, payload, entries, records);
   } catch {
     toast("Die Sicherung ließ sich nicht ganz übernehmen. Lies die Datei noch einmal ein, schon Übernommenes wird dabei nicht doppelt angelegt.", { icon: "triangle-alert" });
   } finally {

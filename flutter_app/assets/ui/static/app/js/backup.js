@@ -400,9 +400,8 @@ export function subjectsInUse(plan) {
   return used;
 }
 
-export function summary({ settings = false, made = {}, known = 0, failed = 0, unread = false } = {}) {
+function madeParts(made) {
   const parts = [];
-  if (settings) parts.push("Stundenplan und Einstellungen");
   if (made.grades) parts.push(count(made.grades, KIND_WORDS.grades));
   Object.entries(DEADLINE_WORDS).forEach(([kind, forms]) => {
     if (made[kind]) parts.push(count(made[kind], forms));
@@ -410,6 +409,23 @@ export function summary({ settings = false, made = {}, known = 0, failed = 0, un
   ["tasks", "notes", "events", "places"].forEach((kind) => {
     if (made[kind]) parts.push(count(made[kind], KIND_WORDS[kind]));
   });
+  return parts;
+}
+
+export function contents(file) {
+  const theirs = record(file);
+  const made = {};
+  KINDS.forEach((kind) => records(theirs[kind]).filter(USABLE[kind]).forEach((item) => {
+    const word = kind === "deadlines" ? item.kind : kind;
+    made[word] = (made[word] || 0) + 1;
+  }));
+  const places = PLACES.filter((key) => placeBody(record(theirs.places)[key])).length;
+  if (places) made.places = places;
+  return list(madeParts(made));
+}
+
+export function summary({ settings = false, made = {}, known = 0, failed = 0, unread = false } = {}) {
+  const parts = [...(settings ? ["Stundenplan und Einstellungen"] : []), ...madeParts(made)];
   const sentences = [parts.length ? `Übernommen: ${list(parts)}.` : "Nichts Neues übernommen."];
   if (known) sentences.push(known === 1 ? "1\u00a0Eintrag war schon da." : `${known}\u00a0Einträge waren schon da.`);
   if (failed) sentences.push(failed === 1 ? "1\u00a0Eintrag ließ sich nicht übernehmen." : `${failed}\u00a0Einträge ließen sich nicht übernehmen.`);
