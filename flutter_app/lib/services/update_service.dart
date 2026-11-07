@@ -362,6 +362,10 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
       }
       return;
     }
+    if (cancel.isCancelled) {
+      _go(_Step.ready);
+      return;
+    }
     await _install();
   }
 
@@ -481,7 +485,7 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
           ),
         ),
         const SizedBox(height: 6),
-        _quiet(isDark, 'Abbrechen', () => _cancel?.cancel()),
+        if (_step == _Step.loading) _quiet(isDark, 'Abbrechen', () => _cancel?.cancel()) else const SizedBox(height: 44),
       ],
     );
   }
