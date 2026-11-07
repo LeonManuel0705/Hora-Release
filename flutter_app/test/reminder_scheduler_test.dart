@@ -30,6 +30,8 @@ class _Alarms implements ReminderAlarms {
   @override
   Future<Set<int>> pending() async => {...scheduled.keys, ...strays};
 
+  void deliverUntil(DateTime now) => scheduled.removeWhere((_, entry) => !entry.$1.at.isAfter(now));
+
   @override
   Future<bool> allowed() async => permitted;
 
@@ -123,6 +125,7 @@ void main() {
     expect(await scheduler.covers('lesson:2026-11-10:1'), isFalse);
 
     now = DateTime(2026, 11, 9, 8);
+    alarms.deliverUntil(now);
     plan.removeAt(0);
     alarms.log.clear();
     await scheduler.reschedule();
@@ -138,7 +141,9 @@ void main() {
   test('without permission nothing is planned and the coming alarms are cancelled', () async {
     await scheduler.reschedule();
     now = DateTime(2026, 11, 9, 8);
-    alarms.permitted = false;
+    alarms
+      ..deliverUntil(now)
+      ..permitted = false;
     alarms.log.clear();
     await scheduler.reschedule();
     expect(alarms.log, unorderedEquals(['cancel lesson:2026-11-09:2', 'cancel deadline:test-1:2026-11-09']));
@@ -162,6 +167,7 @@ void main() {
     expect(alarms.log.every((line) => line.startsWith('schedule')), isTrue);
     alarms.log.clear();
     now = now.add(const Duration(hours: 21));
+    alarms.deliverUntil(now);
     plan = [_reminder('lesson:2026-11-10:1', DateTime(2026, 11, 10, 7, 50))];
     await scheduler.reschedule();
     expect(alarms.log, ['schedule lesson:2026-11-10:1']);
@@ -228,6 +234,32 @@ void main() {
     expect(alarms.scheduled.keys.toSet().difference(recorded), isEmpty, reason: 'the later run saw the record change and planned again');
     await scheduler.reschedule(whole: true);
     expect({for (final entry in alarms.scheduled.values) entry.$1.key}, {'lesson:2026-11-09:2', 'event:loc-a:2026-11-09'});
+  });
+
+  test('a reminder that never went off while the phone was off is left to the page', () async {
+    now = DateTime(2026, 11, 9, 6);
+    plan = [_reminder('tasks:2026-11-09', DateTime(2026, 11, 9, 7)), _reminder('deadline:test-1:2026-11-09', DateTime(2026, 11, 9, 7))];
+    await scheduler.reschedule();
+    now = DateTime(2026, 11, 9, 7, 30);
+    alarms
+      ..scheduled.remove(ReminderScheduler.idFor('deadline:test-1:2026-11-09'))
+      ..log.clear();
+    expect(await scheduler.covers('deadline:test-1:2026-11-09'), isTrue, reason: 'this one went off');
+    expect(await scheduler.covers('tasks:2026-11-09'), isFalse, reason: 'this one is still waiting');
+    expect(alarms.log, ['cancel tasks:2026-11-09'], reason: 'so it cannot come late on top of the page copy');
+  });
+
+  test('a whole run after a force stop forgets the reminders that never went off', () async {
+    now = DateTime(2026, 11, 9, 6);
+    plan = [_reminder('tasks:2026-11-09', DateTime(2026, 11, 9, 7)), _reminder('lesson:2026-11-09:2', DateTime(2026, 11, 9, 9, 40))];
+    await scheduler.reschedule();
+    now = DateTime(2026, 11, 9, 7, 30);
+    alarms
+      ..gone.addAll(alarms.scheduled.keys)
+      ..log.clear();
+    await scheduler.reschedule(whole: true);
+    expect(alarms.log, unorderedEquals(['cancel tasks:2026-11-09', 'schedule lesson:2026-11-09:2']));
+    expect(await scheduler.covers('tasks:2026-11-09'), isFalse);
   });
 
   test('an alarm about to go off is left alone by a plan made seconds before', () async {

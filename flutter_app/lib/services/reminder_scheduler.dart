@@ -236,11 +236,13 @@ class ReminderScheduler {
         before != null && before.at.isAfter(now) && before.id == ids[key] && before.fingerprint == wanted[key]!.fingerprint;
     final kept = [for (final key in wanted.keys) if (unchanged(key, known[key])) known[key]!.id];
     final lost = everything && kept.isNotEmpty ? await alarms.missing(kept) : const <int>{};
+    final waiting = everything ? await alarms.pending() : const <int>{};
     var done = true;
     final next = <String, _Planned>{};
     for (final MapEntry(:key, value: entry) in known.entries) {
       if (!entry.at.isAfter(soonest)) {
-        if (now.difference(entry.at) < keep) next[key] = entry;
+        final unsent = !entry.at.isAfter(now) && waiting.contains(entry.id);
+        if (!unsent && now.difference(entry.at) < keep) next[key] = entry;
       } else if (!wanted.containsKey(key) || ids[key] != entry.id) {
         done &= await _quietly(() => alarms.cancel(entry.id));
       }
@@ -258,7 +260,7 @@ class ReminderScheduler {
     }
     if (everything) {
       final planned = {for (final entry in next.values) entry.id};
-      for (final id in await alarms.pending()) {
+      for (final id in waiting) {
         if (id >= firstId && !planned.contains(id)) done &= await _quietly(() => alarms.cancel(id));
       }
     }
@@ -272,6 +274,13 @@ class ReminderScheduler {
     if (running != null) await running;
     final (_, known) = await _registry(await SharedPreferences.getInstance());
     final entry = known[key];
-    return entry != null && _clock().difference(entry.at) < keep;
+    final now = _clock();
+    if (entry == null || now.difference(entry.at) >= keep) return false;
+    if (entry.at.isAfter(now)) return true;
+    // The plugin forgets an alarm once it went off. One it still holds never did, because the
+    // phone was off or the app was stopped, so the page shows it instead.
+    if (!(await alarms.pending()).contains(entry.id)) return true;
+    await _quietly(() => alarms.cancel(entry.id));
+    return false;
   }
 }
