@@ -584,6 +584,13 @@
         "tone": "ok"
       },
       {
+        "icon": "download",
+        "to": "This website or GitHub",
+        "what": "the download of the new version of the app",
+        "when": "Android, when you tap “Aktualisieren” (update)",
+        "tone": "ok"
+      },
+      {
         "icon": "server-off",
         "to": "{{BRAND_NAME}} server",
         "what": "your data",
@@ -770,6 +777,7 @@
     "s3_list9": "This website: the request for the latest version, at start and then every two hours (by itself, apps for computers and Android)",
     "s3_list10": "Google Fonts: one font file the browser loads when you open the web app (by itself)",
     "s3_list11": "The websites of your bookmarks: a request to the page, to show its logo next to the bookmark",
+    "s3_list12": "This website or GitHub: the download of the new version of the App when you tap “Aktualisieren” (update) in the App (Android)",
     "s4_title": "§ 4 Data Processing on the Website",
     "s4_p1": "When visiting our Website, the hosting provider automatically collects technical access data (server log files). These may include:",
     "s4_list1": "IP address (anonymized)",

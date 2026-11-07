@@ -584,6 +584,13 @@
         "tone": "ok"
       },
       {
+        "icon": "download",
+        "to": "Diese Website oder GitHub",
+        "what": "der Abruf der neuen Version der App",
+        "when": "Android, wenn du „Aktualisieren“ antippst",
+        "tone": "ok"
+      },
+      {
         "icon": "server-off",
         "to": "{{BRAND_NAME}}-Server",
         "what": "deine Daten",
@@ -770,6 +777,7 @@
     "s3_list9": "Diese Website: die Frage nach der neuesten Version, beim Start und danach alle zwei Stunden (von selbst, Apps für Computer und Android)",
     "s3_list10": "Google Fonts: eine Schriftdatei, die der Browser beim Öffnen der Web-App lädt (von selbst)",
     "s3_list11": "Die Websites deiner Lesezeichen: ein Abruf der Seite, um ihr Logo neben dem Lesezeichen zu zeigen",
+    "s3_list12": "Diese Website oder GitHub: der Abruf der neuen Version der App, wenn du in der App „Aktualisieren“ antippst (Android)",
     "s4_title": "§ 4 Datenverarbeitung auf der Website",
     "s4_p1": "Beim Besuch unserer Website werden durch den Hosting-Anbieter automatisch technische Zugriffsdaten erfasst (sog. Server-Logfiles). Diese können umfassen:",
     "s4_list1": "IP-Adresse (anonymisiert)",
