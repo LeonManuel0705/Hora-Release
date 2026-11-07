@@ -40,7 +40,7 @@ The current version is 0.5.2, a closed beta released on 7 October 2026. Get it f
 
 | Platform | What you get |
 |:---|:---|
-| macOS | Native app. Needs Python 3: on the first start the app creates its own Python environment and installs its packages once, which takes a few minutes. |
+| macOS | Native app. On Apple silicon it brings its own backend and needs no Python. On Intel Macs it needs Python 3 on the first start, when the app creates its own Python environment and installs its packages once, which takes a few minutes. |
 | Windows | Installer for the desktop app, backend included. |
 | Linux | AppImage of the desktop app, backend included. |
 | Android | Signed app package. |
