@@ -46,7 +46,18 @@
         })();
     </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
-    <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
+    <script nonce="__APP_NONCE__">
+        // A page the offline worker serves gets the font from it. WebKit then never counts a preload as used and warns.
+        if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+            var font = document.createElement("link");
+            font.rel = "preload";
+            font.as = "font";
+            font.type = "font/woff2";
+            font.crossOrigin = "anonymous";
+            font.href = "/static/fonts/plus-jakarta-sans.woff2";
+            document.head.appendChild(font);
+        }
+    </script>
     <link rel="stylesheet" href="/static/app/css/tokens.css?v=48a843cbd7">
     <link rel="stylesheet" href="/static/app/css/app.css?v=48a843cbd7">
     <link rel="stylesheet" href="/static/css/tour.css?v=48a843cbd7">
