@@ -149,19 +149,37 @@
 
   <script>
     (function () {
-      function catchPlan() {
+      var swallow = 0;
+      function takePlan() {
         if (!/^#plan=/.test(location.hash)) return false;
         try { sessionStorage.setItem('app-plan-link', location.hash.slice(1)); } catch (error) {}
-        history.replaceState(history.state, '', location.pathname + location.search);
-        var frame = document.getElementById('hub-frame');
-        if (frame && frame.contentWindow) frame.contentWindow.postMessage({ source: 'shell', type: 'plan-link' }, location.origin);
         return true;
       }
-      catchPlan();
-      window.addEventListener('popstate', function (event) {
-        if (catchPlan()) event.stopImmediatePropagation();
-      }, true);
-      window.addEventListener('hashchange', catchPlan);
+      // A link opened while the app runs sits on top of Flutter's own history entry, and Flutter answers a Back onto
+      // that entry with a second app shell. So the link entry is marked as spent and left again before Flutter sees it.
+      function stepBack() {
+        swallow++;
+        setTimeout(function () { swallow = 0; }, 1500);
+        history.back();
+      }
+      function arrive(event) {
+        if (event.type === 'popstate' && swallow > 0) {
+          swallow--;
+          event.stopImmediatePropagation();
+        } else if (takePlan()) {
+          if (event.type === 'popstate') event.stopImmediatePropagation();
+          history.replaceState({ hubPlanSpent: true }, '', location.pathname + location.search);
+          stepBack();
+          var frame = document.getElementById('hub-frame');
+          if (frame && frame.contentWindow) frame.contentWindow.postMessage({ source: 'shell', type: 'plan-link' }, location.origin);
+        } else if (event.type === 'popstate' && event.state && event.state.hubPlanSpent) {
+          event.stopImmediatePropagation();
+          stepBack();
+        }
+      }
+      if (takePlan()) history.replaceState(history.state, '', location.pathname + location.search);
+      window.addEventListener('popstate', arrive, true);
+      window.addEventListener('hashchange', arrive);
     })();
   </script>
   <script>

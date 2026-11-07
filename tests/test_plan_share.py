@@ -27,6 +27,12 @@ def test_a_shared_plan_carries_the_timetable_and_nothing_else():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_the_web_shell_hands_over_a_link_without_touching_the_app_history():
+    node = node_at_least(20)
+    result = subprocess.run([node, str(ROOT / 'tests' / 'js' / 'web_shell_check.mjs')], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_the_share_modules_parse_as_modules():
     node = node_at_least(20)
     for name in ('plan-share.js', 'plan-format.js', 'qrcodegen.js'):
