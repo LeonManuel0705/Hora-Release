@@ -17,7 +17,7 @@
     "menu": "Menu"
   },
   "meta": {
-    "home": "{{BRAND_NAME}}: Knows where you need to be.",
+    "home": "{{BRAND_NAME}}: Knows where you need to be",
     "features": "Features · {{BRAND_NAME}}",
     "privacy": "Privacy · {{BRAND_NAME}}",
     "download": "Get {{BRAND_NAME}}",
@@ -451,17 +451,17 @@
     "cta": "Get {{BRAND_NAME}} 0.5",
     "matrix_title": "Which feature on which device",
     "eyebrow": "Features",
-    "hero_title": "What {{BRAND_NAME}} does.",
+    "hero_title": "What {{BRAND_NAME}} does",
     "hero_lede": "On your computer, on Android and as a web app on iPhone. Not every feature runs everywhere, the table below shows honestly what works where.",
     "hero_alt": "The {{BRAND_NAME}} school page (German) with the A-week timetable and the substitution plan.",
     "heads": {
-      "stundenplan": "Your next room is already there.",
-      "noten": "Your average, to the decimal.",
-      "aufgaben": "Every test with a countdown.",
-      "iserv": "Sign in once, the rest arrives on its own.",
-      "fahrplan": "Delays before you leave.",
-      "kalender": "Holidays you never type in.",
-      "luna": "Just ask Luna."
+      "stundenplan": "Your next room is already there",
+      "noten": "Your average, to the decimal",
+      "aufgaben": "Every test with a countdown",
+      "iserv": "Sign in once, the rest arrives on its own",
+      "fahrplan": "Delays before you leave",
+      "kalender": "Holidays you never type in",
+      "luna": "Just ask Luna"
     },
     "shots": {
       "stundenplan": "The A-week timetable (German) with subjects, rooms and periods.",
@@ -472,7 +472,7 @@
       "kalender": "The calendar week (German) with timetable, events and a project day.",
       "luna": "Luna, the assistant in {{BRAND_NAME}}."
     },
-    "cta_title": "Get {{BRAND_NAME}}.",
+    "cta_title": "Get {{BRAND_NAME}}",
     "cta_text": "Free for Mac, Windows, Linux and Android."
   },
   "privacy_page": {
@@ -656,13 +656,13 @@
       }
     ],
     "eyebrow": "Download",
-    "hero_title": "Get {{BRAND_NAME}}.",
+    "hero_title": "Get {{BRAND_NAME}}",
     "yours": "Your device",
     "get": "Download",
     "open": "Open"
   },
   "about_page": {
-    "title": "A student project from Brandenburg.",
+    "title": "A student project from Brandenburg",
     "lede": "{{BRAND_NAME}} is built by a student from Brandenburg, currently in the final years of school. The app started as a tool for their own school day and is now there for anyone looking for something similar.",
     "story_title": "Why {{BRAND_NAME}} exists",
     "story": [
@@ -809,26 +809,26 @@
     "hero_alt": "{{BRAND_NAME}} at 7:12 in the morning (German): chemistry in room B206 next, with today's tasks and upcoming deadlines below.",
     "hero_alt_phone": "{{BRAND_NAME}} on iPhone at 7:12 in the morning (German): chemistry in room B206 next, with today's tasks below.",
     "statement": "Before you leave home, {{BRAND_NAME}} already knows which room you are in and whether your bus is on time.",
-    "show_title": "From first period to the bus home.",
+    "show_title": "From first period to the bus home",
     "steps": [
       {
         "id": "heute",
         "label": "Overview",
-        "title": "Chemistry next, room B206.",
+        "title": "Chemistry next, room B206",
         "text": "{{BRAND_NAME}} shows what is on now and what comes next. With room, teacher and time.",
         "alt": "The overview (German): chemistry in room B206 next, then German."
       },
       {
         "id": "aufgaben",
         "label": "Tasks",
-        "title": "Homework straight from IServ.¹",
+        "title": "Homework straight from IServ¹",
         "text": "With subject and due date. Overdue work sits at the top, and you can add your own tasks.",
         "alt": "The tasks (German): an overdue lab report and four tasks for today, two of them from IServ."
       },
       {
         "id": "plan",
         "label": "Timetable",
-        "title": "A week, B week, substitutions.",
+        "title": "A week, B week, substitutions",
         "text": "Your timetable with your school's periods. {{BRAND_NAME}} fetches the substitution plan from IServ every morning.¹",
         "alt": "The A-week timetable (German) with subjects and rooms, next to it the substitution plan.",
         "alt_phone": "The A-week timetable (German) with subjects and rooms, below it the substitution plan."
@@ -836,7 +836,7 @@
       {
         "id": "bus",
         "label": "Transit",
-        "title": "The 612 arrives in 6 minutes.",
+        "title": "The 612 arrives in 6 minutes",
         "text": "Live departures at your stop, including delays. On Android, Nexus only knew Berlin and Brandenburg, {{BRAND_NAME}} knows all of Germany.",
         "alt": "The transit page (German): the way to school with bus 612 at 7:18 and the next departures.",
         "alt_phone": "The transit page (German): the way to school with bus 612 at 7:18 and the way home with bus 612 at 7:15."
@@ -844,22 +844,22 @@
       {
         "id": "noten",
         "label": "Grades",
-        "title": "A 12 is one 13 away.",
+        "title": "A 12 is one 13 away",
         "text": "{{BRAND_NAME}} works out your average and tells you which grade you need for your goal. Advanced courses count double.",
         "alt": "The grades (German): 11.3 points on average and the grade calculator showing 13 points.",
         "alt_phone": "The grade calculator (German): for an average of 12.0 in Biology you need at least 13 points."
       }
     ],
     "tile_luna_label": "Tap Luna and she waves",
-    "privacy_title": "Your grades are your business.",
+    "privacy_title": "Your grades are your business",
     "privacy_text": "Your data stays on your device, because there is no {{BRAND_NAME}} server. What happens to it is in the source code, line by line.",
     "privacy_link": "More on privacy",
-    "get_title": "Get {{BRAND_NAME}}.",
+    "get_title": "Get {{BRAND_NAME}}",
     "get_text": "Free for Mac, Windows, Linux and Android. On iPhone, {{BRAND_NAME}} runs as a web app.",
     "get_all": "All downloads and instructions",
     "fine": "Version 0.5 is out for every platform. All data in the pictures is made up.",
     "footnote": "³ Applies to the Mac: 24.0 MB in version 0.5 instead of 39.4 MB for the last Mac download (Nexus 0.3.0).",
-    "high_title": "What else is inside.",
+    "high_title": "What else is inside",
     "high_label": "More features",
     "high_prev": "Previous card",
     "high_next": "Next card",
@@ -867,47 +867,47 @@
     "cards": [
       {
         "id": "theme",
-        "lead": "Tidier than Nexus.",
+        "lead": "Tidier than Nexus",
         "text": "Only 6 areas up front instead of 15, the rest sits under More."
       },
       {
         "id": "weather",
-        "lead": "With weather for the way home.",
+        "lead": "With weather for the way home",
         "text": "Whether it rains shows up right next to your bus and plans, on the computer and on Android."
       },
       {
         "id": "tour",
-        "lead": "Luna shows you around.",
+        "lead": "Luna shows you around",
         "text": "Nexus had no tour. Luna walks you through {{BRAND_NAME}} in 12 steps."
       },
       {
         "id": "security",
-        "lead": "Even safer than Nexus.",
+        "lead": "Even safer than Nexus",
         "text": "More than 30 fixes after several security reviews."
       },
       {
         "id": "size",
-        "lead": "39 % smaller.³",
+        "lead": "39 % smaller³",
         "text": "Downloads faster, starts leaner and leaves less to attack."
       },
       {
         "id": "luna",
-        "lead": "Luna adds, but never deletes.",
+        "lead": "Luna adds, but never deletes",
         "text": "She only creates tasks. She cannot delete or tick anything off, even if a mail tells her to."
       },
       {
         "id": "move",
-        "lead": "Everything from Nexus comes along.",
+        "lead": "Everything from Nexus comes along",
         "text": "{{BRAND_NAME}} takes over your tasks, events, grades and logins on the first start. Nothing to type in again."
       },
       {
         "id": "phone",
-        "lead": "On iPhone too.",
+        "lead": "On iPhone too",
         "text": "As a web app, straight from Safari. With overview, tasks and timetable."
       },
       {
         "id": "holidays",
-        "lead": "School holidays included.",
+        "lead": "School holidays included",
         "text": "{{BRAND_NAME}} adds the holidays of all 16 German states to your calendar by itself."
       }
     ],
@@ -995,7 +995,7 @@
     },
     "lock_label": "A lock closes.",
     "agent_eyebrow": "Luna",
-    "agent_title": "Just ask Luna.",
+    "agent_title": "Just ask Luna",
     "agent_text": "Luna is the assistant in {{BRAND_NAME}} and knows your timetable, your tasks and your grades. She adds homework for you and, before an exam, plans with you what to study when. By default she works entirely on your device.²",
     "agent_name": "Luna",
     "agent_role": "Your assistant",
@@ -1013,7 +1013,7 @@
       },
       {
         "from": "me",
-        "text": "Add maths p. 38 for Monday."
+        "text": "Add maths p. 38 for Monday"
       },
       {
         "from": "luna",
@@ -1029,7 +1029,7 @@
         "text": "Yes, there are five days until Tuesday. Page 58 tonight, two-way tables tomorrow, tree diagrams at the weekend."
       }
     ],
-    "day_title": "And there all day.",
+    "day_title": "And there all day",
     "day": [
       {
         "time": "7:12",
@@ -1053,7 +1053,7 @@
       }
     ],
     "free_lesson": "At school they teach you: if an app is free, you are the product.",
-    "free_title": "Not with {{BRAND_NAME}}.",
+    "free_title": "Not with {{BRAND_NAME}}",
     "free_text": "I get nothing from you, no money and no data. I build {{BRAND_NAME}} for fun and out of conviction: a school app does not belong behind a paywall, and your data belongs neither to advertisers nor to anyone else. It belongs to you. That is why it stays on your device, and not even I can get to it.",
     "free_label": "Price: 0 euros",
     "footnote_iserv": "¹ IServ works in the apps for Mac, Windows, Linux and Android. On iPhone, {{BRAND_NAME}} runs as a web app, where IServ is not available.",

@@ -376,7 +376,7 @@ body[data-theme="dark"] .menu-lines i { background: var(--ap-text); }
   color: var(--cap-text);
   text-wrap: pretty;
 }
-.hl-caption strong { font-weight: 600; color: var(--cap-lead); }
+.hl-caption strong { display: block; font-weight: 600; color: var(--cap-lead); }
 .hl-visual { position: relative; flex: 1; min-height: 0; }
 .hl-theme { --tile: linear-gradient(180deg, #45603A 0%, #6E8C5A 100%); }
 .hl-weather { --tile: linear-gradient(180deg, #094B62 0%, #16819E 100%); }
