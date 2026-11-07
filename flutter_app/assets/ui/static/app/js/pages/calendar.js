@@ -93,7 +93,10 @@ function load() {
 const todayIso = () => isoDate(now());
 const nowMin = () => minutesOf(now());
 const mondayOf = (date) => addDays(startOfDay(date), 1 - (date.getDay() || 7));
-const covers = (item, iso) => item.date <= iso && iso <= (item.endDate || item.date);
+// An event that ends at 0:00 of the next day belongs to the day before.
+const endsAtMidnight = (item) => !!item.start && item.end === "00:00" && !!item.endDate && item.endDate > item.date;
+const lastDay = (item) => (endsAtMidnight(item) ? isoDate(addDays(parseDate(item.endDate), -1)) : item.endDate || item.date);
+const covers = (item, iso) => item.date <= iso && iso <= lastDay(item);
 const kindVar = (kind) => `var(--kind-${kind})`;
 const startOf = (item) => toMin(item.start);
 const endOf = (item) => (item.end ? Math.max(toMin(item.end), startOf(item) + 15) : startOf(item) + 60);
@@ -105,6 +108,7 @@ const colorOf = (item) => (item.synced && item.color ? item.color : kindVar(item
 const editable = (item) => !item.synced || item.editable === true;
 const spanDays = (item) => (item.endDate && item.endDate > item.date ? dayDiff(parseDate(item.date), item.endDate) : 0);
 const overnight = (item) => !!item.start && spanDays(item) > 0;
+const endMinute = (item) => (endsAtMidnight(item) ? 1440 : overnight(item) ? toMin(item.end || "00:00") : endOf(item));
 // Like Google: an event of a day or more lies in the row of whole days, a shorter one over midnight is split.
 const longTimed = (item) => overnight(item) && spanDays(item) * 1440 + toMin(item.end || item.start) - startOf(item) >= 1440;
 const timedAt = (iso) => eventsAt(iso).filter((item) => item.start && !longTimed(item)).sort((a, b) => (a.date === iso ? startOf(a) : -1) - (b.date === iso ? startOf(b) : -1));
@@ -121,9 +125,9 @@ function refreshShown() {
 /* The part of an event that lies on one day, in minutes of that day. */
 function segmentOf(item, iso) {
   const head = item.date === iso;
-  const tail = (item.endDate || item.date) === iso || !overnight(item);
+  const tail = lastDay(item) === iso || !overnight(item);
   const s = head ? startOf(item) : 0;
-  const e = tail ? (overnight(item) ? toMin(item.end || "00:00") : endOf(item)) : 1440;
+  const e = tail ? endMinute(item) : 1440;
   if (!head && e <= 0) return null;
   return { item, s, e: Math.max(e, s + 15), head, tail };
 }
@@ -136,16 +140,16 @@ const subjectName = (key) => subject(key).name.replace(/ LK$/, "");
 
 function isPast(item) {
   const today = todayIso();
-  const last = item.endDate || item.date;
+  const last = lastDay(item);
   if (last < today) return true;
   if (last > today || !item.start) return false;
-  return (overnight(item) ? toMin(item.end || "00:00") : endOf(item)) <= nowMin();
+  return endMinute(item) <= nowMin();
 }
 
 function timeText(item) {
   if (!item.start) return "ganztägig";
   if (!item.end) return `ab ${hm(item.start)}`;
-  if (overnight(item)) return `${hm(item.start)} bis ${WEEKDAYS_SHORT[parseDate(item.endDate).getDay()]}. ${hm(item.end)}`;
+  if (overnight(item) && lastDay(item) > item.date) return `${hm(item.start)} bis ${WEEKDAYS_SHORT[parseDate(item.endDate).getDay()]}. ${hm(item.end)}`;
   return `${hm(item.start)} bis ${hm(item.end)}`;
 }
 
@@ -232,7 +236,7 @@ function rangeText() {
 function monthMeta(span) {
   const first = isoDate(span.start);
   const last = isoDate(span.end);
-  const events = visibleEvents().filter((item) => item.date <= last && (item.endDate || item.date) >= first).length;
+  const events = visibleEvents().filter((item) => item.date <= last && lastDay(item) >= first).length;
   const tests = assessmentCount(deadlines.filter((item) => item.date >= first && item.date <= last));
   return [events ? plural(events, "Termin", "Termine") : "", tests].filter(Boolean).join(", ");
 }
@@ -378,11 +382,11 @@ function chipHtml(entry, isos) {
 function allDayEntries(isos) {
   const first = isos[0];
   const last = isos[isos.length - 1];
-  const clip = (item) => ({ from: item.date < first ? first : item.date, to: (item.endDate || item.date) > last ? last : item.endDate || item.date });
+  const clip = (item) => ({ from: item.date < first ? first : item.date, to: lastDay(item) > last ? last : lastDay(item) });
   return [
     ...holidays.filter((item) => item.date <= last && item.endDate >= first).map((item) => ({ type: "holiday", item, ...clip(item) })),
     ...deadlines.filter((item) => item.date >= first && item.date <= last).sort((a, b) => Number(isAssessment(b)) - Number(isAssessment(a))).map((item) => ({ type: "due", item, from: item.date, to: item.date })),
-    ...visibleEvents().filter((item) => (!item.start || longTimed(item)) && item.date <= last && (item.endDate || item.date) >= first).map((item) => ({ type: "event", item, ...clip(item) })),
+    ...visibleEvents().filter((item) => (!item.start || longTimed(item)) && item.date <= last && lastDay(item) >= first).map((item) => ({ type: "event", item, ...clip(item) })),
   ];
 }
 
@@ -824,7 +828,7 @@ function whenNote(item) {
   if (!item.start) return "";
   if (!item.end) return `Ab ${hm(item.start)}, Ende offen`;
   const minutes = overnight(item) ? spanDays(item) * 1440 + toMin(item.end) - startOf(item) : endOf(item) - startOf(item);
-  return `${duration(minutes).replace(/ /g, " ")}${overnight(item) ? `, endet ${shortDate(parseDate(item.endDate))}` : ""}`;
+  return `${duration(minutes).replace(/\u00a0/g, " ")}${overnight(item) && lastDay(item) > item.date ? `, endet ${shortDate(parseDate(item.endDate))}` : ""}`;
 }
 
 function normalizeTime(value) {
@@ -1987,7 +1991,7 @@ function holdCard(event, card, col) {
       date: isoDate(day),
       start: hhmm(start),
       end: finish == null ? null : hhmm(finish % 1440),
-      endDate: finish != null && finish >= 1440 && finish % 1440 ? isoDate(addDays(day, Math.floor(finish / 1440))) : null,
+      endDate: finish != null && finish >= 1440 ? isoDate(addDays(day, Math.floor(finish / 1440))) : null,
     });
   };
   addEventListener("pointermove", move);
