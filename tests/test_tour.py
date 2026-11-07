@@ -95,3 +95,12 @@ def test_the_tour_is_short_and_ends_in_the_setup():
     assert steps.count("id: '") == 8
     assert "IServ" not in steps and "Google" not in steps
     assert "Stundenplan eintragen" in steps and "function handOver()" in tour
+
+
+def test_keys_belong_to_the_page_again_once_the_tour_ends():
+    tour = (Path(__file__).resolve().parent.parent / "app" / "static" / "js" / "tour.js").read_text(encoding="utf-8")
+    end = tour.split("async function end(state) {", 1)[1].split("\n  }\n", 1)[0]
+    assert end.index("removeEventListener('keydown', onKey, true)") < end.index("await guide.setMode('bye')")
+    go = tour.split("async function go(id, options) {", 1)[1].split("\n  }\n", 1)[0]
+    assert go.lstrip().startswith("if (!run || run.ending) return;")
+    assert "token !== run.token" not in go.replace("!run || token !== run.token", "")

@@ -200,7 +200,7 @@
   }
 
   async function go(id, options) {
-    if (!run) return;
+    if (!run || run.ending) return;
     const opts = options || {};
     const step = STEPS[indexOf(id)];
     if (!step) return;
@@ -229,13 +229,13 @@
         await wait(120);
         target = step.target();
       }
-      if (token !== run.token) return;
+      if (!run || token !== run.token) return;
     }
     if (!shown(target)) target = null;
     if (target && clipped(target)) {
       target.scrollIntoView({ block: target.closest('.sidebar') ? 'nearest' : 'center', behavior: still() ? 'auto' : 'smooth' });
       await wait(still() ? 0 : 380);
-      if (token !== run.token) return;
+      if (!run || token !== run.token) return;
     }
     run.target = target;
     run.rect = target ? rectOf(target) : null;
@@ -250,7 +250,7 @@
     } else {
       await guide.moveTo(spots.gx, spots.gy);
     }
-    if (token !== run.token) return;
+    if (!run || token !== run.token) return;
     const aim = target ? aimAt(target, spots) : null;
     if (step.mode === 'point' && aim) guide.setMode('point', aim);
     else if (step.mode === 'watch') guide.setMode('watch', aim || {});
@@ -538,7 +538,7 @@
 
   function onBubbleClick(e) {
     const btn = e.target.closest('[data-act]');
-    if (!btn || !run || !run.step) return;
+    if (!btn || !run || !run.step || run.ending) return;
     const act = btn.dataset.act, step = run.step;
     if (act === 'close') return end('skipped');
     if (act === 'primary') return next(step);
@@ -562,7 +562,7 @@
   }
 
   function onKey(e) {
-    if (!run || !run.step) return;
+    if (!run || !run.step || run.ending) return;
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
     if (e.key === 'Escape') {
       if (run.step.wait === 'created' && document.activeElement === q('#quickInput') && q('#quickInput').value) return;
@@ -611,6 +611,8 @@
     if (!run || run.ending) return;
     run.ending = true;
     run.token++;
+    // Luna still waves goodbye for a moment. Keys already belong to the page again, such as Esc for the setup she handed over to.
+    document.removeEventListener('keydown', onKey, true);
     forget();
     persist(state);
     clearWaits();
