@@ -3008,6 +3008,11 @@ function readRecords() {
   return pending;
 }
 
+function forgetRecords() {
+  exported.records = undefined;
+  readRecords();
+}
+
 // The records are read before the tap, so that the share sheet still opens inside the click on iPhone and iPad.
 async function exportData() {
   let records = exported.records;
@@ -3100,6 +3105,7 @@ async function carryRecords(plan) {
       failed += 1;
     }
   }
+  forgetRecords();
   return { made, known, failed, undo };
 }
 
@@ -3114,6 +3120,7 @@ async function dropRecords(undo) {
       left += 1;
     }
   }
+  forgetRecords();
   return left;
 }
 

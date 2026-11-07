@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
 export function safariOnMac(agent, touchPoints) {
   return /Macintosh/.test(agent) && touchPoints < 2 && /Version\/[\d.]+ Safari\//.test(agent) && !/Chrome|Chromium|Edg\/|OPR\/|Firefox/.test(agent);
 }
