@@ -996,7 +996,7 @@ NOTES_SHOWN = 2000
 NOTES_KEPT = 5000
 LIMITS = {'rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded'}
 ACCESS = {'requiredAccessLevel', 'forbiddenForNonOrganizer'}
-FORMATTED = re.compile(r'<(a|b|i|u|br|p|div|span|ul|ol|li|strong|em|h\d)\b[^>]*>|&(nbsp|amp|lt|gt|quot);', re.I)
+FORMATTED = re.compile(r'<[a-z!/]|&#?\w+;', re.I)
 
 
 def _locate(cache, ref):
@@ -1132,8 +1132,10 @@ def _shown(item, calendar):
 def _marked(shown, item, editable):
     """A page event with what it may do here. An editable one gets its whole description, so the form never cuts it."""
     if shown:
+        fits = notes_fit(item.get('description'))
         shown['editable'] = editable
-        if editable and notes_fit(item.get('description')):
+        shown['notesLocked'] = not fits
+        if editable and fits:
             shown['notes'] = str(item.get('description') or '')
     return shown
 

@@ -296,9 +296,13 @@ def start_oauth_flow(features=('calendar',), another=False) -> Dict:
         return {"success": False, "error": "Google ist in dieser Installation nicht eingerichtet"}
 
     tokens = load_tokens()
-    account = None if another else calendar_account(tokens) or next(iter(tokens), None)
+    account = calendar_account(tokens) or next(iter(tokens), None)
     entry = tokens.get(account) or {}
     working = bool(entry.get('refresh_token')) and not entry.get('expired')
+    # A sign-in that no longer works is renewed first, with all it covered, even when another account was asked for.
+    another = another and (working or not entry)
+    if another:
+        account, entry, working = None, {}, False
     if working and all(covers(scopes_of(entry), name) for name in features):
         return {"success": True, "granted": True, "email": account, "features": features}
 

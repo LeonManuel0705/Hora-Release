@@ -447,3 +447,11 @@ def test_the_classic_pages_offer_google_only_where_it_is_set_up(app_window, monk
     monkeypatch.setattr(google_oauth, 'is_google_oauth_configured', lambda: True)
     assert 'connectGoogleAccount()">Konto verbinden' in app_window.get('/hub/klassisch/settings').get_data(as_text=True)
     assert 'id="googleSignInBtn"' in app_window.get('/hub/klassisch/email').get_data(as_text=True)
+
+
+def test_another_account_asked_for_while_the_sign_in_is_expired_renews_it_with_all_it_covered(flows):
+    saved, _, _ = flows
+    saved['lea@example.com'] = {'token': 'a', 'refresh_token': 'alt', 'expired': True}
+    query = asked(google_oauth.start_oauth_flow(['gmail'], another=True))
+    assert {EVENTS, LISTING, *GMAIL} <= set(query['scope'].split())
+    assert query['prompt'] == 'consent' and query['login_hint'] == 'lea@example.com'

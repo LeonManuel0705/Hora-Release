@@ -266,3 +266,24 @@ def test_an_invitation_from_someone_else_stays_read_only_unless_guests_may_chang
     reply = client.patch(f'/api/ui/events/g-{google.primary}-{invited}', json={'title': 'X'})
     assert reply.status_code == 403 and reply.get_json()['message'] == calendar_cache.INVITED and google.calls == []
     assert client.patch(f'/api/ui/events/g-{google.primary}-{open_one}', json={'title': 'Offene Runde 2'}).status_code == 200
+
+
+@pytest.mark.parametrize('description, locked', [
+    ('Treffpunkt am Tor', False),
+    ('Alt <s>und gestrichen</s>', True),
+    ('Oben<hr>Unten', True),
+    ('<blockquote>Zitat</blockquote>', True),
+    ('Toms&#39;s Plan', True),
+    ('Kurz &ndash; und gut', True),
+])
+def test_a_description_with_any_markup_is_locked_and_never_replaced(google, client, description, locked):
+    key = google.put('primary', 'Treffen', day(2), '17:00', '18:00', description=description)
+    calendar_cache.sync()
+    event = shown()['Treffen']
+    assert event['notesLocked'] is locked
+    reply = client.patch(f'/api/ui/events/g-{google.primary}-{key}', json={'notes': 'Neu geschrieben'})
+    if locked:
+        assert reply.status_code == 409 and reply.get_json()['message'] == calendar_cache.KEEP_NOTES
+        assert google.store[google.primary][key]['description'] == description
+    else:
+        assert reply.status_code == 200 and google.store[google.primary][key]['description'] == 'Neu geschrieben'
