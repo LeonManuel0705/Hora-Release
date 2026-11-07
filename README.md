@@ -184,6 +184,8 @@ npm run build:win                      # per-user installer for Windows
 npm run build:linux                    # AppImage and .deb
 ```
 
+`build_macos.sh` needs Xcode. It first freezes the backend for Apple silicon with `scripts/build_backend_macos.sh`, which downloads a pinned, checksummed CPython and so needs the network; `MACOS_FROZEN_BACKEND=0` skips that for a quick local build. The app starts the frozen backend unless its project folder is a git checkout, and Intel Macs keep starting it with Python.
+
 <details>
 <summary>What the desktop build and the first start do in detail</summary>
 
