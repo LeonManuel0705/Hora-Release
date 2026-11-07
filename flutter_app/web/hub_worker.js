@@ -4,6 +4,7 @@
 const APP = new URL("./", self.location).pathname;
 const SCOPE = "/hub";
 const WAIT = 20000;
+const PROTOCOL = 1;
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
 self.addEventListener("install", () => self.skipWaiting());
@@ -67,6 +68,7 @@ async function relay(request, navigate) {
   const url = new URL(request.url);
   const message = {
     type: "hub-request",
+    protocol: PROTOCOL,
     navigate,
     method: request.method,
     path: url.pathname,

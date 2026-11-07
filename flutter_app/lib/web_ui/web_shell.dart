@@ -45,6 +45,7 @@ class WebShell extends StatefulWidget {
 class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShellHost<WebShell> {
   static const _scope = '/hub';
   static const _worker = 'hub_worker.js';
+  static const _protocol = 1;
   static const _viewKeys = {'app-task-filter', 'app-cal-view', 'app-motion', 'app-theme-choice', 'app-single-keys'};
 
   late final UiBridge _bridge = UiBridge(
@@ -210,7 +211,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     final data = event.data.dartify();
     if (data is! Map<Object?, Object?> || data['type'] != 'hub-request') return;
     final port = ports.first;
-    if (_elsewhere || !mounted) {
+    if (_elsewhere || !mounted || (data['protocol'] ?? 1) != _protocol) {
       port.postMessage(_Reply(busy: true));
       return;
     }

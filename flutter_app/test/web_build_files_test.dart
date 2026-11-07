@@ -36,6 +36,12 @@ void main() {
     expect(File('web/flutter_bootstrap.js').readAsStringSync(), isNot(contains('serviceWorker')));
   });
 
+  test('the hub worker and the page agree on the message format', () {
+    final worker = RegExp(r'const PROTOCOL = (\d+);').firstMatch(File('web/hub_worker.js').readAsStringSync())!.group(1);
+    final page = RegExp(r'_protocol = (\d+);').firstMatch(File('lib/web_ui/web_shell.dart').readAsStringSync())!.group(1);
+    expect(worker, page);
+  });
+
   test('the offline worker keeps the whole build and the start no longer throws it away', () {
     final worker = File('web/app_worker.js').readAsStringSync();
     final builder = File('../scripts/build_web_app.py').readAsStringSync();
