@@ -36,14 +36,15 @@ def page_data(client, path="/hub"):
     return json.loads(re.search(r'<script type="application/json" id="appData">(.*?)</script>', html, re.S).group(1))
 
 
-def test_the_setup_logic_holds_up_under_node():
+@pytest.mark.parametrize("check", ["setup_check.mjs", "setup_flow_check.mjs"])
+def test_the_setup_logic_holds_up_under_node(check):
     node = shutil.which("node")
     if not node:
         pytest.skip("node is not installed")
     major = int(re.match(r"v(\d+)", subprocess.run([node, "--version"], capture_output=True, text=True).stdout).group(1))
     if major < 18:
         pytest.skip("node is too old")
-    result = subprocess.run([node, str(ROOT / "tests" / "js" / "setup_check.mjs")], capture_output=True, text=True, timeout=120)
+    result = subprocess.run([node, str(ROOT / "tests" / "js" / check)], capture_output=True, text=True, timeout=180)
     assert result.returncode == 0, result.stdout + result.stderr
 
 

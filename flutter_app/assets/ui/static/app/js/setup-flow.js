@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import {
-  data, esc, icon, luna, now, storage, LOCAL_KEYS, HUES, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered,
+  data, esc, icon, luna, now, storage, LOCAL_KEYS, HUES, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, abSettled,
   activeSubjectKeys, subject, hueVar, slug, teacherId, teacherLabel, weekType, WEEKDAYS, WEEKDAYS_SHORT, isoWeek, hm, BRAND,
 } from "./core.js";
 import { animates, travels, token } from "./motion.js";
@@ -24,6 +24,10 @@ const COUNTED = STEPS.filter((step) => step.label);
 const DAYS = [1, 2, 3, 4, 5];
 const plural = (count, one, many) => `${count}\u00a0${count === 1 ? one : many}`;
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const same = (one, other) => JSON.stringify(one ?? null) === JSON.stringify(other ?? null);
+const listOf = (value) => (Array.isArray(value) ? value.filter((item) => typeof item === "string") : []);
+const tidy = (text) => String(text || "").replace(/\s+/g, " ").trim();
+const lower = (text) => String(text || "").toLocaleLowerCase("de");
 const shareFlow = () => (typeof window.AppPlanShare?.importFlow === "function" ? window.AppPlanShare.importFlow : null);
 
 const flow = { dialog: null, stage: null, step: 0, dirty: false, busy: false };
@@ -359,62 +363,92 @@ function uniqueKey(name, items) {
   return key;
 }
 
-function teacherOf(text, items) {
-  const parsed = plan.parseTeacher(text);
-  if (!parsed) return "";
+// A name is looked up as it was written before it is read as Frau or Herr, so "Fr. Krüger" stays the teacher the plan already has.
+function teacherOf(text, teachers) {
+  const typed = tidy(text);
+  if (!typed) return "";
+  const written = data.teachers.find((teacher) => lower(teacher.label) === lower(typed));
+  if (written) return written.id;
+  const parsed = plan.parseTeacher(typed);
   const label = teacherLabel(parsed);
-  const known = data.teachers.find((teacher) => teacher.label.toLowerCase() === label.toLowerCase());
-  if (known) return known.id;
+  const read = data.teachers.find((teacher) => lower(teacherLabel(plan.parseTeacher(teacher.label))) === lower(label));
+  if (read) return read.id;
   const id = teacherId(label);
-  items[id] ||= { custom: true, title: parsed.title, name: parsed.name };
+  teachers.items[id] ||= { custom: true, title: parsed.title, name: parsed.name };
+  teachers.removed = teachers.removed.filter((item) => item !== id);
   return id;
 }
 
-function writeStore(key, value, empty) {
+function roomOf(text, rooms) {
+  const typed = tidy(text).slice(0, 12);
+  if (!typed) return "";
+  const room = plan.normalizeRoom(typed);
+  const known = [...data.rooms, ...rooms.added].find((item) => lower(item) === lower(typed) || lower(item) === lower(room));
+  if (known) return known;
+  rooms.added.push(room);
+  rooms.removed = rooms.removed.filter((item) => item !== room);
+  return room;
+}
+
+// Writes a store only when its content changed, so going through the setup without typing leaves every store as it was.
+function saveStore(key, saved, before, after, empty) {
+  if (same(before, after)) return false;
   if (empty) storage.remove(key);
-  else storage.set(key, value);
+  else storage.set(key, { ...saved, ...after });
+  return true;
 }
 
 function commitSubjects() {
-  const saved = readObject(LOCAL_KEYS.subjects);
-  const items = { ...(saved.items || {}) };
-  const removed = Array.isArray(saved.removed) ? saved.removed.filter((key) => typeof key === "string") : [];
+  const subjectStore = readObject(LOCAL_KEYS.subjects);
   const teacherStore = readObject(LOCAL_KEYS.teachers);
-  const teachers = { ...(teacherStore.items || {}) };
   const roomStore = readObject(LOCAL_KEYS.rooms);
-  const rooms = { added: Array.isArray(roomStore.added) ? [...roomStore.added] : [], removed: Array.isArray(roomStore.removed) ? [...roomStore.removed] : [] };
-  const edits = clone(readObject(LOCAL_KEYS.lessons));
+  const before = {
+    subjects: { items: subjectStore.items || {}, removed: listOf(subjectStore.removed) },
+    teachers: { items: teacherStore.items || {}, removed: listOf(teacherStore.removed) },
+    rooms: { added: listOf(roomStore.added), removed: listOf(roomStore.removed) },
+    lessons: readObject(LOCAL_KEYS.lessons),
+  };
+  const next = clone(before);
+  const { items } = next.subjects;
   (model.dropped || []).forEach((key) => {
     if (items[key]?.custom) delete items[key];
-    Object.keys(edits).forEach((cell) => edits[cell]?.subject === key && delete edits[cell]);
+    Object.keys(next.lessons).forEach((cell) => next.lessons[cell]?.subject === key && delete next.lessons[cell]);
   });
   model.dropped = [];
   model.picks.forEach((pick) => {
-    const teacher = teacherOf(pick.teacher, teachers);
-    const room = plan.normalizeRoom(pick.room);
-    pick.room = room;
-    if (room && !data.rooms.includes(room) && !rooms.added.includes(room)) rooms.added.push(room);
-    rooms.removed = rooms.removed.filter((item) => item !== room);
+    const touched = pick.touched || new Set();
+    const info = pick.key ? data.subjects[pick.key] : null;
+    const teacher = !pick.existing || touched.has("teacher") ? teacherOf(pick.teacher, next.teachers) : info?.teacherId || "";
+    const room = !pick.existing || touched.has("room") ? roomOf(pick.room, next.rooms) : info?.room || "";
     if (!pick.key) pick.key = uniqueKey(pick.short || pick.name, items);
-    const info = data.subjects[pick.key];
-    if (!info || info.custom) {
+    if (!pick.existing) {
       items[pick.key] = { custom: true, name: pick.name, short: pick.short, hue: pick.hue, type: pick.type, teacher, room };
       return;
     }
+    if (!info) return;
     const own = { ...(items[pick.key] || {}) };
-    if (pick.type !== info.type) own.type = pick.type;
-    if (teacher !== (info.teacherId || "")) own.teacher = teacher;
-    if (room !== (info.room || "")) own.room = room;
+    if (touched.has("type") && pick.type !== info.type) own.type = pick.type;
+    if (touched.has("teacher") && teacher !== info.teacherId) own.teacher = teacher;
+    if (touched.has("room") && room !== info.room) own.room = room;
     if (Object.keys(own).length) items[pick.key] = own;
   });
-  writeStore(LOCAL_KEYS.subjects, { items, removed }, !Object.keys(items).length && !removed.length);
-  writeStore(LOCAL_KEYS.teachers, { items: teachers, removed: Array.isArray(teacherStore.removed) ? teacherStore.removed : [] }, !Object.keys(teachers).length && !(teacherStore.removed || []).length);
-  writeStore(LOCAL_KEYS.rooms, rooms, !rooms.added.length && !rooms.removed.length);
-  writeStore(LOCAL_KEYS.lessons, edits, !Object.keys(edits).length);
-  applySchoolEdits();
-  model.picks.forEach((pick) => (pick.teacher = data.subjects[pick.key]?.teacher || ""));
+  const changes = [
+    saveStore(LOCAL_KEYS.subjects, subjectStore, before.subjects, next.subjects, !Object.keys(items).length && !next.subjects.removed.length),
+    saveStore(LOCAL_KEYS.teachers, teacherStore, before.teachers, next.teachers, !Object.keys(next.teachers.items).length && !next.teachers.removed.length),
+    saveStore(LOCAL_KEYS.rooms, roomStore, before.rooms, next.rooms, !next.rooms.added.length && !next.rooms.removed.length),
+    saveStore(LOCAL_KEYS.lessons, {}, before.lessons, next.lessons, !Object.keys(next.lessons).length),
+  ];
+  if (changes.some(Boolean)) {
+    applySchoolEdits();
+    flow.dirty = true;
+  }
+  model.picks.forEach((pick) => {
+    const info = data.subjects[pick.key];
+    if (!info) return;
+    pick.teacher = info.teacher || "";
+    pick.room = info.room || "";
+  });
   if (!model.brush || !data.subjects[model.brush]) model.brush = model.picks[0]?.key || null;
-  flow.dirty = true;
 }
 
 function detailRow(pick) {
@@ -532,7 +566,7 @@ function gridHint() {
 
 function writeEdits(edits) {
   if (!abAnswered()) storage.set(LOCAL_KEYS.abWeeks, abWeeks());
-  writeStore(LOCAL_KEYS.lessons, edits, !Object.keys(edits).length);
+  saveStore(LOCAL_KEYS.lessons, {}, readObject(LOCAL_KEYS.lessons), edits, !Object.keys(edits).length);
   applySchoolEdits();
   flow.dirty = true;
 }
@@ -683,8 +717,10 @@ async function saveState(code) {
 function saveGrade(grade) {
   model.grade = grade;
   const prefs = savedPrefs();
-  storage.set(LOCAL_KEYS.prefs, { ...prefs, school: { ...(prefs.school || {}), grade } });
-  flow.dirty = true;
+  if (prefs.school?.grade !== grade) {
+    storage.set(LOCAL_KEYS.prefs, { ...prefs, school: { ...(prefs.school || {}), grade } });
+    flow.dirty = true;
+  }
   const note = flow.stage.querySelector("#setupGradeNote");
   if (note) note.textContent = gradeNote();
   paintFoot();
@@ -701,14 +737,23 @@ function leaveStep(id) {
     }
   }
   if (id === "weeks") {
-    storage.set(LOCAL_KEYS.abWeeks, model.ab === "yes");
-    if (model.ab === "yes") {
-      if (plan.swapFor(model.letter, now(), schoolDefaults.abReference)) storage.set(LOCAL_KEYS.abSwap, true);
-      else storage.remove(LOCAL_KEYS.abSwap);
+    const wanted = model.ab === "yes";
+    let changed = false;
+    if (!abSettled() || abWeeks() !== wanted) {
+      storage.set(LOCAL_KEYS.abWeeks, wanted);
+      changed = true;
     }
-    applySchoolEdits();
+    const swap = wanted && plan.swapFor(model.letter, now(), schoolDefaults.abReference);
+    if (wanted && swap !== (storage.get(LOCAL_KEYS.abSwap) === true)) {
+      if (swap) storage.set(LOCAL_KEYS.abSwap, true);
+      else storage.remove(LOCAL_KEYS.abSwap);
+      changed = true;
+    }
+    if (changed) {
+      applySchoolEdits();
+      flow.dirty = true;
+    }
     model.week = "A";
-    flow.dirty = true;
   }
   if (id === "subjects" || id === "details") commitSubjects();
   return true;
@@ -851,7 +896,9 @@ function onChange(event) {
   }
   if (target.dataset.type) {
     const pick = pickNamed(target.dataset.type);
-    if (pick) pick.type = target.value;
+    if (!pick) return;
+    pick.type = target.value;
+    (pick.touched ||= new Set()).add("type");
     return;
   }
   if (target.name === "brush") {
@@ -862,13 +909,11 @@ function onChange(event) {
 
 function onInput(event) {
   const target = event.target;
-  if (target.dataset.teacher) {
-    const pick = pickNamed(target.dataset.teacher);
-    if (pick) pick.teacher = target.value;
-  } else if (target.dataset.room) {
-    const pick = pickNamed(target.dataset.room);
-    if (pick) pick.room = target.value;
-  }
+  const field = target.dataset.teacher ? "teacher" : target.dataset.room ? "room" : "";
+  const pick = field && pickNamed(target.dataset[field]);
+  if (!pick) return;
+  pick[field] = target.value;
+  (pick.touched ||= new Set()).add(field);
 }
 
 function submitCustom(form) {

@@ -468,6 +468,7 @@ export const abWeeks = () => {
   return typeof saved === "boolean" ? saved : storedPlan;
 };
 export const abAnswered = () => typeof storage.get(LOCAL_KEYS.abWeeks) === "boolean";
+export const abSettled = () => abAnswered() || storedPlan;
 export const hasPlan = () => anyLesson(abWeeks() ? data?.timetable : { A: data?.timetable?.A });
 export const gradeScale = () => ((storage.get(LOCAL_KEYS.prefs)?.school?.grade ?? 12) >= 11 ? "points" : "grades");
 
