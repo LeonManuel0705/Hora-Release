@@ -21,6 +21,10 @@ const appData = {
     event("klavier", "2026-10-20", "15:00", { reminderMinutes: 10, recurrence: { freq: "weekly", exceptions: ["2026-11-17"] } }),
     event("late", "2026-11-10", "23:00"),
     event("allday", "2026-11-10", null, { reminderMinutes: 0 }),
+    event("allday-google", "2026-11-10", null, { synced: true, reminderMinutes: 0 }),
+    event("google-plain", "2026-11-12", "16:00", { synced: true }),
+    event("google-popup", "2026-11-12", "17:00", { synced: true, reminderMinutes: 30 }),
+    event("google-quiet", "2026-11-12", "18:00", { synced: true, reminderMinutes: -1 }),
   ],
 };
 const store = new Map();
@@ -48,7 +52,7 @@ globalThis.matchMedia = () => ({ matches: false, addEventListener() {} });
 globalThis.addEventListener = () => {};
 globalThis.dispatchEvent = () => true;
 
-const { dueReminders, readPrefs } = await import(script("reminders.js"));
+const { dueReminders, readPrefs, eventMinutes } = await import(script("reminders.js"));
 
 const at = (day, clock) => {
   const [year, month, date] = day.split("-").map(Number);
@@ -90,6 +94,35 @@ const tests = {
   "quiet hours and events without a time stay quiet"() {
     assert.deepEqual(seen(on, "2026-11-10", "22:45"), []);
     assert.deepEqual(seen(on, "2026-11-10", "00:00"), []);
+  },
+  "an all-day event never reminds, whatever it says"() {
+    for (const prefs of [on, off]) {
+      for (const clock of ["00:00", "07:00", "08:00", "12:00", "23:59"]) {
+        assert.deepEqual(seen(prefs, "2026-11-10", clock).filter((text) => text.startsWith("allday")), [], clock);
+        assert.deepEqual(seen(prefs, "2026-11-09", clock).filter((text) => text.startsWith("allday")), [], clock);
+      }
+    }
+  },
+  "an event from Google reminds with its own pop-up or the lead time while Termine is on"() {
+    assert.deepEqual(seen(on, "2026-11-12", "15:45"), ["google-plain: Um 16:00"]);
+    assert.deepEqual(seen(on, "2026-11-12", "16:30"), ["google-popup: Um 17:00"]);
+    assert.deepEqual(seen(on, "2026-11-12", "16:45"), []);
+    assert.deepEqual(seen(on, "2026-11-12", "17:45"), []);
+  },
+  "with Termine off no event from Google reminds, not even with a pop-up of its own"() {
+    for (const clock of ["15:45", "16:30", "16:45", "17:45"]) assert.deepEqual(seen(off, "2026-11-12", clock), [], clock);
+  },
+  "the rules in one place"() {
+    const category = { on: true, lead: 15 };
+    const quiet = { on: false, lead: 15 };
+    const cases = [
+      [{ start: null, reminderMinutes: 30 }, category, -1], [{ start: null, synced: true }, category, -1],
+      [{ start: "10:00" }, category, 15], [{ start: "10:00" }, quiet, -1], [{ start: "10:00", reminderMinutes: 30 }, quiet, 30],
+      [{ start: "10:00", reminderMinutes: -1 }, category, -1], [{ start: "10:00", synced: true }, category, 15],
+      [{ start: "10:00", synced: true, reminderMinutes: 30 }, category, 30], [{ start: "10:00", synced: true, reminderMinutes: 30 }, quiet, -1],
+      [{ start: "10:00", synced: true, reminderMinutes: -1 }, category, -1],
+    ];
+    for (const [event, prefs, minutes] of cases) assert.equal(eventMinutes(event, prefs), minutes, JSON.stringify([event, prefs]));
   },
 };
 

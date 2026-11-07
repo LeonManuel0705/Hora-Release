@@ -88,17 +88,27 @@ function deadlineReminders(prefs, day) {
   return reminders;
 }
 
-/* An event reminds as long before its start as it says itself (-1 for never), otherwise as the settings say.
-   "1 Tag vorher" reminds today of tomorrow, and every occurrence of a series reminds of its own. */
+/* How many minutes before its start an event reminds, -1 for never. The Android reminders keep the same rules:
+   - an event without a start time never reminds, so the calendar offers no choice for an all-day event;
+   - an own event reminds as it says itself ("reminderMinutes", -1 for never), even with "Termine" off, because
+     someone chose that for this one event; without a choice of its own it follows "Termine";
+   - an event from Google follows "Termine": switched off it never reminds, switched on its own pop-up from
+     Google counts (-1 when Google shows none), otherwise the lead time of the settings. */
+export function eventMinutes(event, category) {
+  if (!event.start) return -1;
+  const lead = Number(category.lead) || CATEGORY_DEFAULTS.events.lead;
+  if (event.synced) return category.on ? event.reminderMinutes ?? lead : -1;
+  return event.reminderMinutes ?? (category.on ? lead : -1);
+}
+
+// "1 Tag vorher" reminds today of tomorrow, and every occurrence of a series reminds of its own.
 function eventReminders(prefs, day, minute) {
   const category = prefs.categories.events;
-  const lead = Number(category.lead) || CATEGORY_DEFAULTS.events.lead;
   const today = isoDate(day);
   const reminders = [];
   for (const event of expandEvents(data.events || [], today, isoDate(addDays(day, 28)))) {
-    if (!event.start) continue;
     const ahead = dayDiff(day, event.date);
-    const minutes = event.reminderMinutes ?? (category.on ? lead : -1);
+    const minutes = eventMinutes(event, category);
     if (ahead < 0 || minutes < 0 || !dueAt(minute, ahead * 1440 + toMin(event.start) - minutes)) continue;
     const when = ahead === 0 ? (minutes === 0 ? "Jetzt" : `Um ${hm(event.start)}`) : `${capitalized(whenText(ahead))} um ${hm(event.start)}`;
     reminders.push({ key: `event:${event.id}:${event.date}`, title: event.title, body: `${when}${event.place ? ` in ${event.place}` : ""}` });

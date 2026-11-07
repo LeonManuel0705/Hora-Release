@@ -6,7 +6,7 @@ import { animates, travels, flipKeyed, exitInPlace, crossfade, token, ms } from 
 import { toast, parseNote, cleanTitle, phraseAt, typing, shortcutsEnabled, overlayOpen, registerSearch, pageUrl, placeNear, clampSheet } from "../shell.js";
 import { events as eventApi, debounced, serverId } from "../api.js";
 import { expandEvents, normalizeRecurrence, splitOccurrence, occurrenceId, ruleText } from "../recurrence.js";
-import { readPrefs } from "../reminders.js";
+import { readPrefs, eventMinutes } from "../reminders.js";
 
 const typedBefore = new Map();
 const saveText = debounced(700, (key, id, changes) => {
@@ -967,7 +967,7 @@ function panelEdit(item) {
         </div>
         <p class="cal-when-note" id="calWhenNote" aria-live="polite">${esc(whenNote(item))}</p>
       </div>
-      ${series ? repeatHtml(item) : ""}${own ? reminderHtml(item) : ""}
+      ${series ? repeatHtml(item) : ""}${own && item.start ? reminderHtml(item) : ""}
       ${own ? "" : `<div class="field"><span class="field-label">Kalender</span>${calendarLine(item)}</div>`}
       <div class="field">
         <label class="field-label" for="calPanelPlace">Ort</label>
@@ -990,7 +990,7 @@ function panelRead(item) {
     item.calendarName ? ["Kalender", calendarLine(item)] : null,
     item.place ? ["Ort", `${esc(item.place)}${routeLink(item.place) ? `<div class="cal-route-slot">${routeLink(item.place)}</div>` : ""}`] : null,
     item.notes ? ["Beschreibung", `<span class="cal-notes-text">${linked(plainText(item.notes))}</span>`] : null,
-    item.reminderMinutes != null ? ["Erinnerung", esc(reminderText(item.reminderMinutes))] : null,
+    item.start && item.reminderMinutes != null ? ["Erinnerung", esc(reminderText(eventMinutes(item, readPrefs().categories.events)))] : null,
   ];
   return `${panelHead("is-event", "calendar-days", item.title, { style: ` style="--k:${esc(colorOf(item))}"` })}
     ${factsHtml(facts)}${guestsHtml(item)}${linksHtml(item)}
