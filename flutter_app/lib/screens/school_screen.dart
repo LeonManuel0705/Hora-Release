@@ -18,6 +18,7 @@ import '../widgets/animated_list_item.dart';
 import '../widgets/iserv_webview_login.dart';
 import '../widgets/page_fade_in.dart';
 import '../widgets/timetable_setup_wizard.dart';
+import '../web_ui/ui_data.dart' show gradeTerm;
 
 Color _parseColor(dynamic colorValue, [Color fallback = AppPalette.ring]) {
   if (colorValue == null) return fallback;
@@ -219,12 +220,17 @@ class _SchoolScreenState extends State<SchoolScreen> with TickerProviderStateMix
     try { await db.execute('ALTER TABLE grades ADD COLUMN grade_system TEXT DEFAULT \'points\''); } catch (_) {}
     try { await db.execute('ALTER TABLE grades ADD COLUMN value REAL'); } catch (_) {}
     try { await db.execute('ALTER TABLE subjects ADD COLUMN course_type TEXT'); } catch (_) {}
-    _grades = await db.rawQuery('''
+    final rows = await db.rawQuery('''
       SELECT g.*, s.name as subject_name, s.color as subject_color, s.course_type as course_type
       FROM grades g
       LEFT JOIN subjects s ON g.subject_id = s.id
       ORDER BY g.date DESC
     ''');
+    final today = DateTime.now();
+    _grades = [
+      for (final row in rows)
+        {...row, 'semester': gradeTerm('${row['semester'] ?? ''}', DateTime.tryParse('${row['date'] ?? ''}') ?? today, _classLevel, today)},
+    ];
   }
 
   bool _displayedIsAWeek(AppProvider provider) {

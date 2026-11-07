@@ -961,7 +961,41 @@ def semester_for(today, level):
     return f'{level or 10}/{half}'
 
 
-def grade_view(item, subjects, semester, today):
+def school_year(day):
+    return day.year if day.month >= 8 else day.year - 1
+
+
+# The pages used to file grades under class 10 while nobody had named a class.
+GUESSED_TERM = re.compile(r'10/[12]')
+
+
+def grade_term(stored, day, grade, today):
+    """The term a grade belongs to, read without rewriting what is stored.
+
+    A grade stored without a term, or under the class 10 the pages once assumed, takes its term from its own date and
+    the class known now. While no class is known, such grades of this school year count as the current ones.
+    """
+    stored = str(stored or '')
+    if stored and not GUESSED_TERM.fullmatch(stored):
+        return stored
+    year = school_year(day)
+    if grade is None:
+        if year == school_year(today):
+            return ''
+        return stored or f'{year}/{(year + 1) % 100:02d}'
+    then = min(13, max(5, grade - (school_year(today) - year)))
+    # A class setting nobody moved on to the next year must not relabel real class 10 grades.
+    if stored and then <= 10:
+        return stored
+    return semester_for(day, then)
+
+
+def grade_day(item, today):
+    day = iso_day(item.get('date'))
+    return date.fromisoformat(day) if day else today
+
+
+def grade_view(item, subjects, grade, today):
     subject_key = str(item.get('subject_id') or '')
     points = item.get('points')
     if subject_key not in subjects or not isinstance(points, (int, float)):
@@ -971,7 +1005,7 @@ def grade_view(item, subjects, semester, today):
         'subject': subject_key,
         'points': int(round(points)),
         'type': item.get('type') if item.get('type') in GRADE_TYPES else 'sonstiges',
-        'semester': str(item.get('semester') or semester),
+        'semester': grade_term(item.get('semester'), grade_day(item, today), grade, today),
         'date': iso_day(item.get('date')) or today.isoformat(),
         'title': str(item.get('description') or ''),
     }
@@ -982,7 +1016,7 @@ def page_school(data, school, settings, today, iserv):
     grades = []
     history = {}
     for item in load_list('grades'):
-        entry = grade_view(item, school['shown'], semester, today)
+        entry = grade_view(item, school['shown'], data['user']['grade'], today)
         if not entry:
             continue
         if entry['semester'] == semester:
@@ -1087,7 +1121,7 @@ def export_records():
     settings = db.get_timetable_settings() or {}
     school = school_setup(settings)
     today = date.today()
-    semester = semester_for(today, settings.get('class_level'))
+    grade = known_grade(settings, {})
     dated = []
     for prefix, (name, _) in DEADLINE_KINDS.items():
         dated.extend(_views(lambda item: deadline_view(prefix, item, school, today), whole_list(name)))
@@ -1101,7 +1135,7 @@ def export_records():
     return {
         'tasks': [task_view(row, school['shown']) for row in task_rows()],
         'deadlines': dated,
-        'grades': _views(lambda item: grade_view(item, school['shown'], semester, today), whole_list('grades')),
+        'grades': _views(lambda item: grade_view(item, school['shown'], grade, today), whole_list('grades')),
         'notes': [view for view in map(note_view, kept) if view['title']],
         'events': _views(event_view, whole_list('calendar')),
         'places': places,

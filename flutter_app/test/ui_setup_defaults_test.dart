@@ -83,6 +83,22 @@ void main() {
     expect((known['page'] as Map)['semester'], 'Q3');
   });
 
+  test('a grade takes its term from its date and the class of that year without changing what is stored', () {
+    final november = DateTime(2026, 11, 10), february = DateTime(2027, 2, 15);
+    final september = DateTime(2026, 9, 20);
+    expect(gradeTerm('10/1', september, null, november), '');
+    expect(gradeTerm('10/1', september, 12, november), 'Q3');
+    expect(gradeTerm('10/1', september, 12, february), 'Q3');
+    expect(gradeTerm('', november, null, november), '');
+    expect(gradeTerm('', november, 12, november), 'Q3');
+    expect(gradeTerm('', november, 12, february), 'Q3');
+    expect(gradeTerm('12/1', september, 12, november), '12/1');
+    expect(gradeTerm('Q1', september, null, november), 'Q1');
+    expect(gradeTerm('', DateTime(2025, 10, 1), null, november), '2025/26');
+    expect(gradeTerm('10/1', DateTime(2024, 10, 1), 12, november), '10/1');
+    expect(gradeTerm('10/1', DateTime(2026, 3, 1), 10, november), '10/1');
+  });
+
   test('the forecast passes the weather code on', () async {
     const today = '2026-11-07';
     SharedPreferences.setMockInitialValues({

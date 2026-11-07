@@ -5,7 +5,7 @@ import json
 import re
 import shutil
 import subprocess
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -85,19 +85,68 @@ def test_class_ten_saved_in_the_older_class_screen_counts(client):
     assert page_data(client, "/hub/school")["page"]["semester"] in ("10/1", "10/2")
 
 
-def test_grades_name_no_term_while_the_class_is_unknown(client):
+@pytest.fixture
+def no_grades():
+    ui_data.modify_list("grades", lambda items: items.clear())
+
+
+def grade_page(client, day):
+    return page_data(client, f"/hub/school?datum={day}&t=10:00")["page"]
+
+
+def add_grade(client, semester, day, points):
     own = {"custom": True, "name": "Geografie", "short": "Geo", "hue": "moss", "type": "GK", "teacher": "", "room": ""}
     client.put("/api/ui/store/app-subjects", json={"items": {"geo-own": own}, "removed": []})
-    page = page_data(client, "/hub/school")["page"]
-    assert page["semester"] == ""
-    assert page_data(client, "/hub/settings")["page"]["school"]["semester"] == ""
-    made = client.post("/api/ui/grades", json={"subject": "geo-own", "points": 11, "type": "test", "semester": page["semester"]}).get_json()["grade"]
-    assert made["semester"] == ""
-    assert [item["id"] for item in page_data(client, "/hub/school")["page"]["grades"]] == [made["id"]]
+    return client.post("/api/ui/grades", json={"subject": "geo-own", "points": points, "type": "test", "semester": semester, "date": day}).get_json()["grade"]
+
+
+def current(page):
+    return [(item["id"], item["semester"]) for item in page["grades"]]
+
+
+def test_a_grade_filed_under_the_guessed_class_ten_stays_current_and_takes_its_term_from_its_date(client, no_grades):
+    old = add_grade(client, "10/1", "2026-09-20", 9)
+    unknown = grade_page(client, "2026-11-10")
+    assert (unknown["semester"], current(unknown), unknown["history"]) == ("", [(old["id"], "")], {})
     client.put("/api/ui/store/app-settings", json={"school": {"grade": 12}})
-    page = page_data(client, "/hub/school")["page"]
-    assert page["semester"] in ("Q3", "Q4")
-    assert [(item["id"], item["semester"]) for item in page["grades"]] == [(made["id"], page["semester"])]
+    assert current(grade_page(client, "2026-11-10")) == [(old["id"], "Q3")]
+    february = grade_page(client, "2027-02-15")
+    assert (february["semester"], current(february), february["history"]) == ("Q4", [], {"geo-own": {"Q3": 9}})
+    stored = ui_data.load_list("grades")
+    assert [item["semester"] for item in stored] == ["10/1"]
+
+
+def test_a_grade_saved_without_a_class_keeps_the_term_of_its_date(client, no_grades):
+    made = add_grade(client, grade_page(client, "2026-11-10")["semester"], "2026-11-10", 11)
+    assert made["semester"] == ""
+    assert current(grade_page(client, "2026-11-10")) == [(made["id"], "")]
+    client.put("/api/ui/store/app-settings", json={"school": {"grade": 12}})
+    assert current(grade_page(client, "2026-11-10")) == [(made["id"], "Q3")]
+    assert grade_page(client, "2027-02-15")["history"] == {"geo-own": {"Q3": 11}}
+    exported = client.get("/api/ui/export").get_json()["data"]["grades"]
+    assert [(item["id"], item["semester"]) for item in exported] == [(made["id"], "Q3")]
+    classic = client.get("/api/hub/school/grades").get_json()["grades"]
+    assert [item["semester"] for item in classic] == ["Q3"]
+
+
+def test_a_known_class_keeps_every_stored_term(client, no_grades):
+    client.put("/api/ui/store/app-settings", json={"school": {"grade": 12}})
+    kept = add_grade(client, "12/1", "2026-09-20", 10)
+    page = grade_page(client, "2026-11-10")
+    assert page["semester"] == "Q3"
+    assert page["history"] == {"geo-own": {"12/1": 10}} and kept["semester"] == "12/1"
+
+
+def test_grade_terms_follow_the_date_and_the_class_of_that_year():
+    today = date(2026, 11, 10)
+    assert ui_data.grade_term("Q1", date(2026, 9, 1), None, today) == "Q1"
+    assert ui_data.grade_term("", date(2025, 10, 1), None, today) == "2025/26"
+    assert ui_data.grade_term("10/2", date(2025, 3, 1), None, today) == "10/2"
+    assert ui_data.grade_term("", date(2025, 10, 1), 12, today) == "Q1"
+    assert ui_data.grade_term("10/1", date(2024, 10, 1), 12, today) == "10/1"
+    assert ui_data.grade_term("10/1", date(2026, 3, 1), 12, today) == "Q2"
+    assert ui_data.grade_term("10/1", date(2026, 3, 1), 10, today) == "10/1"
+    assert ui_data.grade_term("10/2", date(2025, 3, 1), 11, today) == "10/2"
 
 
 def test_the_bundesland_is_reported_once_chosen(client):

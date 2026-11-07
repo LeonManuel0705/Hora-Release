@@ -187,6 +187,27 @@ String semesterFor(DateTime today, int level) {
   return '$level/${firstHalf ? 1 : 2}';
 }
 
+int schoolYearOf(DateTime day) => day.month >= 8 ? day.year : day.year - 1;
+
+// The pages used to file grades under class 10 while nobody had named a class.
+final _guessedTerm = RegExp(r'^10/[12]$');
+
+/// The term a grade belongs to, read without rewriting what is stored. A grade stored without a term, or under the
+/// class 10 the pages once assumed, takes its term from its own date and the class known now. While no class is known,
+/// such grades of this school year count as the current ones.
+String gradeTerm(String stored, DateTime day, int? level, DateTime today) {
+  if (stored.isNotEmpty && !_guessedTerm.hasMatch(stored)) return stored;
+  final year = schoolYearOf(day);
+  if (level == null) {
+    if (year == schoolYearOf(today)) return '';
+    return stored.isNotEmpty ? stored : '$year/${((year + 1) % 100).toString().padLeft(2, '0')}';
+  }
+  final then = math.min(13, math.max(5, level - (schoolYearOf(today) - year)));
+  // A class setting nobody moved on to the next year must not relabel real class 10 grades.
+  if (stored.isNotEmpty && then <= 10) return stored;
+  return semesterFor(day, then);
+}
+
 String stateCode(String? name) {
   if (name == null) return '';
   if (uiStates.any((state) => state.$1 == name)) return name;
@@ -673,7 +694,7 @@ class UiData {
 
   static String gradeType(Object? stored) => uiGradeTypes[stored] ?? 'sonstiges';
 
-  Map<String, Object?>? gradeView(Map<String, Object?> row, School setup, String semester) {
+  Map<String, Object?>? gradeView(Map<String, Object?> row, School setup) {
     final subjectKey = '${row['subject_id']}';
     if (!setup.known.containsKey(subjectKey)) return null;
     final value = row['value'];
@@ -684,7 +705,7 @@ class UiData {
       'subject': subjectKey,
       'points': points.round(),
       'type': gradeType(row['type']),
-      'semester': text(row['semester']).isEmpty ? semester : text(row['semester']),
+      'semester': gradeTerm(text(row['semester']), DateTime.tryParse(localDay(row['date']) ?? '') ?? today, knownClassLevel, today),
       'date': localDay(row['date']) ?? todayIso,
       'title': text(row['notes']),
     };
@@ -695,7 +716,7 @@ class UiData {
     final grades = <Map<String, Object?>>[];
     final history = <String, Map<String, List<int>>>{};
     for (final row in await db.query('grades', orderBy: 'date ASC')) {
-      final entry = gradeView(row, setup, semester);
+      final entry = gradeView(row, setup);
       if (entry == null) continue;
       if (entry['semester'] == semester) {
         grades.add(entry);
@@ -781,7 +802,6 @@ class UiData {
 
   Future<Map<String, Object?>> exportRecords() async {
     final setup = await school();
-    final semester = semesterFor(today, classLevel);
     final dated = <Map<String, Object?>>[];
     for (final entry in uiDeadlineTables.entries) {
       for (final row in await db.query(entry.value)) {
@@ -798,7 +818,7 @@ class UiData {
     return {
       'tasks': [for (final row in await db.query('tasks', orderBy: 'created_at ASC')) taskView(row, setup.known)],
       'deadlines': dated,
-      'grades': [for (final row in await db.query('grades', orderBy: 'date ASC')) gradeView(row, setup, semester)].nonNulls.toList(),
+      'grades': [for (final row in await db.query('grades', orderBy: 'date ASC')) gradeView(row, setup)].nonNulls.toList(),
       'notes': [for (final row in await db.query('quick_notes', orderBy: 'created_at DESC')) noteView(row)].nonNulls.toList(),
       'events': [for (final row in await _ownEvents()) eventView(row)].nonNulls.toList(),
       'places': places,

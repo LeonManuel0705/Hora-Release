@@ -729,8 +729,10 @@ function gradesSummaryHtml() {
   const rows = semesterRows(SEMESTER);
   const value = overallOf(rows);
   const count = rows.reduce((sum, row) => sum + row.count, 0);
-  const previous = overallOf(semesterRows(SEMESTERS[SEMESTERS.indexOf(SEMESTER) - 1] || ""));
-  const trend = value != null && previous != null ? `${SEMESTERS[SEMESTERS.indexOf(SEMESTER) - 1]}: ${decimal(previous)}` : "";
+  const at = SEMESTERS.indexOf(SEMESTER);
+  const before = at > 0 ? SEMESTERS[at - 1] : null;
+  const previous = before == null ? null : overallOf(semesterRows(before));
+  const trend = value != null && previous != null ? `${before}: ${decimal(previous)}` : "";
   return `<button type="button" class="ov-item ov-grades" data-open-grades="1" aria-label="Noten${IN_TERM}${value != null ? `, Schnitt ${decimal(value)} Punkte` : ", noch keine Noten"}">
     <span class="ov-item-text"><span class="side-title">Noten${IN_TERM}</span><small>${value != null ? `${plural(count, "Note", "Noten")}${trend ? `, ${esc(trend)}` : ""}` : "Noch keine Noten eingetragen"}</small></span>
     ${value != null ? `<span class="ov-number num">${decimal(value)}</span>` : ""}
