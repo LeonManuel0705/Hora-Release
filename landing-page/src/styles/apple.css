@@ -62,7 +62,7 @@ body[data-theme="dark"] .header-actions .lang-toggle { color: rgb(255 255 255 / 
   box-shadow: none;
 }
 .header-cta.button::before { display: none; }
-.header-cta.button::after { inset: -10px -6px; z-index: 0; opacity: 1; box-shadow: none; pointer-events: auto; }
+.header-cta.button::after { inset: -10px -4px; z-index: 0; opacity: 1; box-shadow: none; pointer-events: auto; }
 @media (hover: hover) and (pointer: fine) {
   .header-cta.button:hover { background: var(--ap-blue-hover); }
 }
@@ -1109,6 +1109,7 @@ body.sheet-open { overflow: hidden; }
   .ap-copy { min-height: 44px; padding: 0 14px; }
   .legal-toc a { display: flex; align-items: center; min-height: 44px; }
   .legal-other { min-height: 44px; }
+  .legal-body p > .prose-link:only-child { display: inline-flex; align-items: center; min-height: 44px; }
 }
 .ap-sheet-mark.is-pair { grid-auto-flow: column; gap: 12px; width: auto; margin-left: 0; }
 .ap-sheet-picks { display: grid; gap: 10px; margin-top: 22px; }
