@@ -4,13 +4,23 @@ set -e
 source "$(dirname "$0")/build_common.sh"
 
 BUILD_MODE="${1:---release}"
+REPO_ROOT="$(dirname "$PROJECT_DIR")"
+
+# Apple silicon Macs start this frozen server and need no Python. Intel Macs
+# keep the Python fallback bundled below. MACOS_FROZEN_BACKEND=0 skips the
+# freeze for a quicker local build. It runs first, so a failed freeze leaves
+# the build number alone.
+if [ "${MACOS_FROZEN_BACKEND:-1}" != "0" ]; then
+  echo "=== Freezing the backend for Apple silicon ==="
+  bash "$REPO_ROOT/scripts/build_backend_macos.sh" arm64
+fi
+
 prepare_build "build_macos.sh"
 
 cd "$PROJECT_DIR"
 flutter clean
 flutter build macos $BUILD_MODE --build-number="$BUILD_NUM"
 
-REPO_ROOT="$(dirname "$PROJECT_DIR")"
 PRODUCT_NAME="$(sed -n 's/^PRODUCT_NAME = //p' "$PROJECT_DIR/macos/Runner/Configs/AppInfo.xcconfig")"
 APP_BUNDLE="$PROJECT_DIR/build/macos/Build/Products/Release/$PRODUCT_NAME.app"
 BACKEND_DEST="$APP_BUNDLE/Contents/Resources/backend"
@@ -21,7 +31,11 @@ mkdir -p "$BACKEND_DEST"
 
 cp -R "$REPO_ROOT/app" "$BACKEND_DEST/app"
 cp "$REPO_ROOT/requirements.txt" "$BACKEND_DEST/requirements.txt"
+cp "$REPO_ROOT/requirements-desktop.txt" "$BACKEND_DEST/requirements-desktop.txt"
 cp "$REPO_ROOT/calendar_sync.py" "$BACKEND_DEST/calendar_sync.py" 2>/dev/null || true
+if [ "${MACOS_FROZEN_BACKEND:-1}" != "0" ]; then
+  ditto "$REPO_ROOT/build/freeze-macos-arm64/dist/server" "$BACKEND_DEST/server"
+fi
 
 echo "Backend bundled ($(du -sh "$BACKEND_DEST" | cut -f1))"
 
@@ -44,6 +58,16 @@ ENTITLEMENTS="$PROJECT_DIR/macos/Runner/Release.entitlements"
 seal_adhoc() {
   [ -n "$MACOS_SIGN_IDENTITY" ] && return 0
   echo "=== Re-sealing the ad-hoc signature after bundling ==="
+  # The frozen server and its libraries carry their own signatures, which the
+  # seal over the bundle then covers, so they are signed first.
+  if [ -d "$BACKEND_DEST/server" ]; then
+    while IFS= read -r -d '' f; do
+      if file -b "$f" | grep -q 'Mach-O'; then
+        codesign --force --sign - "$f"
+      fi
+    done < <(find "$BACKEND_DEST/server" -type f \( -perm -111 -o -name '*.dylib' -o -name '*.so' \) -print0)
+    codesign --verify --strict "$BACKEND_DEST/server/server"
+  fi
   codesign --force --sign - --entitlements "$ENTITLEMENTS" "$APP_BUNDLE"
   codesign --verify --deep --strict "$APP_BUNDLE"
 }

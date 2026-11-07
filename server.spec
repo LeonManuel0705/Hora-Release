@@ -62,6 +62,16 @@ a = Analysis(
     noarchive=False,
 )
 
+# app/google_oauth.py builds only these Google APIs. The other ~600 discovery
+# documents that the googleapiclient hook collects add about 100 MB.
+GOOGLE_APIS = ('calendar.v3', 'gmail.v1')
+DISCOVERY_DIR = os.path.join('googleapiclient', 'discovery_cache', 'documents')
+a.datas = [
+    entry for entry in a.datas
+    if os.path.dirname(os.path.normpath(entry[0])) != DISCOVERY_DIR
+    or os.path.splitext(os.path.basename(entry[0]))[0] in GOOGLE_APIS
+]
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
