@@ -1,9 +1,9 @@
 import {
-  data, root, variant, flags, platform, esc, icon, luna, storage, now, subject, hueVar, toMin, clock, hm, weekType, isoWeek,
+  data, root, variant, flags, platform, esc, icon, luna, storage, now, subject, hueVar, toMin, hm, weekType, isoWeek,
   isoDate, minutesOf, lessonsFor, nextSchoolDay, WEEKDAYS, WEEKDAYS_SHORT,
   LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, activeSubjectKeys, motionDefault, slug, teacherLabel, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
-import { toast, setTheme, syncTime } from "../shell.js";
+import { toast, setTheme, syncTime, renderSync } from "../shell.js";
 import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary } from "../backup.js";
 
 const $ = (id) => document.getElementById(id);
@@ -1177,7 +1177,7 @@ function renderSchool() {
   const grade = Number(prefs.school.grade);
   const state = school.loading || prefs.school.state;
   const rows = [
-    row({ id: "rowSchoolName", label: "Schule", desc: "Kommt aus IServ", control: info.name || info.town ? `<span class="set-value">${esc(info.name || "")}<small>${esc(info.town || "")}</small></span>` : "", cls: "is-stack" }),
+    info.name || info.town ? row({ id: "rowSchoolName", label: "Schule", desc: info.name ? "Aus deinem IServ-Konto" : "", control: `<span class="set-value">${esc(info.name || "")}<small>${esc(info.town || "")}</small></span>`, cls: "is-stack" }) : "",
     row({ id: "rowGrade", label: "Klassenstufe", forId: "gradeSelect", desc: gradeDesc(grade), control: `<select class="field-control" id="gradeSelect" aria-describedby="rowGradeDesc">${GRADES.map((value) => `<option value="${value}"${value === grade ? " selected" : ""}>Klasse ${value}</option>`).join("")}</select>` }),
     row({ id: "rowState", label: "Bundesland", forId: "stateSelect", desc: "Für Ferien und Feiertage im Kalender", control: `<select class="field-control" id="stateSelect" aria-describedby="rowStateDesc"${school.loading ? " disabled" : ""}>${(page.states || []).map((item) => `<option value="${item.code}"${item.code === state ? " selected" : ""}>${esc(item.name)}</option>`).join("")}</select>`, cls: "is-stack" }),
     school.loading ? loadingHtml(`Lade Ferien und Feiertage für ${stateName(school.loading)}`, "Dauert nur einen Moment.") : "",
@@ -1233,7 +1233,7 @@ function bindSchool() {
   });
 }
 
-const accounts = { connecting: null, syncing: false, syncedAt: null, formOpen: false };
+const accounts = { connecting: null, syncing: false, report: null, formOpen: false };
 
 function iservFormHtml() {
   const field = (name, label, attrs) => `<div class="form-field"><label class="form-label" for="iserv-${name}">${label}</label><input class="field-control" id="iserv-${name}" name="${name}" ${attrs} aria-describedby="iserv-${name}-error">${errorHtml(`iserv-${name}-error`, "")}</div>`;
@@ -1249,36 +1249,50 @@ function iservFormHtml() {
     </form>`;
 }
 
+// What IServ gives in this app for sure, as the account card names it. Homework counts only once a sync brought some.
+const ISERV_WORDS = { Vertretungsplan: "den Vertretungsplan", "E-Mail": "deine Mails" };
+
+function partSentence(part, answer) {
+  if (!answer) return "";
+  if (!answer.ok) return answer.message || "";
+  const count = answer.count || 0;
+  if (part === "plan") return answer.problem === "empty" ? "IServ zeigt gerade keinen Vertretungsplan." : `Der Vertretungsplan hat ${count === 1 ? "eine Seite" : `${count} Seiten`}.`;
+  if (part === "homework") return count ? `${count === 1 ? "Eine offene Hausaufgabe" : `${count} offene Hausaufgaben`} aus IServ.` : "In IServ stehen keine offenen Hausaufgaben.";
+  return count ? `${count === 1 ? "Eine ungelesene Mail" : `${count} ungelesene Mails`} in IServ.` : "Keine ungelesenen Mails in IServ.";
+}
+
 function renderIserv() {
   const card = $("iservCard");
   const info = page.accounts?.iserv || {};
   let html;
   if (accounts.connecting === "iserv") {
-    html = loadingHtml("Verbinde mit IServ", "Stundenplan, Aufgaben und Mails kommen gleich.");
+    html = loadingHtml("Verbinde mit IServ", "Das dauert ein paar Sekunden.");
   } else if (info.unavailable) {
-    html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">IServ geht im Browser nicht.</p><p class="empty-text">Stundenplan, Aufgaben und Mails holt ${BRAND} aus IServ in der App für Mac, Windows, Linux und Android.</p></div>`;
+    html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">IServ geht im Browser nicht.</p><p class="empty-text">In der App für Mac, Windows, Linux und Android holt ${BRAND} den Vertretungsplan aus IServ.</p></div>`;
   } else if (prefs.iserv.connected) {
-    const stand = accounts.syncedAt || syncTime();
     const offline = flags.offline;
+    const stand = syncTime("iserv");
     const status = offline ? `<span class="status is-offline">${icon("wifi-off")}Offline</span>` : `<span class="status is-ok">${icon("circle-check")}Verbunden</span>`;
+    const report = accounts.report ? ["plan", "homework", "mail"].map((part) => partSentence(part, accounts.report[part])).filter(Boolean).join(" ") : "";
     const detail = offline
-      ? `Stand ${stand} Uhr. ${BRAND} gleicht wieder ab, sobald IServ erreichbar ist.`
-      : `Abgleich um ${stand} Uhr: ${joinWords(info.features || ["Stundenplan", "Aufgaben", "E-Mail"])}.`;
+      ? `Abgleichen geht erst wieder, wenn ${BRAND} läuft.`
+      : `${stand ? `Stand ${stand} Uhr.` : "Noch nicht abgeglichen."}${report ? ` ${report}` : ""}`;
     html = row({
       id: "rowIserv",
       cls: "is-stack",
       label: `IServ ${status}`,
-      desc: `Angemeldet als ${esc(info.name || "")}${info.school ? `, ${esc(info.school)}` : ""}. ${detail}`,
+      desc: `Angemeldet als ${esc(info.name || "")}${info.school ? `, ${esc(info.school)}` : ""}. ${esc(detail)}`,
       control: `<button class="icon-button${accounts.syncing ? " is-spinning" : ""}" type="button" id="iservSync" aria-label="Jetzt mit IServ abgleichen" data-tip="Jetzt abgleichen"${offline || accounts.syncing ? " disabled" : ""}>${icon("refresh-cw")}</button><button class="btn btn-quiet" type="button" id="iservDisconnect">Trennen</button>`,
     });
   } else if (accounts.formOpen) {
     html = iservFormHtml();
   } else {
+    const gives = (info.features || []).map((word) => ISERV_WORDS[word]).filter(Boolean);
     html = row({
       id: "rowIserv",
       cls: "is-stack",
       label: `IServ <span class="status is-off">Nicht verbunden</span>`,
-      desc: "Ohne IServ kommen Stundenplan, Vertretungen, Aufgaben und Mails nicht mehr von selbst.",
+      desc: gives.length ? `Damit holt ${BRAND} ${joinWords(gives)} von selbst.` : "",
       control: `<button class="btn btn-primary" type="button" id="iservConnect">Verbinden</button>`,
     });
   }
@@ -1348,12 +1362,14 @@ async function connectIserv(formNode) {
     const result = await request("POST", "/api/iserv/connect", body);
     accounts.connecting = null;
     accounts.formOpen = false;
-    accounts.syncedAt = clock(minutesOf(now()));
+    accounts.report = null;
     page.accounts.iserv = { ...(page.accounts.iserv || {}), connected: true, name: result.user?.name || body.username, school: server };
     prefs.iserv.connected = true;
+    data.status = { ...(data.status || {}), iserv: true };
     renderIserv();
     toast("Mit IServ verbunden", { icon: "circle-check" });
     $("iservSync")?.focus({ preventScroll: true });
+    syncIserv();
   } catch (error) {
     accounts.connecting = null;
     accounts.formOpen = true;
@@ -1363,35 +1379,38 @@ async function connectIserv(formNode) {
   }
 }
 
+// Fetches what IServ gives here and tells what came of each part. The time is the one the server noted.
 async function syncIserv() {
   if (accounts.syncing) return;
   accounts.syncing = true;
   renderIserv();
-  let ok = false;
+  let result = null;
   try {
-    const status = await request("GET", "/api/iserv/status");
-    ok = !!status.connected || !!status.has_credentials;
+    result = await request("POST", "/api/ui/iserv/sync", {});
   } catch {}
   accounts.syncing = false;
-  accounts.syncedAt = clock(minutesOf(now()));
-  renderIserv();
-  if (!ok) {
-    toast("IServ ist gerade nicht erreichbar.", { icon: "wifi-off" });
-    return;
+  if (result?.status) {
+    data.status = result.status;
+    renderSync();
   }
-  const text = `IServ, Stand ${accounts.syncedAt} Uhr`;
-  const line = $("syncText");
-  if (line) line.textContent = text;
-  document.querySelectorAll("[data-sync-mirror] span").forEach((node) => (node.textContent = text));
-  say(`Abgeglichen um ${accounts.syncedAt} Uhr`);
+  accounts.report = result?.parts || null;
+  renderIserv();
+  const reached = Object.values(result?.parts || {}).some((part) => part.ok);
+  const stand = syncTime("iserv");
+  const text = reached ? `Mit IServ abgeglichen${stand ? `, Stand ${stand} Uhr` : ""}` : "IServ ist gerade nicht erreichbar.";
+  toast(text, { icon: reached ? "circle-check" : "wifi-off" });
+  say(text);
   $("iservSync")?.focus({ preventScroll: true });
 }
 
 async function disconnectIserv() {
   try {
     await request("POST", "/api/iserv/disconnect", {});
-    page.accounts.iserv = { connected: false, name: "", school: "", features: [] };
+    page.accounts.iserv = { ...(page.accounts.iserv || {}), connected: false, name: "", school: "" };
     prefs.iserv.connected = false;
+    accounts.report = null;
+    data.status = { ...(data.status || {}), iserv: false, synced: { ...(data.status?.synced || {}), iserv: null } };
+    renderSync();
     renderIserv();
     toast("IServ getrennt", { icon: "wifi-off" });
     $("iservConnect")?.focus({ preventScroll: true });
@@ -2934,7 +2953,7 @@ function renderData() {
     card.innerHTML = [
       row({ id: "rowExport", label: "Sichern", desc: "Stundenplan, Fächer, Noten, Tests, Klausuren, Aufgaben, Termine, Orte und Einstellungen als Datei", control: `<button class="btn btn-quiet" type="button" id="dataExport">${icon("download")}Exportieren</button>` }),
       row({ id: "rowImport", label: "Wiederherstellen", desc: `Übernimmt eine gesicherte Datei von ${BRAND}, auch von einem anderen Gerät. Stundenplan und Einstellungen kommen aus der Datei, vorhandene Noten, Aufgaben und Termine bleiben.`, control: `<button class="btn btn-quiet" type="button" id="dataImport">${icon("upload")}Importieren</button>` }),
-      row({ id: "rowWipe", label: "Alles auf diesem Gerät löschen", desc: "Stundenplan, Fächer und Stundenraster wieder wie in IServ, alle Einstellungen wie beim ersten Start.", control: `<button class="btn btn-quiet danger-button" type="button" id="dataWipe">${icon("trash-2")}Löschen</button>` }),
+      row({ id: "rowWipe", label: "Alles auf diesem Gerät löschen", desc: "Nimmt alle Änderungen an Stundenplan und Fächern zurück und stellt die Einstellungen wie beim ersten Start.", control: `<button class="btn btn-quiet danger-button" type="button" id="dataWipe">${icon("trash-2")}Löschen</button>` }),
     ].join("");
   });
   renderDataMeta();

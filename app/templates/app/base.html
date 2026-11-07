@@ -138,7 +138,7 @@
             </div>
         </nav>
         <div class="sidebar-foot">
-            <p class="sync-line" id="syncLine"><svg class="icon"><use href="#i-refresh-cw"/></svg><span id="syncText">IServ abgeglichen</span></p>
+            <p class="sync-line" id="syncLine" hidden><svg class="icon"><use href="#i-refresh-cw"/></svg><span id="syncText"></span></p>
             <a class="nav-item" href="/hub/settings" data-page="settings"{% if active == "settings" %} aria-current="page"{% endif %}>
                 <svg class="icon"><use href="#i-settings"/></svg>
                 <span>Einstellungen</span>
@@ -172,7 +172,7 @@
         {% endfor %}
     </div>
     <div class="more-foot">
-        <p class="sync-line" data-sync-mirror><svg class="icon"><use href="#i-refresh-cw"/></svg><span>IServ abgeglichen</span></p>
+        <p class="sync-line" data-sync-mirror hidden><svg class="icon"><use href="#i-refresh-cw"/></svg><span></span></p>
         <button class="text-button" type="button" data-notify>
             <svg class="icon"><use href="#i-bell"/></svg><span data-notify-text>Erinnerungen aktivieren</span>
         </button>

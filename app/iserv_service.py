@@ -266,6 +266,27 @@ def _mail_summary(entry):
     }
 
 
+def _named(value):
+    if isinstance(value, dict):
+        value = value.get('name')
+    return str(value or '').strip()
+
+
+def _exercise_entry(item):
+    """One exercise from the list of the IServ module Aufgaben, read like the phone app reads it."""
+    if not isinstance(item, dict) or item.get('id') in (None, ''):
+        return None
+    return {
+        'id': str(item['id']).strip()[:80],
+        'title': str(item.get('title') or '').strip()[:300],
+        'description': str(item.get('description') or '').strip()[:5000],
+        'course': _named(item.get('course'))[:120],
+        'teacher': _named(item.get('teacher'))[:120],
+        'due': str(item.get('endDate') or '').strip()[:40],
+        'status': str(item.get('status') or 'open').strip()[:20],
+    }
+
+
 class IServService:
 
     def __init__(self):
@@ -729,6 +750,58 @@ class IServService:
         unique_exercises.sort(key=lambda x: x.get('due') or '9999-99-99')
 
         return {'success': True, 'exercises': unique_exercises}
+
+    def get_homework(self):
+        """The exercises of the IServ module Aufgaben, from the list the phone app reads too. IServ is only read, never changed.
+
+        cause says why nothing came: setup without an account, login when IServ refused it, offline when it was out of
+        reach, format when it answered with something that is not that list.
+        """
+        login = None
+        if not self.is_connected():
+            if not self.load_credentials():
+                return {'success': False, 'cause': 'setup'}
+            login = self.connect()
+        if not self.is_connected():
+            return {'success': False, 'cause': 'login' if (login or {}).get('error') == 'Falscher Benutzername oder Passwort' else 'offline'}
+        try:
+            result = self._fetch_homework()
+            if result.get('expired'):
+                login = self.connect()
+                if not self.is_connected():
+                    return {'success': False, 'cause': 'login' if (login or {}).get('error') == 'Falscher Benutzername oder Passwort' else 'offline'}
+                result = self._fetch_homework()
+            return {key: value for key, value in result.items() if key != 'expired'}
+        except Exception as e:
+            logging.error(f"IServ homework error: {e}")
+            return {'success': False, 'cause': 'offline'}
+
+    def _fetch_homework(self):
+        session = getattr(self.api, '_session', None)
+        if session is None or not self.iserv_url:
+            return {'success': False, 'cause': 'offline'}
+        base_url = self.iserv_url.rstrip('/')
+        if not base_url.startswith('http'):
+            base_url = f'https://{base_url}'
+        response = _request_on_host(
+            session, 'GET', f'{base_url}/iserv/exercise/api/exercises', base_url, timeout=15,
+            headers={'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        )
+        if response is None:
+            return {'success': False, 'cause': 'offline'}
+        if response.status_code == 401 or _outside_app(response):
+            return {'success': False, 'cause': 'login', 'expired': True}
+        if response.status_code != 200:
+            return {'success': False, 'cause': 'format' if response.status_code in (403, 404) else 'offline'}
+        try:
+            payload = response.json()
+        except ValueError:
+            return {'success': False, 'cause': 'format'}
+        items = payload.get('data') if isinstance(payload, dict) else None
+        if not isinstance(items, list):
+            return {'success': False, 'cause': 'format'}
+        entries = [entry for entry in map(_exercise_entry, items) if entry]
+        return {'success': True, 'exercises': list({entry['id']: entry for entry in entries}.values())}
 
     def _normalize_exercises(self, raw_data):
 

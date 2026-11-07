@@ -34,6 +34,9 @@ const state = {
 
 const settle = { timer: 0, pointerInside: false, lastCheck: 0 };
 
+const homeworkTask = (item) => ({ id: `iserv-${item.id}`, title: item.title, subject: item.subject, date: item.date, minutes: 30, source: item.origin === "iserv" ? "iserv" : "homework", synced: true, kind: item.kind, detail: item.detail, notes: item.origin === "iserv" ? "" : item.detail || "", done: false });
+const listedHomework = (item, linked) => ["Hausaufgabe", "Abgabe"].includes(item.kind) && !item.pinned && !linked.has(item.id) && item.status !== "abgegeben";
+
 function load() {
   const day = today();
   state.tasks = [...data.tasks, ...(data.taskPool || [])].map((task) => ({
@@ -43,9 +46,7 @@ function load() {
     notes: task.notes || "",
   }));
   const linked = new Set(state.tasks.map((task) => task.deadline).filter(Boolean));
-  state.homework = data.deadlines
-    .filter((item) => ["Hausaufgabe", "Abgabe"].includes(item.kind) && !item.pinned && !linked.has(item.id) && item.status !== "abgegeben")
-    .map((item) => ({ id: `iserv-${item.id}`, title: item.title, subject: item.subject, date: item.date, minutes: 30, source: item.origin === "iserv" ? "iserv" : "homework", synced: true, kind: item.kind, detail: item.detail, notes: item.origin === "iserv" ? "" : item.detail || "", done: false }));
+  state.homework = data.deadlines.filter((item) => listedHomework(item, linked)).map(homeworkTask);
 }
 
 const deadlineOf = (task) => data.deadlines.find((item) => item.id === task.deadline);
@@ -705,11 +706,40 @@ function bindPanel() {
   });
 }
 
-function startSync() {
-  if (state.loading) return;
+// IServ homework exists in the apps with an IServ account. The browser has none, so the button stays hidden there.
+const canSync = () => !!data.status?.iserv && data.status?.iservAvailable !== false;
+
+function syncText(result) {
+  if (!result) return "IServ ist gerade nicht erreichbar.";
+  if (!result.ok) return result.message || "IServ ist gerade nicht erreichbar.";
+  if (!result.count) return "In IServ stehen keine offenen Hausaufgaben.";
+  return `${result.count === 1 ? "Eine offene Hausaufgabe" : `${result.count} offene Hausaufgaben`} aus IServ`;
+}
+
+async function startSync() {
+  if (state.loading || !canSync()) return;
   state.loading = true;
   $("syncButton").classList.add("is-spinning");
-  location.reload();
+  render();
+  let result = null;
+  try {
+    const response = await fetch("/api/ui/iserv/homework", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" });
+    result = await response.json();
+    if (!response.ok || result?.success === false) result = null;
+  } catch {
+    result = null;
+  }
+  state.loading = false;
+  $("syncButton").classList.remove("is-spinning");
+  if (result) {
+    const views = result.deadlines || [];
+    const linked = new Set(state.tasks.map((task) => task.deadline).filter(Boolean));
+    data.deadlines = [...data.deadlines.filter((item) => item.origin !== "iserv"), ...views];
+    state.tasks = [...state.tasks.filter((task) => task.source !== "iserv"), ...views.filter((item) => listedHomework(item, linked)).map(homeworkTask)];
+    if (result.status) data.status = result.status;
+  }
+  render({ flip: true });
+  toast(esc(syncText(result)), { icon: result?.ok ? "check" : "wifi-off" });
 }
 
 function interactiveRows() {
@@ -879,6 +909,7 @@ function taskFromNote(note) {
 
 export function initTasks() {
   if (!$("tasksPage")) return;
+  $("syncButton").hidden = !canSync();
   load();
   state.tasks.push(...state.homework.map((task) => ({ ...task })));
   bind();

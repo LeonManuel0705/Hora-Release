@@ -38,7 +38,7 @@ final uiNativePages = <String, UiNativePage>{
   'review': UiNativePage('Review', () => const ReviewScreen()),
 };
 
-mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost {
+mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost, UiIservSync {
   final Set<String> _changes = {};
   Timer? _changeTimer;
 
@@ -127,6 +127,9 @@ mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost {
 
   @override
   Future<void> disconnectIserv() => context.read<IServProvider>().disconnect();
+
+  @override
+  Future<void> syncIserv() => context.read<IServProvider>().syncData();
 
   @override
   Map<String, Object?> iservStatus() {

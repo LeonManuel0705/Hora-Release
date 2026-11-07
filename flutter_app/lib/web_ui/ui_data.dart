@@ -609,9 +609,49 @@ class UiData {
       'connected': username.isNotEmpty,
       'name': username,
       'school': server,
-      'features': username.isNotEmpty ? ['Aufgaben', 'Vertretungsplan'] : <String>[],
+      'features': browser ? <String>[] : ['Vertretungsplan'],
     };
   }
+
+  static String? minuteOf(Object? value) {
+    final parsed = stamp(value);
+    return parsed == null ? null : '${isoOf(parsed)}T${hm(parsed)}';
+  }
+
+  Future<String?> _newest(String table, String column) async {
+    try {
+      final rows = await db.rawQuery('SELECT MAX($column) AS newest FROM $table');
+      return minuteOf(rows.first['newest']);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// When IServ last gave data on this phone, read from what its copies hold. The phone has no mail and no Google.
+  Future<Map<String, Object?>> syncStatus(Map<String, Object?> iserv) async {
+    final connected = iserv['connected'] == true && !browser;
+    final parts = <String, String?>{'plan': null, 'mail': null, 'homework': null};
+    final stamps = <String>[];
+    if (connected) {
+      parts['plan'] = await _newest('vertretungsplan_cache', 'fetched_at');
+      parts['homework'] = await _newest('iserv_exercises', 'cached_at');
+      stamps.addAll([
+        ...parts.values.nonNulls,
+        ...[await _newest('iserv_events', 'cached_at'), await _newest('iserv_notifications', 'cached_at')].nonNulls,
+      ]);
+    }
+    stamps.sort();
+    return {
+      'iserv': connected,
+      'iservAvailable': !browser,
+      'rendered': '${isoOf(now)}T${hm(now)}',
+      'synced': {'iserv': stamps.isEmpty ? null : stamps.last, 'google': null},
+      'iservParts': parts,
+    };
+  }
+
+  Future<List<Map<String, Object?>>> iservHomework() async =>
+      [for (final view in await deadlines(await school())) if (view['origin'] == 'iserv') view];
 
   Future<Map<String, Object?>> build(String active, Map<String, Object?> store) async {
     final setup = await school();
@@ -633,7 +673,7 @@ class UiData {
       'holidays': holidayList,
       'transit': {'line': '', 'mode': '', 'from': '', 'to': '', 'walkMinutes': 0, 'departures': <Object?>[], 'delays': <String, Object?>{}},
       'weather': UiWeather.instance.view(prefs, now),
-      'status': {'iserv': iserv['connected'], 'lastSync': '${now.hour}:${two(now.minute)}'},
+      'status': await syncStatus(iserv),
       'mailUnread': 0,
     };
     if (!setup.abWeeks) store.putIfAbsent('app-ab-weeks', () => false);

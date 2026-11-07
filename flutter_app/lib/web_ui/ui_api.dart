@@ -29,6 +29,11 @@ class UiPlan {
   final String? cause;
 }
 
+/// A host that can fetch from IServ right now what the background sync fetches every quarter of an hour.
+abstract class UiIservSync {
+  Future<void> syncIserv();
+}
+
 abstract class UiHost {
   Future<Map<String, Object?>> connectIserv(String url, String user, String password);
   Future<void> disconnectIserv();
@@ -114,6 +119,7 @@ class UiApi {
       if (path.length == 2 && path[0] == 'hub' && path[1] == 'bundesland' && method == 'POST') return await _state(request);
       if (path.length >= 2 && path[0] == 'ui' && path[1] == 'vplan') return await _plan(request);
       if (path.length == 2 && path[0] == 'iserv') return await _iserv(request, path[1]);
+      if (path.length == 3 && path[0] == 'ui' && path[1] == 'iserv' && method == 'POST') return await _iservRefresh(db, data, path[2]);
       if (path.isNotEmpty && (path[0] == 'calendar' || path[0] == 'email')) {
         return UiReply.error('Google lässt sich in der App noch nicht verbinden', 404);
       }
@@ -702,6 +708,40 @@ class UiApi {
     if (plan == null || number == null || number < 1 || number > plan.pages.length) return UiReply.error('Seite nicht gefunden', 404);
     final page = plan.pages[number - 1];
     return UiReply.file(page.bytes, page.contentType, 'vertretungsplan-$number.${_planSuffixes[page.contentType] ?? 'bin'}');
+  }
+
+  static const _noHomework = 'Von IServ kamen keine neuen Hausaufgaben.';
+
+  /// The answer has the shape the desktop gives. The phone fetches no mail, so there is no part for it.
+  Future<UiReply> _iservRefresh(Database db, UiData data, String action) async {
+    if (action != 'homework' && action != 'sync') return UiReply.error('Nicht gefunden', 404);
+    final bridge = host;
+    final syncing = host is UiIservSync ? host as UiIservSync : null;
+    final iserv = await data.iservAccount();
+    if (bridge == null || syncing == null || iserv['connected'] != true || data.browser) {
+      return UiReply.error(_planProblems['setup']!, 409);
+    }
+    Future<Object?> newest() async => (await db.rawQuery('SELECT MAX(cached_at) AS newest FROM iserv_exercises')).first['newest'];
+    final parts = <String, Object?>{};
+    if (action == 'sync') {
+      final plan = await bridge.plan(fresh: true);
+      final problem = plan == null ? 'offline' : _planProblems.containsKey(plan.cause) ? plan.cause : null;
+      parts['plan'] = {'ok': problem == null || problem == 'empty', 'problem': problem, 'message': _planProblems[problem] ?? '', 'count': problem == null ? plan!.pages.length : 0};
+    }
+    final before = await newest();
+    await syncing.syncIserv();
+    final after = await newest();
+    final fresh = after != null && after != before;
+    final homework = await data.iservHomework();
+    final open = homework.where((item) => item['status'] != 'abgegeben').length;
+    parts['homework'] = {'ok': fresh, 'problem': fresh ? null : 'none', 'message': fresh ? '' : _noHomework, 'count': open};
+    _changed('school');
+    return UiReply.ok({
+      if (action == 'homework') ...(parts['homework'] as Map<String, Object?>),
+      if (action == 'sync') 'parts': parts,
+      'deadlines': homework,
+      'status': await data.syncStatus(iserv),
+    });
   }
 
   Future<UiReply> _iserv(UiRequest request, String action) async {

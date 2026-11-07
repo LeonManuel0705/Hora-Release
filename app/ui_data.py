@@ -68,6 +68,9 @@ FILES = {
     'iserv': 'iserv_credentials.json',
     'google': 'google_tokens.json',
     'places': 'known_locations.json',
+    'plan_meta': 'vertretungsplan_cache/cache_meta.json',
+    'iserv_homework': 'iserv_homework.json',
+    'sync': 'sync_state.json',
 }
 
 _cache = {}
@@ -137,6 +140,19 @@ def modify_list(name, change):
         result = change(items)
         encrypt_file(items, path)
         _cache[name] = (_signature(path), copy.deepcopy(items))
+        return result
+
+
+def modify_dict(name, change):
+    """Like modify_list for a store that holds one record. One that cannot be read starts over: it only keeps state that comes back."""
+    with _locks[name]:
+        path = _path(name)
+        value = _read(name) if path.exists() else None
+        value = value if isinstance(value, dict) else {}
+        result = change(value)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        encrypt_file(value, path)
+        _cache[name] = (_signature(path), copy.deepcopy(value))
         return result
 
 
@@ -513,20 +529,30 @@ def deadline_view(prefix, item, school, today):
     return view
 
 
-def deadlines(school, today):
+def deadlines(school, today, iserv_homework=None):
     horizon_back = (today - timedelta(days=14)).isoformat()
     written_back = (today - timedelta(days=WRITTEN_DAYS)).isoformat()
     result = []
+
+    def keep(view, homework):
+        if not view or view['date'] < (horizon_back if homework else written_back):
+            return
+        if homework and view['status'] == 'abgegeben' and view['date'] < today.isoformat():
+            return
+        result.append(view)
+
     for prefix, (name, _) in DEADLINE_KINDS.items():
         for item in load_list(name):
-            view = deadline_view(prefix, item, school, today)
-            if not view:
+            keep(deadline_view(prefix, item, school, today), prefix == 'hw')
+    if iserv_homework:
+        # Homework taken over from IServ by hand in the older interface is there already as one's own.
+        own = {(view['title'].casefold(), view['date']) for view in result if view['kind'] == 'Hausaufgabe'}
+        for item in iserv_homework['items']:
+            if f"{ISERV_PREFIX}{item['id']}" in iserv_homework['hidden']:
                 continue
-            if view['date'] < (horizon_back if prefix == 'hw' else written_back):
-                continue
-            if prefix == 'hw' and view['status'] == 'abgegeben' and view['date'] < today.isoformat():
-                continue
-            result.append(view)
+            view = iserv_homework_view(item, school, iserv_homework['done'])
+            if view and (view['title'].casefold(), view['date']) not in own:
+                keep(view, True)
     result.sort(key=lambda item: (item['date'], item.get('block') or 0))
     return result
 
@@ -861,10 +887,186 @@ def weather(settings, now):
     return view
 
 
+# What IServ gives on the desktop for sure. Homework is named only once a fetch brought some.
+ISERV_FEATURES = ['Vertretungsplan', 'E-Mail']
+ISERV_PREFIX = 'iserv.'
+ISERV_PARTS = ('plan', 'mail', 'homework')
+
+
 def iserv_account():
     credentials = load_dict('iserv')
     username = str(credentials.get('username') or '')
-    return {'connected': bool(username), 'name': username, 'school': str(credentials.get('iserv_url') or '').replace('https://', '').rstrip('/'), 'features': ['Aufgaben', 'Vertretungsplan', 'E-Mail'] if username else []}
+    school = str(credentials.get('iserv_url') or '').replace('https://', '').replace('http://', '').strip('/')
+    return {
+        'connected': bool(username), 'name': username, 'school': school, 'features': list(ISERV_FEATURES),
+        'account': f'{username}@{school.lower()}' if username else '',
+    }
+
+
+def iserv_key():
+    return iserv_account()['account']
+
+
+def mark_synced(source, part, account):
+    """Notes that a part of a source just gave data. The pages call this time Stand, so only what really came counts."""
+    stamp = datetime.now().isoformat(timespec='minutes')
+
+    def change(state):
+        entry = state.get(source) if isinstance(state.get(source), dict) else {}
+        if entry.get('account') != account:
+            entry = {'account': account}
+        entry[part] = stamp
+        state[source] = entry
+
+    modify_dict('sync', change)
+
+
+def iserv_parts(account):
+    """When each part of IServ last came, for the account signed in now. The plan also counts from its own copy, which older versions kept."""
+    entry = load_dict('sync').get('iserv') if account else None
+    parts = {part: None for part in ISERV_PARTS}
+    if isinstance(entry, dict) and entry.get('account') == account:
+        parts.update({part: entry[part] for part in ISERV_PARTS if isinstance(entry.get(part), str)})
+    if account:
+        kept = str(load_dict('plan_meta').get('cached_at') or '')[:16]
+        if re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}', kept) and kept > (parts['plan'] or ''):
+            parts['plan'] = kept
+    return parts
+
+
+HOMEWORK_MAX_AGE = timedelta(minutes=30)
+_homework_state = {'running': False}
+_homework_lock = threading.Lock()
+
+
+def iserv_homework_state(account):
+    """The homework the last fetch brought for this account, and which of it is ticked off or hidden here."""
+    stored = load_dict('iserv_homework')
+    if not account or stored.get('account') != account:
+        return {'items': [], 'done': set(), 'hidden': set(), 'tried': None}
+    items = [item for item in stored.get('items') or [] if isinstance(item, dict) and item.get('id')]
+    marks = lambda key: {str(value) for value in stored.get(key) or [] if isinstance(value, str)}
+    return {'items': items, 'done': marks('done'), 'hidden': marks('hidden'), 'tried': stored.get('tried_at')}
+
+
+def change_iserv_homework(account, change):
+    def apply(state):
+        if state.get('account') != account:
+            state.clear()
+            state['account'] = account
+        return change(state)
+
+    return modify_dict('iserv_homework', apply)
+
+
+def refresh_iserv_homework():
+    """Fetches the homework from IServ now. What failed leaves the last list as it was."""
+    from .iserv_service import get_iserv_service
+    account = iserv_key()
+    if not account:
+        return {'success': False, 'cause': 'setup'}
+    result = get_iserv_service().get_homework()
+    stamp = datetime.now().isoformat(timespec='minutes')
+
+    def change(state):
+        state['tried_at'] = stamp
+        if result.get('success'):
+            state['items'] = result['exercises']
+
+    change_iserv_homework(account, change)
+    if result.get('success'):
+        mark_synced('iserv', 'homework', account)
+    return result
+
+
+def refresh_iserv_homework_soon():
+    with _homework_lock:
+        if _homework_state['running']:
+            return
+        _homework_state['running'] = True
+
+    def run():
+        try:
+            refresh_iserv_homework()
+        except Exception:
+            pass
+        finally:
+            with _homework_lock:
+                _homework_state['running'] = False
+
+    threading.Thread(target=run, name='iserv-homework', daemon=True).start()
+
+
+def homework_due(state):
+    now = datetime.now()
+    try:
+        tried = datetime.fromisoformat(str(state.get('tried') or ''))
+    except ValueError:
+        return True
+    return not now - HOMEWORK_MAX_AGE < tried <= now
+
+
+def _local_day(value):
+    text = str(value or '').strip()
+    if len(text) > 10:
+        try:
+            stamp = datetime.fromisoformat(text.replace('Z', '+00:00'))
+        except ValueError:
+            stamp = None
+        if stamp is not None:
+            return (stamp.astimezone() if stamp.tzinfo else stamp).date().isoformat()
+    return iso_day(text)
+
+
+def course_subject(course, school):
+    """The subject an IServ course stands for: the same name, else the longest subject name it starts with or holds as a word."""
+    wanted = _norm(course)
+    if not wanted:
+        return None
+    names = {}
+    for key, info in school['shown'].items():
+        names.setdefault(_norm(info.get('name')), key)
+    if wanted in names:
+        return names[wanted]
+    found, length = None, 0
+    for name, key in names.items():
+        if len(name) > length and len(name) >= 3 and (wanted.startswith(name) or f' {name}' in wanted):
+            found, length = key, len(name)
+    return found
+
+
+def iserv_homework_view(item, school, done):
+    when = _local_day(item.get('due'))
+    if not when:
+        return None
+    item_id = f"{ISERV_PREFIX}{item['id']}"
+    subject_key = course_subject(item.get('course'), school)
+    finished = item_id in done or str(item.get('status')) in ('done', 'submitted')
+    view = {
+        'id': f'hw-{item_id}', 'kind': 'Hausaufgabe', 'title': str(item.get('title') or '') or 'Hausaufgabe', 'subject': subject_key,
+        'date': when, 'detail': str(item.get('course') or ''), 'status': 'abgegeben' if finished else 'offen', 'origin': 'iserv',
+    }
+    block = lesson_block(school, subject_key, when)
+    if block:
+        view['block'] = block
+    return view
+
+
+def sync_status(iserv, now):
+    from . import calendar_cache
+    try:
+        google = calendar_cache.stand() if calendar_cache.connected() else None
+    except Exception:
+        google = None
+    parts = iserv_parts(iserv['account']) if iserv['connected'] else {part: None for part in ISERV_PARTS}
+    stamps = [stamp for stamp in parts.values() if stamp]
+    return {
+        'iserv': iserv['connected'],
+        'iservAvailable': True,
+        'rendered': now.isoformat(timespec='minutes'),
+        'synced': {'iserv': max(stamps) if stamps else None, 'google': google},
+        'iservParts': parts,
+    }
 
 
 def build(active, store, now):
@@ -873,6 +1075,9 @@ def build(active, store, now):
     school = school_setup(settings)
     plan, pool = tasks(school['shown'], today)
     iserv = iserv_account()
+    homework = iserv_homework_state(iserv['account']) if iserv['connected'] else None
+    if homework is not None and homework_due(homework):
+        refresh_iserv_homework_soon()
     data = {
         'user': {},
         'blocks': school['blocks'],
@@ -883,13 +1088,13 @@ def build(active, store, now):
         'changes': [],
         'tasks': plan,
         'taskPool': pool,
-        'deadlines': deadlines(school, today),
+        'deadlines': deadlines(school, today, homework),
         'events': events(today),
         'holidays': holidays(today),
         'transit': {'line': '', 'mode': '', 'from': '', 'to': '', 'walkMinutes': 0, 'departures': [], 'delays': {}},
         'weather': weather(settings, now),
-        'status': {'iserv': iserv['connected'], 'lastSync': f'{now.hour}:{now.minute:02d}'},
-        'mailUnread': 0,
+        'status': sync_status(iserv, now),
+        'mailUnread': len(mail_unread_ids()),
     }
     if not school['abWeeks']:
         store.setdefault('app-ab-weeks', False)
@@ -1123,6 +1328,41 @@ def archived_mails():
         return {}
 
 
+MAIL_UNREAD = 2000
+
+
+def note_unread(views, answered, current=None):
+    """Keeps by id which mails in the inbox are unread, so that every page can count them without asking a mailbox.
+
+    Only the mailboxes that answered are replaced. One that failed keeps what it had, one that is gone from current loses it.
+    """
+    fresh = {view['id'] for view in views if view.get('folder') == 'inbox' and not view.get('read')}
+
+    def change(state):
+        mail = state.get('mail') if isinstance(state.get('mail'), dict) else {}
+        kept = {
+            mail_id for mail_id in mail.get('unread') or []
+            if isinstance(mail_id, str) and mail_id.split('|', 1)[0] not in answered and (current is None or mail_id.split('|', 1)[0] in current)
+        }
+        state['mail'] = {'unread': sorted(kept | fresh)[:MAIL_UNREAD]}
+
+    modify_dict('sync', change)
+
+
+def note_read(mail_ids):
+    def change(state):
+        mail = state.get('mail') if isinstance(state.get('mail'), dict) else {}
+        state['mail'] = {'unread': [mail_id for mail_id in mail.get('unread') or [] if mail_id not in mail_ids]}
+
+    if mail_ids and set(mail_ids) & set(mail_unread_ids()):
+        modify_dict('sync', change)
+
+
+def mail_unread_ids():
+    mail = load_dict('sync').get('mail')
+    return [mail_id for mail_id in (mail.get('unread') or []) if isinstance(mail_id, str)] if isinstance(mail, dict) else []
+
+
 def page_email(data, school, settings, today, iserv):
     drafts, on_the_way = mail_draft_state()
     return {'messages': [], 'contacts': [], 'drafts': drafts, 'draftsPending': on_the_way}
@@ -1181,7 +1421,7 @@ def page_settings(data, school, settings, today, iserv):
         'states': [{'code': code, 'name': name} for code, name in STATES],
         'courses': school['courses'],
         'accounts': {
-            'iserv': iserv,
+            'iserv': {key: value for key, value in iserv.items() if key != 'account'},
             'google': {'connected': bool(google), 'calendars': []},
         },
         'notifications': copy.deepcopy(NOTIFY_DEFAULTS),

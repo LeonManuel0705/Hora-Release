@@ -1,6 +1,6 @@
 import { data, flags, esc, icon, luna, now, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, subject, hueVar, minutesOf, platform, root, storage, WEEKDAYS, WEEKDAYS_SHORT, MONTHS_SHORT, BRAND } from "../core.js";
 import { animates, travels, flipKeyed, enterInPlace, exitInPlace, token, ms } from "../motion.js";
-import { toast, typing, shortcutsEnabled, overlayOpen, registerSearch, syncTime } from "../shell.js";
+import { toast, typing, shortcutsEnabled, overlayOpen, registerSearch } from "../shell.js";
 
 const $ = (id) => document.getElementById(id);
 const pad = (value) => String(value).padStart(2, "0");
@@ -507,7 +507,7 @@ function syncNav() {
 function renderAlert() {
   if (!flags.offline) return;
   $("mailAlert").hidden = false;
-  $("mailAlertText").textContent = `Keine Verbindung zu IServ. ${BRAND} zeigt die Mails vom Stand ${syncTime()} Uhr.`;
+  $("mailAlertText").textContent = `Keine Verbindung zu ${BRAND}. Mails lassen sich gerade nicht laden.`;
 }
 
 function linkedExists(linked) {
