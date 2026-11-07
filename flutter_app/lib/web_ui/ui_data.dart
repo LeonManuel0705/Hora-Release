@@ -210,6 +210,7 @@ class School {
     required this.abReference,
     required this.abWeeks,
     required this.names,
+    this.abSwapped = false,
   });
 
   final Map<String, Map<String, Object?>> subjects;
@@ -220,12 +221,13 @@ class School {
   final String abReference;
   final bool abWeeks;
   final Map<String, String> names;
+  // The page applies the swap to abReference itself, as on the desktop. Weeks counted here include it.
+  final bool abSwapped;
 
   String weekOf(DateTime day) {
     if (!abWeeks) return 'A';
-    final monday = day.subtract(Duration(days: day.weekday - 1));
-    final weeks = (daysBetween(dayOf(abReference), monday) / 7).floor();
-    return weeks % 2 == 0 ? 'A' : 'B';
+    final reference = dayOf(abReference);
+    return AppProvider.weekTypeFrom(day, abSwapped ? reference.add(const Duration(days: 7)) : reference);
   }
 
   int? blockFor(String? subjectKey, String? dayIso) {
@@ -354,12 +356,11 @@ class UiData {
       }
     }
 
-    final inverted = prefs.getBool('ab_week_inverted') ?? false;
-    final monday = today.subtract(Duration(days: today.weekday - 1));
-    final aWeek = AppProvider.calculateIsAWeek(monday) != inverted;
-    final reference = aWeek ? monday : monday.subtract(const Duration(days: 7));
+    await AppProvider.settleWeekRule(db, prefs, now);
+    final reference = AppProvider.abReferenceOf(inverted: prefs.getBool('ab_week_inverted') ?? false);
 
-    final custom = customSubjects((await UiDb.store(db))['app-subjects'], subjects);
+    final store = await UiDb.store(db);
+    final custom = customSubjects(store['app-subjects'], subjects);
     return School(
       subjects: subjects,
       known: {...subjects, ...custom},
@@ -369,6 +370,7 @@ class UiData {
       abReference: isoOf(reference),
       abWeeks: abWeeks,
       names: names,
+      abSwapped: store['app-ab-swap'] == true,
     );
   }
 

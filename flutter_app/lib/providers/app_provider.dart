@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/task.dart';
@@ -79,6 +81,7 @@ class AppProvider extends ChangeNotifier {
       }
 
       _abWeeksEnabled = prefs.getBool('ab_weeks_enabled') ?? true;
+      await settleWeekRule(await _db.database, prefs);
       _abWeekInverted = prefs.getBool('ab_week_inverted') ?? false;
 
       _timetableSetupCompleted = prefs.getBool('timetable_setup_completed') ?? false;
@@ -424,12 +427,52 @@ class AppProvider extends ChangeNotifier {
     await loadTimetablePeriods();
   }
 
-  static bool calculateIsAWeek(DateTime date) {
+  /// The Monday the A and B weeks count from, the same default as on the desktop.
+  static final abReference = DateTime.utc(2026, 1, 12);
+
+  /// Swapping A and B on this device counts from the Monday after.
+  static DateTime abReferenceOf({required bool inverted}) => inverted ? abReference.add(const Duration(days: 7)) : abReference;
+
+  /// The desktop's rule: the week of [date] is an A week when the whole weeks from [reference] to its Monday are even.
+  static String weekTypeFrom(DateTime date, DateTime reference) {
     final day = DateTime.utc(date.year, date.month, date.day);
-    final firstDayOfYear = DateTime.utc(date.year, 1, 1);
-    final daysSinceFirst = day.difference(firstDayOfYear).inDays;
-    final weekNumber = (daysSinceFirst + firstDayOfYear.weekday - 1) ~/ 7 + 1;
-    return weekNumber % 2 == 0;
+    final monday = day.subtract(Duration(days: day.weekday - 1));
+    final start = DateTime.utc(reference.year, reference.month, reference.day);
+    return (monday.difference(start).inDays / 7).floor() % 2 == 0 ? 'A' : 'B';
+  }
+
+  static bool calculateIsAWeek(DateTime date) => weekTypeFrom(date, abReference) == 'A';
+
+  static const _weekRuleKey = 'ab_week_rule';
+  static Future<void>? _weekRule;
+
+  /// Before this rule the phone called a week A when its number in the year was even, so it disagreed with the desktop.
+  /// Whoever swapped A and B here keeps the letter this week has. Everyone else counts like the desktop from now on.
+  static Future<void> settleWeekRule(Database db, SharedPreferences prefs, [DateTime? now]) =>
+      _weekRule ??= _settleWeekRule(db, prefs, now ?? DateTime.now()).catchError((Object error) {
+        _weekRule = null;
+        throw error;
+      });
+
+  @visibleForTesting
+  static void forgetWeekRule() => _weekRule = null;
+
+  static Future<void> _settleWeekRule(Database db, SharedPreferences prefs, DateTime now) async {
+    if (prefs.getString(_weekRuleKey) == 'reference') return;
+    final inverted = prefs.getBool('ab_week_inverted') ?? false;
+    var swapped = false;
+    try {
+      final rows = await db.query('ui_store', columns: ['value'], where: 'key = ?', whereArgs: ['app-ab-swap'], limit: 1);
+      swapped = rows.isNotEmpty && jsonDecode(rows.first['value'] as String) == true;
+    } catch (_) {}
+    if (inverted || swapped) {
+      final day = DateTime.utc(now.year, now.month, now.day);
+      final yearStart = DateTime.utc(now.year, 1, 1);
+      final yearWeek = (day.difference(yearStart).inDays + yearStart.weekday - 1) ~/ 7 + 1;
+      final before = yearWeek.isEven != inverted;
+      await prefs.setBool('ab_week_inverted', before != calculateIsAWeek(now));
+    }
+    await prefs.setString(_weekRuleKey, 'reference');
   }
 
   static String getWeekTypeForDate(DateTime date) {
@@ -540,10 +583,7 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool isCurrentlyAWeek([DateTime? date]) {
-    final raw = calculateIsAWeek(date ?? DateTime.now());
-    return _abWeekInverted ? !raw : raw;
-  }
+  bool isCurrentlyAWeek([DateTime? date]) => weekTypeFrom(date ?? DateTime.now(), abReferenceOf(inverted: _abWeekInverted)) == 'A';
 
   String getEffectiveWeekType([DateTime? date]) {
     return isCurrentlyAWeek(date) ? 'A' : 'B';
