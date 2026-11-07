@@ -15,6 +15,33 @@ if [ "${MACOS_FROZEN_BACKEND:-1}" != "0" ]; then
   bash "$REPO_ROOT/scripts/build_backend_macos.sh" arm64
 fi
 
+# prepare_build moves the build number in five tracked files. Should any later
+# step fail, they go back to what they were, so a broken build leaves no bump.
+VERSION_FILES=(
+  "$PROJECT_DIR/build_number.txt"
+  "$PROJECT_DIR/build_version.txt"
+  "$PROJECT_DIR/lib/build_info.dart"
+  "$PROJECT_DIR/pubspec.yaml"
+  "$REPO_ROOT/landing-page/public/version.json"
+)
+SAVED_VERSIONS="$(mktemp -d)"
+for index in "${!VERSION_FILES[@]}"; do
+  if [ -f "${VERSION_FILES[$index]}" ]; then
+    cp -p "${VERSION_FILES[$index]}" "$SAVED_VERSIONS/$index"
+  fi
+done
+restore_versions() {
+  for index in "${!VERSION_FILES[@]}"; do
+    if [ -f "$SAVED_VERSIONS/$index" ]; then
+      cp -p "$SAVED_VERSIONS/$index" "${VERSION_FILES[$index]}"
+    fi
+  done
+  rm -rf "$SAVED_VERSIONS"
+  echo "=== Build failed, the version files are back to build $(cat "$PROJECT_DIR/build_number.txt" 2>/dev/null) ===" >&2
+}
+set -E
+trap restore_versions ERR
+
 prepare_build "build_macos.sh"
 
 cd "$PROJECT_DIR"
@@ -163,6 +190,9 @@ notarize_app() {
 seal_adhoc
 codesign_app
 notarize_app
+
+trap - ERR
+rm -rf "$SAVED_VERSIONS"
 
 echo "=== Build complete: $VERSION_NAME Build $BUILD_NUM ==="
 echo "Output: build/macos/Build/Products/Release/"
