@@ -183,6 +183,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
   DateTime? _pausedAt;
   String _pausedDay = '';
   bool _setupRunning = false;
+  bool _asking = false;
 
   @override
   void initState() {
@@ -265,7 +266,12 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     await service.initialize();
     final before = await service.refreshPermission();
     if (before != 'default') return before;
-    await service.requestPermissions();
+    _asking = true;
+    try {
+      await service.requestPermissions();
+    } finally {
+      _asking = false;
+    }
     final after = service.permission;
     if (after != before) unawaited(_permissionChanged(after));
     return after;
@@ -334,7 +340,8 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     unawaited(UiWeather.instance.refresh());
     final service = NotificationService();
     final known = service.permission;
-    final changed = await service.refreshPermission() != known;
+    // The system prompt of our own request pauses the app too; that answer is the page's to handle.
+    final changed = !_asking && await service.refreshPermission() != known;
     if (Platform.isAndroid) {
       if (changed) ReminderScheduler.instance.markChanged();
       unawaited(ReminderScheduler.instance.reschedule());
