@@ -130,6 +130,40 @@ Map<String, Object?>? recurrenceRule(Object? value) {
   };
 }
 
+DateTime? _nthDay(DateTime first, Map<String, Object?> rule, int index) {
+  final step = index * (rule['interval'] as int);
+  if (rule['freq'] == 'daily' || rule['freq'] == 'weekly') {
+    return DateTime(first.year, first.month, first.day + step * (rule['freq'] == 'weekly' ? 7 : 1));
+  }
+  final day = DateTime(first.year, first.month + (rule['freq'] == 'monthly' ? step : step * 12), first.day);
+  return day.day == first.day ? day : null;
+}
+
+/// The last day an event view reaches, every repetition included, or null for a series without end.
+String? seriesLastDay(Map<String, Object?> view) {
+  final first = dayOf(view['date'] as String);
+  final span = view['endDate'] is String ? daysBetween(first, dayOf(view['endDate'] as String)) : 0;
+  final rule = recurrenceRule(view['recurrence']);
+  if (rule == null) return (view['endDate'] as String?) ?? view['date'] as String;
+  DateTime last;
+  if (rule['until'] != null) {
+    final until = dayOf(rule['until'] as String);
+    last = until.isBefore(first) ? first : until;
+  } else if (rule['count'] != null) {
+    last = first;
+    var produced = 0;
+    for (var index = 0; produced < (rule['count'] as int) && index < 20000; index++) {
+      final day = _nthDay(first, rule, index);
+      if (day == null) continue;
+      last = day;
+      produced++;
+    }
+  } else {
+    return null;
+  }
+  return isoOf(DateTime(last.year, last.month, last.day + span));
+}
+
 /// Minutes before the start, -1 for none, null for the default of the settings. Throws FormatException otherwise.
 int? reminderMinutes(Object? value) {
   if (value == null || value == '') return null;
@@ -603,8 +637,8 @@ class UiData {
     for (final row in await _ownEvents()) {
       final view = eventView(row);
       if (view == null) continue;
-      final last = (view['endDate'] as String?) ?? view['date'] as String;
-      if (last.compareTo(start) >= 0 && (view['date'] as String).compareTo(end) <= 0) result.add(view);
+      final last = seriesLastDay(view);
+      if ((last == null || last.compareTo(start) >= 0) && (view['date'] as String).compareTo(end) <= 0) result.add(view);
     }
     result.sort((a, b) {
       final byDate = (a['date'] as String).compareTo(b['date'] as String);

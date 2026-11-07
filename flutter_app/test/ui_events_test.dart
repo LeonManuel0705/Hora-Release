@@ -110,6 +110,36 @@ void main() {
     }
   });
 
+  String day(int offset) {
+    final when = DateTime.now().add(Duration(days: offset));
+    return '${when.year}-${when.month.toString().padLeft(2, '0')}-${when.day.toString().padLeft(2, '0')}';
+  }
+
+  test('a series reaches the page data as long as it repeats', () async {
+    for (final (title, offset, rule) in [
+      ('Alt', -60, {'freq': 'weekly'}),
+      ('Neu', -20, {'freq': 'weekly'}),
+      ('Vorbei', -60, {'freq': 'weekly', 'count': 2}),
+    ]) {
+      final (status, _) = await send('POST', '/api/ui/events', {'title': title, 'date': day(offset), 'start': '17:00', 'end': '18:00', 'recurrence': rule});
+      expect(status, 200);
+    }
+    final page = await hub.handle(const UiBridgeRequest(method: 'GET', path: '/hub/calendar', navigate: true));
+    final match = RegExp(r'<script type="application/json" id="appData">(.*?)</script>', dotAll: true).firstMatch(page.body as String)!;
+    final data = (jsonDecode(match.group(1)!) as Map).cast<String, Object?>();
+    final titles = {for (final item in (data['events'] as List)) (item as Map)['title']};
+    expect(titles, containsAll(['Alt', 'Neu']));
+    expect(titles, isNot(contains('Vorbei')));
+  });
+
+  test('the last day of a series counts only days that exist', () {
+    expect(seriesLastDay({'date': '2027-01-31', 'recurrence': {'freq': 'monthly', 'count': 6}}), '2027-10-31');
+    expect(seriesLastDay({'date': '2028-02-29', 'recurrence': {'freq': 'yearly', 'count': 3}}), '2036-02-29');
+    expect(seriesLastDay({'date': '2026-11-13', 'endDate': '2026-11-14', 'recurrence': {'freq': 'weekly', 'until': '2026-12-31'}}), '2027-01-01');
+    expect(seriesLastDay({'date': '2025-09-30', 'recurrence': {'freq': 'weekly'}}), isNull);
+    expect(seriesLastDay({'date': '2025-09-30', 'endDate': '2025-10-02'}), '2025-10-02');
+  });
+
   test('the rule is read the same way as in the browser', () {
     expect(recurrenceRule({'freq': 'daily', 'count': 3, 'until': '2026-12-31'}), {'freq': 'daily', 'interval': 1, 'until': null, 'count': 3, 'exceptions': <String>[]});
     expect(recurrenceRule('{"freq":"yearly","interval":40}'), {'freq': 'yearly', 'interval': 12, 'until': null, 'count': null, 'exceptions': <String>[]});

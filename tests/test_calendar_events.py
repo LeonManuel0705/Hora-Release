@@ -1,9 +1,12 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import json
+import re
+
 from app import calendar_cache, google_oauth, ui_data
 from tests.google_fake import local_stamp
-from tests.test_calendar_cache import client, day, due_again, google, local_events  # noqa: F401
+from tests.test_calendar_cache import TODAY, client, day, due_again, google, local_events  # noqa: F401
 
 WEEKLY = {'freq': 'weekly', 'interval': 2, 'until': day(60), 'count': None, 'exceptions': [day(16)]}
 
@@ -158,3 +161,24 @@ def test_the_rule_shape_is_checked_like_in_the_browser():
     assert ui_data.recurrence_rule({'freq': 'weekly', 'exceptions': ['2026-02-30', '2026-11-11']})['exceptions'] == ['2026-11-11']
     assert ui_data.recurrence_rule(None) is None
     assert ui_data.reminder_minutes(None) is None and ui_data.reminder_minutes('1440') == 1440
+
+
+def test_a_series_reaches_the_pages_as_long_as_it_repeats(client):
+    first = day(-500)
+    for title, rule in [('Endlos', {'freq': 'weekly'}), ('Vorbei', {'freq': 'weekly', 'count': 3}),
+                        ('Bis vor langem', {'freq': 'daily', 'until': day(-450)}), ('Noch lange', {'freq': 'monthly', 'count': 30})]:
+        assert create(client, title=title, date=first, recurrence=rule)[0] == 200
+    shown = {item['title'] for item in ui_data.events(TODAY)}
+    assert {'Endlos', 'Noch lange'} <= shown
+    assert not {'Vorbei', 'Bis vor langem'} & shown
+    page = client.get('/hub/calendar').get_data(as_text=True)
+    data = json.loads(re.search(r'<script type="application/json" id="appData">(.*?)</script>', page, re.S).group(1))
+    assert {'Endlos', 'Noch lange'} <= {item['title'] for item in data['events']}
+
+
+def test_the_last_day_of_a_series_counts_only_days_that_exist():
+    assert ui_data.series_last_day({'date': '2027-01-31', 'recurrence': {'freq': 'monthly', 'count': 6}}) == '2027-10-31'
+    assert ui_data.series_last_day({'date': '2028-02-29', 'recurrence': {'freq': 'yearly', 'count': 3}}) == '2036-02-29'
+    assert ui_data.series_last_day({'date': '2026-11-13', 'endDate': '2026-11-14', 'recurrence': {'freq': 'weekly', 'until': '2026-12-31'}}) == '2027-01-01'
+    assert ui_data.series_last_day({'date': '2025-09-30', 'recurrence': {'freq': 'weekly'}}) is None
+    assert ui_data.series_last_day({'date': '2025-09-30', 'endDate': '2025-10-02'}) == '2025-10-02'

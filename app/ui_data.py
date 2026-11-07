@@ -626,6 +626,39 @@ def recurrence_rule(value):
     return {'freq': value['freq'], 'interval': interval, 'until': until, 'count': count, 'exceptions': days}
 
 
+def _nth_day(first, rule, index):
+    """The day a rule comes round for the index-th time, or None where that day does not exist (31.4., 29.2.)."""
+    step = index * rule['interval']
+    if rule['freq'] in ('daily', 'weekly'):
+        return first + timedelta(days=step * (7 if rule['freq'] == 'weekly' else 1))
+    months = first.month - 1 + (step if rule['freq'] == 'monthly' else step * 12)
+    try:
+        return first.replace(year=first.year + months // 12, month=months % 12 + 1)
+    except ValueError:
+        return None
+
+
+def series_last_day(view):
+    """The last day an event view reaches, every repetition included, or None for a series without end."""
+    first = date.fromisoformat(view['date'])
+    span = (date.fromisoformat(view['endDate']) - first).days if view.get('endDate') else 0
+    rule = recurrence_rule(view.get('recurrence'))
+    if not rule:
+        return view.get('endDate') or view['date']
+    if rule['until']:
+        last = max(date.fromisoformat(rule['until']), first)
+    elif rule['count']:
+        last, produced, index = first, 0, 0
+        while produced < rule['count'] and index < 20000:
+            day = _nth_day(first, rule, index)
+            index += 1
+            if day:
+                last, produced = day, produced + 1
+    else:
+        return None
+    return (last + timedelta(days=span)).isoformat()
+
+
 def reminder_minutes(value):
     """Minutes before the start, -1 for none, or None for the default. Raises ValueError for anything else."""
     if value is None or value == '':
@@ -682,7 +715,8 @@ def events(today):
     result = []
     for item in load_list('calendar'):
         view = event_view(item)
-        if view and (view.get('endDate') or view['date']) >= start and view['date'] <= end:
+        last = series_last_day(view) if view else None
+        if view and (last is None or last >= start) and view['date'] <= end:
             result.append(view)
     return _with_synced(result, today)
 
