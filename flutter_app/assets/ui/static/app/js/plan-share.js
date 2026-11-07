@@ -340,10 +340,10 @@ async function saveText(name, text) {
     try {
       saved = await shell.saveFile(name, text);
     } catch {}
-    if (saved?.error === "denied") return { tone: "warn", text: `${BRAND} darf nicht in „Downloads“ speichern. Erlaube es unter Systemeinstellungen › Datenschutz & Sicherheit › Dateien und Ordner.` };
-    if (!saved?.name) return { tone: "warn", text: "Die Datei ließ sich nicht im Ordner „Downloads“ speichern." };
+    if (saved?.error === "denied" && platform.mac) return { tone: "warn", text: `${BRAND} darf nicht in „Downloads“ speichern. Erlaube es unter Systemeinstellungen › Datenschutz & Sicherheit › Dateien und Ordner.` };
+    if (!saved?.name) return { tone: "warn", text: "Die Datei ließ sich gerade nicht speichern." };
     const reveal = typeof shell.showFile === "function" ? { label: "Im Finder zeigen", run: () => shell.showFile(saved.path) } : null;
-    return { text: `Gespeichert in „${saved.folder}“ als „${saved.name}“.`, action: reveal };
+    return { text: saved.folder ? `Gespeichert in „${saved.folder}“ als „${saved.name}“.` : `Gespeichert als „${saved.name}“.`, action: reveal };
   }
   const file = new File([text], name, { type: "application/json" });
   if (touch() && navigator.canShare?.({ files: [file] })) {
@@ -409,7 +409,7 @@ async function shareView() {
   const send = !!link && typeof navigator.share === "function" && !platform.desktop && !phoneApp();
   const code = qr
     ? `<figure class="share-qr">${qr}<figcaption>Mit der Handykamera scannen</figcaption></figure>`
-    : `<p class="share-note">${icon("info")}<span>${link ? "Für einen QR-Code ist dieser Plan zu groß. Schick den Link oder die Datei." : tooLong ? "Für einen Link ist dieser Plan zu groß. Die Datei geht trotzdem." : "Einen Link kann dieses Gerät gerade nicht bauen. Die Datei geht trotzdem."}</span></p>`;
+    : `<p class="share-note">${icon("info")}<span>${link ? `Für einen QR-Code ist dieser Plan zu groß. Schick den Link${canSaveFile() ? " oder die Datei" : ""}.` : `${tooLong ? "Für einen Link ist dieser Plan zu groß." : "Einen Link kann dieses Gerät gerade nicht bauen."}${canSaveFile() ? " Die Datei geht trotzdem." : ""}`}</span></p>`;
   const actions = [send ? button("shareSend", "share-2", "Teilen", true) : "", link ? button("shareCopy", "link", "Link kopieren", !send) : "", canSaveFile() ? button("shareFile", "download", "Als Datei sichern", !link) : ""];
   show("Stundenplan teilen", `${code}<p class="share-summary">${esc(planLine(model))}. Der Link enthält nur den Stundenplan.</p><div class="share-actions">${actions.join("")}</div><p class="share-status" id="shareStatus" role="status"></p>`, (body) => {
     body.querySelector("#shareSend")?.addEventListener("click", async () => {
@@ -689,9 +689,9 @@ function openBackup(payload) {
   else takeView("In dieser Sicherung steht kein Stundenplan.");
 }
 
-export function askBackup(line) {
+export function askBackup(line, { settings = false } = {}) {
   const done = begin();
-  show("Ganze Sicherung übernehmen?", `<p class="share-lead">Die Datei enthält ${esc(line)}. Kommt sie von jemand anderem, übernimm nur den Stundenplan.</p><div class="share-actions">${button("backupPlan", "table-2", "Nur Stundenplan")}${button("backupAll", "upload", "Alles übernehmen", true)}</div>`, (body) => {
+  show("Ganze Sicherung übernehmen?", `<p class="share-lead">Die Datei enthält ${esc(line)}.${settings ? " „Alles übernehmen“ ersetzt außerdem deinen Stundenplan und deine Einstellungen." : ""} Kommt sie von jemand anderem, übernimm nur den Stundenplan.</p><div class="share-actions">${button("backupPlan", "table-2", "Nur Stundenplan")}${button("backupAll", "upload", "Alles übernehmen", true)}</div>`, (body) => {
     body.querySelector("#backupPlan").addEventListener("click", () => close("plan"));
     body.querySelector("#backupAll").addEventListener("click", () => close("all"));
   });

@@ -3099,7 +3099,7 @@ async function importData(file) {
   if (button) button.disabled = true;
   try {
     const inside = records ? contents(records) : "";
-    const choice = inside ? await askBackup(inside) : "all";
+    const choice = inside ? await askBackup(inside, { settings: entries.length > 0 }) : "all";
     if (choice === "plan") importFlow({ backup: payload });
     else if (choice === "all") await takeBackup(file, payload, entries, records);
   } catch {
