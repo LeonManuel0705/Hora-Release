@@ -154,6 +154,7 @@ async function startBackend(withoutEncryptedFrom = null) {
   if (current !== generation || quitting) return;
   if (!result.ok) {
     screens.problem(result.problem.kind, result.problem);
+    if (openedAtLogin) showWindow();
     return;
   }
   loadHub();
