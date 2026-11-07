@@ -4,7 +4,7 @@
 import { data, root, platform, esc, icon, storage, now, isoDate, slug, LOCAL_KEYS, MAX_BLOCKS, schoolDefaults, applySchoolEdits, abWeeks, BRAND, BRAND_NAMES } from "./core.js";
 import { animates, travels } from "./motion.js";
 import { toast } from "./shell.js";
-import { PLAN_KEYS, PlanError, planOf, encodePlan, decodePlan, payloadOf, linkOf, planFile, planOfFile, planOfValues, describePlan, fitPlan, sameValue } from "./plan-format.js";
+import { PLAN_KEYS, PlanError, planOf, encodePlan, decodePlan, payloadOf, linkOf, planFile, planOfFile, planOfValues, describePlan, fitPlan, sameValue, changedKeys, writeValues } from "./plan-format.js";
 
 const PENDING_KEY = "app-plan-link";
 const UNDO_KEY = "app-plan-undo";
@@ -87,23 +87,21 @@ function context() {
 
 const myPlan = () => planOf(context().mine);
 
+const perWeek = (size) => Math.max(size.lessons, size.lessonsB || 0);
+
 function planLine(model, skip = []) {
   const size = describePlan(model, skip);
   const weeks = size.weeks ? ", mit A- und B-Woche" : "";
-  return `${plural(size.subjects, "Fach", "Fächer")} und ${plural(size.lessons || size.lessonsB || 0, "Stunde", "Stunden")} pro Woche${weeks}`;
+  return `${plural(size.subjects, "Fach", "Fächer")} und ${plural(perWeek(size), "Stunde", "Stunden")} pro Woche${weeks}`;
 }
 
 const snapshot = () => Object.fromEntries(PLAN_KEYS.map((key) => [key, storage.get(key)]));
-
-function write(values, keys) {
-  keys.forEach((key) => (values[key] == null ? storage.remove(key) : storage.set(key, values[key])));
-}
 
 async function writeChecked(values, keys) {
   const failed = [];
   const note = () => failed.push(1);
   addEventListener("app:save-failed", note);
-  write(values, keys);
+  writeValues(storage, values, keys);
   await storage.settled();
   removeEventListener("app:save-failed", note);
   return !failed.length;
@@ -116,8 +114,8 @@ function reloadHere() {
 
 async function commit(fitted, message) {
   const before = snapshot();
-  const keys = PLAN_KEYS.filter((key) => !sameValue(before[key], fitted.values[key]));
-  if (!keys.length) return "same";
+  const keys = changedKeys(before, fitted.values);
+  if (!keys.length || !fitted.changed) return "same";
   if (!(await writeChecked(fitted.values, keys))) {
     await writeChecked(before, keys);
     applySchoolEdits();
@@ -586,15 +584,24 @@ function previewView(model, origin = {}) {
     show("Plan übernehmen", `<p class="share-lead">${esc(reasonText(new PlanError("blocks")))} Aktualisiere ${esc(BRAND)}, dann klappt es.</p>`);
     return;
   }
-  let mode = hasMine ? "merge" : "replace";
+  const merged = (left) => {
+    try {
+      return fitPlan(model, context(), { mode: "merge", skip: left, maxBlocks: MAX_BLOCKS });
+    } catch {
+      return { filled: 0, dropped: 0 };
+    }
+  };
+  const mine = [...data.blocks].sort((a, b) => a.n - b.n);
+  const sameTimes = model.blocks.length === mine.length && model.blocks.every((block, index) => block.start === mine[index].start && block.end === mine[index].end);
+  let mode = !hasMine ? "replace" : tooMany || !merged([]).dropped ? "merge" : "replace";
   const chips = model.subjects.map((subject, index) => `<button type="button" class="share-chip" data-skip="${index}" aria-pressed="true" style="--hue: var(--hue-${subject.hue})"><i aria-hidden="true"></i><span>${esc(subject.name)}${subject.type === "LK" ? " LK" : ""}</span></button>`).join("");
   const pick = model.subjects.length > 1
     ? `<button class="text-button share-pick-toggle" type="button" id="sharePickToggle" aria-expanded="false" aria-controls="sharePickList"><span>Fächer auswählen</span>${icon("chevron-down")}</button><div class="share-pick" id="sharePickList" hidden><p class="share-row-desc">Tipp die Fächer an, die du nicht hast.</p><div class="share-chips">${chips}</div></div>`
     : "";
   const choice = hasMine
     ? `<fieldset class="share-choice"><legend class="share-label">So übernehmen</legend>
-      <label class="share-option"><input type="radio" name="shareMode" value="merge" checked><span class="share-option-text"><b>Ergänzen</b><small id="shareMerge"></small></span></label>
-      <label class="share-option"><input type="radio" name="shareMode" value="replace"${tooMany ? " disabled" : ""}><span class="share-option-text"><b>Ersetzen</b><small id="shareReplace"></small></span></label></fieldset>`
+      <label class="share-option"><input type="radio" name="shareMode" value="merge"${mode === "merge" ? " checked" : ""}><span class="share-option-text"><b>Ergänzen</b><small id="shareMerge"></small></span></label>
+      <label class="share-option"><input type="radio" name="shareMode" value="replace"${mode === "replace" ? " checked" : ""}${tooMany ? " disabled" : ""}><span class="share-option-text"><b>Ersetzen</b><small id="shareReplace"></small></span></label></fieldset>`
     : "";
   const note = origin.link ? browserNote() : origin.backup ? `<p class="share-note">${icon("info")}<span>Aus der Sicherung kommt nur der Stundenplan, alles andere bleibt, wie es ist.</span></p>` : "";
   const html = `<div class="share-preview" role="img" aria-label="${esc(planLine(model))}">${weeksHtml(model)}</div>
@@ -609,12 +616,12 @@ function previewView(model, origin = {}) {
       body.querySelectorAll(".share-cell[data-subject]").forEach((cell) => cell.classList.toggle("is-free", skip.has(Number(cell.dataset.subject))));
       apply.disabled = describePlan(model, left).subjects === 0;
       if (!hasMine) return;
-      let filled = 0;
-      try {
-        filled = fitPlan(model, context(), { mode: "merge", skip: left, maxBlocks: MAX_BLOCKS }).filled;
-      } catch {}
-      body.querySelector("#shareMerge").textContent = filled ? `Deine Stunden bleiben, ${plural(filled, "freie Stunde kommt", "freie Stunden kommen")} dazu.` : "Bei dir ist schon jede dieser Stunden belegt.";
-      body.querySelector("#shareReplace").textContent = tooMany ? reasonText(new PlanError("blocks")) : "Dein Plan wird durch diesen ersetzt. Deine Fächer und Noten bleiben.";
+      const { filled, dropped } = merged(left);
+      const outside = dropped ? ` ${plural(dropped, "Stunde passt", "Stunden passen")} nicht in dein Raster.` : "";
+      body.querySelector("#shareMerge").textContent = filled
+        ? `Deine Stunden bleiben, ${plural(filled, "freie Stunde", "freie Stunden")} pro Woche ${filled === 1 ? "kommt" : "kommen"} dazu.${outside}`
+        : dropped ? "Keine dieser Stunden passt in dein Raster, die Stundenzeiten sind anders." : "Bei dir ist schon jede dieser Stunden belegt.";
+      body.querySelector("#shareReplace").textContent = tooMany ? reasonText(new PlanError("blocks")) : `Dein Plan wird durch diesen ersetzt${sameTimes ? "" : ", auch die Stundenzeiten"}. Deine Fächer und Noten bleiben.`;
     };
     body.querySelector("#sharePickToggle")?.addEventListener("click", (event) => {
       const list = body.querySelector("#sharePickList");
@@ -646,9 +653,10 @@ function previewView(model, origin = {}) {
         return;
       }
       const size = describePlan(model, left);
+      const lessons = mode === "merge" ? fitted.filled : perWeek(size);
       const message = mode === "merge"
-        ? fitted.filled ? `${plural(fitted.filled, "Stunde", "Stunden")} aus dem geteilten Plan ergänzt` : "Plan ergänzt"
-        : `Plan übernommen: ${plural(size.subjects, "Fach", "Fächer")} und ${plural(size.lessons || size.lessonsB || 0, "Stunde", "Stunden")} pro Woche`;
+        ? `${plural(lessons, "Stunde", "Stunden")} pro Woche ergänzt`
+        : `Plan übernommen: ${plural(size.subjects, "Fach", "Fächer")} und ${plural(lessons, "Stunde", "Stunden")} pro Woche`;
       const outcome = await commit(fitted, message);
       if (outcome === "failed") {
         setError(body, "Der Plan ließ sich gerade nicht speichern. Versuch es gleich noch einmal.");
@@ -656,8 +664,11 @@ function previewView(model, origin = {}) {
         return;
       }
       const reload = flowOptions.reload !== false;
-      close(outcome === "same" ? null : { mode, subjects: size.subjects, lessons: size.lessons });
-      if (outcome === "same") toast("Diesen Plan hast du schon.", { icon: "check" });
+      close(outcome === "same" ? null : { mode, subjects: size.subjects, lessons });
+      if (outcome === "same") {
+        const nothing = fitted.dropped && !fitted.filled ? "Nichts ergänzt, diese Stunden passen nicht in dein Raster." : "Nichts ergänzt, bei dir ist schon jede dieser Stunden belegt.";
+        toast(mode === "merge" ? nothing : "Diesen Plan hast du schon.", { icon: "check" });
+      }
       else if (reload) reloadHere();
       else offerUndo();
     });

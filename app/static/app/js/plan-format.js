@@ -325,7 +325,38 @@ export function fitPlan(model, { mine, defaults, own = {} }, { mode = "replace",
   const goneTeachers = new Set(values[KEYS.teachers].removed);
   const rooms = new Set(values[KEYS.rooms].added);
   const goneRooms = new Set(values[KEYS.rooms].removed);
+  const cells = values[KEYS.lessons];
   const taken = new Set([...Object.keys(items), ...Object.keys(mine.subjects), ...Object.keys(defaults.subjects), ...Object.keys(record(record(own.subjects).items))]);
+  const count = { A: { filled: 0, kept: 0, dropped: 0 }, B: { filled: 0, kept: 0, dropped: 0 } };
+  const placed = [];
+  const chosen = model.lessons.filter((lesson) => !left.has(lesson.subject));
+  if (replace) {
+    Object.keys(cells).forEach((key) => delete cells[key]);
+    ["A", "B"].forEach((week) => DAYS.forEach((day) => model.blocks.forEach((_, index) => (cells[`${week}:${day}:${index + 1}`] = null))));
+    chosen.forEach((lesson) => (model.weeks ? [lesson.week] : ["A", "B"]).forEach((week) => {
+      placed.push([lesson, `${week}:${lesson.day}:${lesson.block}`]);
+      count[week].filled += 1;
+    }));
+    values[KEYS.blocks] = { v: 2, blocks: model.blocks.map((block, index) => ({ n: index + 1, start: block.start, end: block.end })) };
+    values[KEYS.weeks] = model.weeks;
+  } else {
+    const startsAt = new Map(mine.blocks.map((block) => [block.start, block.n]));
+    const shifted = model.weeks && mine.weeks && isDay(model.reference) && isDay(mine.abReference) && weekParity(model.reference) !== weekParity(mine.abReference);
+    const flip = (week) => (week === "A" ? "B" : "A");
+    chosen.forEach((lesson) => {
+      const weeks = !mine.weeks ? (lesson.week === "A" ? ["A"] : []) : !model.weeks ? ["A", "B"] : [shifted ? flip(lesson.week) : lesson.week];
+      const n = startsAt.get(model.blocks[lesson.block - 1]?.start);
+      weeks.forEach((week) => {
+        const key = `${week}:${lesson.day}:${n}`;
+        if (n == null) count[week].dropped += 1;
+        else if (cells[key] || placed.some(([, other]) => other === key)) count[week].kept += 1;
+        else {
+          placed.push([lesson, key]);
+          count[week].filled += 1;
+        }
+      });
+    });
+  }
   const room = (name) => {
     if (!name) return name;
     rooms.add(name);
@@ -353,13 +384,12 @@ export function fitPlan(model, { mine, defaults, own = {} }, { mode = "replace",
   };
   const subjectKey = new Map();
   let added = 0;
-  model.subjects.forEach((subject, index) => {
-    if (left.has(index) || !model.lessons.some((lesson) => lesson.subject === index)) return;
+  [...new Set(placed.map(([lesson]) => lesson.subject))].sort((a, b) => a - b).forEach((index) => {
+    const subject = model.subjects[index];
     const match = matchOf(subject);
     if (match) {
       const item = items[match];
-      const who = teacher(subject.teacher);
-      if (who && (replace || !item.teacher)) item.teacher = who;
+      if (subject.teacher != null && (replace || !item.teacher)) item.teacher = teacher(subject.teacher);
       if (subject.room && (replace || !item.room)) item.room = room(subject.room);
       retired.delete(match);
       subjectKey.set(index, match);
@@ -370,48 +400,24 @@ export function fitPlan(model, { mine, defaults, own = {} }, { mode = "replace",
     subjectKey.set(index, key);
     added += 1;
   });
-  const cellOf = (lesson) => {
+  placed.forEach(([lesson, key]) => {
     const subject = subjectKey.get(lesson.subject);
-    const who = teacher(lesson.teacher);
-    return { subject, room: room(lesson.room), ...(who && who !== items[subject].teacher ? { teacher: who } : {}) };
-  };
-  const chosen = model.lessons.filter((lesson) => subjectKey.has(lesson.subject));
-  const cells = values[KEYS.lessons];
-  const result = { added, filled: 0, kept: 0, dropped: 0 };
-  if (replace) {
-    Object.keys(cells).forEach((key) => delete cells[key]);
-    ["A", "B"].forEach((week) => DAYS.forEach((day) => model.blocks.forEach((_, index) => (cells[`${week}:${day}:${index + 1}`] = null))));
-    chosen.forEach((lesson) => (model.weeks ? [lesson.week] : ["A", "B"]).forEach((week) => (cells[`${week}:${lesson.day}:${lesson.block}`] = cellOf(lesson))));
-    values[KEYS.blocks] = { v: 2, blocks: model.blocks.map((block, index) => ({ n: index + 1, start: block.start, end: block.end })) };
-    values[KEYS.weeks] = model.weeks;
-    result.filled = chosen.filter((lesson) => lesson.week === "A").length;
-  } else {
-    const order = [...mine.blocks].sort((a, b) => a.n - b.n);
-    const shifted = model.weeks && mine.weeks && isDay(model.reference) && isDay(mine.abReference) && weekParity(model.reference) !== weekParity(mine.abReference);
-    const flip = (week) => (week === "A" ? "B" : "A");
-    chosen.forEach((lesson) => {
-      const weeks = !mine.weeks ? (lesson.week === "A" ? ["A"] : []) : !model.weeks ? ["A", "B"] : [shifted ? flip(lesson.week) : lesson.week];
-      weeks.forEach((week) => {
-        const n = order[lesson.block - 1]?.n;
-        if (n == null) {
-          result.dropped += 1;
-          return;
-        }
-        const key = `${week}:${lesson.day}:${n}`;
-        if (cells[key]) {
-          result.kept += 1;
-          return;
-        }
-        cells[key] = cellOf(lesson);
-        result.filled += 1;
-      });
-    });
-  }
+    const own = lesson.teacher == null ? "" : teacherKey(model.teachers[lesson.teacher]);
+    const who = own && own !== items[subject].teacher ? teacher(lesson.teacher) : "";
+    cells[key] = { subject, room: room(lesson.room), ...(who ? { teacher: who } : {}) };
+  });
   values[KEYS.subjects] = { items, removed: [...retired] };
   values[KEYS.teachers] = { items: people, removed: [...goneTeachers] };
   values[KEYS.rooms] = { added: [...rooms], removed: [...goneRooms] };
   const source = { abReference: replace && model.weeks && model.reference ? model.reference : mine.abReference, subjects: fileSubjects(defaults.subjects, keys) };
-  return { ...result, values: fitSchool(values, source, { ...defaults, own }).values };
+  const most = (field) => Math.max(count.A[field], count.B[field]);
+  return { added, filled: most("filled"), kept: most("kept"), dropped: most("dropped"), changed: replace || placed.length > 0, values: fitSchool(values, source, { ...defaults, own }).values };
+}
+
+export const changedKeys = (before, after) => PLAN_KEYS.filter((key) => !sameValue(before[key], after[key]));
+
+export function writeValues(store, values, keys) {
+  keys.forEach((key) => (values[key] == null ? store.remove(key) : store.set(key, values[key])));
 }
 
 const sorted = (value) => (Array.isArray(value) ? value.map(sorted) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sorted(value[key])])) : value);

@@ -10,7 +10,7 @@ const load = (name) => import(pathToFileURL(resolve(here, "../../app/static/app/
 const share = await load("plan-format.js");
 const { wholeSchool, fileKeys, fileSubjects } = await load("backup.js");
 const qrcodegen = (await load("qrcodegen.js")).default;
-const { planOf, packPlan, unpackPlan, encodePlan, decodePlan, payloadOf, linkOf, planFile, planOfFile, planOfValues, describePlan, fitPlan, sameValue, crc32, PlanError, FORMAT } = share;
+const { planOf, packPlan, unpackPlan, encodePlan, decodePlan, payloadOf, linkOf, planFile, planOfFile, planOfValues, describePlan, fitPlan, sameValue, changedKeys, writeValues, crc32, PlanError, FORMAT, PLAN_KEYS } = share;
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const days = (filled = {}) => Object.fromEntries(["1", "2", "3", "4", "5"].map((dow) => [dow, filled[dow] || []]));
@@ -226,7 +226,7 @@ const tests = {
     assert.deepEqual(fitted.values, {});
     const merged = fitPlan(planOf(state()), { mine: state(), defaults: base }, { mode: "merge" });
     assert.deepEqual(merged.values, {});
-    assert.deepEqual([merged.filled, merged.kept], [0, 3]);
+    assert.deepEqual([merged.filled, merged.kept, merged.changed], [0, 2, false]);
   },
   "on a device without a plan the shared plan arrives whole"() {
     const fitted = fitPlan(planOf(state()), { mine: emptyState(), defaults: empty });
@@ -273,7 +273,7 @@ const tests = {
     mine.edits = { "A:3:1": { subject: "d", room: "R2" } };
     const fitted = fitPlan(planOf(theirs), { mine, defaults: base }, { mode: "merge" });
     assert.deepEqual(fitted.values["app-timetable-edits"], { "A:1:2": { subject: "d", room: "R7" }, "A:3:1": { subject: "d", room: "R2" } });
-    assert.deepEqual([fitted.filled, fitted.kept, fitted.dropped], [1, 4, 0]);
+    assert.deepEqual([fitted.filled, fitted.kept, fitted.dropped], [1, 3, 0]);
     assert.equal("app-block-times" in fitted.values, false);
   },
   "merging puts each lesson in the calendar week it belongs to"() {
@@ -307,6 +307,56 @@ const tests = {
     const fitted = fitPlan(planOf(state()), { mine, defaults: phone });
     assert.deepEqual(fitted.values["app-timetable-edits"]["A:2:2"], { subject: "4", room: "R2" });
     assert.equal(fitted.added, 1);
+  },
+  "merging goes by clock time and counts what does not fit"() {
+    const mine = emptyState();
+    mine.subjects = { c: { name: "Chor", short: "Cho", hue: "teal", type: "GK", teacherId: "", room: "Aula", custom: true } };
+    mine.timetable.A["1"] = [{ block: 1, subject: "c", room: "Aula", teacher: "" }];
+    const short = planOf({ ...state(), blocks: [{ n: 1, start: "08:00", end: "08:45" }, { n: 2, start: "08:50", end: "09:35" }, { n: 3, start: "09:50", end: "10:35" }], timetable: { A: days({ 2: [{ block: 1, subject: "m", room: "R1" }, { block: 2, subject: "d", room: "R2" }, { block: 3, subject: "d", room: "R2" }] }), B: days() } });
+    const fitted = fitPlan(short, { mine, defaults: empty }, { mode: "merge" });
+    assert.deepEqual([fitted.filled, fitted.kept, fitted.dropped], [2, 0, 1]);
+    assert.deepEqual(fitted.values["app-timetable-edits"]["A:2:1"], { subject: "s-mathe-lk", room: "R1" });
+    assert.deepEqual(fitted.values["app-timetable-edits"]["A:2:2"], { subject: "s-deutsch", room: "R2" });
+    const late = planOf({ ...state(), blocks: [{ n: 1, start: "07:30", end: "08:15" }, { n: 2, start: "08:20", end: "09:05" }] });
+    const none = fitPlan(late, { mine, defaults: empty }, { mode: "merge" });
+    assert.deepEqual([none.filled, none.dropped, none.changed], [0, 2, false]);
+    assert.deepEqual(Object.keys(none.values["app-subjects"]?.items || {}), ["c"]);
+    assert.equal(Object.keys(none.values["app-teachers"]?.items || {}).length, 0);
+  },
+  "a merge only creates what a placed lesson needs"() {
+    const theirs = state();
+    theirs.subjects.k = { name: "Kunst", short: "Kun", hue: "rose", type: "GK", teacherId: "t-herr-kurz", room: "Atelier", custom: true };
+    theirs.subjects.m = { ...theirs.subjects.m, teacherId: "t-frau-neu" };
+    theirs.teachers.push({ id: "t-frau-neu", title: "Frau", name: "Neu" });
+    theirs.timetable.A["1"] = [{ block: 1, subject: "k", room: "Atelier", teacher: "" }];
+    theirs.timetable.A["4"] = [{ block: 1, subject: "m", room: "R1", teacher: "" }];
+    const mine = state();
+    mine.timetable = { A: days({ 1: [{ block: 1, subject: "d", room: "R2", teacher: "" }] }), B: days() };
+    const fitted = fitPlan(planOf(theirs), { mine, defaults: { ...base, timetable: { A: days(), B: days() } } }, { mode: "merge" });
+    assert.equal(fitted.values["app-subjects"]?.items?.["s-kunst"], undefined);
+    assert.equal(fitted.values["app-teachers"]?.items?.["t-frau-neu"], undefined);
+    assert.deepEqual(fitted.values["app-timetable-edits"]["A:4:1"], { subject: "m", room: "R1" });
+    assert.equal(fitted.added, 0);
+  },
+  "lessons are counted per week, not for A and B together"() {
+    const twice = state({ timetable: { A: days({ 1: [{ block: 1, subject: "m", room: "R1" }], 2: [{ block: 2, subject: "d", room: "R2" }] }), B: days({ 1: [{ block: 1, subject: "m", room: "R1" }], 2: [{ block: 2, subject: "d", room: "R2" }] }) } });
+    assert.equal(fitPlan(planOf(twice), { mine: emptyState(), defaults: empty }).filled, 2);
+    const merged = fitPlan(planOf(twice), { mine: { ...emptyState(), blocks: clone(twoBlocks) }, defaults: { ...empty, blocks: twoBlocks } }, { mode: "merge" });
+    assert.equal(merged.filled, 2);
+    assert.deepEqual(describePlan(planOf(twice)), { subjects: 2, lessons: 2, lessonsB: 2, weeks: true, blocks: 2 });
+  },
+  "undo puts every plan key back exactly as it was"() {
+    const initial = { "app-subjects": { items: { m: { hue: "jade" } }, removed: [] }, "app-ab-weeks": false, "app-timetable-edits": { "A:1:1": null } };
+    const map = new Map(Object.entries(clone(initial)));
+    const store = { get: (key) => (map.has(key) ? clone(map.get(key)) : null), set: (key, value) => map.set(key, clone(value)), remove: (key) => map.delete(key) };
+    const before = Object.fromEntries(PLAN_KEYS.map((key) => [key, store.get(key)]));
+    const fitted = fitPlan(planOf(state({ abReference: "2026-01-19" })), { mine: emptyState(), defaults: empty });
+    const keys = changedKeys(before, fitted.values);
+    assert.deepEqual([...keys].sort(), [...PLAN_KEYS].sort());
+    writeValues(store, fitted.values, keys);
+    PLAN_KEYS.forEach((key) => assert.ok(sameValue(store.get(key), fitted.values[key] ?? null), key));
+    writeValues(store, before, keys);
+    assert.deepEqual(Object.fromEntries(map), initial);
   },
   "values that equal in all but their order are the same"() {
     assert.ok(sameValue({ a: 1, b: { c: [1, 2] } }, { b: { c: [1, 2] }, a: 1 }));
