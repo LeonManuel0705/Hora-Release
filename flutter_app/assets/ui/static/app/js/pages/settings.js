@@ -3383,12 +3383,18 @@ async function exportData() {
       toast(`${BRAND} darf nicht in „Downloads“ speichern. Erlaube es unter Systemeinstellungen › Datenschutz & Sicherheit › Dateien und Ordner.`, { icon: "circle-alert", duration: 12000 });
       return;
     }
+    if (saved?.error === "cancelled") return;
+    if (saved?.error === "too-large") {
+      toast("Die Sicherung ist zu groß, um sie hier zu speichern.", { icon: "circle-alert" });
+      return;
+    }
     if (!saved?.name) {
       toast("Die Sicherung ließ sich nicht im Ordner „Downloads“ speichern.", { icon: "circle-alert" });
       return;
     }
-    const reveal = typeof shell.showFile === "function" ? { label: "Im Finder zeigen", run: () => shell.showFile(saved.path) } : undefined;
-    toast(`Gesichert in „${esc(saved.folder)}“ als „${esc(saved.name)}“${missing}`, { icon: missing ? "triangle-alert" : "download", action: reveal });
+    const reveal = typeof shell.showFile === "function" && saved.path ? { label: "Im Finder zeigen", run: () => shell.showFile(saved.path) } : undefined;
+    const place = saved.folder ? `in „${esc(saved.folder)}“ ` : "";
+    toast(`Gesichert ${place}als „${esc(saved.name)}“${missing}`, { icon: missing ? "triangle-alert" : "download", action: reveal });
     return;
   }
   const result = await offerFile(name, JSON.stringify(payload, null, 2));
