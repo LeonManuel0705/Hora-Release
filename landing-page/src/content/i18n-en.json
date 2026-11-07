@@ -642,7 +642,7 @@
       },
       {
         "q": "Can I move my data to a new device?",
-        "a": "Yes, with a backup. In the settings under Daten (data), you export everything to a file and import it on the new device. There is no cloud that keeps your devices in sync by itself."
+        "a": "Yes, with a backup. In the settings under Daten (data), you save your timetable and subjects, grades, homework, tests, exams, presentations, tasks, events, notes, places and settings to a file and read it in on the new device. You set up training, bookmarks and your IServ and mail logins there again. There is no cloud that keeps your devices in sync by itself."
       },
       {
         "q": "Is {{BRAND_NAME}} part of IServ?",

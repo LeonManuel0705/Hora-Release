@@ -642,7 +642,7 @@
       },
       {
         "q": "Kann ich meine Daten auf ein neues Gerät mitnehmen?",
-        "a": "Ja, mit einer Sicherung. In den Einstellungen unter Daten exportierst du alles als Datei und importierst sie auf dem neuen Gerät. Eine Cloud, die deine Geräte von selbst abgleicht, gibt es nicht."
+        "a": "Ja, mit einer Sicherung. In den Einstellungen unter Daten sicherst du Stundenplan und Fächer, Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Aufgaben, Termine, Notizen, Orte und Einstellungen in einer Datei und liest sie auf dem neuen Gerät wieder ein. Training, Lesezeichen und die Anmeldungen bei IServ und Mail richtest du dort neu ein. Eine Cloud, die deine Geräte von selbst abgleicht, gibt es nicht."
       },
       {
         "q": "Gehört {{BRAND_NAME}} zu IServ?",
