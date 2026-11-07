@@ -5,7 +5,7 @@
   "main": "main.js",
   "author": "Leon Manuel",
   "license": "PolyForm-Noncommercial-1.0.0",
-  "homepage": "https://github.com/LeonManuel0705/Hora",
+  "homepage": "https://github.com/LeonManuel0705/Hora-Release",
   "desktopName": "app.hora.desktop",
   "engines": {
     "node": ">=22.12.0"

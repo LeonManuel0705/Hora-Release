@@ -5,7 +5,7 @@ class Brand {
   Brand._();
 
   static const name = 'Hora';
-  static const repository = 'https://github.com/LeonManuel0705/Hora';
+  static const repository = 'https://github.com/LeonManuel0705/Hora-Release';
   static const website = 'https://hora-app.netlify.app';
   static const previousNames = <String>['Nexus'];
 }
