@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 
+import 'package:app/build_info.dart';
 import 'package:app/services/backend_setup.dart';
 import 'package:app/services/flask_server_service.dart';
 
@@ -27,6 +28,8 @@ class FakeHost extends HostSystem {
   final Map<String, List<int>> heads;
   final Answer answer;
   final runs = <List<String>>[];
+  final limits = <Duration?>[];
+  final folders = <String?>[];
   final started = <List<String>>[];
   FakeProcess? process;
 
@@ -44,8 +47,15 @@ class FakeHost extends HostSystem {
   List<int> head(String path, int length) => heads[path] ?? const [];
 
   @override
-  Future<ProcessResult?> run(String executable, List<String> arguments, {Duration timeout = const Duration(seconds: 20)}) async {
+  Future<ProcessResult?> run(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Duration? timeout = const Duration(seconds: 20),
+  }) async {
     runs.add([executable, ...arguments]);
+    limits.add(timeout);
+    folders.add(workingDirectory);
     return answer(executable, arguments);
   }
 
@@ -360,7 +370,119 @@ void main() {
     });
   });
 
+  group('installing the packages', () {
+    late Directory root;
+    const python = '/p/venv/bin/python3';
+    const offline = "WARNING: Retrying (Retry(total=1)) after connection broken by 'NewConnectionError(... "
+        "Failed to establish a new connection: [Errno 8] nodename nor servname provided, or not known)': /simple/flask/";
+
+    setUp(() {
+      root = Directory.systemTemp.createTempSync('packages-');
+      File(path.join(root.path, 'requirements.txt')).writeAsStringSync('flask\npytest\n');
+      File(path.join(root.path, 'requirements-desktop.txt')).writeAsStringSync('flask\n');
+    });
+    tearDown(() => root.deleteSync(recursive: true));
+
+    File hash() => File(path.join(root.path, '.requirements_hash'));
+
+    Future<({bool proceed, StartFailure? failure})> sync(FakeHost host, {required bool checkout}) =>
+        FlaskServerService.syncPackages(host: host, root: root.path, python: python, checkout: checkout, progress: (_) {});
+
+    test('a checkout runs pip exactly as before and starts even when pip fails', () async {
+      final host = FakeHost(answer: (_, __) => ProcessResult(1, 1, '', '$offline\nERROR: No matching distribution found for flask'));
+      final outcome = await sync(host, checkout: true);
+      expect(outcome.proceed, isTrue);
+      expect(outcome.failure!.message, startsWith('Keine Verbindung zum Internet.'));
+      expect(host.runs.single, [python, '-m', 'pip', 'install', '-r', path.join(root.path, 'requirements.txt'), '--quiet']);
+      expect(host.limits.single, isNull);
+      expect(host.folders.single, root.path);
+      expect(host.started, isEmpty);
+      expect(hash().existsSync(), isFalse);
+    });
+
+    test('a checkout records the old hash after a good pip run', () async {
+      final host = FakeHost(answer: (_, __) => ProcessResult(1, 0, '', ''));
+      expect((await sync(host, checkout: true)).proceed, isTrue);
+      expect(hash().readAsStringSync(), 'flask\npytest\n'.hashCode.toString());
+      expect((await sync(host, checkout: true)).proceed, isTrue);
+      expect(host.runs, hasLength(1));
+    });
+
+    test('a checkout that cannot start pip still starts the backend', () async {
+      final outcome = await sync(FakeHost(), checkout: true);
+      expect(outcome.proceed, isTrue);
+      expect(outcome.failure, isNull);
+    });
+
+    test('a fresh extracted backend stops on a failed install', () async {
+      final process = FakeProcess();
+      final host = FakeHost()..process = process;
+      final outcome = sync(host, checkout: false);
+      process.say(offline, error: true);
+      await pumpEventQueue();
+      process.finish(1);
+      final result = await outcome;
+      expect(result.proceed, isFalse);
+      expect(host.started.single, [python, ...PipInstall.arguments(path.join(root.path, 'requirements-desktop.txt'))]);
+      expect(hash().existsSync(), isFalse);
+    });
+
+    test('an extracted backend installed before gets its chance after a failed update', () async {
+      hash().writeAsStringSync('older');
+      final process = FakeProcess();
+      final host = FakeHost()..process = process;
+      final outcome = sync(host, checkout: false);
+      await pumpEventQueue();
+      process.finish(1);
+      final result = await outcome;
+      expect(result.proceed, isTrue);
+      expect(result.failure, isNotNull);
+      expect(hash().readAsStringSync(), 'older');
+    });
+  });
+
+  group('the backend environment', () {
+    test('the Python backend keeps its variables and learns the version', () {
+      final environment = FlaskServerService.backendEnvironment(token: 'abc', port: 5050);
+      expect(environment, {
+        'HUB_HOST': '127.0.0.1',
+        'HUB_DESKTOP_TOKEN': 'abc',
+        'HUB_PORT': '5050',
+        'HUB_EXIT_WITH_PARENT': '1',
+        'HUB_APP_VERSION': BuildInfo.versionName,
+        'HUB_APP_BUILD': '${BuildInfo.buildNumber}',
+        'FLASK_ENV': 'development',
+      });
+    });
+
+    test('the frozen backend reads the data and settings next to it', () {
+      const project = '/Users/a/Documents/App';
+      final environment = FlaskServerService.backendEnvironment(token: 'abc', port: 5050, frozenProject: project);
+      expect(environment['HUB_DATA_DIR'], path.join(project, 'data'));
+      expect(environment['HUB_ENV_FILE'], path.join(project, '.env'));
+      expect(environment['HUB_APP_VERSION'], BuildInfo.versionName);
+      expect(environment['HUB_APP_BUILD'], '${BuildInfo.buildNumber}');
+      expect(environment.containsKey('FLASK_ENV'), isFalse);
+    });
+  });
+
   group('a backend that ends during the start', () {
+    test('a checkout is never promised a reinstall', () {
+      final failure = StartText.exited(["ModuleNotFoundError: No module named 'brand_new'"], 1, frozen: false, checkout: true);
+      expect(failure.reinstallPackages, isFalse);
+      expect(failure.message, contains('venv'));
+    });
+
+    test('an earlier pip error explains only a failed import', () {
+      const packages = StartFailure('pip failed');
+      expect(StartText.exited(["ModuleNotFoundError: No module named 'flask'"], 1, frozen: false, packages: packages), same(packages));
+      expect(StartText.exited(['ImportError: cannot import name x'], 1, frozen: false, packages: packages), same(packages));
+      expect(StartText.exited(['OSError: [Errno 48] Address already in use'], 1, frozen: false, packages: packages).message, startsWith('Port 5050'));
+      final denied = StartText.exited(["PermissionError: [Errno 1] Operation not permitted: '/Users/a/Documents/App/data'"], 1,
+          frozen: false, packages: packages);
+      expect(denied.problem, StartProblem.documentsDenied);
+    });
+
     test('a missing package in the venv offers a fresh install', () {
       final failure = StartText.exited(
         ['Traceback (most recent call last):', '  File "app/app.py", line 5', "ModuleNotFoundError: No module named 'flask_socketio'"],

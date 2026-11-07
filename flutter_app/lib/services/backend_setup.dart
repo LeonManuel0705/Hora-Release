@@ -43,22 +43,25 @@ class HostSystem {
   Future<ProcessResult?> run(
     String executable,
     List<String> arguments, {
-    Duration timeout = const Duration(seconds: 20),
+    String? workingDirectory,
+    Duration? timeout = const Duration(seconds: 20),
   }) async {
     final Process process;
     try {
-      process = await Process.start(executable, arguments);
+      process = await Process.start(executable, arguments, workingDirectory: workingDirectory);
     } on ProcessException {
       return null;
     }
     final out = process.stdout.transform(const SystemEncoding().decoder).join();
     final err = process.stderr.transform(const SystemEncoding().decoder).join();
     var timedOut = false;
-    final code = await process.exitCode.timeout(timeout, onTimeout: () {
-      timedOut = true;
-      process.kill(ProcessSignal.sigkill);
-      return process.exitCode;
-    });
+    final code = timeout == null
+        ? await process.exitCode
+        : await process.exitCode.timeout(timeout, onTimeout: () {
+            timedOut = true;
+            process.kill(ProcessSignal.sigkill);
+            return process.exitCode;
+          });
     if (timedOut) return null;
     final output = await Future.wait([out, err]).timeout(const Duration(seconds: 2), onTimeout: () => ['', '']);
     return ProcessResult(process.pid, code, output[0], output[1]);
@@ -314,13 +317,30 @@ class StartText {
     return null;
   }
 
-  static StartFailure exited(List<String> output, int? code, {required bool frozen, int port = 5050}) {
+  // An earlier pip error only explains an exit that failed on an import; a
+  // taken port or a refused Documents folder keeps its own message and action.
+  // A git checkout is never told that the app reinstalls its packages.
+  static StartFailure exited(
+    List<String> output,
+    int? code, {
+    required bool frozen,
+    bool checkout = false,
+    StartFailure? packages,
+    int port = 5050,
+  }) {
     final text = output.join('\n');
+    if (packages != null && (text.contains('ModuleNotFoundError') || text.contains('ImportError'))) return packages;
     final missing = RegExp(r"ModuleNotFoundError: No module named '([^']+)'").firstMatch(text);
     if (missing != null && frozen) {
       return StartFailure(
         'Diese Installation von ${Brand.name} ist unvollständig.\n'
         'Lade ${Brand.name} noch einmal von der Website. Deine Daten bleiben dabei erhalten.',
+        detail: missing[0],
+      );
+    }
+    if (missing != null && checkout) {
+      return StartFailure(
+        'Ein Python-Paket fehlt (${missing[1]}).\nInstallier es in der venv dieses Checkouts und versuch es dann noch einmal.',
         detail: missing[0],
       );
     }

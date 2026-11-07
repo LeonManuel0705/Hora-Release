@@ -326,15 +326,37 @@ class FlaskServerService {
     }
     if (!p.isWithin(root, found)) setupProgress.value = StartText.environment;
     final pythonPath = await ownEnvironment(root, found);
-    if (!await _syncPipDependencies(root, pythonPath, checkout: _isCheckout(_host, root))) return;
+    final checkout = _isCheckout(_host, root);
+    if (!await _syncPipDependencies(root, pythonPath, checkout: checkout)) return;
     await _launch(
       pythonPath,
       ['-m', 'app.app'],
       root,
-      {'FLASK_ENV': 'development'},
+      backendEnvironment(token: _desktopToken, port: port),
       frozen: false,
+      checkout: checkout,
     );
   }
+
+  // The Python backend keeps the variables it always got. Both backends also
+  // get the app's version and build, which a backend without flutter_app/ next
+  // to it cannot read itself.
+  @visibleForTesting
+  static Map<String, String> backendEnvironment({required String token, required int port, String? frozenProject}) => {
+        'HUB_HOST': '127.0.0.1',
+        'HUB_DESKTOP_TOKEN': token,
+        'HUB_PORT': '$port',
+        'HUB_EXIT_WITH_PARENT': '1',
+        'HUB_APP_VERSION': BuildInfo.versionName,
+        'HUB_APP_BUILD': '${BuildInfo.buildNumber}',
+        if (frozenProject == null)
+          'FLASK_ENV': 'development'
+        else ...{
+          'HUB_DATA_DIR': p.join(frozenProject, 'data'),
+          'HUB_ENV_FILE': p.join(frozenProject, '.env'),
+          'PYTHONUNBUFFERED': '1',
+        },
+      };
 
   static bool _isCheckout(HostSystem host, String root) {
     final git = p.join(root, '.git');
@@ -371,11 +393,7 @@ class FlaskServerService {
       server,
       const [],
       project,
-      {
-        'HUB_DATA_DIR': p.join(project, 'data'),
-        'HUB_ENV_FILE': p.join(project, '.env'),
-        'PYTHONUNBUFFERED': '1',
-      },
+      backendEnvironment(token: _desktopToken, port: port, frozenProject: project),
       frozen: true,
     );
   }
@@ -386,6 +404,7 @@ class FlaskServerService {
     String workingDirectory,
     Map<String, String> environment, {
     required bool frozen,
+    bool checkout = false,
   }) async {
     final listenersBefore = await _listenerPids();
     final output = OutputTail();
@@ -396,14 +415,7 @@ class FlaskServerService {
         executable,
         arguments,
         workingDirectory: workingDirectory,
-        environment: {
-          ...Platform.environment,
-          'HUB_HOST': '127.0.0.1',
-          'HUB_DESKTOP_TOKEN': _desktopToken,
-          'HUB_PORT': '$port',
-          'HUB_EXIT_WITH_PARENT': '1',
-          ...environment,
-        },
+        environment: {...Platform.environment, ...environment},
       );
     } on ProcessException catch (error) {
       _fail(StartText.notStartable(error.message));
@@ -419,8 +431,8 @@ class FlaskServerService {
       await streams.timeout(const Duration(seconds: 1), onTimeout: () => const []);
       final failure = running
           ? StartText.crashed(output.lines, code)
-          : _packagesFailure ?? StartText.exited(output.lines, code, frozen: frozen, port: port);
-      if (failure.reinstallPackages) _forgetPackages(workingDirectory);
+          : StartText.exited(output.lines, code, frozen: frozen, checkout: checkout, packages: _packagesFailure, port: port);
+      if (failure.reinstallPackages && !checkout) _forgetPackages(workingDirectory);
       return failure;
     }
 
@@ -697,50 +709,76 @@ class FlaskServerService {
     }
   }
 
-  // A checkout keeps syncing requirements.txt with the old hash, so a
-  // developer's venv is touched exactly as before. An extracted backend only
-  // needs the desktop subset.
   Future<bool> _syncPipDependencies(String root, String pythonPath, {required bool checkout}) async {
     _packagesFailure = null;
-    final desktop = File(p.join(root, 'requirements-desktop.txt'));
-    final requirements = !checkout && desktop.existsSync() ? desktop : File(p.join(root, 'requirements.txt'));
-    if (!requirements.existsSync()) {
-      setupProgress.value = '';
+    final sync = await syncPackages(
+      host: _host,
+      root: root,
+      python: pythonPath,
+      checkout: checkout,
+      progress: (text) => setupProgress.value = text,
+    );
+    setupProgress.value = '';
+    if (kDebugMode) {
+      if (sync.failure case final failure?) print('FlaskServer: pip failed: ${failure.detail}');
+    }
+    if (sync.proceed) {
+      _packagesFailure = sync.failure;
       return true;
     }
+    _fail(sync.failure!);
+    return false;
+  }
+
+  // A git checkout is synced exactly as before: requirements.txt, the old
+  // hash, a quiet pip without time limits, and the backend starts whatever pip
+  // says. An extracted backend installs the desktop subset with progress and
+  // limits, and stops on a failed first install, since nothing could run yet.
+  @visibleForTesting
+  static Future<({bool proceed, StartFailure? failure})> syncPackages({
+    required HostSystem host,
+    required String root,
+    required String python,
+    required bool checkout,
+    required void Function(String text) progress,
+  }) async {
+    final desktop = File(p.join(root, 'requirements-desktop.txt'));
+    final requirements = !checkout && desktop.existsSync() ? desktop : File(p.join(root, 'requirements.txt'));
+    if (!requirements.existsSync()) return (proceed: true, failure: null);
 
     final hashFile = File(p.join(root, '.requirements_hash'));
     final content = requirements.readAsStringSync();
     final currentHash = checkout ? content.hashCode.toString() : sha256.convert(utf8.encode(content)).toString();
     final installedBefore = hashFile.existsSync();
-    if (installedBefore && hashFile.readAsStringSync().trim() == currentHash) {
-      setupProgress.value = '';
-      return true;
+    if (installedBefore && hashFile.readAsStringSync().trim() == currentHash) return (proceed: true, failure: null);
+
+    progress(StartText.setup);
+    if (checkout) {
+      final result = await host.run(
+        python,
+        ['-m', 'pip', 'install', '-r', requirements.path, '--quiet'],
+        workingDirectory: root,
+        timeout: null,
+      );
+      if (result?.exitCode == 0) {
+        hashFile.writeAsStringSync(currentHash);
+        return (proceed: true, failure: null);
+      }
+      return (proceed: true, failure: result == null ? null : PipInstall.explain(const LineSplitter().convert('${result.stderr}')));
     }
 
-    if (kDebugMode) print('FlaskServer: Installing ${p.basename(requirements.path)}');
-    setupProgress.value = StartText.setup;
     final failure = await PipInstall.run(
-      host: _host,
-      python: pythonPath,
+      host: host,
+      python: python,
       requirements: requirements.path,
       workingDirectory: root,
-      progress: (text) => setupProgress.value = text,
+      progress: progress,
     );
-    setupProgress.value = '';
     if (failure == null) {
       hashFile.writeAsStringSync(currentHash);
-      return true;
+      return (proceed: true, failure: null);
     }
-    if (kDebugMode) print('FlaskServer: pip failed: ${failure.detail}');
-    // Packages from an earlier install may still be enough, so the backend
-    // gets its chance; should it fail, pip's error is what the user sees.
-    if (installedBefore) {
-      _packagesFailure = failure;
-      return true;
-    }
-    _fail(failure);
-    return false;
+    return (proceed: installedBefore, failure: failure);
   }
 
   String? _findBundledBackend() {
