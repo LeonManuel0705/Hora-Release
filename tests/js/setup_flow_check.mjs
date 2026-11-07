@@ -256,6 +256,46 @@ CASES["a teacher or room typed like the stored one stays the stored one"] = asyn
   assert.deepEqual(page.core.data.rooms, ["Bio2", "Ph1", "R 101", "R114"]);
 };
 
+CASES["closing keeps what the open step holds"] = async () => {
+  const page = await boot({ plan: EMPTY });
+  page.flow.open({ from: "home" });
+  const run = driver(page);
+  await answerSchool(run);
+  await run.next();
+  await run.change({ name: "times", value: "45" });
+  await run.next();
+  await run.change({ name: "ab", value: "no" });
+  await run.next();
+  await run.pick("Deutsch");
+  await run.pick("Mathematik");
+  await run.next();
+  assert.equal(run.step(), "details");
+  await run.type("teacher", "Deutsch", "Frau Beck");
+  await run.type("room", "Deutsch", "R101");
+  await run.fire("cancel", { preventDefault() {} });
+  assert.deepEqual(page.visits, ["reload"]);
+  assert.deepEqual(page.core.storage.get("app-teachers").items, { "t-frau-beck": { custom: true, title: "Frau", name: "Beck" } });
+  const german = Object.values(page.core.storage.get("app-subjects").items).find((item) => item.name === "Deutsch");
+  assert.equal(german.teacher, "t-frau-beck");
+  assert.equal(german.room, "R101");
+  assert.equal(page.core.storage.get("app-block-times").blocks.length, 8);
+  assert.equal(page.core.storage.get("app-ab-weeks"), false);
+};
+
+CASES["closing a step left half done keeps nothing of it"] = async () => {
+  const page = await boot({ plan: EMPTY });
+  page.flow.open({});
+  const run = driver(page);
+  await answerSchool(run);
+  await run.next();
+  await run.change({ name: "times", value: "90" });
+  await run.next();
+  await run.change({ name: "ab", value: "yes" });
+  await run.fire("click", { target: run.control("[data-setup-close]") });
+  assert.equal(page.core.storage.get("app-ab-weeks"), null);
+  assert.deepEqual(storeWrites(page), ["PUT app-settings"]);
+};
+
 const only = process.argv[2];
 if (only) {
   await CASES[only]();

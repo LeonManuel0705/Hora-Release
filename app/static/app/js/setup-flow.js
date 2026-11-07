@@ -121,8 +121,16 @@ export function open(options = {}) {
   focusFirst();
 }
 
+// Closing keeps what the open step holds, as Weiter would. Times and weeks only count once they are complete.
+function commitOpenStep() {
+  const id = current();
+  if (id === "subjects" || id === "details") commitSubjects();
+  else if ((id === "times" || id === "weeks") && VIEWS[id].ready()) leaveStep(id);
+}
+
 async function close({ to = "" } = {}) {
   if (!flow.dialog?.open) return;
+  commitOpenStep();
   const leave = () => {
     flow.dialog.close();
     document.documentElement.classList.remove("setup-open");
