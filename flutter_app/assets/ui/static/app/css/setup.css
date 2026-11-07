@@ -307,7 +307,7 @@ html.setup-open { overflow: hidden; }
   .setup-cell-short { display: inline; }
 }
 
-.setup-foot { display: flex; align-items: center; gap: 12px; padding: 14px 24px; padding-bottom: max(14px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line-soft); background: var(--canvas); }
+.setup-foot { display: flex; align-items: center; gap: 12px; padding: 14px 24px; padding-bottom: max(14px, var(--safe-bottom)); border-top: 1px solid var(--line-soft); background: var(--canvas); }
 .setup-hint { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--ink-muted); text-align: right; }
 .setup-foot .btn { height: 44px; padding: 0 18px; border-radius: var(--radius-pill); font-size: var(--text-base); }
 .setup-next { margin-left: auto; }
@@ -326,11 +326,13 @@ html.setup-open { overflow: hidden; }
 
 @media (max-width: 759px) {
   .setup { width: 100vw; height: 100dvh; border-radius: 0; }
-  .setup-top { padding: max(12px, env(safe-area-inset-top)) 10px 4px 16px; }
+  .setup-top { padding: max(12px, calc(var(--safe-top) + 6px)) calc(10px + var(--safe-right)) 4px calc(16px + var(--safe-left)); }
   .setup-steps span { display: none; }
-  .setup-steps .is-now span { display: block; position: absolute; }
-  .setup-progress { position: relative; padding-bottom: 16px; }
-  .setup-stage { padding: 10px 16px 24px; }
+  .setup-steps li { position: relative; }
+  .setup-steps .is-now span { display: block; position: absolute; top: calc(100% + 6px); left: 0; }
+  .setup-steps li:last-child span { right: 0; left: auto; }
+  .setup-progress { padding-bottom: 24px; }
+  .setup-stage { padding: 10px calc(16px + var(--safe-right)) 24px calc(16px + var(--safe-left)); }
   .setup-guide { --luna-size: 52px; gap: 10px; margin-bottom: 18px; }
   .setup-title { font-size: var(--text-lg); }
   .setup-title.is-big { font-size: var(--text-xl); }
@@ -352,7 +354,7 @@ html.setup-open { overflow: hidden; }
   .setup-brush-short { display: inline; }
   .setup-grid thead td { width: 34px; }
   .setup-grid tbody th b { font-size: var(--text-md); }
-  .setup-foot { padding-left: 16px; padding-right: 16px; }
+  .setup-foot { padding-left: calc(16px + var(--safe-left)); padding-right: calc(16px + var(--safe-right)); }
   .setup-hint { display: none; }
   .setup-extra { grid-template-columns: 36px minmax(0, 1fr); }
   .setup-extra .btn, .setup-extra-ok { grid-column: 2; justify-self: start; }
