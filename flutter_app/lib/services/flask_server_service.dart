@@ -213,7 +213,7 @@ class FlaskServerService {
     final outcome = await LegacyImport.copyInto(
       legacy: legacy,
       target: _defaultProjectPath,
-      python: await _findPythonPath(legacy),
+      python: await _findPythonPath(legacy, developer: false),
     );
     if (kDebugMode) print('FlaskServer: Import from $legacy: $outcome');
     switch (outcome) {
@@ -319,22 +319,22 @@ class FlaskServerService {
       return;
     }
 
-    final found = await _findPythonPath(root);
+    final developer = developerSource(_host, root, envRoot: _env('ROOT'));
+    final found = await _findPythonPath(root, developer: developer);
     if (found == null) {
       _fail(Platform.isMacOS ? StartText.pythonMissing : StartText.pythonNotFound);
       return;
     }
     if (!p.isWithin(root, found)) setupProgress.value = StartText.environment;
     final pythonPath = await ownEnvironment(root, found);
-    final checkout = _isCheckout(_host, root);
-    if (!await _syncPipDependencies(root, pythonPath, checkout: checkout)) return;
+    if (!await _syncPipDependencies(root, pythonPath, checkout: developer)) return;
     await _launch(
       pythonPath,
       ['-m', 'app.app'],
       root,
       backendEnvironment(token: _desktopToken, port: port),
       frozen: false,
-      checkout: checkout,
+      checkout: developer,
     );
   }
 
@@ -357,6 +357,12 @@ class FlaskServerService {
           'PYTHONUNBUFFERED': '1',
         },
       };
+
+  // A git checkout or the folder named in HUB_ROOT is developer source: it finds
+  // its Python, syncs its packages and starts exactly as before.
+  @visibleForTesting
+  static bool developerSource(HostSystem host, String root, {String? envRoot}) =>
+      (envRoot != null && p.equals(envRoot, root)) || _isCheckout(host, root);
 
   static bool _isCheckout(HostSystem host, String root) {
     final git = p.join(root, '.git');
@@ -618,8 +624,8 @@ class FlaskServerService {
     }
   }
 
-  Future<String?> _findPythonPath(String projectRoot) async {
-    if (Platform.isMacOS) return (await MacPython.locate(_host, root: projectRoot)).path;
+  Future<String?> _findPythonPath(String projectRoot, {required bool developer}) async {
+    if (Platform.isMacOS && !developer) return (await MacPython.locate(_host, root: projectRoot)).path;
     final venvPaths = Platform.isWindows
         ? [
             p.join(projectRoot, 'venv', 'Scripts', 'python.exe'),
@@ -761,7 +767,7 @@ class FlaskServerService {
         timeout: null,
       );
       if (result?.exitCode == 0) {
-        hashFile.writeAsStringSync(currentHash);
+        _rememberHash(hashFile, currentHash);
         return (proceed: true, failure: null);
       }
       return (proceed: true, failure: result == null ? null : PipInstall.explain(const LineSplitter().convert('${result.stderr}')));
@@ -775,10 +781,17 @@ class FlaskServerService {
       progress: progress,
     );
     if (failure == null) {
-      hashFile.writeAsStringSync(currentHash);
+      _rememberHash(hashFile, currentHash);
       return (proceed: true, failure: null);
     }
     return (proceed: installedBefore, failure: failure);
+  }
+
+  // An unwritable hash only means pip runs again next time, as before.
+  static void _rememberHash(File file, String hash) {
+    try {
+      file.writeAsStringSync(hash);
+    } on FileSystemException catch (_) {}
   }
 
   String? _findBundledBackend() {

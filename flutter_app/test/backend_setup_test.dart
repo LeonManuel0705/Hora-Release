@@ -427,6 +427,24 @@ void main() {
       expect(outcome.failure, isNull);
     });
 
+    test('an unwritable hash file does not stop the start', () async {
+      Directory(path.join(root.path, '.requirements_hash')).createSync();
+      expect((await sync(FakeHost(answer: (_, __) => ProcessResult(1, 0, '', '')), checkout: true)).proceed, isTrue);
+      final process = FakeProcess();
+      final outcome = sync(FakeHost()..process = process, checkout: false);
+      await pumpEventQueue();
+      process.finish(0);
+      expect((await outcome).proceed, isTrue);
+    });
+
+    test('a git checkout and the HUB_ROOT folder are developer source, an extracted copy is not', () {
+      final checkout = FakeHost(directories: {path.join(root.path, '.git')});
+      expect(FlaskServerService.developerSource(checkout, root.path), isTrue);
+      expect(FlaskServerService.developerSource(FakeHost(), root.path, envRoot: root.path), isTrue);
+      expect(FlaskServerService.developerSource(FakeHost(), root.path, envRoot: path.join(root.path, 'other')), isFalse);
+      expect(FlaskServerService.developerSource(FakeHost(), root.path), isFalse);
+    });
+
     test('a fresh extracted backend stops on a failed install', () async {
       final process = FakeProcess();
       final host = FakeHost()..process = process;
