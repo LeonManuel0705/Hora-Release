@@ -220,7 +220,10 @@ def _pull_full(service, email, today, previous=None):
         'full_day': today.isoformat(),
         'synced_at': _stamp(began - OVERLAP),
         'calendars': [
-            {'id': item.get('id'), 'summary': item.get('summary', 'Kalender'), 'backgroundColor': item.get('backgroundColor', '#4285f4'), 'primary': bool(item.get('primary'))}
+            {
+                'id': item.get('id'), 'summary': item.get('summary', 'Kalender'), 'backgroundColor': item.get('backgroundColor', '#4285f4'),
+                'primary': bool(item.get('primary')), 'accessRole': item.get('accessRole') or 'reader',
+            }
             for item in calendars if item.get('id')
         ],
         'events': {},
@@ -627,6 +630,7 @@ def _sync(full, today):
         stale = (
             not known or cache.get('partial') or cache.get('full_day') != today.isoformat()
             or time.time() - float(cache.get('full_at') or 0) > FULL_SECONDS
+            or any('accessRole' not in calendar for calendar in cache.get('calendars', []))
         )
         _push(service, cache if known else None, email)
         changed, cancelled, seen, failed = False, set(), {}, set()
@@ -886,18 +890,186 @@ def events(start, end):
         return []
     hidden = hidden_calendars()
     linked = {item.get('google_id') for item in ui_data.load_list('calendar') if item.get('google_id')}
+    calendars = {calendar['id']: calendar for calendar in cache.get('calendars', [])}
+    open_to_edits = _open_to_edits(cache)
     result = []
     for calendar_id, bucket in cache.get('events', {}).items():
         if calendar_id in hidden:
             continue
+        editable = open_to_edits and _writable(calendars.get(calendar_id))
         for key, item in bucket.items():
             if key in linked:
                 continue
             shown = view(item)
             if shown and (shown.get('endDate') or shown['date']) >= start and shown['date'] <= end:
+                shown['editable'] = editable
                 result.append(shown)
     result.sort(key=lambda item: (item['date'], item['start'] or ''))
     return result
+
+
+def _writable(calendar):
+    return bool(calendar) and calendar.get('accessRole') in ('owner', 'writer')
+
+
+def _open_to_edits(cache):
+    """Google events can be changed here only while the account of the copy is signed in, may write, and Google answers."""
+    google = _google()
+    try:
+        account = google.calendar_account()
+        return (
+            bool(account) and account == cache.get('account') and google.can('write', account)
+            and not google.login_expired(account) and _status['problem'] is None
+        )
+    except Exception:
+        return False
+
+
+class Refusal(Exception):
+    def __init__(self, message, status=409):
+        super().__init__(message)
+        self.status = status
+
+
+READ_ONLY = 'Diesen Termin kannst du nur lesen, der Kalender ist schreibgeschützt.'
+SIGNED_OUT = 'Die Anmeldung bei Google ist abgelaufen. Verbinde Google in den Einstellungen neu.'
+UNREACHABLE = 'Google ist gerade nicht erreichbar. Die Änderung ist nicht gespeichert.'
+CHANGED_THERE = 'Der Termin wurde gerade in Google geändert. Schau ihn dir noch einmal an.'
+GONE_THERE = 'Den Termin gibt es in Google nicht mehr.'
+NOTES_SHOWN = 2000
+
+
+def _locate(cache, ref):
+    for calendar in cache.get('calendars', []):
+        prefix = f"g-{calendar['id']}-"
+        if str(ref).startswith(prefix):
+            key = str(ref)[len(prefix):]
+            item = (cache.get('events', {}).get(calendar['id']) or {}).get(key)
+            if item:
+                return calendar, key, item
+    return None, None, None
+
+
+def _reachable(ref):
+    """The Google event behind a page id, with a service that may change it. Refuses what cannot be changed right now."""
+    if not connected():
+        raise Refusal('Google ist nicht verbunden.', 409)
+    cache = _load()
+    calendar, key, item = _locate(cache or {}, ref)
+    if not item:
+        raise Refusal('Termin nicht gefunden', 404)
+    google = _google()
+    if google.login_expired():
+        raise Refusal(SIGNED_OUT)
+    if not _writable(calendar) or not google.can('write'):
+        raise Refusal(READ_ONLY, 403)
+    try:
+        service, email = google.calendar_service()
+    except Exception:
+        service, email = None, None
+    if service is None:
+        if google.login_expired(email):
+            raise Refusal(SIGNED_OUT)
+        raise Refusal(UNREACHABLE, 503)
+    if email != cache.get('account'):
+        raise Refusal(READ_ONLY, 403)
+    return calendar, key, item, service
+
+
+def _kept_notes(before, after):
+    """Pages see only the first NOTES_SHOWN characters of a description. Sent back unchanged, the rest must not get lost."""
+    full = before.get('description') or ''
+    if len(full) > NOTES_SHOWN and after.get('description') == full[:NOTES_SHOWN]:
+        after['description'] = full
+
+
+def _answer_of(request, calendar, key, service):
+    try:
+        return request.execute()
+    except Exception as error:
+        status = _status_of(error)
+        if status == 412:
+            if _refetch(service, calendar, key):
+                raise Refusal(CHANGED_THERE) from error
+            raise Refusal(GONE_THERE, 404) from error
+        if status in GONE:
+            _keep(calendar['id'], key, None)
+            raise Refusal(GONE_THERE, 404) from error
+        if status in (401, 403):
+            raise Refusal(READ_ONLY, 403) from error
+        if type(error).__name__ == 'RefreshError':
+            raise Refusal(SIGNED_OUT) from error
+        raise Refusal(UNREACHABLE, 503) from error
+
+
+def edit_remote(ref, change):
+    """Writes a change of a Google event straight to Google, onto the very state the copy shows, and keeps the answer in the copy.
+
+    Only what the form changed is sent, so what the page cannot show stays as it is: a long description, a time zone, guests.
+    """
+    calendar, key, item, service = _reachable(ref)
+    before = _local_fields(item)
+    after = dict(before)
+    change(after)
+    _kept_notes(before, after)
+    old, new = _body(before), _body(after)
+    body = {name: value for name, value in new.items() if value != old.get(name)}
+    if not body:
+        return _shown(item, calendar)
+    request = service.events().patch(calendarId=calendar['id'], eventId=key, body=body)
+    if item.get('etag'):
+        request.headers['If-Match'] = item['etag']
+    fresh = _google().calendar_event_view(_answer_of(request, calendar, key, service), calendar)
+    _keep(calendar['id'], key, fresh)
+    return _shown(fresh, calendar)
+
+
+def delete_remote(ref):
+    calendar, key, item, service = _reachable(ref)
+    request = service.events().delete(calendarId=calendar['id'], eventId=key)
+    if item.get('etag'):
+        request.headers['If-Match'] = item['etag']
+    try:
+        _answer_of(request, calendar, key, service)
+    except Refusal as refusal:
+        if refusal.status != 404:
+            raise
+    _keep(calendar['id'], key, None)
+
+
+def _shown(item, calendar):
+    shown = view(item)
+    if shown:
+        shown['editable'] = True
+    return shown
+
+
+def _refetch(service, calendar, key):
+    """Takes what Google has now into the copy. False when Google no longer has the event."""
+    try:
+        event = _there(service, calendar['id'], key)
+    except Exception:
+        return True
+    fresh = None if event is None or event.get('status') == 'cancelled' else _google().calendar_event_view(event, calendar)
+    _keep(calendar['id'], key, fresh)
+    return fresh is not None
+
+
+def _keep(calendar_id, key, fresh):
+    """Puts Google's answer into the copy at once. A check that is running then drops its older result."""
+    with _store_lock:
+        cache = _load()
+        if cache is None or calendar_id not in cache.get('events', {}):
+            return
+        bucket = cache['events'][calendar_id]
+        if fresh is None:
+            bucket.pop(key, None)
+        elif _in_window(fresh, cache):
+            bucket[key] = fresh
+        else:
+            bucket.pop(key, None)
+        _status['epoch'] += 1
+        _save(cache)
 
 
 def covers(start, end):

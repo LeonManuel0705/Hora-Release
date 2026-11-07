@@ -38,15 +38,16 @@ class FakeGoogle:
 
     Like the real service it merges a patch into the stored event at every
     depth, refuses an event that has both a day and a time, only takes ids made
-    of a-v and 0-9, answers 409 for an id that is taken and 412 for a patch
-    whose If-Match no longer fits, keeps deleted events as cancelled ones and
-    only lists them when asked to. With quiet_patch it takes a patch of a
-    deleted event without complaint and stamps it, the worst the real one may do.
+    of a-v and 0-9, answers 409 for an id that is taken and 412 for a patch or a
+    delete whose If-Match no longer fits, keeps deleted events as cancelled ones
+    and only lists them when asked to, and refuses writes to a calendar the
+    account may only read. With quiet_patch it takes a patch of a deleted event
+    without complaint and stamps it, the worst the real one may do.
     """
 
     def __init__(self, primary='me@example.org'):
         self.primary = primary
-        self.calendars = {primary: {'id': primary, 'summary': 'Privat', 'primary': True, 'backgroundColor': '#4285f4'}}
+        self.calendars = {primary: {'id': primary, 'summary': 'Privat', 'primary': True, 'backgroundColor': '#4285f4', 'accessRole': 'owner'}}
         self.store = {primary: {}}
         self.calls = []
         self.offline = False
@@ -70,6 +71,12 @@ class FakeGoogle:
             raise FakeHttpError(404)
         return key
 
+    def _writable(self, calendar):
+        key = self._calendar(calendar)
+        if self.calendars.get(key, {}).get('accessRole', 'owner') not in ('owner', 'writer'):
+            raise FakeHttpError(403, 'requiredAccessLevel')
+        return self.store[key]
+
     def _readable(self, calendar):
         if calendar in self.broken:
             status = self.broken[calendar]
@@ -83,8 +90,8 @@ class FakeGoogle:
         event.update(updated=stamp, etag=f'"{stamp}"')
         return event
 
-    def add_calendar(self, key, name):
-        self.calendars[key] = {'id': key, 'summary': name, 'primary': False, 'backgroundColor': '#0b8043'}
+    def add_calendar(self, key, name, role='owner', color='#0b8043'):
+        self.calendars[key] = {'id': key, 'summary': name, 'primary': False, 'backgroundColor': color, 'accessRole': role}
         self.store[key] = {}
 
     def remove_calendar(self, key):
@@ -194,7 +201,7 @@ class FakeGoogle:
         def insert(calendarId, body):
             def run(call):
                 self._guard('events.insert', calendar=calendarId, body=body)
-                bucket = self.store[self._calendar(calendarId)]
+                bucket = self._writable(calendarId)
                 key = body.get('id') or f'ev{next(self._ids)}'
                 if 'id' in body and not re.fullmatch(r'[a-v0-9]{5,1024}', key):
                     raise FakeHttpError(400)
@@ -209,7 +216,7 @@ class FakeGoogle:
         def patch(calendarId, eventId, body):
             def run(call):
                 self._guard('events.patch', calendar=calendarId, event=eventId, body=body)
-                bucket = self.store[self._calendar(calendarId)]
+                bucket = self._writable(calendarId)
                 if eventId not in bucket:
                     raise FakeHttpError(404)
                 if call.headers.get('If-Match') not in (None, bucket[eventId].get('etag')):
@@ -225,11 +232,13 @@ class FakeGoogle:
         def delete(calendarId, eventId):
             def run(call):
                 self._guard('events.delete', calendar=calendarId, event=eventId)
-                bucket = self.store[self._calendar(calendarId)]
+                bucket = self._writable(calendarId)
                 if eventId not in bucket:
                     raise FakeHttpError(404)
                 if bucket[eventId]['status'] == 'cancelled':
                     raise FakeHttpError(410)
+                if call.headers.get('If-Match') not in (None, bucket[eventId].get('etag')):
+                    raise FakeHttpError(412)
                 bucket[eventId]['status'] = 'cancelled'
                 self._stamped(bucket[eventId])
                 return ''

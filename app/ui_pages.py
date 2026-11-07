@@ -459,6 +459,8 @@ def create_event():
 
 @bp.route('/api/ui/events/<ref>', methods=['PATCH', 'DELETE'])
 def change_event(ref):
+    if str(ref).startswith('g-'):
+        return _change_google_event(ref)
     if not str(ref).startswith('loc-'):
         return _error('Nur eigene Termine lassen sich hier ändern', 404)
     event_id = ref[4:]
@@ -495,6 +497,25 @@ def change_event(ref):
     if payload is None:
         return jsonify({'success': True})
     return jsonify({'success': True, 'event': ui_data.event_view(found)})
+
+
+def _change_google_event(ref):
+    """A Google event in a calendar the account may write to. The change goes to Google first and counts only once Google took it."""
+    payload = None
+    if request.method == 'PATCH':
+        payload = _payload()
+        if payload is None:
+            return _error('JSON erwartet')
+    try:
+        if payload is None:
+            calendar_cache.delete_remote(ref)
+            return jsonify({'success': True})
+        event = calendar_cache.edit_remote(ref, lambda item: _event_payload(payload, item, creating=False))
+    except calendar_cache.Refusal as refusal:
+        return _error(str(refusal), refusal.status)
+    except ValueError as error:
+        return _error(str(error))
+    return jsonify({'success': True, 'event': event})
 
 
 # The page lets a new note have a title of 300 and a text of 5000 characters. The older interface set no limit, and
