@@ -20,7 +20,7 @@ def ui_static_files():
     for entry in UI_STATIC:
         origin = STATIC_ROOT / entry
         if origin.is_dir():
-            yield from sorted(path for path in origin.rglob('*') if path.is_file() and not path.name.startswith('.'))
+            yield from sorted((path for path in origin.rglob('*') if path.is_file() and not path.name.startswith('.')), key=lambda path: path.relative_to(STATIC_ROOT).parts)
         else:
             yield origin
 
