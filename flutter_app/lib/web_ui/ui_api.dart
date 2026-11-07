@@ -29,9 +29,10 @@ class UiPlan {
   final String? cause;
 }
 
-/// A host that can fetch from IServ right now what the background sync fetches every quarter of an hour.
+/// A host that can fetch the homework from IServ right now, which the background sync does every quarter of an hour.
+/// It answers null when IServ gave its list, an empty one too, otherwise why not: setup, login, offline or format.
 abstract class UiIservSync {
-  Future<void> syncIserv();
+  Future<String?> syncIserv();
 }
 
 abstract class UiHost {
@@ -119,7 +120,7 @@ class UiApi {
       if (path.length == 2 && path[0] == 'hub' && path[1] == 'bundesland' && method == 'POST') return await _state(request);
       if (path.length >= 2 && path[0] == 'ui' && path[1] == 'vplan') return await _plan(request);
       if (path.length == 2 && path[0] == 'iserv') return await _iserv(request, path[1]);
-      if (path.length == 3 && path[0] == 'ui' && path[1] == 'iserv' && method == 'POST') return await _iservRefresh(db, data, path[2]);
+      if (path.length == 3 && path[0] == 'ui' && path[1] == 'iserv' && method == 'POST') return await _iservRefresh(data, path[2]);
       if (path.isNotEmpty && (path[0] == 'calendar' || path[0] == 'email')) {
         return UiReply.error('Google lässt sich in der App noch nicht verbinden', 404);
       }
@@ -710,10 +711,15 @@ class UiApi {
     return UiReply.file(page.bytes, page.contentType, 'vertretungsplan-$number.${_planSuffixes[page.contentType] ?? 'bin'}');
   }
 
-  static const _noHomework = 'Von IServ kamen keine neuen Hausaufgaben.';
+  static const _homeworkProblems = {
+    'setup': 'IServ ist nicht verbunden.',
+    'login': 'Die Anmeldung bei IServ ist abgelaufen. Verbinde IServ in den Einstellungen neu.',
+    'offline': 'IServ ist gerade nicht erreichbar.',
+    'format': 'Die Hausaufgaben aus IServ lassen sich hier nicht lesen.',
+  };
 
   /// The answer has the shape the desktop gives. The phone fetches no mail, so there is no part for it.
-  Future<UiReply> _iservRefresh(Database db, UiData data, String action) async {
+  Future<UiReply> _iservRefresh(UiData data, String action) async {
     if (action != 'homework' && action != 'sync') return UiReply.error('Nicht gefunden', 404);
     final bridge = host;
     final syncing = host is UiIservSync ? host as UiIservSync : null;
@@ -721,20 +727,19 @@ class UiApi {
     if (bridge == null || syncing == null || iserv['connected'] != true || data.browser) {
       return UiReply.error(_planProblems['setup']!, 409);
     }
-    Future<Object?> newest() async => (await db.rawQuery('SELECT MAX(cached_at) AS newest FROM iserv_exercises')).first['newest'];
     final parts = <String, Object?>{};
     if (action == 'sync') {
       final plan = await bridge.plan(fresh: true);
       final problem = plan == null ? 'offline' : _planProblems.containsKey(plan.cause) ? plan.cause : null;
-      parts['plan'] = {'ok': problem == null || problem == 'empty', 'problem': problem, 'message': _planProblems[problem] ?? '', 'count': problem == null ? plan!.pages.length : 0};
+      // An empty plan and one only as PDF are answers from IServ as well.
+      final reached = problem == null || problem == 'empty' || problem == 'format';
+      parts['plan'] = {'ok': reached, 'problem': problem, 'message': _planProblems[problem] ?? '', 'count': problem == null ? plan!.pages.length : 0};
     }
-    final before = await newest();
-    await syncing.syncIserv();
-    final after = await newest();
-    final fresh = after != null && after != before;
+    final cause = await syncing.syncIserv();
+    final problem = cause == null ? null : _homeworkProblems.containsKey(cause) ? cause : 'offline';
     final homework = await data.iservHomework();
     final open = homework.where((item) => item['status'] != 'abgegeben').length;
-    parts['homework'] = {'ok': fresh, 'problem': fresh ? null : 'none', 'message': fresh ? '' : _noHomework, 'count': open};
+    parts['homework'] = {'ok': problem == null, 'problem': problem, 'message': _homeworkProblems[problem] ?? '', 'count': open};
     _changed('school');
     return UiReply.ok({
       if (action == 'homework') ...(parts['homework'] as Map<String, Object?>),

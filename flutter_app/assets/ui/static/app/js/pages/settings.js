@@ -1254,9 +1254,10 @@ const ISERV_WORDS = { Vertretungsplan: "den Vertretungsplan", "E-Mail": "deine M
 
 function partSentence(part, answer) {
   if (!answer) return "";
-  if (!answer.ok) return answer.message || "";
+  // A failed part, and also a plan IServ has not or only as PDF, says so in the server's words.
+  if (!answer.ok || answer.problem) return answer.message || "";
   const count = answer.count || 0;
-  if (part === "plan") return answer.problem === "empty" ? "IServ zeigt gerade keinen Vertretungsplan." : `Der Vertretungsplan hat ${count === 1 ? "eine Seite" : `${count} Seiten`}.`;
+  if (part === "plan") return `Der Vertretungsplan hat ${count === 1 ? "eine Seite" : `${count} Seiten`}.`;
   if (part === "homework") return count ? `${count === 1 ? "Eine offene Hausaufgabe" : `${count} offene Hausaufgaben`} aus IServ.` : "In IServ stehen keine offenen Hausaufgaben.";
   return count ? `${count === 1 ? "Eine ungelesene Mail" : `${count} ungelesene Mails`} in IServ.` : "Keine ungelesenen Mails in IServ.";
 }

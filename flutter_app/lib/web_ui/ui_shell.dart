@@ -20,6 +20,7 @@ import '../screens/review_screen.dart';
 import '../screens/training_screen.dart';
 import '../services/holiday_service.dart';
 import '../services/iserv_plan.dart';
+import '../services/iserv_service.dart';
 import 'ui_api.dart';
 
 class UiNativePage {
@@ -128,8 +129,14 @@ mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost, UiIse
   @override
   Future<void> disconnectIserv() => context.read<IServProvider>().disconnect();
 
+  /// The homework answer comes from its own fetch, which tells why nothing came. Messages and dates follow as before.
   @override
-  Future<void> syncIserv() => context.read<IServProvider>().syncData();
+  Future<String?> syncIserv() async {
+    final provider = context.read<IServProvider>();
+    final cause = await IServService().refreshExercises();
+    if (cause == null) await provider.syncData();
+    return cause;
+  }
 
   @override
   Map<String, Object?> iservStatus() {

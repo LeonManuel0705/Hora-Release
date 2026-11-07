@@ -477,11 +477,7 @@ class IServService {
     }
   }
 
-  Future<List<IServExercise>> getExercises() async {
-    if (!isConnected || _dio == null) return getCachedExercises();
-
-    try {
-      final response = await _dio!.get(
+  Future<Response<dynamic>> _askExercises() => _dio!.get(
         '/iserv/exercise/api/exercises',
         options: Options(
           headers: {
@@ -492,31 +488,36 @@ class IServService {
         ),
       );
 
-      if (response.statusCode != 200) return await getCachedExercises();
-
-      final data = response.data;
-
-      if (data is! Map || data['data'] is! List) {
-        if (kDebugMode) print('IServ: Exercises response is not valid, returning cached');
-        return await getCachedExercises();
-      }
-
-      final List<IServExercise> exercises = [];
-      final now = DateTime.now();
-
-      for (final item in data['data']) {
-        exercises.add(IServExercise(
+  static List<IServExercise>? _exercisesFrom(Object? data) {
+    if (data is! Map || data['data'] is! List) return null;
+    final now = DateTime.now();
+    return [
+      for (final item in data['data'] as List)
+        IServExercise(
           id: item['id']?.toString() ?? '',
           title: item['title'] ?? '',
           description: item['description'],
           course: item['course']?['name'] ?? item['course'],
           teacher: item['teacher']?['name'] ?? item['teacher'],
-          dueDate: item['endDate'] != null
-              ? DateTime.parse(item['endDate'])
-              : null,
+          dueDate: item['endDate'] != null ? DateTime.parse(item['endDate']) : null,
           status: item['status'] ?? 'open',
           cachedAt: now,
-        ));
+        ),
+    ];
+  }
+
+  Future<List<IServExercise>> getExercises() async {
+    if (!isConnected || _dio == null) return getCachedExercises();
+
+    try {
+      final response = await _askExercises();
+
+      if (response.statusCode != 200) return await getCachedExercises();
+
+      final exercises = _exercisesFrom(response.data);
+      if (exercises == null) {
+        if (kDebugMode) print('IServ: Exercises response is not valid, returning cached');
+        return await getCachedExercises();
       }
 
       await _cacheExercises(exercises);
@@ -526,6 +527,43 @@ class IServService {
 
       return getCachedExercises();
     }
+  }
+
+  static final _loginField = RegExp(r'''name=["']_(?:username|password)["']''');
+
+  /// Fetches the exercises now and says what came of it: null when IServ gave its list, an empty one too, otherwise
+  /// setup, login, offline or format. Unlike [getExercises] it keeps an empty list, so finished homework leaves.
+  Future<String?> refreshExercises() async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (!await autoReconnect() || _dio == null) return _signInCause ?? 'offline';
+      final Response<dynamic> response;
+      try {
+        response = await _askExercises();
+      } catch (_) {
+        return 'offline';
+      }
+      final status = response.statusCode ?? 0;
+      final data = response.data;
+      if (status == 401 || (status >= 300 && status < 400) || (data is String && _loginField.hasMatch(data))) {
+        if (attempt == 0 && await _reconnect()) continue;
+        return _signInCause ?? 'login';
+      }
+      final List<IServExercise>? exercises;
+      try {
+        exercises = status == 200 ? _exercisesFrom(data) : null;
+      } catch (_) {
+        return 'format';
+      }
+      if (exercises == null) return 'format';
+      final db = await _db.database;
+      final batch = db.batch()..delete('iserv_exercises');
+      for (final exercise in exercises) {
+        batch.insert('iserv_exercises', exercise.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
+      return null;
+    }
+    return _signInCause ?? 'login';
   }
 
   Future<List<IServEvent>> getEvents({int? userGrade}) async {

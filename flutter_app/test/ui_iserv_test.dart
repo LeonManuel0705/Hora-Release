@@ -18,25 +18,31 @@ class _Host implements UiHost, UiIservSync {
 
   final Database db;
   int syncs = 0;
-  bool bringsHomework = true;
+  // What the phone's IServ sync answers: null when the list came, else why not. With homework false the list is empty.
+  String? cause;
+  bool homework = true;
+  String? planCause = 'empty';
 
   @override
-  Future<void> syncIserv() async {
+  Future<String?> syncIserv() async {
     syncs++;
-    if (!bringsHomework) return;
-    final due = DateTime.now().add(const Duration(days: 2));
-    await db.insert('iserv_exercises', {
-      'id': '41',
-      'title': 'Analysis Blatt 3',
-      'course': 'Mathematik',
-      'due_date': due.toIso8601String(),
-      'status': 'open',
-      'cached_at': DateTime.now().add(Duration(microseconds: syncs)).toIso8601String(),
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    if (cause != null) return cause;
+    await db.delete('iserv_exercises');
+    if (homework) {
+      await db.insert('iserv_exercises', {
+        'id': '41',
+        'title': 'Analysis Blatt 3',
+        'course': 'Mathematik',
+        'due_date': DateTime.now().add(const Duration(days: 2)).toIso8601String(),
+        'status': 'open',
+        'cached_at': DateTime.now().toIso8601String(),
+      });
+    }
+    return null;
   }
 
   @override
-  Future<UiPlan?> plan({bool fresh = false}) async => UiPlan(pages: const <UiPlanPage>[], cachedAt: DateTime.now(), cause: 'empty');
+  Future<UiPlan?> plan({bool fresh = false}) async => UiPlan(pages: const <UiPlanPage>[], cachedAt: DateTime.now(), cause: planCause);
 
   @override
   Future<Map<String, Object?>> connectIserv(String url, String user, String password) async => {'success': true};
@@ -131,15 +137,36 @@ void main() {
     expect([for (final item in body['deadlines'] as List) (item as Map)['id']], ['hw-iserv.41']);
     expect(((body['status'] as Map)['iservParts'] as Map)['homework'], isNotNull);
 
-    host.bringsHomework = false;
-    final again = (await api.handle(post('homework'))).body as Map;
-    expect(again['ok'], isFalse);
-    expect(again['message'], 'Von IServ kamen keine neuen Hausaufgaben.');
-    expect(again['count'], 1);
+    host.homework = false;
+    final empty = (await api.handle(post('homework'))).body as Map;
+    expect((empty['ok'], empty['problem'], empty['count']), (true, null, 0));
+    expect(empty['deadlines'], isEmpty);
 
-    final sync = (await api.handle(post('sync'))).body as Map;
-    expect((sync['parts'] as Map).keys, unorderedEquals(['plan', 'homework']));
-    expect(((sync['parts'] as Map)['plan'] as Map)['problem'], 'empty');
+    host.homework = true;
+    await api.handle(post('homework'));
+    final messages = <String, String>{};
+    for (final cause in ['login', 'offline', 'setup', 'format']) {
+      host.cause = cause;
+      final failed = (await api.handle(post('homework'))).body as Map;
+      expect((failed['ok'], failed['problem'], failed['count']), (false, cause, 1));
+      messages[cause] = failed['message'] as String;
+    }
+    expect(messages['login'], 'Die Anmeldung bei IServ ist abgelaufen. Verbinde IServ in den Einstellungen neu.');
+    expect(messages['offline'], 'IServ ist gerade nicht erreichbar.');
+    expect(messages['format'], 'Die Hausaufgaben aus IServ lassen sich hier nicht lesen.');
+  });
+
+  test('a plan only as PDF or no plan at all still counts as an answer from IServ', () async {
+    final db = await clean(account: true);
+    final host = _Host(db)..homework = false;
+    for (final (planCause, reached) in [('format', true), ('empty', true), (null, true), ('offline', false), ('login', false)]) {
+      host.planCause = planCause;
+      final parts = ((await UiApi(host).handle(post('sync'))).body as Map)['parts'] as Map;
+      expect(parts.keys, unorderedEquals(['plan', 'homework']));
+      expect((parts['plan'] as Map)['ok'], reached, reason: '$planCause');
+      expect((parts['plan'] as Map)['problem'], planCause);
+      expect((parts['homework'] as Map)['ok'], isTrue);
+    }
   });
 
   test('without an account or a host that can sync nothing is fetched', () async {
