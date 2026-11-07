@@ -47,7 +47,7 @@ const framed = (() => {
 })();
 const phoneApp = () => ["android", "ios"].includes(root.dataset.shell);
 // The phone app's WebView does not save downloads yet, so the plan file is only offered elsewhere.
-const canSaveFile = () => !phoneApp();
+const canSaveFile = () => true;
 const inWebApp = () => root.dataset.shell === "web" || (framed && !window.hubShell && !root.dataset.shell);
 const appleDevice = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform || ""));
 const touch = () => root.classList.contains("is-touch") || platform.touch;
