@@ -438,8 +438,8 @@ def _event_payload(payload, item, creating):
     if 'recurrence' in payload:
         if payload.get('recurrence') is not None and not ui_data.recurrence_rule(payload.get('recurrence')):
             raise ValueError('Wiederholung ungültig')
-        # None stays as a value: Google then hears that the event no longer repeats.
         item['recurrence'] = ui_data.recurrence_rule(payload.get('recurrence'))
+        item['rule_changed'] = True
     if 'reminderMinutes' in payload:
         item['reminder_minutes'] = ui_data.reminder_minutes(payload.get('reminderMinutes'))
 
@@ -612,8 +612,9 @@ def _google_range(start, end):
         return None
     hidden = calendar_cache.hidden_calendars()
     linked = {item.get('google_id') for item in ui_data.load_list('calendar') if item.get('google_id')}
-    views = [calendar_cache.view(item) for item in result.get('events', [])
-             if item.get('calendar_id') not in hidden and item.get('id') not in linked and item.get('recurring_event_id') not in linked]
+    found = [item for item in result.get('events', []) if item.get('calendar_id') not in hidden and item.get('id') not in linked]
+    covered = calendar_cache.live_overlay(found, start, end)
+    views = [calendar_cache.view(item) for item in found if (item.get('calendar_id'), item.get('id')) not in covered]
     return [view for view in views if view]
 
 
@@ -639,7 +640,7 @@ def synced_events():
                 events = None
             if events is None:
                 events, problem = calendar_cache.events(start, end), problem or 'offline'
-        own = [view for view in (ui_data.event_view(item) for item in ui_data.load_list('calendar')) if view]
+        own = calendar_cache.own_views([view for view in (ui_data.event_view(item) for item in ui_data.load_list('calendar')) if view])
         first, last = calendar_cache.window(today)
         return jsonify({
             'success': True,

@@ -204,3 +204,74 @@ def test_only_a_pop_up_counts_as_a_reminder():
     assert minutes({'useDefault': False, 'overrides': [{'method': 'email', 'minutes': 60}]}) == -1
     assert minutes({'useDefault': False, 'overrides': [{'method': 'email', 'minutes': 600}, {'method': 'popup', 'minutes': 10}]}) == 10
     assert minutes({'useDefault': True}) is None
+
+
+def occurrences(google, master, title, first, last, start='15:00', end='15:45', changes=None, gone=()):
+    for offset in range(first, last + 1, 7):
+        if offset in gone:
+            continue
+        values = {'recurringEventId': master, 'originalStartTime': {'dateTime': local_stamp(day(offset), start)}}
+        moved = (changes or {}).get(offset, {})
+        google.put('primary', moved.get('title', title), day(offset), moved.get('start', start), moved.get('end', end), key=f'{master}_{offset}', **values)
+
+
+def test_occurrences_changed_or_deleted_in_google_are_left_to_google(client, google):
+    create(client, recurrence={'freq': 'weekly'})
+    master = google.live()[0]['id']
+    occurrences(google, master, 'Klavier', 2, 93, changes={9: {'start': '16:00', 'end': '16:45'}, 23: {'title': 'Klavier bei Frau Kunz'}}, gone=(16,))
+    due_again()
+    calendar_cache.sync(full=True)
+    shown = sorted((item['title'], item['date'], item['start']) for item in calendar_cache.events(day(0), day(100)))
+    assert shown == [('Klavier', day(9), '16:00'), ('Klavier bei Frau Kunz', day(23), '15:00')]
+    own = next(item for item in ui_data.events(TODAY) if item['title'] == 'Klavier')
+    assert {day(9), day(16), day(23)} <= set(own['recurrence']['exceptions'])
+    assert day(30) not in own['recurrence']['exceptions']
+
+
+def test_occurrences_of_a_series_with_an_edit_still_waiting_stay_hidden(client, google):
+    _, reply = create(client, recurrence={'freq': 'weekly'})
+    master = google.live()[0]['id']
+    occurrences(google, master, 'Klavier', 2, 93, changes={9: {'start': '16:00', 'end': '16:45'}})
+    due_again()
+    calendar_cache.sync(full=True)
+    google.offline = True
+    client.patch(f"/api/ui/events/{reply['event']['id']}", json={'title': 'Klavierstunde'})
+    assert [item['title'] for item in calendar_cache.events(day(0), day(100))] == []
+    own = next(item for item in ui_data.events(TODAY) if item['title'] == 'Klavierstunde')
+    assert own['recurrence']['exceptions'] == []
+
+
+def test_a_rule_only_google_can_show_is_left_to_googles_occurrences(client, google):
+    create(client)
+    master = google.live()[0]['id']
+    google.change('primary', master, recurrence=['RRULE:FREQ=WEEKLY;BYDAY=MO,TH'])
+    occurrences(google, master, 'Klavier', 2, 30)
+    due_again()
+    calendar_cache.sync(full=True)
+    assert local_events()[0]['recurrence'] == {'google': ['RRULE:FREQ=WEEKLY;BYDAY=MO,TH']}
+    assert [item['date'] for item in calendar_cache.events(day(0), day(40))] == [day(2), day(9), day(16), day(23), day(30)]
+    assert 'Klavier' not in {item['title'] for item in ui_data.events(TODAY) if not item.get('synced')}
+
+
+def test_a_series_made_in_google_is_not_flattened_by_an_edit_here(client, google):
+    _, reply = create(client)
+    master = google.live()[0]['id']
+    google.change('primary', master, summary='Klavier neu')
+    due_again()
+    calendar_cache.sync(full=True)
+    assert 'recurrence' in local_events()[0]
+    google.change('primary', master, recurrence=['RRULE:FREQ=WEEKLY'])
+    client.patch(f"/api/ui/events/{reply['event']['id']}", json={'place': 'Musikschule'})
+    body = google.calls[-1][1]['body']
+    assert 'recurrence' not in body and body['location'] == 'Musikschule'
+    assert google.live()[0]['recurrence'] == ['RRULE:FREQ=WEEKLY']
+
+
+def test_beyond_the_copy_only_untouched_occurrences_are_hidden(client, google):
+    create(client, recurrence={'freq': 'weekly'})
+    master = google.live()[0]['id']
+    occurrences(google, master, 'Klavier', 100, 114, changes={107: {'start': '17:00', 'end': '17:45'}})
+    calendar = {'id': google.primary, 'summary': 'Privat', 'backgroundColor': '#4285f4'}
+    found = [{**google_oauth.calendar_event_view(event, calendar), 'calendar_id': google.primary} for event in google.live() if event.get('recurringEventId')]
+    hidden = calendar_cache.live_overlay(found, day(95), day(120))
+    assert sorted(key for _, key in hidden) == [f'{master}_100', f'{master}_114']

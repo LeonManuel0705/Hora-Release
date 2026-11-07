@@ -541,6 +541,8 @@ def calendar_event_view(event: Dict, calendar: Dict) -> Dict:
         end_date, end_time = _local_day_and_time(end.get('dateTime', ''))
         end_date = end_date or start_date
         all_day = False
+    original = event.get('originalStartTime') or {}
+    original_date, original_time = _local_day_and_time(original['dateTime']) if original.get('dateTime') else (original.get('date'), None)
     return {
         "id": event.get('id', ''),
         "title": event.get('summary', '(No title)'),
@@ -566,6 +568,8 @@ def calendar_event_view(event: Dict, calendar: Dict) -> Dict:
         "attendee_total": len([person for person in event.get('attendees') or [] if isinstance(person, dict) and not person.get('resource')]),
         "reminder_minutes": _reminder_minutes(event),
         "recurrence": [str(line) for line in event.get('recurrence') or []] or None,
+        "original_date": original_date,
+        "original_time": original_time,
     }
 
 

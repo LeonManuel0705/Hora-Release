@@ -302,12 +302,12 @@ def _body(item):
         body['start'] = {'date': first, 'dateTime': None, 'timeZone': None}
         body['end'] = {'date': (date.fromisoformat(last) + timedelta(days=1)).isoformat(), 'dateTime': None, 'timeZone': None}
     body['extendedProperties'] = {'private': {OPEN_END: '1' if start and not end else None}}
-    if 'recurrence' in item:
-        rule = ui_data.recurrence_rule(item.get('recurrence'))
-        kept = (item.get('recurrence') or {}).get('google') if isinstance(item.get('recurrence'), dict) else None
-        body['recurrence'] = _rrule(rule, start) if rule else list(kept) if kept else []
-        if rule and start:
-            body['start']['timeZone'] = body['end']['timeZone'] = _zone()
+    rule = ui_data.recurrence_rule(item.get('recurrence'))
+    # Only a rule changed here goes out: one Google changed, or made from a single event, must not be flattened.
+    if item.get('rule_changed'):
+        body['recurrence'] = _rrule(rule, start) if rule else []
+    if start and (rule or item.get('recurrence')):
+        body['start']['timeZone'] = body['end']['timeZone'] = _zone()
     if 'reminder_minutes' in item:
         minutes = item.get('reminder_minutes')
         body['reminders'] = {'useDefault': True, 'overrides': None} if minutes is None else {
@@ -605,8 +605,8 @@ def _local_fields(view):
         'description': view.get('description') or '',
     }
     rule = _rule_of(view.get('recurrence'), first)
-    # A rule the app cannot show is kept as Google wrote it, so an edit made here does not flatten it.
     fields['recurrence'] = {'google': list(view['recurrence'])} if rule is False else rule
+    fields['rule_changed'] = None
     if 'reminder_minutes' in view:
         fields['reminder_minutes'] = view['reminder_minutes']
     return fields
@@ -866,19 +866,115 @@ def view(item):
     return result
 
 
+def _days_drawn(item, rule, start, end):
+    first = date.fromisoformat(item['date'])
+    days, produced, index = set(), 0, 0
+    while index < 20000 and not (rule['count'] and produced >= rule['count']):
+        day = ui_data.nth_day(first, rule, index)
+        index += 1
+        if day is None:
+            continue
+        produced += 1
+        iso = day.isoformat()
+        if iso > end or (rule['until'] and iso > rule['until']):
+            break
+        if iso >= start and iso not in rule['exceptions']:
+            days.add(iso)
+    return days
+
+
+def _untouched(view, item):
+    end = '' if view.get('open_end') else ui_data.clock(view.get('end_time')) or ''
+    return ((view.get('original_date') or view.get('start_date')) == view.get('start_date')
+            and (view.get('original_time') or view.get('start_time')) == view.get('start_time')
+            and (view.get('title') or '') == (item.get('title') or '') and (view.get('location') or '') == (item.get('location') or '')
+            and end == (ui_data.clock(item.get('end_time')) or ''))
+
+
+def _overlay(items, buckets, start, end):
+    """Google's occurrences of a series written here against the ones the app draws from its own rule.
+
+    Untouched occurrences are hidden. One that was moved, changed or deleted in Google is left to Google, so the app
+    leaves its day out of the series. While an edit made here still waits, Google's occurrences are the old ones and
+    all of them are hidden; a rule only Google can show is left to Google's occurrences entirely.
+    """
+    by_series = {}
+    for calendar, bucket in buckets.items():
+        for key, view in bucket.items():
+            if view.get('recurring_event_id'):
+                by_series.setdefault(view['recurring_event_id'], []).append((calendar, key, view))
+    hide, skip = set(), {}
+    for item in items:
+        instances = by_series.get(item.get('google_id')) if item.get('google_id') else None
+        if not instances:
+            continue
+        if not _settled(item):
+            hide.update((calendar, key) for calendar, key, _ in instances)
+            continue
+        rule = ui_data.recurrence_rule(item.get('recurrence'))
+        if not rule:
+            continue
+        drawn = _days_drawn(item, rule, start, end)
+        seen, changed = set(), set()
+        for calendar, key, view in instances:
+            original = view.get('original_date') or view.get('start_date')
+            seen.add(original)
+            if original in drawn and _untouched(view, item):
+                hide.add((calendar, key))
+            elif original in drawn:
+                changed.add(original)
+        if changed | (drawn - seen):
+            skip[str(item.get('id'))] = changed | (drawn - seen)
+    return hide, skip
+
+
+def series_overlay():
+    cache = _load(shared=True)
+    if not cache:
+        return set(), {}
+    return _overlay(ui_data.load_list('calendar'), cache.get('events', {}), cache['start'], cache['end'])
+
+
+def live_overlay(found, start, end):
+    """The same for events fetched beyond the copy: the (calendar, id) pairs to hide."""
+    buckets = {}
+    for view in found:
+        buckets.setdefault(view.get('calendar_id'), {})[view.get('id')] = view
+    return _overlay(ui_data.load_list('calendar'), buckets, start, end)[0]
+
+
+def own_views(views):
+    """Own event views as they stand beside Google's: a series without the days Google took over, and none for an event
+    whose rule only Google can show, as its occurrences come from Google."""
+    if not connected():
+        return views
+    items = {f"loc-{item.get('id')}": item for item in ui_data.load_list('calendar')}
+    _, skip = series_overlay()
+    result = []
+    for view in views:
+        item = items.get(view['id']) or {}
+        if item.get('google_id') and isinstance(item.get('recurrence'), dict) and 'google' in item['recurrence']:
+            continue
+        days = skip.get(str(item.get('id')))
+        if days and view.get('recurrence'):
+            view = {**view, 'recurrence': {**view['recurrence'], 'exceptions': sorted(set(view['recurrence']['exceptions']) | days)}}
+        result.append(view)
+    return result
+
+
 def events(start, end):
     cache = _load(shared=True)
     if not cache:
         return []
     hidden = hidden_calendars()
     linked = {item.get('google_id') for item in ui_data.load_list('calendar') if item.get('google_id')}
+    covered, _ = series_overlay()
     result = []
     for calendar_id, bucket in cache.get('events', {}).items():
         if calendar_id in hidden:
             continue
         for key, item in bucket.items():
-            # A series written here comes back from Google as its occurrences, which the app shows from the rule itself.
-            if key in linked or item.get('recurring_event_id') in linked:
+            if key in linked or (calendar_id, key) in covered:
                 continue
             shown = view(item)
             if shown and (shown.get('endDate') or shown['date']) >= start and shown['date'] <= end:

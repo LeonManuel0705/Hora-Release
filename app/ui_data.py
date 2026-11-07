@@ -626,7 +626,7 @@ def recurrence_rule(value):
     return {'freq': value['freq'], 'interval': interval, 'until': until, 'count': count, 'exceptions': days}
 
 
-def _nth_day(first, rule, index):
+def nth_day(first, rule, index):
     """The day a rule comes round for the index-th time, or None where that day does not exist (31.4., 29.2.)."""
     step = index * rule['interval']
     if rule['freq'] in ('daily', 'weekly'):
@@ -650,7 +650,7 @@ def series_last_day(view):
     elif rule['count']:
         last, produced, index = first, 0, 0
         while produced < rule['count'] and index < 20000:
-            day = _nth_day(first, rule, index)
+            day = nth_day(first, rule, index)
             index += 1
             if day:
                 last, produced = day, produced + 1
@@ -726,6 +726,7 @@ def _with_synced(own, today):
     try:
         first, last = calendar_cache.window(today)
         synced = calendar_cache.events(first.isoformat(), last.isoformat()) if calendar_cache.connected() else []
+        own = calendar_cache.own_views(own)
     except Exception:
         synced = []
     seen = {(item['title'], item['date'], item['start'] or '') for item in own}
