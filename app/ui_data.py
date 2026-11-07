@@ -912,7 +912,7 @@ def page_bookmarks(data, school, settings, today, iserv):
     links = [{'id': str(row['id']), 'title': row.get('title') or '', 'url': row.get('url') or '', 'category': row.get('category') or 'Other',
               'icon': site_icons.known(row.get('url') or '')}
              for row in db.get_hub_bookmarks()]
-    return {'bookmarks': links, 'siteFallback': True}
+    return {'bookmarks': links}
 
 
 def page_calendar(data, school, settings, today, iserv):

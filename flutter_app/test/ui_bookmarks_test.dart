@@ -72,7 +72,6 @@ void main() {
     expect(html, contains('data-page-module="bookmarks"'));
     final data = RegExp(r'<script type="application/json" id="appData">(.*?)</script>', dotAll: true).firstMatch(html)!.group(1)!;
     final page = (jsonDecode(data) as Map)['page'] as Map;
-    expect(page['siteFallback'], isFalse);
     return (page['bookmarks'] as List).cast<Map>();
   }
 
@@ -102,6 +101,15 @@ void main() {
     final listed = json(await api(hub, 'GET', '/api/hub/bookmarks'))['bookmarks'] as List;
     expect(listed.cast<Map>().singleWhere((item) => item['id'] == link['id'])['title'], 'Portal');
 
+    final deleted = await api(hub, 'DELETE', '/api/hub/bookmarks/${link['id']}');
+    final gone = json(deleted)['bookmark'] as Map;
+    expect((await shown(hub)).where((item) => item['id'] == link['id']), isEmpty);
+    final back = json(await api(hub, 'POST', '/api/hub/bookmarks', {
+      'title': 'Portal',
+      'url': 'https://portal.example.org/neu',
+      'restore': {'id': gone['id'], 'created_at': gone['created_at'], 'favicon': gone['favicon']},
+    }))['bookmark'] as Map;
+    expect([back['id'], (await db.query('bookmarks', where: 'id = ?', whereArgs: [link['id']])).single['created_at']], [link['id'], gone['created_at']]);
     expect((await api(hub, 'DELETE', '/api/hub/bookmarks/${link['id']}')).status, 200);
     expect((await shown(hub)).where((item) => item['id'] == link['id']), isEmpty);
     expect((await api(hub, 'PUT', '/api/hub/bookmarks/${link['id']}', {'title': 'x', 'url': 'https://x.example/'})).status, 404);
@@ -128,7 +136,8 @@ void main() {
     expect(icon.headers['Content-Type'], 'image/png');
     expect(icon.body, iconImage('png'));
     siteIconLoader = (url) async => null;
-    expect((await api(hub, 'GET', '/api/hub/bookmarks/${link['id']}/icon')).status, 404);
+    final none = await api(hub, 'GET', '/api/hub/bookmarks/${link['id']}/icon');
+    expect([none.status, none.body], [204, null]);
     expect((await api(hub, 'GET', '/api/hub/bookmarks/unbekannt/icon')).status, 404);
   });
 }

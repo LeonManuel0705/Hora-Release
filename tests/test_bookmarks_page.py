@@ -43,7 +43,6 @@ def test_the_bookmarks_page_is_part_of_the_new_interface(client):
     assert {link["title"] for link in links} == {"Schulportal", "Wörterbuch"}
     assert all(isinstance(link["id"], str) for link in links)
     assert next(link for link in links if link["title"] == "Schulportal") == {"id": str(first["id"]), "title": "Schulportal", "url": "https://portal.example.org/", "category": "Work", "icon": None}
-    assert page_data(html)["page"]["siteFallback"] is True
 
 
 @pytest.mark.parametrize("url", ["javascript:alert(1)", "kein link", "ftp://files.example.org/", "https://", "mailto:x@example.org", "data:text/html,x"])
@@ -61,6 +60,23 @@ def test_a_bookmark_needs_a_title_and_one_of_the_four_categories(client):
     assert client.put(f"/api/hub/bookmarks/{made['id']}", json={"category": "Dev"}).get_json()["bookmark"]["category"] == "Dev"
     kept = client.get("/api/hub/bookmarks").get_json()["bookmarks"]
     assert [(link["url"], link["category"]) for link in kept] == [("https://example.org/", "Dev")]
+
+
+def test_a_deleted_bookmark_is_gone_at_once_and_undo_brings_back_the_same_one(client):
+    older = client.post("/api/hub/bookmarks", json={"title": "Alt", "url": "https://old.example.org/"}).get_json()["bookmark"]
+    newer = client.post("/api/hub/bookmarks", json={"title": "Zweitportal", "url": "https://new.example.org/", "favicon": "f.ico"}).get_json()["bookmark"]
+    before = client.get("/api/hub/bookmarks").get_json()["bookmarks"]
+    gone = client.delete(f"/api/hub/bookmarks/{newer['id']}").get_json()["bookmark"]
+    assert [link["id"] for link in client.get("/api/hub/bookmarks").get_json()["bookmarks"]] == [older["id"]]
+    assert "Zweitportal" not in client.get("/hub/bookmarks").get_data(as_text=True)
+    restore = {"id": gone["id"], "created_at": gone["created_at"], "favicon": gone["favicon"]}
+    back = client.post("/api/hub/bookmarks", json={"title": "Zweitportal", "url": "https://new.example.org/", "restore": restore}).get_json()["bookmark"]
+    assert (back["id"], back["created_at"], back["favicon"]) == (newer["id"], newer["created_at"], "f.ico")
+    assert [link["id"] for link in client.get("/api/hub/bookmarks").get_json()["bookmarks"]] == [link["id"] for link in before]
+    taken = client.post("/api/hub/bookmarks", json={"title": "Doppelt", "url": "https://x.example.org/", "restore": restore}).get_json()["bookmark"]
+    assert taken["id"] != newer["id"]
+    odd = client.post("/api/hub/bookmarks", json={"title": "Seltsam", "url": "https://y.example.org/", "restore": {"id": "1; drop", "created_at": "gestern"}}).get_json()["bookmark"]
+    assert odd["id"] not in (older["id"], newer["id"])
 
 
 def test_the_classic_bookmarks_page_moved_out_of_the_way(client):

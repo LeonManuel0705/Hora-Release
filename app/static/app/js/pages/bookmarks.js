@@ -11,8 +11,6 @@ const ENDPOINT = "/api/hub/bookmarks";
 const CATEGORIES = [["Other", "Sonstiges"], ["Work", "Arbeit"], ["Personal", "Persönlich"], ["Dev", "Dev"]];
 const CATEGORY = Object.fromEntries(CATEGORIES);
 const ICON_LOOK = 2;
-const SITE_MEMORY = "app-link-site-icons";
-const SITE_RETRY = 7 * 864e5;
 
 const view = (row) => ({
   id: String(row.id),
@@ -45,60 +43,14 @@ function hashOf(text) {
 const hueOf = (text) => HUES[hashOf(text) % HUES.length];
 const iconVersion = (url) => hashOf(url).toString(36);
 
-// The window may ask the site itself where the app could not, but only where the page's own rules allow outside images.
-function siteIcon(url) {
-  const address = webAddress(url);
-  return page.siteFallback && address?.protocol === "https:" ? `${address.origin}/favicon.ico` : "";
-}
-
-function siteMemory() {
-  try {
-    const kept = JSON.parse(localStorage.getItem(SITE_MEMORY) || "{}");
-    return kept && typeof kept === "object" ? kept : {};
-  } catch {
-    return {};
-  }
-}
-
-function rememberSite(site, works) {
-  try {
-    const kept = siteMemory();
-    kept[site] = { works, at: Date.now() };
-    localStorage.setItem(SITE_MEMORY, JSON.stringify(kept));
-  } catch {}
-}
-
-// A site that turned the window away is not asked again for a week, so a missing logo costs at most one failed request.
-function siteVerdict(site) {
-  const kept = site ? siteMemory()[site] : null;
-  if (!kept) return null;
-  if (kept.works) return "works";
-  return Date.now() - kept.at < SITE_RETRY ? "fails" : null;
-}
-
-function logoSource(link, key) {
-  const known = iconState.get(key);
-  const site = siteIcon(link.url);
-  const verdict = siteVerdict(site);
-  const route = `src="${ENDPOINT}/${encodeURIComponent(link.id)}/icon?v=${iconVersion(link.url)}&look=${ICON_LOOK}"`;
-  const direct = `src="${esc(site)}" data-tried="1"`;
-  if (known === "none") return "";
-  if (known === "site") return direct;
-  if (known === "ok" || link.icon === true) return route;
-  if (link.icon === false) return verdict === "works" ? direct : "";
-  return route;
-}
-
 function logoHtml(link) {
   const host = hostOf(link.url);
   const letter = ([...(link.title || host || "?").trim()][0] || "?").toUpperCase();
   const key = `${link.id}:${iconVersion(link.url)}`;
   const known = iconState.get(key);
-  const site = siteIcon(link.url);
-  const source = logoSource(link, key);
-  const asked = siteVerdict(site) === "fails" ? "" : site;
-  const image = source ? `<img ${source} data-key="${esc(key)}" data-site="${esc(asked)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : "";
-  const shown = known === "ok" || known === "site" ? " has-icon is-known" : "";
+  const asked = known !== "none" && (known === "ok" || link.icon !== false);
+  const image = asked ? `<img src="${ENDPOINT}/${encodeURIComponent(link.id)}/icon?v=${iconVersion(link.url)}&look=${ICON_LOOK}" data-key="${esc(key)}" alt="" loading="lazy" decoding="async">` : "";
+  const shown = known === "ok" ? " has-icon is-known" : "";
   return `<span class="link-logo${shown}" style="--hue: var(--hue-${hueOf(host)})" aria-hidden="true"><span class="link-letter">${esc(letter)}</span>${image}</span>`;
 }
 
@@ -150,17 +102,9 @@ function onIcon(event) {
   if (!(image instanceof HTMLImageElement) || !image.closest(".link-logo")) return;
   const key = image.dataset.key;
   const logo = image.parentElement;
-  const site = image.dataset.tried ? image.dataset.site : "";
   if (event.type === "load" && image.naturalWidth >= 8) {
-    iconState.set(key, site ? "site" : "ok");
-    if (site) rememberSite(site, true);
+    iconState.set(key, "ok");
     logo.classList.add("has-icon");
-    return;
-  }
-  if (site) rememberSite(site, false);
-  if (image.dataset.site && !image.dataset.tried) {
-    image.dataset.tried = "1";
-    image.src = image.dataset.site;
     return;
   }
   iconState.set(key, "none");
@@ -266,12 +210,19 @@ async function save(event) {
   }
 }
 
-// A deleted bookmark stays on the server while its undo is offered, so undo brings back the same one in its place.
-const pendingDeletes = new Map();
-
 async function remove() {
   const link = state.links.find((item) => item.id === state.editing);
   if (!link || state.busy) return;
+  state.busy = true;
+  let gone = null;
+  try {
+    gone = (await request("DELETE", `${ENDPOINT}/${encodeURIComponent(link.id)}`)).bookmark || null;
+  } catch {
+    state.busy = false;
+    setFieldError(null, $("linkError"), "Das ließ sich gerade nicht löschen. Versuch es gleich noch einmal.");
+    return;
+  }
+  state.busy = false;
   closeSheet();
   const index = state.links.indexOf(link);
   const tile = document.querySelector(`#linkGrid .link-tile[data-id="${CSS.escape(link.id)}"]`);
@@ -279,46 +230,23 @@ async function remove() {
   state.links = state.links.filter((item) => item.id !== link.id);
   render({ flip: true });
   $("linkAdd").focus({ preventScroll: true });
-  const { node } = toast(`„${esc(link.title)}“ gelöscht`, {
+  toast(`„${esc(link.title)}“ gelöscht`, {
     icon: "trash-2",
-    action: { label: "Rückgängig", undo: true, run: () => restore(link.id) },
+    action: { label: "Rückgängig", undo: true, run: () => restore(link, index, gone) },
   });
-  pendingDeletes.set(link.id, { link, index, node, timer: setTimeout(() => settleDelete(link.id), 10500) });
 }
 
-function settleDelete(id, leaving = false) {
-  const pending = pendingDeletes.get(id);
-  if (!pending) return;
-  clearTimeout(pending.timer);
-  if (!leaving && pending.node.isConnected) {
-    pending.timer = setTimeout(() => settleDelete(id), 1000);
-    return;
+// The delete answered with the stored bookmark, so undo can bring it back with its id, place and icon.
+async function restore(link, index, gone) {
+  const earlier = gone ? { id: gone.id, created_at: gone.created_at, favicon: gone.favicon ?? null } : undefined;
+  try {
+    const result = await request("POST", ENDPOINT, { title: link.title, url: link.url, category: link.category, restore: earlier });
+    state.links.splice(Math.min(index, state.links.length), 0, { ...view(result.bookmark), icon: link.icon });
+    render({ flip: true });
+    say(`${link.title} ist wieder da`);
+  } catch {
+    toast("Das Lesezeichen ließ sich nicht zurückholen.", { icon: "circle-alert" });
   }
-  pendingDeletes.delete(id);
-  fetch(`${ENDPOINT}/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "same-origin", keepalive: true })
-    .then((response) => {
-      if (!response.ok) throw new Error(String(response.status));
-    })
-    .catch(() => {
-      if (leaving) return;
-      putBack(pending);
-      toast(`„${esc(pending.link.title)}“ ließ sich gerade nicht löschen.`, { icon: "circle-alert" });
-    });
-}
-
-function putBack(pending) {
-  if (state.links.some((item) => item.id === pending.link.id)) return;
-  state.links.splice(Math.min(pending.index, state.links.length), 0, pending.link);
-  render({ flip: true });
-}
-
-function restore(id) {
-  const pending = pendingDeletes.get(id);
-  if (!pending) return;
-  clearTimeout(pending.timer);
-  pendingDeletes.delete(id);
-  putBack(pending);
-  say(`${pending.link.title} ist wieder da`);
 }
 
 function openLink(link) {
@@ -378,5 +306,4 @@ export function init() {
     if (!document.activeElement || document.activeElement === document.body || $("linkSheet").contains(document.activeElement)) back.focus({ preventScroll: true });
   });
   registerSearch(paletteItems);
-  addEventListener("pagehide", () => [...pendingDeletes.keys()].forEach((id) => settleDelete(id, true)));
 }

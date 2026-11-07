@@ -797,7 +797,6 @@ class UiData {
         'bookmarks': [
           for (final row in await db.query('bookmarks', orderBy: 'created_at DESC')) {...bookmarkView(row), 'icon': await knownSiteIcon(text(row['url']))},
         ],
-        'siteFallback': false,
       };
 
   Future<Map<String, Object?>> pageSettings(School setup, Map<String, Object?> iserv) async {

@@ -599,15 +599,22 @@ class UiApi {
     if (path.length == 2 && method == 'POST') {
       final fields = _bookmarkFields(request);
       final now = DateTime.now().toIso8601String();
-      final id = _uuid.v4();
-      await db.insert('bookmarks', {'id': id, ...fields, 'created_at': now, 'updated_at': now});
+      final earlier = request.payload?['restore'];
+      final kept = earlier is Map ? earlier : const <Object?, Object?>{};
+      final earlierId = '${kept['id'] ?? ''}';
+      final earlierAt = text(kept['created_at'], 40);
+      final restoring = RegExp(r'^[A-Za-z0-9-]{1,64}$').hasMatch(earlierId) && DateTime.tryParse(earlierAt) != null && await _bookmark(db, earlierId) == null;
+      final id = restoring ? earlierId : _uuid.v4();
+      final favicon = restoring && kept['favicon'] is String ? kept['favicon'] : null;
+      await db.insert('bookmarks', {'id': id, ...fields, 'favicon': favicon, 'created_at': restoring ? earlierAt : now, 'updated_at': now});
       return UiReply.ok({'bookmark': UiData.bookmarkView((await _bookmark(db, id))!)});
     }
     if (path.length == 4 && path[3] == 'icon' && method == 'GET') {
       final row = await _bookmark(db, path[2]);
       final bytes = row == null ? null : await siteIcon(text(row['url']));
       final type = bytes == null ? null : _iconTypes[imageKind(bytes)];
-      if (bytes == null || type == null) return const UiReply(404, null);
+      if (row == null) return const UiReply(404, null);
+      if (bytes == null || type == null) return const UiReply(204, null);
       return UiReply.file(bytes, type, 'icon');
     }
     if (path.length != 3) return UiReply.error('Nicht gefunden', 404);
@@ -616,7 +623,7 @@ class UiApi {
       if (row == null) return UiReply.ok();
       await db.delete('bookmarks', where: 'id = ?', whereArgs: [path[2]]);
       await forgetSiteIcon(text(row['url']), await _bookmarkUrls(db));
-      return UiReply.ok();
+      return UiReply.ok({'bookmark': row});
     }
     if (method != 'PUT') return UiReply.error('Nicht gefunden', 404);
     if (row == null) return UiReply.error('Lesezeichen nicht gefunden', 404);

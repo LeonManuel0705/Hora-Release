@@ -718,6 +718,19 @@ def _bookmark_fields(data, creating):
     return fields
 
 
+# Undo hands back what the delete answered, so the bookmark returns with its id, place and icon.
+def _restored(earlier):
+    if not isinstance(earlier, dict) or not isinstance(earlier.get('id'), int) or earlier['id'] <= 0:
+        return None
+    created_at = str(earlier.get('created_at') or '')[:40]
+    try:
+        datetime.fromisoformat(created_at)
+    except ValueError:
+        return None
+    favicon = earlier.get('favicon')
+    return {'id': earlier['id'], 'created_at': created_at, 'favicon': favicon if isinstance(favicon, str) else None}
+
+
 @app.route('/api/hub/bookmarks', methods=['POST'])
 def create_bookmark():
     data = request.get_json(silent=True)
@@ -727,7 +740,11 @@ def create_bookmark():
         fields = _bookmark_fields(data, creating=True)
     except ValueError as problem:
         return jsonify({'success': False, 'error': str(problem)}), 400
-    bookmark_id = db.create_hub_bookmark(**fields)
+    earlier = _restored(data.get('restore'))
+    if earlier:
+        bookmark_id = db.restore_hub_bookmark(earlier['id'], fields['title'], fields['url'], fields['category'], earlier['favicon'], earlier['created_at'])
+    else:
+        bookmark_id = db.create_hub_bookmark(**fields)
     bookmark = db.get_hub_bookmark(bookmark_id)
     site_icons.retry(bookmark['url'])
     return jsonify({'success': True, 'bookmark': bookmark})
@@ -756,7 +773,7 @@ def delete_bookmark(bookmark_id):
     db.delete_hub_bookmark(bookmark_id)
     if bookmark:
         _forget_unused_icon(bookmark['url'])
-    return jsonify({'success': True})
+    return jsonify({'success': True, 'bookmark': bookmark})
 
 
 def _forget_unused_icon(url):
