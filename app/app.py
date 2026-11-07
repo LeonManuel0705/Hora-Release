@@ -490,6 +490,15 @@ def iserv_ping():
         return '', 204
     return '', 503
 
+
+# Reading the saved login means deriving a key, so the classic pages only learn whether one is there at all.
+def iserv_linked():
+    from .iserv_service import CREDENTIALS_FILE, get_iserv_service
+    return bool(get_iserv_service().connected) or CREDENTIALS_FILE.exists()
+
+
+app.jinja_env.globals['iserv_linked'] = iserv_linked
+
 @app.route('/api/hub/tasks', methods=['GET'])
 def get_hub_tasks_api():
 

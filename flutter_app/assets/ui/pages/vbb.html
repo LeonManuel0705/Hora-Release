@@ -43,6 +43,15 @@
                     if (!root.dataset.navVt) settle();
                 }, 1200);
             });
+            // A page outside this interface has no opt-in, so the browser would abort the transition there and report it as an error.
+            var ownPages = /^\/hub(?:\/(?:tasks|calendar|school|vbb|email|pomodoro|settings))?\/?$/;
+            addEventListener("pageswap", function (event) {
+                var transition = event.viewTransition;
+                var entry = event.activation && event.activation.entry;
+                if (!transition || !entry || !entry.url || ownPages.test(new URL(entry.url).pathname)) return;
+                transition.ready.catch(function () {});
+                transition.skipTransition();
+            });
         })();
     </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
