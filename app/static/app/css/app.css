@@ -1374,6 +1374,39 @@ label.switch:is(:active, .is-pressed) input:checked + .switch-track::after { tra
 .today.is-desk .segment.is-cancelled { background: transparent; border-color: var(--urgent); }
 .today.is-desk .segment.is-cancelled .segment-label { color: var(--ink-muted); }
 .today.is-desk .segment-flag { top: -8px; right: 4px; background: var(--urgent); color: #FFFFFF; }
+.today.is-desk .segment.is-tight { gap: 0; padding: 0 3px; }
+.today.is-desk .segment.is-tight .segment-time { display: none; }
+.today.is-desk .segment.is-tight .segment-label { font-size: var(--text-xs); letter-spacing: -0.01em; }
+.today.is-desk .track[hidden] { display: none; }
+.today.is-desk .today-nextline:has(.today-setup) { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 24px; }
+.today-setup { height: 44px; padding: 0 20px; border-radius: var(--radius-pill); font-size: var(--text-base); }
+.today-setup .icon { --s: 18; }
+.today-setup-note { font-size: var(--text-sm); color: var(--ink-muted); }
+
+.head-weather {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--desk-card);
+  box-shadow: inset 0 0 0 1px var(--desk-card-edge);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  white-space: nowrap;
+  transition: background-color var(--dur-hover-out) var(--ease-hover), scale var(--spring-tactile-dur) var(--spring-tactile);
+}
+.head-weather[hidden] { display: none; }
+.head-weather .icon { --s: 16; color: var(--ink); }
+.head-weather b { font-weight: var(--weight-strong); color: var(--ink); font-variant-numeric: tabular-nums; }
+.head-weather:is(:active, .is-pressed) { scale: var(--scale-press); transition-duration: var(--dur-press); }
+@media (hover: hover) and (pointer: fine) {
+  .head-weather:hover { background: var(--surface-hover); transition-duration: var(--dur-hover-in); }
+}
+.is-touch .head-weather { position: relative; }
+.is-touch .head-weather::after { content: ""; position: absolute; inset: -8px -4px; }
 
 .scene { position: relative; align-self: end; justify-self: end; width: 100%; max-width: 470px; margin-bottom: -2px; }
 .scene svg { display: block; width: 100%; height: auto; overflow: visible; }

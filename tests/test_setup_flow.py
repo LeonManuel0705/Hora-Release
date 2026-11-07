@@ -161,3 +161,10 @@ def test_every_page_can_open_the_setup(client):
     assert "/static/app/css/setup.css" in home
     main = (ROOT / "app" / "static" / "app" / "js" / "main.js").read_text(encoding="utf-8")
     assert re.search(r"^initSetup\(\);$", main, re.M)
+
+
+def test_the_home_shows_the_weather_and_one_button_for_everything_new(client):
+    home = client.get("/hub").get_data(as_text=True)
+    assert 'id="headWeather"' in home and "data-open-weather" in home
+    assert '<use href="#i-plus"/></svg>Neu' in home and "Notiz\n" not in home
+    assert 'id="i-cloud-snow"' in home and 'id="i-cloud-lightning"' in home and 'id="i-cloud-fog"' in home

@@ -10,6 +10,31 @@ const SKY = {
   night: { top: "#1F2B21", bottom: "#314330", hill: "#263227", sun: "#F3EFE3" },
 };
 
+const OVERCAST = {
+  day: { top: "#C7CEC5", bottom: "#ECEEE8", hill: "#A3AF99" },
+  night: { top: "#1B231D", bottom: "#29352B", hill: "#222C24" },
+};
+
+const CLOUD = (x, y, scale, opacity, fill = "#FFFFFF") => `<g opacity="${opacity}" transform="translate(${x} ${y}) scale(${scale})"><rect x="-23" y="0" width="46" height="13" rx="6.5" fill="${fill}"/><circle cx="-4" cy="0" r="9.5" fill="${fill}"/><circle cx="10" cy="3" r="6.5" fill="${fill}"/></g>`;
+
+function weatherView(sky, dark) {
+  const cloud = dark ? "#4A574C" : "#FFFFFF";
+  const clouds = `${CLOUD(84, 46, 1.25, 0.95, cloud)}${CLOUD(160, 58, 1.1, 0.9, cloud)}${CLOUD(118, 74, 0.9, 0.85, cloud)}`;
+  if (sky === "fog") return `${clouds}<rect x="46" y="88" width="156" height="7" rx="3.5" fill="${dark ? "#55625A" : "#FFFFFF"}" opacity=".7"/><rect x="62" y="100" width="124" height="6" rx="3" fill="${dark ? "#55625A" : "#FFFFFF"}" opacity=".6"/>`;
+  if (sky === "snow") {
+    const flakes = [[64, 92], [86, 104], [108, 90], [130, 108], [152, 94], [174, 106], [196, 92], [76, 116], [142, 120]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.2" fill="#FFFFFF"/>`).join("");
+    return `${clouds}${flakes}`;
+  }
+  if (sky === "drizzle" || sky === "rain" || sky === "storm") {
+    const step = sky === "drizzle" ? 26 : 16;
+    const drops = [];
+    for (let x = 58; x < 200; x += step) drops.push(`<path d="M${x} ${88 + (x % 3) * 6} l-4 9" stroke="${dark ? "#8FA3AA" : "#8FA8B4"}" stroke-width="2.2" stroke-linecap="round"/>`);
+    const bolt = sky === "storm" ? `<path d="M128 80 l-8 14 h7 l-5 12 l13 -17 h-7 l5 -9 z" fill="#E7C694"/>` : "";
+    return `${clouds}${drops.join("")}${bolt}`;
+  }
+  return clouds;
+}
+
 const BOOKS = [
   { x: 20, w: 98, h: 17, fill: "f-salbei", band: "f-salbei-d" },
   { x: 27, w: 88, h: 14, fill: "f-terra", band: "f-terra-d" },
@@ -17,19 +42,22 @@ const BOOKS = [
   { x: 30, w: 80, h: 13, fill: "f-sand3", band: "f-sand4" },
 ];
 
-function windowPart(time) {
-  const sky = SKY[time];
+function windowPart(time, weather = null) {
+  const grey = ["cloudy", "fog", "drizzle", "rain", "snow", "storm"].includes(weather);
+  const sky = grey ? { ...SKY[time], ...OVERCAST[time === "night" ? "night" : "day"] } : SKY[time];
   let view;
-  if (time === "night") {
+  if (grey) {
+    view = weatherView(weather, time === "night");
+  } else if (time === "night") {
     const stars = [[62, 42], [90, 62], [104, 36], [150, 68], [186, 38], [196, 86], [70, 88]]
       .map(([x, y], i) => `<circle class="sc-star" style="--i:${i}" cx="${x}" cy="${y}" r="${i % 3 ? 1.4 : 1.9}" fill="#F8F6EE"/>`)
       .join("");
     view = `${stars}<circle cx="164" cy="54" r="13" fill="${sky.sun}"/><circle cx="159" cy="50" r="2.6" fill="#E2DCCB"/><circle cx="168" cy="59" r="1.9" fill="#E2DCCB"/>`;
   } else {
     const [cx, cy, r] = time === "day" ? [170, 52, 15] : time === "dawn" ? [84, 100, 17] : [166, 100, 18];
-    view = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${sky.sun}"/>
+    view = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${sky.sun}"/>${weather === "clear" ? "" : `
       <g class="sc-cloud"><g opacity=".9"><rect x="58" y="54" width="46" height="13" rx="6.5" fill="#FFFFFF"/><circle cx="77" cy="54" r="9.5" fill="#FFFFFF"/><circle cx="91" cy="57" r="6.5" fill="#FFFFFF"/></g></g>
-      <g class="sc-cloud is-slow"><g opacity=".72"><rect x="128" y="82" width="40" height="11" rx="5.5" fill="#FFFFFF"/><circle cx="144" cy="82" r="7.5" fill="#FFFFFF"/></g></g>`;
+      <g class="sc-cloud is-slow"><g opacity=".72"><rect x="128" y="82" width="40" height="11" rx="5.5" fill="#FFFFFF"/><circle cx="144" cy="82" r="7.5" fill="#FFFFFF"/></g></g>`}`;
   }
   return `<g transform="translate(88 0)"><defs>
       <linearGradient id="scSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky.top}"/><stop offset="1" stop-color="${sky.bottom}"/></linearGradient>
@@ -155,7 +183,7 @@ function flowerPart() {
 }
 
 export function sceneParts(model) {
-  const parts = [["window", "fade", windowPart(model.time)], ["clock", "fade", clockPart(model.minute)]];
+  const parts = [["window", "fade", windowPart(model.time, model.sky)], ["clock", "fade", clockPart(model.minute)]];
   if (model.notes) parts.push(["notes", "drop", notesPart(model.notes)]);
   parts.push(["desk", "fade", deskPart()]);
   if (model.lamp) parts.push(["lamp", "rise", lampPart(model.lampOn)]);
