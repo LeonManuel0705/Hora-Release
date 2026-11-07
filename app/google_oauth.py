@@ -518,11 +518,11 @@ def _guests(event: Dict) -> List[Dict]:
 
 
 def _reminder_minutes(event: Dict):
-    """Minutes before the start of the earliest pop-up, -1 when the event reminds of nothing, None for the calendar's default."""
+    """Minutes before the start of the earliest pop-up, -1 when nothing pops up, None for the calendar's default."""
     reminders = event.get('reminders')
     if not isinstance(reminders, dict) or reminders.get('useDefault', True):
         return None
-    minutes = [item.get('minutes') for item in reminders.get('overrides') or [] if isinstance(item.get('minutes'), int)]
+    minutes = [item.get('minutes') for item in reminders.get('overrides') or [] if item.get('method') == 'popup' and isinstance(item.get('minutes'), int)]
     return max(minutes) if minutes else -1
 
 

@@ -378,6 +378,8 @@ def _rule_of(lines, first=None):
             fields.pop('BYMONTH')
     if not fields or set(fields) - {'FREQ', 'INTERVAL', 'COUNT', 'UNTIL', 'WKST'} or fields.get('FREQ', '').lower() not in ui_data.EVENT_REPEATS:
         return False
+    if not re.fullmatch(r'0*(?:[1-9]|1[0-2])', fields.get('INTERVAL', '1')) or not re.fullmatch(r'0*(?:[1-9]\d{0,2}|1000)', fields.get('COUNT', '1')):
+        return False
     until = _rule_moment(fields['UNTIL']) if 'UNTIL' in fields else None
     rule = ui_data.recurrence_rule({'freq': fields['FREQ'].lower(), 'interval': fields.get('INTERVAL'), 'count': fields.get('COUNT'), 'until': until, 'exceptions': exceptions})
     return rule or False

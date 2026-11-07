@@ -189,3 +189,18 @@ def test_a_colour_that_is_no_plain_hex_value_is_left_out():
     for bad in ('red', '#fff', '#12345g', '#123456;background:url(x)', '"><b>x</b>'):
         assert calendar_cache.view({**base, 'color': bad})['color'] == ''
     assert calendar_cache.view({**base, 'color': '#33B679'})['color'] == '#33B679'
+
+
+def test_a_google_rule_beyond_what_the_app_offers_stays_as_google_wrote_it():
+    assert calendar_cache._rule_of(['RRULE:FREQ=WEEKLY;INTERVAL=26'], day(1)) is False
+    assert calendar_cache._rule_of(['RRULE:FREQ=DAILY;COUNT=2000'], day(1)) is False
+    assert calendar_cache._rule_of(['RRULE:FREQ=WEEKLY;INTERVAL=x'], day(1)) is False
+    assert calendar_cache._rule_of(['RRULE:FREQ=WEEKLY;INTERVAL=12;COUNT=1000'], day(1))['count'] == 1000
+
+
+def test_only_a_pop_up_counts_as_a_reminder():
+    def minutes(reminders):
+        return google_oauth._reminder_minutes({'reminders': reminders})
+    assert minutes({'useDefault': False, 'overrides': [{'method': 'email', 'minutes': 60}]}) == -1
+    assert minutes({'useDefault': False, 'overrides': [{'method': 'email', 'minutes': 600}, {'method': 'popup', 'minutes': 10}]}) == 10
+    assert minutes({'useDefault': True}) is None
