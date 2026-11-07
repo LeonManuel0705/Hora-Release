@@ -39,6 +39,7 @@ function readObject(key) {
 }
 
 const sortedBlocks = () => [...data.blocks].sort((a, b) => a.n - b.n);
+const single = (blocks) => blocks.every((block) => plan.minutesOfClock(block.end) - plan.minutesOfClock(block.start) <= 60);
 const usedBlocks = () => Math.max(0, ...["A", "B"].flatMap((week) => DAYS.flatMap((dow) => (data.timetable[week]?.[String(dow)] || []).map((entry) => entry.block))));
 const DEFAULT_TIMES = plan.blockTimes(plan.TEMPLATES[90]);
 const sameTimes = (one, other) => one.length === other.length && one.every((block, index) => block.start === other[index].start && block.end === other[index].end);
@@ -134,8 +135,12 @@ async function close({ to = "" } = {}) {
     leave();
     return;
   }
-  const frame = flow.dialog.querySelector(".setup-frame");
-  frame.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(12px) scale(0.98)" }], { duration: 180, easing: "ease-in", fill: "forwards" }).finished.then(leave, leave);
+  const fade = flow.dialog.querySelector(".setup-frame").animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(12px) scale(0.98)" }], { duration: 180, easing: "ease-in", fill: "forwards" });
+  const done = () => {
+    leave();
+    fade.cancel();
+  };
+  fade.finished.then(done, done);
 }
 
 const current = () => STEPS[flow.step].id;
@@ -239,7 +244,7 @@ function timelineHtml(blocks) {
 
 function timesNote(blocks) {
   if (!blocks.length) return "";
-  const what = model.template.length === 90 && model.times !== "keep" ? plural(blocks.length, "Block", "Blöcke") : plural(blocks.length, "Stunde", "Stunden");
+  const what = single(blocks) ? plural(blocks.length, "Stunde", "Stunden") : plural(blocks.length, "Block", "Blöcke");
   return `${what} von ${hm(blocks[0].start)} bis ${hm(blocks.at(-1).end)}. Einzelne Zeiten änderst du später unter Einstellungen, Stundenraster.`;
 }
 
@@ -286,7 +291,7 @@ const VIEWS = {
       const keep = ownTimes() || usedBlocks() > 0;
       const stored = sortedBlocks();
       const cards = [
-        keep ? radio("times", "keep", model.times === "keep", `${motif(stored.length)}<b>So wie jetzt</b><small>${plural(stored.length, "Block", "Blöcke")}, ${hm(stored[0].start)} bis ${hm(stored.at(-1).end)}</small>`, "is-card") : "",
+        keep ? radio("times", "keep", model.times === "keep", `${motif(stored.length)}<b>So wie jetzt</b><small>${single(stored) ? plural(stored.length, "Stunde", "Stunden") : plural(stored.length, "Block", "Blöcke")}, ${hm(stored[0].start)} bis ${hm(stored.at(-1).end)}</small>`, "is-card") : "",
         radio("times", "45", model.times === "45", `${motif(8)}<b>45 Minuten</b><small>Einzelstunden</small>`, "is-card"),
         radio("times", "90", model.times === "90", `${motif(4)}<b>90 Minuten</b><small>Doppelstunden</small>`, "is-card is-double"),
       ].join("");
@@ -419,7 +424,7 @@ function detailRow(pick) {
     ? `<div class="setup-type" role="radiogroup" aria-label="Kursart ${id}">${["GK", "LK"].map((value) => `<label><input type="radio" name="type:${id}" value="${value}" data-type="${id}"${pick.type === value ? " checked" : ""}><span>${value}</span></label>`).join("")}</div>`
     : "";
   return `<div class="setup-row" style="--hue:var(--hue-${pick.hue})">
-      <p class="setup-row-name"><i class="setup-dot" aria-hidden="true"></i><span>${id}</span></p>
+      <p class="setup-row-name"><i class="subject-dot" aria-hidden="true"></i><span>${id}</span></p>
       ${type}
       <input class="field-control setup-row-teacher" data-teacher="${id}" value="${esc(pick.teacher)}" maxlength="48" placeholder="Lehrkraft" aria-label="Lehrkraft für ${id}" autocomplete="off" spellcheck="false" enterkeyhint="next">
       <input class="field-control setup-row-room" data-room="${id}" value="${esc(pick.room)}" maxlength="12" placeholder="Raum" aria-label="Raum für ${id}" autocomplete="off" spellcheck="false" autocapitalize="characters" enterkeyhint="next">
@@ -460,7 +465,7 @@ const weekCount = (week) => plan.countLessons(data.timetable, [week]);
 
 function cellHtml(dow, block, row, col) {
   const entry = entryAt(model.week, dow, block.n);
-  const when = `${WEEKDAYS[dow]}, ${block.n}. Stunde, ${hm(block.start)}`;
+  const when = `${WEEKDAYS[dow]}, ${block.n}. ${single(sortedBlocks()) ? "Stunde" : "Block"}, ${hm(block.start)}`;
   const focus = model.cursor.row === row && model.cursor.col === col ? 0 : -1;
   const attrs = `type="button" data-cell="${dow}:${block.n}" data-row="${row}" data-col="${col}" tabindex="${focus}"`;
   if (!entry) return `<td><button class="setup-cell is-free" ${attrs} aria-label="${esc(when)}: frei">${icon("plus")}</button></td>`;
