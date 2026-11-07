@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
 import { wholeSchool, fileKeys, fileSubjects, fitSchool } from "./backup.js";
 
 export const FORMAT = 1;

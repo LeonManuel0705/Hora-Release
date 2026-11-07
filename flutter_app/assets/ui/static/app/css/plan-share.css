@@ -1,3 +1,6 @@
+/* SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
+
 .share-sheet {
   width: min(468px, calc(100vw - 32px));
   max-height: min(780px, calc(100dvh - 48px));

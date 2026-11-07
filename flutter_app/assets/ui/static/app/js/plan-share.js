@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
 import { data, root, platform, esc, icon, storage, now, isoDate, slug, LOCAL_KEYS, MAX_BLOCKS, schoolDefaults, applySchoolEdits, abWeeks, BRAND, BRAND_NAMES } from "./core.js";
 import { animates, travels } from "./motion.js";
 import { toast } from "./shell.js";
