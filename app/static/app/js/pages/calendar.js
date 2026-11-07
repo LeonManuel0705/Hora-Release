@@ -1357,8 +1357,8 @@ export function parseEntry(text) {
   const time = parseTime(cut(text, info.phrases.date), info.part);
   let start = time?.start || null;
   let end = time?.end || null;
-  if (!start && info.block) {
-    const block = blockOf(info.block);
+  const block = !start && info.block ? blockOf(info.block) : null;
+  if (block) {
     start = block.start;
     end = block.end;
   }
