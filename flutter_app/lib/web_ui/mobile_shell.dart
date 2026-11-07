@@ -377,10 +377,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     await Future<void>.delayed(const Duration(seconds: 2));
     if (!mounted) return;
     final info = await UpdateService.checkForUpdate();
-    if (info != null && mounted) {
-      UpdateService.sendUpdateNotification(info);
-      UpdateService.showUpdateDialog(context, info);
-    }
+    if (info != null && mounted) UpdateService.showUpdateDialog(context, info);
   }
 
   Future<void> _debugScript(InAppWebViewController controller) async {

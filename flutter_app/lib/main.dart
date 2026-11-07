@@ -282,10 +282,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     if (!mounted) return;
 
     final updateInfo = await UpdateService.checkForUpdate();
-    if (updateInfo != null && mounted) {
-      UpdateService.sendUpdateNotification(updateInfo);
-      UpdateService.showUpdateDialog(context, updateInfo);
-    }
+    if (updateInfo != null && mounted) UpdateService.showUpdateDialog(context, updateInfo);
   }
 
   Future<void> _checkFirstLaunch() async {

@@ -94,6 +94,12 @@ class MainActivity: FlutterActivity() {
                     val bytes = call.argument<ByteArray>("bytes")
                     result.success(if (name == null || type == null || bytes == null) null else saveDownload(name, type, bytes))
                 }
+                "canInstall" -> result.success(canInstallPackages())
+                "allowInstall" -> result.success(openInstallSettings())
+                "install" -> {
+                    val path = call.argument<String>("path")
+                    result.success(path != null && installPackage(path))
+                }
                 else -> result.notImplemented()
             }
         }
@@ -179,6 +185,32 @@ class MainActivity: FlutterActivity() {
         contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) cursor.getString(0) else null
         }
+
+    private fun canInstallPackages(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
+
+    private fun openInstallSettings(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        return try {
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun installPackage(path: String): Boolean {
+        return try {
+            val uri = FileProvider.getUriForFile(this, "$packageName.files", File(path))
+            val intent = Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     private fun networkStatus(): Map<String, Boolean> {
         val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager

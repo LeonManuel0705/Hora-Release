@@ -60,4 +60,10 @@ class AndroidDevice {
     if (name is! String) return null;
     return SavedFile(name: name, folder: saved?['folder'] as String?, shared: saved?['shared'] == true);
   }
+
+  static Future<bool> canInstall() async => await _call<bool>('canInstall') ?? false;
+
+  static Future<bool> allowInstall() async => await _call<bool>('allowInstall') ?? false;
+
+  static Future<bool> install(String path) async => await _call<bool>('install', {'path': path}) ?? false;
 }

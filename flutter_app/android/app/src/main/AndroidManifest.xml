@@ -12,6 +12,7 @@
     <!-- "In der Nähe" in Fahrplan looks up the closest stop, asked for only when tapped. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <application
         android:label="Hora"
