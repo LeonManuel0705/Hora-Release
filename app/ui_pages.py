@@ -650,6 +650,21 @@ def synced_events():
     return jsonify({'success': True, 'events': events or [], 'source': 'mac' if events is not None else None})
 
 
+@bp.route('/api/ui/google/nudge', methods=['POST'])
+def google_nudge():
+    """A page came to the front. The background check follows soon, the answer does not wait for it."""
+    if calendar_cache.connected():
+        calendar_cache.nudge()
+    return jsonify({'success': True, **calendar_cache.page_state()})
+
+
+@bp.route('/api/ui/google/events')
+def google_events():
+    """The events as a page gets them when it is built, for a page that stays open while the copy changes."""
+    today = pinned_day() or date.today()
+    return jsonify({'success': True, 'events': ui_data.events(today), **calendar_cache.page_state()})
+
+
 PLAN_PROBLEMS = {
     'setup': 'IServ ist nicht verbunden.',
     'login': 'Die Anmeldung bei IServ ist abgelaufen. Verbinde IServ in den Einstellungen neu.',

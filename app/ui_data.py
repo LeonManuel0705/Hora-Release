@@ -891,11 +891,21 @@ def build(active, store, now):
         'status': {'iserv': iserv['connected'], 'lastSync': f'{now.hour}:{now.minute:02d}'},
         'mailUnread': 0,
     }
+    data['status'].update(google_status())
     if not school['abWeeks']:
         store.setdefault('app-ab-weeks', False)
     if active in PAGE_BUILDERS:
         data['page'] = PAGE_BUILDERS[active](data, school, settings, today, iserv)
     return data
+
+
+def google_status():
+    """What the pages need to know about Google before they ask: whether it can be connected here, and how the copy stands."""
+    from . import calendar_cache
+    try:
+        return {'google': calendar_cache.page_state()['google']}
+    except Exception:
+        return {'google': None}
 
 
 def page_assistant(data, school, settings, today, iserv):

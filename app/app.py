@@ -7,6 +7,7 @@ from flask_socketio import SocketIO
 from werkzeug.exceptions import HTTPException
 from functools import wraps
 from urllib.parse import urlencode, urlsplit
+import atexit
 import os
 import sys
 import uuid
@@ -4154,6 +4155,13 @@ def get_all_deadlines():
         'count': len(deadlines)
     })
 
+def start_background_jobs():
+    """What only a running app does: keeping the copy of the Google calendar fresh. Importing the app starts nothing."""
+    from . import calendar_cache
+    calendar_cache.start_background()
+    atexit.register(calendar_cache.stop_background)
+
+
 if __name__ == '__main__':
     import socket
 
@@ -4192,4 +4200,5 @@ if __name__ == '__main__':
               or os.environ.get('FLASK_ENV') == 'development')
     from . import local_ai
     local_ai.install_shutdown_hooks()
+    start_background_jobs()
     socketio.run(app, host=host, port=port, debug=False, allow_unsafe_werkzeug=unsafe)

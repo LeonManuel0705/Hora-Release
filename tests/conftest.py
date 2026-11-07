@@ -4,7 +4,9 @@
 import atexit
 import os
 import shutil
+import sys
 import tempfile
+import threading
 from pathlib import Path
 
 import pytest
@@ -17,3 +19,12 @@ atexit.register(shutil.rmtree, _TEST_ROOT, True)
 @pytest.fixture(autouse=True)
 def secret_key(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-crypto-utils")
+
+
+@pytest.fixture(autouse=True)
+def no_background_check_left_running():
+    yield
+    if not any(thread.name == 'calendar-sync' and thread.is_alive() for thread in threading.enumerate()):
+        return
+    sys.modules['app.calendar_cache'].stop_background()
+    pytest.fail('a test left the background calendar check running')

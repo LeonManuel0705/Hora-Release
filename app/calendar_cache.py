@@ -8,6 +8,9 @@ first sends what changed in the app, then asks Google only for what changed
 since the last check. Once a day the whole window is loaded again, because the
 window moves with the date. Events made in the app keep living in the app and
 carry the id of their Google twin, so the twin is never shown a second time.
+
+While the app runs, a background thread checks every few minutes and soon after
+a page comes to the front, so the copy is fresh before anyone opens the calendar.
 """
 
 import copy
@@ -31,6 +34,10 @@ OPEN_END = 'horaOpenEnd'
 BACK_DAYS = 62
 AHEAD_DAYS = 93
 CHECK_SECONDS = 60
+PERIOD_SECONDS = 300
+TICK_SECONDS = 30
+RETRY_SECONDS = 60
+REQUEST_WAIT = 15
 FULL_SECONDS = 20 * 3600
 OVERLAP = timedelta(minutes=2)
 SOURCE = 'dem Google-Kalender'
@@ -48,7 +55,8 @@ _store_lock = threading.Lock()
 _memory_lock = threading.Lock()
 _queue_lock = threading.Lock()
 _memory = {'signature': None, 'cache': None}
-_status = {'checked': None, 'problem': None, 'epoch': 0}
+_status = {'checked': None, 'checked_at': None, 'problem': None, 'epoch': 0, 'round': 0, 'misses': 0}
+_worker = {'thread': None, 'stop': threading.Event(), 'wake': threading.Event(), 'nudged': False}
 
 
 def _google():
@@ -132,7 +140,7 @@ def forget():
                 pass
         with _memory_lock:
             _memory.update(signature=None, cache=None)
-        _status.update(checked=None, problem=None, epoch=_status['epoch'] + 1)
+        _status.update(checked=None, checked_at=None, problem=None, misses=0, epoch=_status['epoch'] + 1)
 
 
 def _status_of(error):
@@ -583,64 +591,83 @@ def _confirm_missing(service, cache, previous, failed, cancelled, seen):
     cache['present'] = present
 
 
-def sync(full=False, today=None):
+def sync(full=False, today=None, wait=None):
+    """One check. With `wait` a page is asking: it waits that long at most for a check that is already running, and takes
+    that one's result instead of asking Google a second time."""
     if not connected():
         return None
-    today = today or date.today()
-    with _sync_lock:
-        epoch = _status['epoch']
-        try:
-            service, email = _google().calendar_service()
-        except Exception:
-            service, email = None, None
-        if service is None:
-            problem = 'login' if not connected() or _google().login_expired(email) else 'offline'
-            _status.update(checked=time.monotonic(), problem=problem)
-            return problem
-        cache = _load()
-        try:
-            known = cache is not None and cache.get('account') == email
-            stale = (
-                not known or cache.get('partial') or cache.get('full_day') != today.isoformat()
-                or time.time() - float(cache.get('full_at') or 0) > FULL_SECONDS
-            )
-            _push(service, cache if known else None, email)
-            changed, cancelled, seen, failed = False, set(), {}, set()
-            if known:
-                try:
-                    changed, cancelled, seen = _pull_changes(service, cache)
-                except Exception as error:
-                    if not (full or stale or _status_of(error) in (400, 410)):
-                        raise
-                    stale = True
-            if full or stale:
-                previous = cache if known else None
-                cache, failed = _pull_full(service, email, today, previous)
-                changed = True
-                _confirm_missing(service, cache, previous, failed, cancelled, seen)
-            with _store_lock:
-                if _status['epoch'] != epoch:
-                    return None
-                _adopt(cache, cancelled, seen)
-                if changed:
-                    _save(cache)
-                else:
-                    with _memory_lock:
-                        if _memory['cache'] is not None:
-                            _memory['cache']['synced_at'] = cache['synced_at']
-            problem = 'offline' if failed else None
-            _status.update(checked=time.monotonic(), problem=problem)
-            return problem
-        except Exception as error:
-            log.warning('Google calendar sync failed: %s', type(error).__name__)
-            problem = 'login' if type(error).__name__ == 'RefreshError' else 'offline'
-            _status.update(checked=time.monotonic(), problem=problem)
-            return problem
+    before = _status['round']
+    if not _sync_lock.acquire(timeout=-1 if wait is None else wait):
+        return _status['problem']
+    try:
+        if wait is not None and not full and _status['round'] != before:
+            return _status['problem']
+        return _sync(full, today or date.today())
+    finally:
+        _sync_lock.release()
 
 
-def _checked_lately():
-    checked = _status['checked']
-    return checked is not None and time.monotonic() - checked < CHECK_SECONDS
+def _settle(problem):
+    misses = _status['misses'] + 1 if problem == 'offline' else 0
+    _status.update(checked=time.monotonic(), checked_at=time.time(), problem=problem, round=_status['round'] + 1, misses=misses)
+    return problem
+
+
+def _sync(full, today):
+    epoch = _status['epoch']
+    try:
+        service, email = _google().calendar_service()
+    except Exception:
+        service, email = None, None
+    if service is None:
+        return _settle('login' if not connected() or _google().login_expired(email) else 'offline')
+    cache = _load()
+    try:
+        known = cache is not None and cache.get('account') == email
+        stale = (
+            not known or cache.get('partial') or cache.get('full_day') != today.isoformat()
+            or time.time() - float(cache.get('full_at') or 0) > FULL_SECONDS
+        )
+        _push(service, cache if known else None, email)
+        changed, cancelled, seen, failed = False, set(), {}, set()
+        if known:
+            try:
+                changed, cancelled, seen = _pull_changes(service, cache)
+            except Exception as error:
+                if not (full or stale or _status_of(error) in (400, 410)):
+                    raise
+                stale = True
+        if full or stale:
+            previous = cache if known else None
+            cache, failed = _pull_full(service, email, today, previous)
+            changed = True
+            _confirm_missing(service, cache, previous, failed, cancelled, seen)
+        with _store_lock:
+            if _status['epoch'] != epoch:
+                return None
+            _adopt(cache, cancelled, seen)
+            if changed:
+                _save(cache)
+            else:
+                with _memory_lock:
+                    if _memory['cache'] is not None:
+                        _memory['cache']['synced_at'] = cache['synced_at']
+        return _settle('offline' if failed else None)
+    except Exception as error:
+        log.warning('Google calendar sync failed: %s', type(error).__name__)
+        if type(error).__name__ != 'RefreshError':
+            return _settle('offline')
+        if email and _google().refused_for_good(error):
+            _google().mark_expired(email)
+        return _settle('login')
+
+
+def _checked_lately(seconds=CHECK_SECONDS):
+    """Both clocks have to agree: the monotonic one stands still while the computer sleeps, the wall clock can be set back."""
+    checked, stamp = _status['checked'], _status['checked_at']
+    if checked is None or stamp is None:
+        return False
+    return time.monotonic() - checked < seconds and 0 <= time.time() - stamp < seconds
 
 
 def refresh(force=False):
@@ -648,11 +675,70 @@ def refresh(force=False):
         return None
     if not force and _load(shared=True) is not None and _checked_lately():
         return _status['problem']
-    return sync(full=force)
+    return sync(full=force, wait=REQUEST_WAIT)
 
 
 def due():
     return connected() and (_load(shared=True) is None or not _checked_lately())
+
+
+def start_background():
+    """Keeps the copy fresh while the app runs. Only the running app starts it, an import never does, so tests run without it."""
+    thread = _worker['thread']
+    if thread is not None and thread.is_alive():
+        return thread
+    _worker['stop'].clear()
+    thread = threading.Thread(target=_background, name='calendar-sync', daemon=True)
+    _worker['thread'] = thread
+    thread.start()
+    return thread
+
+
+def stop_background(timeout=5):
+    thread, _worker['thread'] = _worker['thread'], None
+    _worker['stop'].set()
+    _worker['wake'].set()
+    if thread is not None and thread is not threading.current_thread():
+        thread.join(timeout)
+
+
+def nudge():
+    """A page came to the front. The next check follows at once, but never sooner than CHECK_SECONDS after the last one."""
+    _worker['nudged'] = True
+    _worker['wake'].set()
+
+
+def _background():
+    stop, wake = _worker['stop'], _worker['wake']
+    while not stop.is_set():
+        try:
+            background_round()
+        except Exception as error:
+            log.warning('Background calendar check failed: %s', type(error).__name__)
+        wake.wait(TICK_SECONDS)
+        wake.clear()
+
+
+def _pause():
+    """How long the copy may rest. Without network the next try comes sooner, with a pause that grows up to the period."""
+    if _status['problem'] != 'offline':
+        return PERIOD_SECONDS
+    return min(PERIOD_SECONDS, RETRY_SECONDS * 2 ** max(0, _status['misses'] - 1))
+
+
+def background_round():
+    """One look at the clock, made every TICK_SECONDS. The wall clock decides, because it runs on while the computer sleeps.
+    An expired sign-in is never tried again, it stays expired until the account is connected anew."""
+    nudged, _worker['nudged'] = _worker['nudged'], False
+    if not connected() or _google().login_expired():
+        return False
+    stamp = _status['checked_at']
+    if stamp is not None:
+        rest = min(_pause(), CHECK_SECONDS) if nudged else _pause()
+        if 0 <= time.time() - stamp < rest:
+            return False
+    sync()
+    return True
 
 
 def push_soon():
@@ -706,6 +792,17 @@ def waits_elsewhere(item):
         return account != _google().calendar_account()
     except Exception:
         return False
+
+
+def page_state():
+    """How the copy stands, in the words of the pages: no Google, fine, signed out, or out of reach."""
+    if not connected():
+        return {'google': None, 'stand': None}
+    if _google().login_expired() or _status['problem'] == 'login':
+        google = 'login'
+    else:
+        google = 'offline' if _status['problem'] == 'offline' else 'ok'
+    return {'google': google, 'stand': stand()}
 
 
 def stand():

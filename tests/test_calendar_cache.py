@@ -30,17 +30,19 @@ def google(tmp_path, monkeypatch):
     monkeypatch.setattr(calendar_cache, 'CACHE_FILE', tmp_path / 'google_calendar_cache.json')
     monkeypatch.setattr(calendar_cache, 'QUEUE_FILE', tmp_path / 'google_calendar_queue.json')
     calendar_cache._memory.update(signature=None, cache=None)
-    calendar_cache._status.update(checked=None, problem=None)
+    calendar_cache._status.update(checked=None, checked_at=None, problem=None, misses=0)
     monkeypatch.setattr(calendar_cache, 'datetime', Clock)
     Clock.ahead = timedelta()
     fake = FakeGoogle()
     monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {fake.primary: {'token': 'x'}})
+    monkeypatch.setattr(google_oauth, 'save_tokens', lambda tokens: True)
     monkeypatch.setattr(google_oauth, 'calendar_service', lambda account_email=None: (fake, fake.primary))
     monkeypatch.setattr(calendar_cache, '_spawn', lambda run: run())
     yield fake
     ui_data._cache.clear()
     calendar_cache._memory.update(signature=None, cache=None)
-    calendar_cache._status.update(checked=None, problem=None)
+    calendar_cache._status.update(checked=None, checked_at=None, problem=None, misses=0)
+    calendar_cache._worker.update(nudged=False)
 
 
 @pytest.fixture
