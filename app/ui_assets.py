@@ -28,7 +28,7 @@ def ui_static_files():
 def asset_digest():
     digest = hashlib.sha1()
     for path in ui_static_files():
-        digest.update(str(path.relative_to(STATIC_ROOT)).encode('utf-8'))
+        digest.update(path.relative_to(STATIC_ROOT).as_posix().encode('utf-8'))
         digest.update(path.read_bytes())
     return digest.hexdigest()[:10]
 
