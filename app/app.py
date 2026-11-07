@@ -61,24 +61,33 @@ try:
 except ImportError:
     pass
 
+BUILD_INFO = Path(__file__).resolve().parent.parent / 'flutter_app' / 'lib' / 'build_info.dart'
+
+
+# An installed app runs this backend from a copy that holds only app/, so its shell hands over what it was built as.
 def _read_build_info():
+    version = (env('APP_VERSION') or '').strip()
+    if version:
+        build = (env('APP_BUILD') or '').strip()
+        return f"{version} (Build {build})" if build.isdigit() else version
     try:
-        build_info_path = Path(__file__).parent.parent / 'flutter_app' / 'lib' / 'build_info.dart'
-        content = build_info_path.read_text()
+        content = BUILD_INFO.read_text()
         version_name = re.search(r"versionName = '(.+?)'", content)
         build_number = re.search(r"buildNumber = (\d+)", content)
         if version_name and build_number:
             return f"{version_name.group(1)} (Build {build_number.group(1)})"
     except Exception:
         pass
-    return brand.NAME
+    return ''
 
 _cached_version = None
 _cached_version_mtime = 0
 
 def _get_app_version():
     global _cached_version, _cached_version_mtime
-    build_info_path = Path(__file__).parent.parent / 'flutter_app' / 'lib' / 'build_info.dart'
+    if env('APP_VERSION'):
+        return _read_build_info()
+    build_info_path = BUILD_INFO
     try:
         mtime = build_info_path.stat().st_mtime
         if mtime != _cached_version_mtime:
@@ -367,8 +376,9 @@ def _socketio_authorize(auth=None):
 
 @app.route('/')
 def landing():
-
-    return redirect(url_for('hub_home'))
+    target = url_for('ui.ui_page_home')
+    query = request.query_string.decode('latin-1')
+    return redirect(f'{target}?{query}' if query else target)
 
 @app.route('/welcome')
 def welcome_page():
@@ -440,10 +450,8 @@ def _assistant_needs_install():
 
 @app.route('/hub/assistant')
 def hub_assistant():
-    if _assistant_needs_install():
-        from .ui_pages import render_page
-        return render_page('assistant')
-    return render_template('hub/assistant.html', active_tab='assistant')
+    from .ui_pages import render_page
+    return render_page('assistant', None if _assistant_needs_install() else 'app/chat.html')
 
 @app.route('/hub/klassisch/settings')
 def hub_settings():
@@ -461,7 +469,7 @@ def hub_privacy():
 def hub_email():
     return render_template('hub/email.html', active_tab='email')
 
-@app.route('/hub/bookmarks')
+@app.route('/hub/klassisch/bookmarks')
 def hub_bookmarks():
     return render_template('hub/bookmarks.html', active_tab='bookmarks')
 
@@ -488,6 +496,15 @@ def iserv_ping():
     if status.get('connected') or status.get('has_credentials'):
         return '', 204
     return '', 503
+
+
+# Loading the IServ module decrypts the saved login and signs in, so the classic pages only look whether a login is kept.
+def iserv_linked():
+    service = getattr(sys.modules.get(f'{__package__}.iserv_service'), 'iserv_service', None)
+    return bool(getattr(service, 'connected', False)) or (DATA_DIR / 'iserv_credentials.json').exists()
+
+
+app.jinja_env.globals['iserv_linked'] = iserv_linked
 
 @app.route('/api/hub/tasks', methods=['GET'])
 def get_hub_tasks_api():
@@ -673,30 +690,78 @@ def get_bookmarks():
     bookmarks = db.get_hub_bookmarks(category=category)
     return jsonify({'bookmarks': bookmarks})
 
+BOOKMARK_CATEGORIES = {'Work', 'Personal', 'Dev', 'Other'}
+
+
+def _bookmark_fields(data, creating):
+    fields = {}
+    if creating or 'title' in data:
+        fields['title'] = str(data.get('title') or '').strip()[:200]
+        if not fields['title']:
+            raise ValueError('Titel und Adresse fehlen')
+    if creating or 'url' in data:
+        url = str(data.get('url') or '').strip()[:2000]
+        if not url:
+            raise ValueError('Titel und Adresse fehlen')
+        try:
+            parts = urlsplit(url)
+            web = parts.scheme in ('http', 'https') and bool(parts.hostname)
+        except ValueError:
+            web = False
+        if not web:
+            raise ValueError('Das ist keine Webadresse')
+        fields['url'] = url
+    if creating or 'category' in data:
+        fields['category'] = data.get('category') if data.get('category') in BOOKMARK_CATEGORIES else 'Other'
+    if 'favicon' in data:
+        fields['favicon'] = data['favicon'] if isinstance(data['favicon'], str) else None
+    return fields
+
+
+# Undo hands back what the delete answered, so the bookmark returns with its id, place and icon.
+def _restored(earlier):
+    if not isinstance(earlier, dict) or not isinstance(earlier.get('id'), int) or earlier['id'] <= 0:
+        return None
+    created_at = str(earlier.get('created_at') or '')[:40]
+    try:
+        datetime.fromisoformat(created_at)
+    except ValueError:
+        return None
+    favicon = earlier.get('favicon')
+    return {'id': earlier['id'], 'created_at': created_at, 'favicon': favicon if isinstance(favicon, str) else None}
+
+
 @app.route('/api/hub/bookmarks', methods=['POST'])
 def create_bookmark():
-    data = request.get_json()
-    if not data or not data.get('title') or not data.get('url'):
-        return jsonify({'success': False, 'error': 'Title and URL required'}), 400
-    bookmark_id = db.create_hub_bookmark(
-        title=data['title'],
-        url=data['url'],
-        category=data.get('category', 'Other'),
-        favicon=data.get('favicon')
-    )
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'success': False, 'error': 'JSON erwartet'}), 400
+    try:
+        fields = _bookmark_fields(data, creating=True)
+    except ValueError as problem:
+        return jsonify({'success': False, 'error': str(problem)}), 400
+    earlier = _restored(data.get('restore'))
+    if earlier:
+        bookmark_id = db.restore_hub_bookmark(earlier['id'], fields['title'], fields['url'], fields['category'], earlier['favicon'], earlier['created_at'])
+    else:
+        bookmark_id = db.create_hub_bookmark(**fields)
     bookmark = db.get_hub_bookmark(bookmark_id)
     site_icons.retry(bookmark['url'])
     return jsonify({'success': True, 'bookmark': bookmark})
 
 @app.route('/api/hub/bookmarks/<int:bookmark_id>', methods=['PUT'])
 def update_bookmark(bookmark_id):
-    data = request.get_json()
-    if not data:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data:
         return jsonify({'success': False, 'error': 'No data provided'}), 400
     bookmark = db.get_hub_bookmark(bookmark_id)
     if not bookmark:
         return jsonify({'success': False, 'error': 'Bookmark not found'}), 404
-    db.update_hub_bookmark(bookmark_id, **{k: data[k] for k in ('title', 'url', 'category', 'favicon') if k in data})
+    try:
+        fields = _bookmark_fields(data, creating=False)
+    except ValueError as problem:
+        return jsonify({'success': False, 'error': str(problem)}), 400
+    db.update_hub_bookmark(bookmark_id, **fields)
     updated = db.get_hub_bookmark(bookmark_id)
     _forget_unused_icon(bookmark['url'])
     site_icons.retry(updated['url'])
@@ -708,7 +773,7 @@ def delete_bookmark(bookmark_id):
     db.delete_hub_bookmark(bookmark_id)
     if bookmark:
         _forget_unused_icon(bookmark['url'])
-    return jsonify({'success': True})
+    return jsonify({'success': True, 'bookmark': bookmark})
 
 
 def _forget_unused_icon(url):
@@ -725,7 +790,7 @@ def bookmark_icon(bookmark_id):
     except OSError:
         body = None
     if body is None:
-        return _no_store(app.response_class(status=404))
+        return _no_store(app.response_class(status=204 if bookmark else 404))
     response = app.response_class(body, mimetype=icon.kind)
     response.add_etag()
     response.headers['Cache-Control'] = 'private, max-age=86400'

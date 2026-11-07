@@ -24,6 +24,7 @@ PAGES = {
     'school': 'app/school.html',
     'vbb': 'app/transit.html',
     'email': 'app/email.html',
+    'bookmarks': 'app/bookmarks.html',
     'settings': 'app/settings.html',
 }
 

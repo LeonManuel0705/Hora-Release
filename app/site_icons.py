@@ -550,6 +550,19 @@ def icon_for(url, wait=None):
     return Icon(stored[0], stored[1]) if stored and stored[1] else None
 
 
+def known(url):
+    """Whether an icon is kept for the page, the page was asked lately and had none, or nothing is known yet; without asking anyone."""
+    key = _key(url)
+    if key is None:
+        return False
+    stored = _stored(key)
+    if stored is None:
+        return None
+    if stored[1]:
+        return True
+    return False if stored[2] < RETRY else None
+
+
 def content(icon):
     """What is sent for an icon: a vector in its colours for a light surface, anything else as it was kept."""
     body = icon.path.read_bytes()

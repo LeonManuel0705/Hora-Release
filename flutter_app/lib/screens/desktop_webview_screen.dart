@@ -18,6 +18,23 @@ import '../services/update_service.dart';
 import '../theme.dart';
 import '../widgets/app_background.dart';
 
+const feedbackAddress = 'horaapp.team@gmail.com';
+
+/// The page may hand over a feedback draft to the published address with a subject and a body, and nothing else.
+Uri? mailDraft(Object? value) {
+  if (value is! String || value.length > 8000) return null;
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.scheme != 'mailto' || uri.hasFragment) return null;
+  try {
+    if (Uri.decodeComponent(uri.path).toLowerCase() != feedbackAddress) return null;
+    return uri.queryParametersAll.keys.every((key) => key == 'subject' || key == 'body') ? uri : null;
+  } on ArgumentError {
+    return null;
+  } on FormatException {
+    return null;
+  }
+}
+
 class DesktopWebViewScreen extends StatefulWidget {
   const DesktopWebViewScreen({super.key});
 
@@ -74,6 +91,7 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
   window.hubShell = Object.freeze({
     nativeNotifications: true,
     openInBrowser: function () { return bridge("openInBrowser", true); },
+    openMail: function (url) { return bridge("openMail", String(url || "")); },
     saveFile: saveFile${Platform.isMacOS ? _macShellScript : ''}
   });
 })();
@@ -485,6 +503,13 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
             controller.addJavaScriptHandler(
               handlerName: 'openInBrowser',
               callback: (args) => _openHubInBrowser(),
+            );
+            controller.addJavaScriptHandler(
+              handlerName: 'openMail',
+              callback: (args) async {
+                final draft = mailDraft(args.isEmpty ? null : args.first);
+                return draft != null && await launchUrl(draft, mode: LaunchMode.externalApplication);
+              },
             );
             controller.addJavaScriptHandler(
               handlerName: 'saveFile',

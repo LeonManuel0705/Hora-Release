@@ -7,14 +7,12 @@ const $ = (id) => document.getElementById(id);
 
 const pageNames = {
   home: "Übersicht", tasks: "Aufgaben", calendar: "Kalender", school: "Schule", vbb: "Fahrplan", email: "E-Mail",
-  assistant: "Assistent", pomodoro: "Pomodoro", training: "Training",
-  bookmarks: "Lesezeichen", review: "Review", settings: "Einstellungen",
+  assistant: "Assistent", pomodoro: "Pomodoro", bookmarks: "Lesezeichen", settings: "Einstellungen",
 };
 
 const pageIcons = {
   home: "house", tasks: "list-checks", calendar: "calendar-days", school: "graduation-cap", vbb: "train-front", email: "mail",
-  assistant: "message-circle", pomodoro: "timer", training: "dumbbell",
-  bookmarks: "bookmark", review: "activity", settings: "settings",
+  assistant: "message-circle", pomodoro: "timer", bookmarks: "bookmark", settings: "settings",
 };
 
 const keyGlyphs = {
@@ -155,7 +153,7 @@ export function toast(message, options = {}) {
   return { node, dismiss };
 }
 
-const ROUTES = { home: "/hub", tasks: "/hub/tasks", calendar: "/hub/calendar", school: "/hub/school", vbb: "/hub/vbb", email: "/hub/email", settings: "/hub/settings" };
+const ROUTES = { home: "/hub", tasks: "/hub/tasks", calendar: "/hub/calendar", school: "/hub/school", vbb: "/hub/vbb", email: "/hub/email", bookmarks: "/hub/bookmarks", settings: "/hub/settings" };
 const CARRIED = ["variante", "theme", "datum", "t", "clean"];
 
 export function pageUrl(page, href = ROUTES[page]) {
@@ -814,6 +812,7 @@ function baseCommands() {
     { group: "Aktionen", label: "Wetter und Heimweg", icon: "cloud", run: () => openWeather(document.querySelector("[data-open-weather]")) },
     { group: "Aktionen", label: theme === "dark" ? "Helle Darstellung" : "Dunkle Darstellung", icon: theme === "dark" ? "sun" : "moon", run: () => setTheme(theme === "dark" ? "light" : "dark") },
     { group: "Aktionen", label: "Tastaturkürzel", icon: "keyboard", hint: single ? "?" : "", run: () => $("shortcuts").showModal() },
+    { group: "Aktionen", label: "Rückmeldung geben", icon: "send", keywords: "Fehler melden Feedback Kontakt", run: () => window.dispatchEvent(new CustomEvent("app:feedback")) },
   ];
   Object.entries(pageNames).forEach(([key, label]) => {
     if (key === "home") return;

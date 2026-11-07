@@ -1,0 +1,59 @@
+{# SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 #}
+{% extends "app/base.html" %}
+
+{% block title %}Assistent · {{ brand_name }}{% endblock %}
+
+{% block page_css %}<link rel="stylesheet" href="/static/app/css/pages/chat.css?v={{ asset_version }}">{% endblock %}
+
+{% block content %}
+<div class="page chat-page" id="chatPage" data-page-module="chat">
+    <header class="head">
+        <div class="head-row">
+            <div class="head-title">
+                <h1 class="head-date">Assistent</h1>
+                <span class="head-week" id="assistantStatus">Ohne KI</span>
+            </div>
+            <div class="head-actions">
+                <a class="btn btn-quiet" id="assistantInstall" href="/hub/assistant?installieren=1" hidden><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Sprachmodell installieren</a>
+                <button class="btn btn-quiet" type="button" id="chatClear"><svg class="icon" aria-hidden="true"><use href="#i-trash-2"/></svg><span>Chat leeren</span></button>
+            </div>
+        </div>
+    </header>
+
+    <section class="chat-card" aria-label="Unterhaltung">
+        <div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-label="Verlauf">
+            <div class="message assistant">
+                <div class="message-avatar"><svg class="icon" aria-hidden="true"><use href="#i-message-circle"/></svg></div>
+                <div class="message-content">
+                    <p>Hallo! Ich bin dein {{ brand_name }} Assistent. Ich kann dir bei Fragen zu deinem Stundenplan, Hausaufgaben, Klausuren und mehr helfen.</p>
+                    <p class="message-hint">Frag mich zum Beispiel:</p>
+                    <ul class="suggestion-list">
+                        <li><button type="button" class="pill" data-suggest="Was habe ich heute?">Was habe ich heute?</button></li>
+                        <li><button type="button" class="pill" data-suggest="Löse x² - 5x + 6 = 0">Mathe lösen</button></li>
+                        <li><button type="button" class="pill" data-suggest="Schreibe eine Erörterung über Klimawandel">Essay schreiben</button></li>
+                        <li><button type="button" class="pill" data-suggest="Fasse den Text zusammen: ...">Zusammenfassen</button></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <form class="chat-form" id="chatForm" autocomplete="off">
+            <input class="chat-input" type="text" id="chatInput" placeholder="Schreibe eine Nachricht …" aria-label="Nachricht an den Assistenten" enterkeyhint="send">
+            <button type="submit" class="chat-send" aria-label="Senden"><svg class="icon" aria-hidden="true"><use href="#i-send"/></svg></button>
+        </form>
+    </section>
+
+    <div class="quick-actions" role="group" aria-label="Werkzeuge">
+        <button class="quick-action" type="button" data-suggest="Zusammenfassung des Tages"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>Tagesübersicht</button>
+        <button class="quick-action" type="button" data-tool="math"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Mathe-Hilfe</button>
+        <button class="quick-action" type="button" data-tool="essay"><svg class="icon" aria-hidden="true"><use href="#i-file-text"/></svg>Essay-Hilfe</button>
+        <button class="quick-action" type="button" data-tool="summary"><svg class="icon" aria-hidden="true"><use href="#i-list-checks"/></svg>Zusammenfassen</button>
+    </div>
+</div>
+{% include "app/_chat_tools.html" %}
+{% endblock %}
+
+{% block data %}
+<script type="application/json" id="appData">{{ data_json | safe }}</script>
+{% endblock %}

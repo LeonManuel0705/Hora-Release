@@ -161,6 +161,7 @@ class UiBridge {
       json: json,
       body: body,
     ));
+    if (reply.status == 204) return const UiBridgeReply(204, headers: {'Cache-Control': 'no-store'});
     final bytes = reply.bytes;
     if (bytes != null) {
       return UiBridgeReply(reply.status, headers: {

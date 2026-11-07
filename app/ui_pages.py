@@ -33,6 +33,7 @@ PAGES = {
     'vbb': ('/hub/vbb', 'app/transit.html'),
     'email': ('/hub/email', 'app/email.html'),
     'pomodoro': ('/hub/pomodoro', 'app/pomodoro.html'),
+    'bookmarks': ('/hub/bookmarks', 'app/bookmarks.html'),
     'settings': ('/hub/settings', 'app/settings.html'),
 }
 
@@ -70,8 +71,8 @@ GATED_PAGES = {
 }
 
 
-def render_page(active):
-    template = PAGES[active][1] if active in PAGES else GATED_PAGES[active]
+def render_page(active, template=None):
+    template = template or (PAGES[active][1] if active in PAGES else GATED_PAGES[active])
     g.strict_csp = True
     store = db.get_ui_store()
     day = pinned_day()

@@ -110,6 +110,7 @@ function prepareHub() {
     startAtLogin: () => ipcRenderer.invoke('hub:login-item'),
     setStartAtLogin: (on) => ipcRenderer.invoke('hub:login-item', on === true),
     openLoginItems: () => ipcRenderer.invoke('hub:login-item-settings'),
+    openMail: (url) => ipcRenderer.invoke('hub:open-mail', String(url || '')),
   });
   watchTheme();
   answerQuickNote();

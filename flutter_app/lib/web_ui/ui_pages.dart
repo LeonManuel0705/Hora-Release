@@ -20,6 +20,7 @@ const uiPageRoutes = {
   '/hub/school': 'school',
   '/hub/vbb': 'vbb',
   '/hub/email': 'email',
+  '/hub/bookmarks': 'bookmarks',
   '/hub/settings': 'settings',
 };
 
@@ -105,7 +106,7 @@ class UiPages {
       '__APP_SCHEME__': theme == 'dark' ? 'dark' : 'light',
       '__APP_MOTION__': store['app-motion'] == 'minimal' ? 'minimal' : 'calm',
       '__APP_TOUR__': tour ? '1' : '0',
-      '__APP_VERSION__': _escape(BuildInfo.version),
+      '__APP_VERSION__': _escape('${BuildInfo.versionName} (Build ${BuildInfo.buildNumber})'),
       '__APP_DATA__': scriptJson(data),
       '__APP_STORE__': scriptJson(store),
     };

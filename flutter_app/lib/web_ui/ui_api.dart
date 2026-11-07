@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+import '../services/site_icon_rules.dart' show imageKind;
+import '../services/site_icons.dart';
 import 'ui_data.dart';
 import 'ui_db.dart';
 import 'ui_transit.dart';
@@ -110,6 +112,7 @@ class UiApi {
       if (path.length == 3 && path[0] == 'ui' && path[1] == 'weather' && path[2] == 'place' && method == 'PUT') {
         return await _weatherPlace(request);
       }
+      if (path.length >= 2 && path[0] == 'hub' && path[1] == 'bookmarks') return await _bookmarks(db, request);
       if (path.length == 2 && path[0] == 'hub' && path[1] == 'tour') return await _tour(prefs, request);
       if (path.length == 2 && path[0] == 'hub' && path[1] == 'bundesland' && method == 'POST') return await _state(request);
       if (path.length >= 2 && path[0] == 'ui' && path[1] == 'vplan') return await _plan(request);
@@ -565,6 +568,72 @@ class UiApi {
     });
     _changed('notes');
     return UiReply.ok({'note': {'id': id}});
+  }
+
+  static const _bookmarkCategories = {'Work', 'Personal', 'Dev', 'Other'};
+  static const _iconTypes = {'png': 'image/png', 'ico': 'image/x-icon', 'jpg': 'image/jpeg', 'gif': 'image/gif', 'webp': 'image/webp'};
+
+  Map<String, Object?> _bookmarkFields(UiRequest request) {
+    final payload = _needPayload(request);
+    final title = text(payload['title'], 200);
+    final url = text(payload['url'], 2000);
+    final address = Uri.tryParse(url);
+    if (title.isEmpty || url.isEmpty) throw const _Invalid('Titel und Adresse fehlen');
+    if (address == null || !const {'http', 'https'}.contains(address.scheme) || address.host.isEmpty) {
+      throw const _Invalid('Das ist keine Webadresse');
+    }
+    final category = '${payload['category'] ?? ''}';
+    return {'title': title, 'url': url, 'category': _bookmarkCategories.contains(category) ? category : 'Other'};
+  }
+
+  Future<Map<String, Object?>?> _bookmark(Database db, String id) async {
+    final rows = await db.query('bookmarks', where: 'id = ?', whereArgs: [id], limit: 1);
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<Iterable<String>> _bookmarkUrls(Database db) async => [for (final row in await db.query('bookmarks', columns: ['url'])) text(row['url'])];
+
+  Future<UiReply> _bookmarks(Database db, UiRequest request) async {
+    final path = request.segments;
+    final method = request.method;
+    if (path.length == 2 && method == 'GET') {
+      return UiReply(200, {'bookmarks': [for (final row in await db.query('bookmarks', orderBy: 'created_at DESC')) UiData.bookmarkView(row)]});
+    }
+    if (path.length == 2 && method == 'POST') {
+      final fields = _bookmarkFields(request);
+      final now = DateTime.now().toIso8601String();
+      final earlier = request.payload?['restore'];
+      final kept = earlier is Map ? earlier : const <Object?, Object?>{};
+      final earlierId = '${kept['id'] ?? ''}';
+      final earlierAt = text(kept['created_at'], 40);
+      final restoring = RegExp(r'^[A-Za-z0-9-]{1,64}$').hasMatch(earlierId) && DateTime.tryParse(earlierAt) != null && await _bookmark(db, earlierId) == null;
+      final id = restoring ? earlierId : _uuid.v4();
+      final favicon = restoring && kept['favicon'] is String ? kept['favicon'] : null;
+      await db.insert('bookmarks', {'id': id, ...fields, 'favicon': favicon, 'created_at': restoring ? earlierAt : now, 'updated_at': now});
+      return UiReply.ok({'bookmark': UiData.bookmarkView((await _bookmark(db, id))!)});
+    }
+    if (path.length == 4 && path[3] == 'icon' && method == 'GET') {
+      final row = await _bookmark(db, path[2]);
+      final bytes = row == null ? null : await siteIcon(text(row['url']));
+      final type = bytes == null ? null : _iconTypes[imageKind(bytes)];
+      if (row == null) return const UiReply(404, null);
+      if (bytes == null || type == null) return const UiReply(204, null);
+      return UiReply.file(bytes, type, 'icon');
+    }
+    if (path.length != 3) return UiReply.error('Nicht gefunden', 404);
+    final row = await _bookmark(db, path[2]);
+    if (method == 'DELETE') {
+      if (row == null) return UiReply.ok();
+      await db.delete('bookmarks', where: 'id = ?', whereArgs: [path[2]]);
+      await forgetSiteIcon(text(row['url']), await _bookmarkUrls(db));
+      return UiReply.ok({'bookmark': row});
+    }
+    if (method != 'PUT') return UiReply.error('Nicht gefunden', 404);
+    if (row == null) return UiReply.error('Lesezeichen nicht gefunden', 404);
+    final fields = _bookmarkFields(request);
+    await db.update('bookmarks', {...fields, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [path[2]]);
+    if (text(row['url']) != fields['url']) await forgetSiteIcon(text(row['url']), await _bookmarkUrls(db));
+    return UiReply.ok({'bookmark': UiData.bookmarkView((await _bookmark(db, path[2]))!)});
   }
 
   Future<UiReply> _place(Database db, UiRequest request, String key) async {

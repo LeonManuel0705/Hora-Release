@@ -95,6 +95,16 @@ class SiteIconStore {
     return now?.kind == null ? null : _bytes(key, now!);
   }
 
+  /// Whether an icon is kept for the page, the page was asked lately and had none, or nothing is known yet; without asking anyone.
+  Future<bool?> known(String url) async {
+    final key = keyOf(url);
+    if (key == null) return false;
+    final kept = await _kept(key);
+    if (kept == null) return null;
+    if (kept.kind != null) return true;
+    return kept.age < retryAfter ? false : null;
+  }
+
   /// Lets the next request ask a site again that had no icon.
   Future<void> retry(String url) async {
     final key = keyOf(url);

@@ -262,6 +262,7 @@ class UiServer {
       body: body,
     ));
     response.statusCode = reply.status;
+    if (reply.status == HttpStatus.noContent) return;
     final bytes = reply.bytes;
     if (bytes != null) {
       response.headers

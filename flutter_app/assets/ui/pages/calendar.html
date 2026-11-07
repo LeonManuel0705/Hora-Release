@@ -43,14 +43,24 @@
                     if (!root.dataset.navVt) settle();
                 }, 1200);
             });
+            // A page outside this interface has no opt-in, so the browser would abort the transition there and report it as an error.
+            var ownPages = /^\/hub(?:\/(?:tasks|calendar|school|vbb|email|pomodoro|bookmarks|settings|assistant))?\/?$/;
+            addEventListener("pageswap", function (event) {
+                var transition = event.viewTransition;
+                var entry = event.activation && event.activation.entry;
+                if (!transition || !entry || !entry.url || ownPages.test(new URL(entry.url).pathname)) return;
+                transition.ready.catch(function () {});
+                transition.skipTransition();
+            });
         })();
     </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
     <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/static/app/css/tokens.css?v=e35b711512">
-    <link rel="stylesheet" href="/static/app/css/app.css?v=e35b711512">
-    <link rel="stylesheet" href="/static/css/tour.css?v=e35b711512">
-    <link rel="stylesheet" href="/static/app/css/pages/calendar.css?v=e35b711512">
+    <link rel="stylesheet" href="/static/app/css/tokens.css?v=b62277033d">
+    <link rel="stylesheet" href="/static/app/css/app.css?v=b62277033d">
+    <link rel="stylesheet" href="/static/app/css/dialog.css?v=b62277033d">
+    <link rel="stylesheet" href="/static/css/tour.css?v=b62277033d">
+    <link rel="stylesheet" href="/static/app/css/pages/calendar.css?v=b62277033d">
     <script nonce="__APP_NONCE__">
         (function () {
             var root = document.documentElement;
@@ -65,9 +75,9 @@
             if (root.dataset.themeMode === "auto") root.dataset.theme = system.matches ? "dark" : "light";
         })();
     </script>
-    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=e35b711512"></script>
+    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=b62277033d"></script>
 </head>
-<body data-tour-auto="__APP_TOUR__" data-server-behind="0">
+<body data-tour-auto="__APP_TOUR__" data-server-behind="0" data-app-version="__APP_VERSION__">
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
 <!-- Lucide icons (lucide-static 0.544.0), ISC License, Copyright (c) Lucide Contributors -->
 <symbol id="i-house" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></symbol>
@@ -267,19 +277,9 @@
                         <span>Pomodoro</span>
                     </a>
                     
-                    <a class="nav-item" href="/hub/training" data-page="training">
-                        <svg class="icon"><use href="#i-dumbbell"/></svg>
-                        <span>Training</span>
-                    </a>
-                    
                     <a class="nav-item" href="/hub/bookmarks" data-page="bookmarks">
                         <svg class="icon"><use href="#i-bookmark"/></svg>
                         <span>Lesezeichen</span>
-                    </a>
-                    
-                    <a class="nav-item" href="/hub/review" data-page="review">
-                        <svg class="icon"><use href="#i-activity"/></svg>
-                        <span>Review</span>
                     </a>
                     
                 </div>
@@ -403,16 +403,8 @@
             <svg class="icon"><use href="#i-timer"/></svg><span>Pomodoro</span>
         </a>
         
-        <a class="more-tile" href="/hub/training" data-page="training">
-            <svg class="icon"><use href="#i-dumbbell"/></svg><span>Training</span>
-        </a>
-        
         <a class="more-tile" href="/hub/bookmarks" data-page="bookmarks">
             <svg class="icon"><use href="#i-bookmark"/></svg><span>Lesezeichen</span>
-        </a>
-        
-        <a class="more-tile" href="/hub/review" data-page="review">
-            <svg class="icon"><use href="#i-activity"/></svg><span>Review</span>
         </a>
         
         <a class="more-tile" href="/hub/settings" data-page="settings">
@@ -424,6 +416,9 @@
         <p class="sync-line" data-sync-mirror><svg class="icon"><use href="#i-refresh-cw"/></svg><span>IServ abgeglichen</span></p>
         <button class="text-button" type="button" data-notify>
             <svg class="icon"><use href="#i-bell"/></svg><span data-notify-text>Erinnerungen aktivieren</span>
+        </button>
+        <button class="text-button" type="button" data-feedback>
+            <svg class="icon"><use href="#i-send"/></svg><span>Rückmeldung geben</span>
         </button>
     </div>
 </div>
@@ -514,8 +509,8 @@
 <div class="tooltip" id="tooltip" role="tooltip"></div>
 
 <script type="application/json" id="appStore">__APP_STORE__</script>
-<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=e35b711512" defer></script>
-<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=e35b711512" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=b62277033d" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=b62277033d" defer></script>
 
 
 <script type="application/json" id="appData">__APP_DATA__</script>

@@ -13,7 +13,6 @@ const AppConnection = {
     SESSION_KEY: 'app_session_started',
     CACHE_DURATION: 60000,
     PING_TIMEOUT: 500,
-    INTERNET_TIMEOUT: 1500,
 
     async init() {
 
@@ -105,26 +104,18 @@ const AppConnection = {
         return this.state;
     },
 
+    // The pages may only talk to their own server, and everything that needs the internet goes through it,
+    // so the browser's own view of the network is the whole answer.
     async checkInternet() {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), this.INTERNET_TIMEOUT);
+        return navigator.onLine;
+    },
 
-        try {
-            await fetch('https://connectivitycheck.gstatic.com/generate_204', {
-                method: 'HEAD',
-                mode: 'no-cors',
-                signal: controller.signal,
-                cache: 'no-store'
-            });
-            clearTimeout(timeoutId);
-            return true;
-        } catch {
-            clearTimeout(timeoutId);
-            return false;
-        }
+    iservLinked() {
+        return document.documentElement.dataset.iserv === 'linked';
     },
 
     async checkIServ() {
+        if (!this.iservLinked()) return false;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.PING_TIMEOUT);
 

@@ -907,6 +907,14 @@ def page_pomodoro(data, school, settings, today, iserv):
     return {'stats': {name: db.get_pomodoro_stats(name) for name in ('today', 'week', 'month')}}
 
 
+def page_bookmarks(data, school, settings, today, iserv):
+    from . import site_icons
+    links = [{'id': str(row['id']), 'title': row.get('title') or '', 'url': row.get('url') or '', 'category': row.get('category') or 'Other',
+              'icon': site_icons.known(row.get('url') or '')}
+             for row in db.get_hub_bookmarks()]
+    return {'bookmarks': links}
+
+
 def page_calendar(data, school, settings, today, iserv):
     from . import calendar_cache
     code = settings.get('bundesland') or ''
@@ -1206,6 +1214,7 @@ PAGE_BUILDERS = {
     'settings': page_settings,
     'assistant': page_assistant,
     'pomodoro': page_pomodoro,
+    'bookmarks': page_bookmarks,
 }
 
 

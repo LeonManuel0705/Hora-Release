@@ -2136,6 +2136,19 @@ def create_hub_bookmark(title: str, url: str, category: str = 'Other', favicon: 
     conn.close()
     return bookmark_id
 
+def restore_hub_bookmark(bookmark_id: int, title: str, url: str, category: str, favicon: str, created_at: str) -> int:
+    if get_hub_bookmark(bookmark_id):
+        return create_hub_bookmark(title, url, category, favicon)
+    conn = get_connection()
+    cursor = conn.cursor()
+    _execute(cursor, '''
+        INSERT INTO hub_bookmarks (id, title, url, category, favicon, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (bookmark_id, title, url, category, favicon, created_at, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+    return bookmark_id
+
 def update_hub_bookmark(bookmark_id: int, **kwargs) -> bool:
     conn = get_connection()
     cursor = conn.cursor()

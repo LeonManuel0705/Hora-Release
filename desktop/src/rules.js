@@ -51,4 +51,19 @@ function browserLoginUrl(hubUrl, code) {
   return url.href;
 }
 
-module.exports = { browserLoginUrl, isHubOrigin, isHubUrl, isNewerVersion, parseUrl, trustedUpdateUrl };
+const FEEDBACK_ADDRESS = 'horaapp.team@gmail.com';
+const DRAFT_FIELDS = new Set(['subject', 'body']);
+
+function isMailDraft(value) {
+  if (typeof value !== 'string' || value.length > 8000) return false;
+  const url = parseUrl(value);
+  if (!url || url.protocol !== 'mailto:' || url.hash) return false;
+  try {
+    if (decodeURIComponent(url.pathname).toLowerCase() !== FEEDBACK_ADDRESS) return false;
+  } catch {
+    return false;
+  }
+  return [...url.searchParams.keys()].every((key) => DRAFT_FIELDS.has(key));
+}
+
+module.exports = { FEEDBACK_ADDRESS, browserLoginUrl, isHubOrigin, isHubUrl, isMailDraft, isNewerVersion, parseUrl, trustedUpdateUrl };

@@ -11,7 +11,7 @@ const { log, openLogs, backendLogFile, logDirectory, shellLogFile } = require('.
 const { chooseUserData } = require('./src/profile');
 const store = require('./src/store');
 const { Backend, proveBackend, requestLoginCode } = require('./src/backend');
-const { browserLoginUrl } = require('./src/rules');
+const { browserLoginUrl, isMailDraft } = require('./src/rules');
 const { hardenContents, hardenSession, isHubUrl, openExternally } = require('./src/security');
 const { createLoginItem, startedHidden } = require('./src/login-item');
 const { canvasColor, createMainWindow, revealWindow } = require('./src/window');
@@ -254,6 +254,8 @@ function registerHubBridge() {
   });
 
   ipcMain.handle('hub:login-item-settings', (event) => (fromHub(event) ? loginItem.openSettings() : false));
+
+  ipcMain.handle('hub:open-mail', (event, url) => fromHub(event) && isMailDraft(url) && openExternally(url));
 
   ipcMain.on('hub:quick-note-result', (event, result) => {
     if (!fromHub(event) || !quickNote.pending) return;

@@ -16,7 +16,7 @@ from app import ui_data
 from app.crypto_utils import encrypt_file
 
 ROOT = Path(__file__).resolve().parent.parent
-PAGES = ["/hub", "/hub/tasks", "/hub/calendar", "/hub/school", "/hub/vbb", "/hub/email", "/hub/pomodoro", "/hub/settings"]
+PAGES = ["/hub", "/hub/tasks", "/hub/calendar", "/hub/school", "/hub/vbb", "/hub/email", "/hub/pomodoro", "/hub/bookmarks", "/hub/settings"]
 
 
 @pytest.fixture
@@ -48,6 +48,34 @@ def test_new_pages_run_only_scripts_with_the_nonce(client, path):
 def test_classic_pages_keep_inline_scripts_for_now(client):
     policy = client.get("/hub/klassisch").headers["Content-Security-Policy"]
     assert "script-src 'self' 'unsafe-inline'" in policy
+
+
+def test_the_root_opens_the_new_overview(client):
+    response = client.get("/")
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/hub")
+    assert 'data-variant="palette"' in client.get("/", follow_redirects=True).get_data(as_text=True)
+
+
+def test_the_root_hands_its_query_to_the_overview(client):
+    response = client.get("/?datum=2026-11-10&t=10:40")
+    assert response.headers["Location"].endswith("/hub?datum=2026-11-10&t=10:40")
+
+
+def test_a_login_link_to_the_root_still_signs_in(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DATABASE_PATH", str(tmp_path / "hub.db"))
+    db.init_db()
+    monkeypatch.setattr(ui_data, "refresh_weather_soon", lambda location: None)
+    from app import app as app_module
+    from app.app import app
+
+    app.config["TESTING"] = True
+    with app.test_client() as anonymous:
+        assert anonymous.get("/hub").status_code == 401
+        page = anonymous.get(f"/?token={app_module.API_TOKEN}", follow_redirects=True)
+        assert page.status_code == 200
+        assert page.request.path == "/hub" and not page.request.query_string
+        assert anonymous.get("/hub").status_code == 200
 
 
 def test_service_worker_caches_only_existing_ui_files(monkeypatch):

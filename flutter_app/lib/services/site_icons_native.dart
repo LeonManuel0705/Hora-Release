@@ -18,4 +18,6 @@ final _store = SiteIconStore(
 
 Future<Uint8List?> loadSiteIcon(String url) => _store.iconFor(url);
 
+Future<bool?> siteIconKnown(String url) => _store.known(url);
+
 Future<void> forgetSiteIcon(String url, Iterable<String> stillUsed) => _store.forget(url, stillUsed: stillUsed);

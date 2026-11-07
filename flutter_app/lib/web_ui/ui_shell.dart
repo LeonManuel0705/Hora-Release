@@ -14,7 +14,6 @@ import '../main.dart' show showWelcomeSetup;
 import '../providers/app_provider.dart';
 import '../providers/iserv_provider.dart';
 import '../screens/assistant_screen.dart';
-import '../screens/bookmarks_screen.dart';
 import '../screens/pomodoro_screen.dart';
 import '../screens/review_screen.dart';
 import '../screens/training_screen.dart';
@@ -35,7 +34,6 @@ final uiNativePages = <String, UiNativePage>{
   'assistant': UiNativePage('Assistent', () => const AssistantScreen(), reload: true),
   'pomodoro': UiNativePage('Pomodoro', () => const PomodoroScreen(), reload: true),
   'training': UiNativePage('Training', () => const TrainingScreen()),
-  'bookmarks': UiNativePage('Lesezeichen', () => const BookmarksScreen()),
   'review': UiNativePage('Review', () => const ReviewScreen()),
 };
 

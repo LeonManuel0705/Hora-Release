@@ -293,6 +293,22 @@ void main() {
     expect(kept(), ['gif']);
   });
 
+  test('what is kept for a page can be told without asking the site', () async {
+    final icons = store();
+    expect(await icons.known('http://site.test/'), isNull);
+    expect(await icons.known('kein link'), isFalse);
+    expect(site.seen, isEmpty);
+    expect(await icons.iconFor('http://site.test/'), isNull);
+    final asked = site.seen.length;
+    expect(await icons.known('http://site.test/'), isFalse);
+    site.routes['/favicon.ico'] = Answer(iconImage('png'));
+    await icons.retry('http://site.test/');
+    expect(await icons.known('http://site.test/'), isNull);
+    expect(await icons.iconFor('http://site.test/'), iconImage('png'));
+    expect(await icons.known('http://site.test/'), isTrue);
+    expect(site.seen.length, greaterThan(asked));
+  });
+
   test('an old icon is handed out at once and renewed beside it', () async {
     site.routes['/favicon.ico'] = Answer(iconImage('png'));
     final icons = store();

@@ -1,0 +1,66 @@
+{# SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 #}
+{% extends "app/base.html" %}
+
+{% block title %}Lesezeichen · {{ brand_name }}{% endblock %}
+
+{% block page_css %}<link rel="stylesheet" href="/static/app/css/pages/bookmarks.css?v={{ asset_version }}">{% endblock %}
+
+{% block content %}
+<div class="page bookmarks-page" id="bookmarksPage" data-page-module="bookmarks">
+    <header class="head">
+        <div class="head-row">
+            <div class="head-title">
+                <h1 class="head-date">Lesezeichen</h1>
+                <span class="head-week" id="linkCount"></span>
+            </div>
+            <div class="head-actions">
+                <button class="btn btn-primary" type="button" id="linkAdd"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span>Hinzufügen</span></button>
+            </div>
+        </div>
+    </header>
+
+    <div class="link-filters" id="linkFilters" role="group" aria-label="Kategorie" hidden></div>
+    <ul class="link-grid" id="linkGrid" aria-label="Lesezeichen"></ul>
+    <p class="visually-hidden" id="linkLive" role="status" aria-live="polite"></p>
+</div>
+
+<div class="sheet link-sheet is-glass" id="linkSheet" popover role="dialog" aria-labelledby="linkSheetTitle">
+    <form id="linkForm" novalidate autocomplete="off">
+        <div class="sheet-head">
+            <h2 class="sheet-title" id="linkSheetTitle">Neues Lesezeichen</h2>
+            <button class="icon-button" type="button" popovertarget="linkSheet" popovertargetaction="hide" aria-label="Schließen"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="link-fields">
+            <div class="field">
+                <label class="field-label" for="linkUrl">Adresse</label>
+                <input class="field-control" id="linkUrl" name="url" type="url" inputmode="url" placeholder="z. B. schulportal.de" maxlength="2000" spellcheck="false" autocapitalize="off" aria-describedby="linkUrlError" required>
+                <p class="field-error" id="linkUrlError" hidden></p>
+            </div>
+            <div class="field">
+                <label class="field-label" for="linkTitle">Name</label>
+                <input class="field-control" id="linkTitle" name="title" placeholder="Sonst steht hier die Adresse" maxlength="200">
+            </div>
+            <div class="field">
+                <label class="field-label" for="linkCategory">Kategorie</label>
+                <select class="field-control" id="linkCategory" name="category">
+                    <option value="Other">Sonstiges</option>
+                    <option value="Work">Arbeit</option>
+                    <option value="Personal">Persönlich</option>
+                    <option value="Dev">Dev</option>
+                </select>
+            </div>
+        </div>
+        <p class="field-error" id="linkError" hidden></p>
+        <div class="sheet-actions">
+            <button class="btn btn-quiet link-delete" type="button" id="linkDelete" hidden><svg class="icon" aria-hidden="true"><use href="#i-trash-2"/></svg>Löschen</button>
+            <button class="btn btn-quiet" type="button" popovertarget="linkSheet" popovertargetaction="hide">Abbrechen</button>
+            <button class="btn btn-primary" type="submit" id="linkSave">Speichern</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block data %}
+<script type="application/json" id="appData">{{ data_json | safe }}</script>
+{% endblock %}

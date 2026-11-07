@@ -1,6 +1,7 @@
 import { data, flags, esc, icon, luna, now, isoDate, parseDate, addDays, startOfDay, dayDiff, shortDate, subject, hueVar, minutesOf, platform, root, storage, WEEKDAYS, WEEKDAYS_SHORT, MONTHS_SHORT, BRAND } from "../core.js";
 import { animates, travels, flipKeyed, enterInPlace, exitInPlace, token, ms } from "../motion.js";
 import { toast, typing, shortcutsEnabled, overlayOpen, registerSearch, syncTime } from "../shell.js";
+import { openMailboxes } from "../mailbox.js";
 
 const $ = (id) => document.getElementById(id);
 const pad = (value) => String(value).padStart(2, "0");
@@ -401,7 +402,7 @@ function emptyHtml() {
   const action = state.folder === "sent" || state.folder === "drafts"
     ? `<button type="button" class="empty-action" data-empty="compose">Neue Mail schreiben${icon("chevron-right")}</button>`
     : state.folder === "inbox" && !state.accounts.length && !state.loading && !native
-      ? `<a class="empty-action" href="/hub/klassisch/email">Postfach hinzufügen${icon("chevron-right")}</a>`
+      ? `<button type="button" class="empty-action" data-empty="mailbox">Postfach hinzufügen${icon("chevron-right")}</button>`
       : "";
   return `<div class="empty-state" data-flip="mail-empty">${luna(kind)}<p class="empty-title">${copy[0]}</p><p class="empty-text">${copy[1]}</p>${action}</div>`;
 }
@@ -1456,7 +1457,7 @@ async function startSync({ initial = false } = {}) {
   render({ flip: true });
   if (!initial) staggerIn(fresh.map(rowOf));
   const troubled = (result.failed || []).length > 0;
-  if (troubled) toast(`Nicht erreichbar: ${esc(result.failed.join(", "))}`, { icon: "wifi-off" });
+  if (troubled) toast(`Nicht erreichbar: ${esc(result.failed.join(", "))}`, { icon: "wifi-off", action: native ? null : { label: "Postfächer", run: openBoxes } });
   else if (!initial) announce(fresh.length ? `${fresh.length} neue ${fresh.length === 1 ? "Mail" : "Mails"}` : "Keine neuen Mails");
   return troubled;
 }
@@ -1536,6 +1537,11 @@ function onEmptyAction(button) {
     render({ flip: true });
   } else if (action === "folder") setFolder(button.dataset.folder);
   else if (action === "compose") openCompose();
+  else if (action === "mailbox") openBoxes();
+}
+
+function openBoxes() {
+  openMailboxes({ accounts: state.accounts, changed: () => startSync() });
 }
 
 function targetId() {
@@ -1735,6 +1741,8 @@ function bind() {
   $("mailSearchForm").addEventListener("submit", (event) => event.preventDefault());
   $("mailSearchClear").addEventListener("click", () => setQuery("", { focus: true }));
   $("mailSync").addEventListener("click", () => startSync());
+  $("mailBoxes").hidden = native;
+  $("mailBoxes").addEventListener("click", openBoxes);
   $("mailCompose").addEventListener("click", () => openCompose());
   $("mailDates").addEventListener("click", (event) => {
     const button = event.target.closest("[data-open]");
