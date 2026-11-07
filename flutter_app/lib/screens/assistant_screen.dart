@@ -445,7 +445,7 @@ class _WebNote extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Der KI-Assistent mit Sprachmodell läuft in den Apps für Android und iOS.',
+              'Der KI-Assistent mit Sprachmodell läuft in der App für Mac, Windows, Linux und Android.',
               style: TextStyle(fontSize: 13, height: 1.35, color: isDark ? AppPalette.inkDark : AppPalette.ink),
             ),
           ),

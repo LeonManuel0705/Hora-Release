@@ -53,7 +53,12 @@ void main() {
     final policy = RegExp('Content-Security-Policy: (.*)').firstMatch(block('/pwa/*'))!.group(1)!;
     final connect = RegExp('connect-src ([^;]+)').firstMatch(policy)!.group(1)!.split(' ').toSet();
     final hosts = <String>{};
-    for (final path in ['lib/web_ui/ui_transit.dart', 'lib/web_ui/ui_weather.dart', 'lib/services/holiday_service.dart']) {
+    for (final path in [
+      'lib/web_ui/ui_transit.dart',
+      'lib/web_ui/ui_weather.dart',
+      'lib/services/holiday_service.dart',
+      'lib/services/assistant/wiki_cache.dart',
+    ]) {
       final source = File(path).readAsStringSync();
       hosts.addAll(RegExp(r"Uri\.https\('([^']+)'").allMatches(source).map((match) => 'https://${match[1]}'));
       hosts.addAll(RegExp(r"_base = '([^']+)'").allMatches(source).map((match) => 'https://${match[1]}'));
@@ -62,5 +67,6 @@ void main() {
     expect(hosts, isNotEmpty);
     expect(hosts.difference(connect), isEmpty);
     expect(block('/pwa/*'), contains('geolocation=(self)'));
+    expect(connect, containsAll(['https://de.wikipedia.org', 'https://en.wikipedia.org']));
   });
 }

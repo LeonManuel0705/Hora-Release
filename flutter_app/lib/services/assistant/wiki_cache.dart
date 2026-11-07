@@ -2,10 +2,15 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../brand.dart';
+
+class WikiUnreachable implements Exception {
+  const WikiUnreachable();
+}
 
 /// Wikipedia REST lookup + on-device disk cache. Fetches once online, then
 /// answers repeat queries fully offline for 30 days.
@@ -14,6 +19,7 @@ class WikiCacheService {
   static final WikiCacheService instance = WikiCacheService._();
 
   static const _userAgent = '${Brand.name}Assistant/1.0 (${Brand.repository})';
+  static const _wikis = {'de': 'https://de.wikipedia.org', 'en': 'https://en.wikipedia.org'};
   static const _timeout = Duration(seconds: 6);
   static const _ttl = Duration(days: 30);
   static const _maxEntries = 200;
@@ -53,6 +59,28 @@ class WikiCacheService {
     return (entry['data'] as Map).cast<String, dynamic>();
   }
 
+  @visibleForTesting
+  http.Client? client;
+
+  static Uri summaryUri(String lang, String entity) => Uri.parse(_wikis[lang]!)
+      .replace(pathSegments: ['api', 'rest_v1', 'page', 'summary', entity.trim().replaceAll(' ', '_')]);
+
+  static Uri extractUri(String lang, String title) => Uri.parse('${_wikis[lang]!}/w/api.php').replace(queryParameters: {
+        'action': 'query',
+        'format': 'json',
+        'prop': 'extracts',
+        'titles': title,
+        'explaintext': '1',
+        'redirects': '1',
+        if (kIsWeb) 'origin': '*',
+      });
+
+  Future<http.Response> _fetch(Uri uri) {
+    final headers = {kIsWeb ? 'Api-User-Agent' : 'User-Agent': _userAgent, 'Accept': 'application/json'};
+    final own = client;
+    return (own == null ? http.get(uri, headers: headers) : own.get(uri, headers: headers)).timeout(_timeout);
+  }
+
   Future<void> _put(String key, Map<String, dynamic> data) async {
     final cache = await _loadCache();
     cache[key] = {'ts': DateTime.now().millisecondsSinceEpoch, 'data': data};
@@ -61,19 +89,7 @@ class WikiCacheService {
 
   Future<String?> _fetchExtendedExtract(String title, String lang) async {
     try {
-      final r = await http
-          .get(
-            Uri.https('$lang.wikipedia.org', '/w/api.php', {
-              'action': 'query',
-              'format': 'json',
-              'prop': 'extracts',
-              'titles': title,
-              'explaintext': '1',
-              'redirects': '1',
-            }),
-            headers: {'User-Agent': _userAgent, 'Accept': 'application/json'},
-          )
-          .timeout(_timeout);
+      final r = await _fetch(extractUri(lang, title));
       if (r.statusCode != 200) return null;
       final data = jsonDecode(r.body) as Map<String, dynamic>;
       final pages = (data['query']?['pages'] as Map?)?.cast<String, dynamic>();
@@ -99,16 +115,15 @@ class WikiCacheService {
     final cached = await _get(cacheKey);
     if (cached != null) return cached;
 
+    var unanswered = false;
     for (final tryLang in (lang == 'en' ? ['en'] : [lang, 'en'])) {
       try {
-        final r = await http
-            .get(
-              Uri.https('$tryLang.wikipedia.org', '/api/rest_v1/page/summary/${Uri.encodeComponent(entity)}'),
-              headers: {'User-Agent': _userAgent, 'Accept': 'application/json'},
-            )
-            .timeout(_timeout);
+        final r = await _fetch(summaryUri(tryLang, entity));
         if (r.statusCode == 404) continue;
-        if (r.statusCode != 200) continue;
+        if (r.statusCode != 200) {
+          unanswered = true;
+          continue;
+        }
         final data = jsonDecode(r.body) as Map<String, dynamic>;
         if (data['type'] == 'disambiguation') {
           final result = {
@@ -136,9 +151,10 @@ class WikiCacheService {
         await _put(cacheKey, result);
         return result;
       } catch (_) {
-        continue;
+        unanswered = true;
       }
     }
+    if (unanswered) throw const WikiUnreachable();
     return null;
   }
 
