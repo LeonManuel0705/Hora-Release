@@ -15,8 +15,10 @@ if [ "${MACOS_FROZEN_BACKEND:-1}" != "0" ]; then
   bash "$REPO_ROOT/scripts/build_backend_macos.sh" arm64
 fi
 
-# prepare_build moves the build number in five tracked files. Should any later
-# step fail, they go back to what they were, so a broken build leaves no bump.
+# prepare_build moves the build number in five tracked files. Unless the build
+# gets to its end, they go back to what they were, also after Ctrl-C, so a
+# broken build leaves no bump. An EXIT trap does not run in the subshells of
+# the find loops below, where an ERR trap with set -E would.
 VERSION_FILES=(
   "$PROJECT_DIR/build_number.txt"
   "$PROJECT_DIR/build_version.txt"
@@ -30,7 +32,12 @@ for index in "${!VERSION_FILES[@]}"; do
     cp -p "${VERSION_FILES[$index]}" "$SAVED_VERSIONS/$index"
   fi
 done
+BUILD_FINISHED=0
 restore_versions() {
+  if [ "$BUILD_FINISHED" = 1 ]; then
+    rm -rf "$SAVED_VERSIONS"
+    return
+  fi
   for index in "${!VERSION_FILES[@]}"; do
     if [ -f "$SAVED_VERSIONS/$index" ]; then
       cp -p "$SAVED_VERSIONS/$index" "${VERSION_FILES[$index]}"
@@ -39,8 +46,7 @@ restore_versions() {
   rm -rf "$SAVED_VERSIONS"
   echo "=== Build failed, the version files are back to build $(cat "$PROJECT_DIR/build_number.txt" 2>/dev/null) ===" >&2
 }
-set -E
-trap restore_versions ERR
+trap restore_versions EXIT
 
 prepare_build "build_macos.sh"
 
@@ -191,8 +197,7 @@ seal_adhoc
 codesign_app
 notarize_app
 
-trap - ERR
-rm -rf "$SAVED_VERSIONS"
+BUILD_FINISHED=1
 
 echo "=== Build complete: $VERSION_NAME Build $BUILD_NUM ==="
 echo "Output: build/macos/Build/Products/Release/"
