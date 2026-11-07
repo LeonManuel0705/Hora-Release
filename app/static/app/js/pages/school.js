@@ -6,6 +6,7 @@ import {
 import { animates, travels, token, ms } from "../motion.js";
 import { toast, registerSearch, syncTime, typing, overlayOpen, pageUrl, keepOneLine } from "../shell.js";
 import { deadlines as deadlineApi, grades as gradeApi } from "../api.js";
+import { askAtFirstEntry } from "../reminders.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -1598,6 +1599,7 @@ function saveTest() {
   if (draft.block) item.block = draft.block;
   state.items.push(item);
   deadlineApi.create(item);
+  askAtFirstEntry();
   const index = abWeeks() ? weekIndexOf(item.date) : null;
   if (index != null) state.week = index;
   renderWeekSwitch();

@@ -1,7 +1,7 @@
 import {
   data, root, variant, flags, platform, esc, icon, luna, storage, now, subject, hueVar, toMin, clock, hm, weekType, isoWeek,
   isoDate, minutesOf, lessonsFor, nextSchoolDay, WEEKDAYS, WEEKDAYS_SHORT,
-  LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, activeSubjectKeys, motionDefault, slug, teacherLabel, BRAND, BRAND_NAMES } from "../core.js";
+  LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, activeSubjectKeys, motionDefault, slug, teacherLabel, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
 import { toast, setTheme, syncTime } from "../shell.js";
 import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary } from "../backup.js";
@@ -210,6 +210,7 @@ function readEdits() {
 }
 
 function writeEdits(edits) {
+  if (!abAnswered()) storage.set(LOCAL_KEYS.abWeeks, abWeeks());
   if (Object.keys(edits).length) storage.set(LOCAL_KEYS.lessons, edits);
   else removeKey(LOCAL_KEYS.lessons);
   applySchoolEdits();
@@ -345,8 +346,7 @@ function renderAb() {
 }
 
 function setAbWeeks(on) {
-  if (on) removeKey(LOCAL_KEYS.abWeeks);
-  else storage.set(LOCAL_KEYS.abWeeks, false);
+  storage.set(LOCAL_KEYS.abWeeks, on);
   plan.week = on ? weekType(now()) : "A";
   applySchoolEdits();
   renderPlan();
