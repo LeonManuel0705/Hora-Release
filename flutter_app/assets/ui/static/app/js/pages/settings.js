@@ -5,6 +5,7 @@ import {
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
 import { toast, setTheme, syncTime } from "../shell.js";
 import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, offerFile } from "../backup.js";
+import { storageNote, safariOnMac } from "../persistence.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -2930,19 +2931,29 @@ function renderDataMeta() {
 
 let keptData = null;
 
-function storageRow() {
-  if (root.dataset.shell !== "web" || keptData === null) return "";
-  if (appleDevice() && !onHomeScreen()) {
-    return row({ id: "rowStorage", label: "Speicher", desc: `Öffnest du ${BRAND} in Safari sieben Tage lang nicht, löscht Safari alle Einträge. Als App vom Home-Bildschirm passiert das nicht.`, control: `<span class="status is-warn">Vorläufig</span>` });
+function storageManager() {
+  try {
+    return window.top.navigator.storage || null;
+  } catch {
+    return navigator.storage || null;
   }
-  if (keptData) return row({ id: "rowStorage", label: "Speicher", desc: "Der Browser löscht deine Einträge nicht von sich aus.", control: `<span class="status is-ok">${icon("circle-check")}Dauerhaft</span>` });
-  return row({ id: "rowStorage", label: "Speicher", desc: "Wird der Speicher knapp, darf der Browser deine Einträge löschen.", control: `<button class="btn btn-quiet" type="button" id="dataKeep">${icon("hard-drive")}Dauerhaft speichern</button>` });
+}
+
+function storageRow() {
+  const note = storageNote({ shell: root.dataset.shell, persisted: keptData, device: appleDevice(), homeScreen: onHomeScreen(), macSafari: safariOnMac(navigator.userAgent, navigator.maxTouchPoints || 0), brand: BRAND });
+  if (!note) return "";
+  const control = {
+    tab: `<span class="status is-warn">Vorläufig</span>`,
+    kept: `<span class="status is-ok">${icon("circle-check")}Dauerhaft</span>`,
+    ask: `<button class="btn btn-quiet" type="button" id="dataKeep">${icon("hard-drive")}Dauerhaft speichern</button>`,
+  }[note.state];
+  return row({ id: "rowStorage", label: "Speicher", desc: note.text, control });
 }
 
 async function keepData() {
   let kept = false;
   try {
-    kept = await navigator.storage.persist();
+    kept = await storageManager().persist();
   } catch {}
   keptData = kept;
   renderData();
@@ -3241,8 +3252,8 @@ function bindData() {
     file.value = "";
     if (chosen) importData(chosen);
   });
-  if (root.dataset.shell === "web" && navigator.storage?.persisted) {
-    navigator.storage.persisted().then((kept) => {
+  if (root.dataset.shell === "web" && storageManager()?.persisted) {
+    storageManager().persisted().then((kept) => {
       keptData = kept;
       renderData();
     }, () => {});

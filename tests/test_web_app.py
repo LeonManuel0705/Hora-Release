@@ -58,6 +58,10 @@ def test_a_backup_reaches_the_files_app_on_iphone_and_the_downloads_elsewhere():
     run_check('offer_file_check.mjs')
 
 
+def test_settings_say_how_long_the_browser_keeps_the_entries():
+    run_check('persistence_check.mjs')
+
+
 def test_the_file_list_holds_what_the_app_loads_and_leaves_out_the_rest(tmp_path):
     build = script('build_web_app')
     kept = {

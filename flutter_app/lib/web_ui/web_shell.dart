@@ -16,6 +16,7 @@ import '../services/database_service.dart';
 import '../services/web_tab_guard.dart';
 import '../theme.dart';
 import 'home_screen_hint.dart';
+import 'lasting_storage.dart';
 import 'ui_api.dart';
 import 'ui_bridge.dart';
 import 'ui_pages.dart';
@@ -46,7 +47,6 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
   static const _scope = '/hub';
   static const _worker = 'hub_worker.js';
   static const _protocol = 1;
-  static const _viewKeys = {'app-task-filter', 'app-cal-view', 'app-motion', 'app-theme-choice', 'app-single-keys'};
 
   late final UiBridge _bridge = UiBridge(
     api: UiApi(this),
@@ -153,12 +153,6 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     } catch (_) {}
   }
 
-  static bool _keeps(UiBridgeRequest request, UiBridgeReply reply) {
-    if (request.method == 'GET' || reply.status >= 400 || !request.path.startsWith('/api/ui/')) return false;
-    final segments = Uri.parse(request.path).pathSegments;
-    return !(segments.length == 4 && segments[2] == 'store' && _viewKeys.contains(segments[3]));
-  }
-
   Future<void> _register() async {
     final navigator = web.window.navigator;
     if (!(navigator as JSObject).has('serviceWorker')) throw StateError('Kein Service Worker');
@@ -220,7 +214,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
 
   Future<void> _answer(web.MessagePort port, UiBridgeRequest request) async {
     final reply = await _bridge.handle(request);
-    if (_keeps(request, reply)) unawaited(_keepData());
+    if (savesUserData(request.method, request.path, reply.status)) unawaited(_keepData());
     final body = reply.body;
     port.postMessage(_Reply(
       status: reply.status,
