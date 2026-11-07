@@ -138,6 +138,8 @@ function eventBody(item) {
     place: item.place || "",
     kind: item.kind || "private",
     notes: item.notes || "",
+    ...(item.recurrence ? { recurrence: item.recurrence } : {}),
+    ...(item.reminderMinutes != null ? { reminderMinutes: item.reminderMinutes } : {}),
   };
 }
 

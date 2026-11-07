@@ -55,6 +55,7 @@ export function safeMarkup(markup, allowed = ["B", "BR", "STRONG", "EM"]) {
 export const icon = (name, cls = "") => `<svg class="icon ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
 export { luna } from "./luna.js";
+import { expandEvents } from "./recurrence.js";
 
 export const toMin = (hhmm) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -283,7 +284,7 @@ export const shortDate = (date) => `${WEEKDAYS_SHORT[date.getDay()]}., ${date.ge
 export const longDate = (date) => `${WEEKDAYS[date.getDay()]}, ${date.getDate()}. ${MONTHS[date.getMonth()]}`;
 
 export const eventsOn = (date) =>
-  (flags.empty ? [] : data.events)
+  expandEvents(flags.empty ? [] : data.events, isoDate(date), isoDate(date))
     .filter((event) => event.date === isoDate(date))
     .sort((a, b) => (a.start || "00:00").localeCompare(b.start || "00:00"));
 

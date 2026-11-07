@@ -13,6 +13,7 @@ carry the id of their Google twin, so the twin is never shown a second time.
 import copy
 import json
 import logging
+import os
 import threading
 import time
 import uuid
@@ -300,7 +301,96 @@ def _body(item):
         body['start'] = {'date': first, 'dateTime': None, 'timeZone': None}
         body['end'] = {'date': (date.fromisoformat(last) + timedelta(days=1)).isoformat(), 'dateTime': None, 'timeZone': None}
     body['extendedProperties'] = {'private': {OPEN_END: '1' if start and not end else None}}
+    if 'recurrence' in item:
+        rule = ui_data.recurrence_rule(item.get('recurrence'))
+        kept = (item.get('recurrence') or {}).get('google') if isinstance(item.get('recurrence'), dict) else None
+        body['recurrence'] = _rrule(rule, start) if rule else list(kept) if kept else []
+        if rule and start:
+            body['start']['timeZone'] = body['end']['timeZone'] = _zone()
+    if 'reminder_minutes' in item:
+        minutes = item.get('reminder_minutes')
+        body['reminders'] = {'useDefault': True, 'overrides': None} if minutes is None else {
+            'useDefault': False, 'overrides': [] if minutes < 0 else [{'method': 'popup', 'minutes': minutes}]}
     return body
+
+
+def _zone():
+    """The name of this computer's time zone. Google needs one to repeat a timed event across a change of summer time."""
+    name = os.environ.get('TZ', '').lstrip(':')
+    if '/' in name:
+        return name
+    try:
+        target = os.path.realpath('/etc/localtime')
+    except OSError:
+        target = ''
+    return target.split('zoneinfo/', 1)[1] if 'zoneinfo/' in target else 'Europe/Berlin'
+
+
+def _rrule(rule, start):
+    """The rule as Google takes it: RRULE plus EXDATE for the days left out."""
+    parts = [f"FREQ={rule['freq'].upper()}"]
+    if rule['interval'] > 1:
+        parts.append(f"INTERVAL={rule['interval']}")
+    if rule['count']:
+        parts.append(f"COUNT={rule['count']}")
+    elif rule['until']:
+        last = datetime.fromisoformat(f"{rule['until']}T23:59:59").astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        parts.append(f"UNTIL={last if start else rule['until'].replace('-', '')}")
+    lines = ['RRULE:' + ';'.join(parts)]
+    if rule['exceptions'] and start:
+        days = ','.join(f"{day.replace('-', '')}T{start.replace(':', '')}00" for day in rule['exceptions'])
+        lines.append(f'EXDATE;TZID={_zone()}:{days}')
+    elif rule['exceptions']:
+        lines.append('EXDATE;VALUE=DATE:' + ','.join(day.replace('-', '') for day in rule['exceptions']))
+    return lines
+
+
+WEEKDAY_CODES = ('MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU')
+
+
+def _rule_of(lines, first=None):
+    """A rule written in Google back in the shape the app keeps, None for an event that does not repeat. False when
+    the rule says more than the app can show ("every Monday and Thursday"), so it is left as it is. Google's own
+    pages name the weekday or the day of the month of the first time, which says nothing more."""
+    if not lines:
+        return None
+    fields, exceptions = None, []
+    for line in lines:
+        name, _, value = str(line).partition(':')
+        if name == 'RRULE':
+            fields = dict(part.split('=', 1) for part in value.split(';') if '=' in part)
+        elif name.startswith('EXDATE'):
+            for stamp in value.split(','):
+                moment = _rule_moment(stamp)
+                if moment:
+                    exceptions.append(moment)
+        else:
+            return False
+    start = ui_data.iso_day(first)
+    if start and fields:
+        day = date.fromisoformat(start)
+        if fields.get('BYDAY') == WEEKDAY_CODES[day.weekday()] and fields.get('FREQ') == 'WEEKLY':
+            fields.pop('BYDAY')
+        if fields.get('BYMONTHDAY') == str(day.day) and fields.get('FREQ') in ('MONTHLY', 'YEARLY'):
+            fields.pop('BYMONTHDAY')
+        if fields.get('BYMONTH') == str(day.month) and fields.get('FREQ') == 'YEARLY':
+            fields.pop('BYMONTH')
+    if not fields or set(fields) - {'FREQ', 'INTERVAL', 'COUNT', 'UNTIL', 'WKST'} or fields.get('FREQ', '').lower() not in ui_data.EVENT_REPEATS:
+        return False
+    until = _rule_moment(fields['UNTIL']) if 'UNTIL' in fields else None
+    rule = ui_data.recurrence_rule({'freq': fields['FREQ'].lower(), 'interval': fields.get('INTERVAL'), 'count': fields.get('COUNT'), 'until': until, 'exceptions': exceptions})
+    return rule or False
+
+
+def _rule_moment(stamp):
+    """The local day of a time written in a rule: 20261112, 20261112T160000 or 20261112T150000Z."""
+    stamp = stamp.strip()
+    try:
+        if stamp.endswith('Z'):
+            return datetime.strptime(stamp, '%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc).astimezone().date().isoformat()
+        return datetime.strptime(stamp[:8], '%Y%m%d').date().isoformat()
+    except ValueError:
+        return None
 
 
 def _without_nulls(value):
@@ -502,7 +592,7 @@ def _local_fields(view):
     first = view.get('start_date')
     timed = not view.get('all_day')
     open_end = timed and view.get('open_end')
-    return {
+    fields = {
         'title': view.get('title') or 'Termin',
         'date': first,
         'end_date': last if last and last > first and not open_end else '',
@@ -511,6 +601,12 @@ def _local_fields(view):
         'location': view.get('location') or '',
         'description': view.get('description') or '',
     }
+    rule = _rule_of(view.get('recurrence'), first)
+    # A rule the app cannot show is kept as Google wrote it, so an edit made here does not flatten it.
+    fields['recurrence'] = {'google': list(view['recurrence'])} if rule is False else rule
+    if 'reminder_minutes' in view:
+        fields['reminder_minutes'] = view['reminder_minutes']
+    return fields
 
 
 def _settled(item):
@@ -750,6 +846,19 @@ def view(item):
     }
     if last and last > day:
         result['endDate'] = last
+    result.update(
+        color=str(item.get('color') or item.get('calendar_color') or ''),
+        calendarName=str(item.get('calendar') or ''),
+        htmlLink=str(item.get('html_link') or ''),
+        meetLink=str(item.get('meet_link') or ''),
+        attendees=item.get('attendees') or [],
+    )
+    if (item.get('attendee_total') or 0) > len(result['attendees']):
+        result['attendeeTotal'] = item['attendee_total']
+    if item.get('reminder_minutes') is not None:
+        result['reminderMinutes'] = item['reminder_minutes']
+    if item.get('recurring_event_id'):
+        result['series'] = True
     return result
 
 
@@ -764,7 +873,8 @@ def events(start, end):
         if calendar_id in hidden:
             continue
         for key, item in bucket.items():
-            if key in linked:
+            # A series written here comes back from Google as its occurrences, which the app shows from the rule itself.
+            if key in linked or item.get('recurring_event_id') in linked:
                 continue
             shown = view(item)
             if shown and (shown.get('endDate') or shown['date']) >= start and shown['date'] <= end:

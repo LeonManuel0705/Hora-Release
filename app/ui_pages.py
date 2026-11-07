@@ -435,6 +435,13 @@ def _event_payload(payload, item, creating):
         item['description'] = _text(payload.get('notes'), 5000)
     if 'kind' in payload:
         item['category'] = EVENT_CATEGORIES.get(payload.get('kind'), 'personal')
+    if 'recurrence' in payload:
+        if payload.get('recurrence') is not None and not ui_data.recurrence_rule(payload.get('recurrence')):
+            raise ValueError('Wiederholung ungültig')
+        # None stays as a value: Google then hears that the event no longer repeats.
+        item['recurrence'] = ui_data.recurrence_rule(payload.get('recurrence'))
+    if 'reminderMinutes' in payload:
+        item['reminder_minutes'] = ui_data.reminder_minutes(payload.get('reminderMinutes'))
 
 
 @bp.route('/api/ui/events', methods=['POST'])
@@ -605,7 +612,8 @@ def _google_range(start, end):
         return None
     hidden = calendar_cache.hidden_calendars()
     linked = {item.get('google_id') for item in ui_data.load_list('calendar') if item.get('google_id')}
-    views = [calendar_cache.view(item) for item in result.get('events', []) if item.get('calendar_id') not in hidden and item.get('id') not in linked]
+    views = [calendar_cache.view(item) for item in result.get('events', [])
+             if item.get('calendar_id') not in hidden and item.get('id') not in linked and item.get('recurring_event_id') not in linked]
     return [view for view in views if view]
 
 

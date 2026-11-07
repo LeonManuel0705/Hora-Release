@@ -488,6 +488,44 @@ def _local_day_and_time(value: str):
     return moment.strftime('%Y-%m-%d'), moment.strftime('%H:%M')
 
 
+# The colours calendar.google.com shows for the eleven event colours, by colorId.
+EVENT_COLORS = {
+    '1': '#7986cb', '2': '#33b679', '3': '#8e24aa', '4': '#e67c73', '5': '#f6bf26', '6': '#f4511e',
+    '7': '#039be5', '8': '#616161', '9': '#3f51b5', '10': '#0b8043', '11': '#d50000',
+}
+GUEST_LIMIT = 50
+
+
+def _meet_link(event: Dict) -> str:
+    link = event.get('hangoutLink') or ''
+    if not link:
+        for point in (event.get('conferenceData') or {}).get('entryPoints') or []:
+            if point.get('entryPointType') == 'video':
+                link = point.get('uri') or ''
+                break
+    return link if str(link).startswith('https://') else ''
+
+
+def _guests(event: Dict) -> List[Dict]:
+    people = [person for person in event.get('attendees') or [] if isinstance(person, dict) and not person.get('resource')]
+    return [{
+        'email': str(person.get('email') or ''),
+        'name': str(person.get('displayName') or ''),
+        'status': person.get('responseStatus') if person.get('responseStatus') in ('accepted', 'declined', 'tentative') else 'needsAction',
+        'organizer': bool(person.get('organizer')),
+        'self': bool(person.get('self')),
+    } for person in people[:GUEST_LIMIT]]
+
+
+def _reminder_minutes(event: Dict):
+    """Minutes before the start of the earliest pop-up, -1 when the event reminds of nothing, None for the calendar's default."""
+    reminders = event.get('reminders')
+    if not isinstance(reminders, dict) or reminders.get('useDefault', True):
+        return None
+    minutes = [item.get('minutes') for item in reminders.get('overrides') or [] if isinstance(item.get('minutes'), int)]
+    return max(minutes) if minutes else -1
+
+
 def calendar_event_view(event: Dict, calendar: Dict) -> Dict:
     start = event.get('start', {})
     end = event.get('end', {})
@@ -521,6 +559,13 @@ def calendar_event_view(event: Dict, calendar: Dict) -> Dict:
         "updated": event.get('updated', ''),
         "etag": event.get('etag', ''),
         "open_end": bool(event.get('endTimeUnspecified')) or private.get('horaOpenEnd') == '1',
+        "color": EVENT_COLORS.get(str(event.get('colorId') or '')) or calendar.get('backgroundColor', '#4285f4'),
+        "html_link": event.get('htmlLink', '') if str(event.get('htmlLink', '')).startswith('https://') else '',
+        "meet_link": _meet_link(event),
+        "attendees": _guests(event),
+        "attendee_total": len([person for person in event.get('attendees') or [] if isinstance(person, dict) and not person.get('resource')]),
+        "reminder_minutes": _reminder_minutes(event),
+        "recurrence": [str(line) for line in event.get('recurrence') or []] or None,
     }
 
 

@@ -78,6 +78,7 @@ class UiDb {
     ''');
     await _addColumns(db, 'grades', {'grade_system': "TEXT DEFAULT 'points'", 'value': 'REAL'});
     await _addColumns(db, 'subjects', {'course_type': 'TEXT'});
+    await _addColumns(db, 'events', {'recurrence': 'TEXT', 'reminder_minutes': 'INTEGER'});
     await _addColumns(db, 'tasks', {
       'subject': 'TEXT',
       'someday': 'INTEGER DEFAULT 0',

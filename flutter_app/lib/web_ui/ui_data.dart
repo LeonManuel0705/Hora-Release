@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -100,6 +101,41 @@ String? clock(Object? value) {
   final hour = int.parse(match[1]!), minute = int.parse(match[2]!);
   if (hour > 23 || minute > 59) return null;
   return '${two(hour)}:${two(minute)}';
+}
+
+const uiEventRepeats = {'daily', 'weekly', 'monthly', 'yearly'};
+const uiReminderRange = (-1, 40320);
+
+/// A repeat rule as events keep it, {freq, interval, until, count, exceptions}, or null. Same shape as recurrence.js.
+Map<String, Object?>? recurrenceRule(Object? value) {
+  if (value is String && value.trim().startsWith('{')) {
+    try {
+      value = jsonDecode(value);
+    } catch (_) {
+      return null;
+    }
+  }
+  if (value is! Map || !uiEventRepeats.contains(value['freq'])) return null;
+  int? whole(Object? item) => item is num ? item.round() : int.tryParse('${item ?? ''}');
+  final interval = math.max(1, math.min(12, whole(value['interval']) ?? 1));
+  final counted = whole(value['count']) ?? 0;
+  final count = counted >= 1 ? math.min(counted, 1000) : null;
+  final exceptions = value['exceptions'] is List ? (value['exceptions'] as List).take(500) : const [];
+  return {
+    'freq': value['freq'],
+    'interval': interval,
+    'until': count == null ? isoDay(value['until']) : null,
+    'count': count,
+    'exceptions': ({for (final day in exceptions) isoDay(day)}..remove(null)).cast<String>().toList()..sort(),
+  };
+}
+
+/// Minutes before the start, -1 for none, null for the default of the settings. Throws FormatException otherwise.
+int? reminderMinutes(Object? value) {
+  if (value == null || value == '') return null;
+  final minutes = value is num && value == value.roundToDouble() ? value.toInt() : value is String ? int.tryParse(value) : null;
+  if (minutes == null || minutes < uiReminderRange.$1 || minutes > uiReminderRange.$2) throw const FormatException('Erinnerung ungültig');
+  return minutes;
 }
 
 String text(Object? value, [int limit = 1 << 20]) {
@@ -548,6 +584,10 @@ class UiData {
       'synced': false,
     };
     if (last.compareTo(date) > 0) view['endDate'] = last;
+    final rule = recurrenceRule(row['recurrence']);
+    if (rule != null) view['recurrence'] = rule;
+    final minutes = row['reminder_minutes'];
+    if (minutes is int && minutes >= uiReminderRange.$1 && minutes <= uiReminderRange.$2) view['reminderMinutes'] = minutes;
     return view;
   }
 

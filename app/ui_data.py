@@ -602,6 +602,45 @@ def tasks(subjects, today):
     return plan, pool
 
 
+EVENT_REPEATS = ('daily', 'weekly', 'monthly', 'yearly')
+# Google takes reminders up to four weeks ahead. -1 means none at all, a missing value the default of the settings.
+REMINDER_RANGE = (-1, 40320)
+
+
+def recurrence_rule(value):
+    """A repeat rule as events keep it, {freq, interval, until, count, exceptions}, or None. Same shape as recurrence.js."""
+    if not isinstance(value, dict) or value.get('freq') not in EVENT_REPEATS:
+        return None
+    try:
+        interval = min(12, max(1, int(value.get('interval') or 1)))
+    except (TypeError, ValueError):
+        interval = 1
+    try:
+        count = int(value.get('count') or 0)
+    except (TypeError, ValueError):
+        count = 0
+    count = min(1000, count) if count >= 1 else None
+    until = None if count else iso_day(value.get('until'))
+    exceptions = value.get('exceptions') if isinstance(value.get('exceptions'), list) else []
+    days = sorted({day for day in (iso_day(item) for item in exceptions[:500]) if day})
+    return {'freq': value['freq'], 'interval': interval, 'until': until, 'count': count, 'exceptions': days}
+
+
+def reminder_minutes(value):
+    """Minutes before the start, -1 for none, or None for the default. Raises ValueError for anything else."""
+    if value is None or value == '':
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError('Erinnerung ungültig')
+    try:
+        minutes = int(value)
+    except ValueError:
+        raise ValueError('Erinnerung ungültig') from None
+    if not REMINDER_RANGE[0] <= minutes <= REMINDER_RANGE[1]:
+        raise ValueError('Erinnerung ungültig')
+    return minutes
+
+
 def event_view(item):
     when = iso_day(item.get('date'))
     if not when:
@@ -620,6 +659,15 @@ def event_view(item):
     }
     if end_day and end_day > when:
         view['endDate'] = end_day
+    rule = recurrence_rule(item.get('recurrence'))
+    if rule:
+        view['recurrence'] = rule
+    try:
+        minutes = reminder_minutes(item.get('reminder_minutes'))
+    except ValueError:
+        minutes = None
+    if minutes is not None:
+        view['reminderMinutes'] = minutes
     if item.get('google_id') and not item.get('google_new'):
         view['google'] = True
     if item.get('google_dirty'):

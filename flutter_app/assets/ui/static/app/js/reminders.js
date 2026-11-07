@@ -1,4 +1,5 @@
-import { BRAND, LOCAL_KEYS, data, dayDiff, hm, isoDate, lessonsFor, minutesOf, startOfDay, storage, subject, toMin } from "./core.js";
+import { BRAND, LOCAL_KEYS, addDays, data, dayDiff, hm, isoDate, lessonsFor, minutesOf, startOfDay, storage, subject, toMin } from "./core.js";
+import { expandEvents } from "./recurrence.js";
 import { endNotice, read as readPomodoro, subscribe } from "./pomodoro-timer.js";
 
 const SHOWN_KEY = "app-reminders-shown";
@@ -87,16 +88,22 @@ function deadlineReminders(prefs, day) {
   return reminders;
 }
 
+/* An event reminds as long before its start as it says itself (-1 for never), otherwise as the settings say.
+   "1 Tag vorher" reminds today of tomorrow, and every occurrence of a series reminds of its own. */
 function eventReminders(prefs, day, minute) {
-  const lead = Number(prefs.categories.events.lead) || CATEGORY_DEFAULTS.events.lead;
+  const category = prefs.categories.events;
+  const lead = Number(category.lead) || CATEGORY_DEFAULTS.events.lead;
   const today = isoDate(day);
-  return (data.events || [])
-    .filter((event) => event.date === today && event.start && dueAt(minute, toMin(event.start) - lead))
-    .map((event) => ({
-      key: `event:${event.id}:${today}`,
-      title: event.title,
-      body: `Um ${hm(event.start)}${event.place ? ` in ${event.place}` : ""}`,
-    }));
+  const reminders = [];
+  for (const event of expandEvents(data.events || [], today, isoDate(addDays(day, 28)))) {
+    if (!event.start) continue;
+    const ahead = dayDiff(day, event.date);
+    const minutes = event.reminderMinutes ?? (category.on ? lead : -1);
+    if (ahead < 0 || minutes < 0 || !dueAt(minute, ahead * 1440 + toMin(event.start) - minutes)) continue;
+    const when = ahead === 0 ? (minutes === 0 ? "Jetzt" : `Um ${hm(event.start)}`) : `${capitalized(whenText(ahead))} um ${hm(event.start)}`;
+    reminders.push({ key: `event:${event.id}:${event.date}`, title: event.title, body: `${when}${event.place ? ` in ${event.place}` : ""}` });
+  }
+  return reminders;
 }
 
 function taskReminders(day, minute) {
@@ -135,7 +142,7 @@ export function dueReminders(prefs, date) {
   return [
     ...(prefs.categories.lessons.on ? lessonReminders(prefs, day, minute) : []),
     ...deadlineReminders(prefs, day),
-    ...(prefs.categories.events.on ? eventReminders(prefs, day, minute) : []),
+    ...eventReminders(prefs, day, minute),
     ...(prefs.categories.tasks.on ? taskReminders(day, minute) : []),
     ...timer,
   ];
