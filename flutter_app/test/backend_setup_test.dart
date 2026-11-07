@@ -353,6 +353,19 @@ void main() {
       expect(failure!.message, contains('kommt seit Minuten nicht weiter'));
     });
 
+    test('a slow download is not taken for a hang', () async {
+      final process = FakeProcess();
+      final host = FakeHost()..process = process;
+      final outcome = install(host, quietLimit: const Duration(milliseconds: 300));
+      process.say('  Downloading google_api_python_client-2.201.0-py3-none-any.whl (16.8 MB)');
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(process.killed, isEmpty);
+      process.say('Installing collected packages: google-api-python-client');
+      await pumpEventQueue();
+      process.finish(0);
+      expect(await outcome, isNull);
+    });
+
     test('pip errors are explained in plain words', () {
       expect(
         PipInstall.explain(["WARNING: Retrying ... SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed'))"]).message,

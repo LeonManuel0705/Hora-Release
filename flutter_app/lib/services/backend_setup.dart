@@ -391,7 +391,7 @@ class PipInstall {
     required String workingDirectory,
     required void Function(String text) progress,
     Duration quietLimit = const Duration(minutes: 3),
-    Duration timeLimit = const Duration(minutes: 20),
+    Duration timeLimit = const Duration(minutes: 60),
   }) async {
     final Process process;
     try {
@@ -403,8 +403,10 @@ class PipInstall {
     final tail = OutputTail();
     final quiet = Stopwatch()..start();
     var count = 0;
+    var downloading = false;
     void onLine(String line) {
       quiet.reset();
+      downloading = line.trim().startsWith('Downloading ');
       final package = _package.firstMatch(line.trim());
       if (package != null) {
         count++;
@@ -417,8 +419,10 @@ class PipInstall {
     final streams = Future.wait([tail.follow(process.stdout, onLine), tail.follow(process.stderr, onLine)]);
     var stalled = false;
     var tooLong = false;
+    // pip prints nothing while a file downloads, so a slow line is no hang;
+    // a stalled download ends through pip's own socket timeout instead.
     final watch = Timer.periodic(const Duration(milliseconds: 500), (timer) {
-      if (quiet.elapsed < quietLimit) return;
+      if (downloading || quiet.elapsed < quietLimit) return;
       stalled = true;
       timer.cancel();
       process.kill(ProcessSignal.sigkill);
