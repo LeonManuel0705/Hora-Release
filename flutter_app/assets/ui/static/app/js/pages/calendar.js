@@ -10,17 +10,17 @@ import { readPrefs, eventMinutes } from "../reminders.js";
 
 const typedBefore = new Map();
 const saveText = debounced(700, (key, id, changes) => {
-  const sent = eventApi.update(id, changes);
   const before = typedBefore.get(key);
   typedBefore.delete(key);
+  const sent = eventApi.update(id, changes, { quiet: !!before });
   if (!before) return;
-  sent.catch(() => {
+  sent.catch((error) => {
     const item = state.events.find((entry) => entry.id === id);
     if (!item) return;
     Object.assign(item, before);
     render();
     if (state.selected === id) renderPanel();
-    toast(`Die Änderung an „${esc(item.title)}“ kam nicht im Google-Kalender an.`, { icon: "wifi-off" });
+    toast(refusal(error, `Die Änderung an „${esc(item.title)}“ kam nicht im Google-Kalender an.`), { icon: "wifi-off" });
   });
 });
 
@@ -869,7 +869,10 @@ function plainText(value) {
   return (doc.body.textContent || "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-const formatted = (value) => /<[a-z!/]/i.test(String(value || ""));
+// The same rule as the backend's notes_fit: a long or formatted description is only ever changed in Google.
+const FORMATTED = /<(a|b|i|u|br|p|div|span|ul|ol|li|strong|em|h\d)\b[^>]*>|&(nbsp|amp|lt|gt|quot);/i;
+const notesLocked = (item) => item.notesLocked ?? (String(item.notes || "").length > 5000 || FORMATTED.test(String(item.notes || "")));
+const refusal = (error, fallback) => (error?.server ? esc(error.server) : fallback);
 const linked = (text) => String(text).split(/(https:\/\/[^\s<>"')]+)/g).map((part, index) => (index % 2 ? `<a href="${esc(part)}" target="_blank" rel="noopener">${esc(part)}</a>` : esc(part))).join("");
 
 function panelHead(markClass, markIcon, title, { editable = false, deletable = false, style = "", draft = false } = {}) {
@@ -972,7 +975,7 @@ function panelEdit(item) {
         <span class="field-label" id="calKindLabel">Art</span>
         <div class="field-body" role="group" aria-labelledby="calKindLabel">${Object.entries(KINDS).map(([key, kind]) => `<button type="button" class="pill cal-kind" data-kind="${key}" aria-pressed="${item.kind === key}" style="--k:${kindVar(key)}"><i class="cal-dot"></i>${kind.label}</button>`).join("")}</div>
       </div>` : ""}
-      <label class="field"><span class="field-label">${own ? "Notizen" : "Beschreibung"}</span><textarea class="field-control" id="calPanelNotes" rows="3" placeholder="${own ? "Was du mitbringen oder vorbereiten willst" : "Was dazu im Kalender stehen soll"}">${esc(own ? item.notes || "" : plainText(item.notes))}</textarea>${!own && formatted(item.notes) ? '<span class="cal-hint">Beim Ändern geht die Formatierung verloren, Links bleiben als Adresse.</span>' : ""}</label>
+      ${!own && notesLocked(item) ? `<div class="field"><span class="field-label">Beschreibung</span><span class="cal-notes-text">${linked(plainText(item.notes))}</span><p class="cal-hint">Diese Beschreibung ist lang oder formatiert. Ändere sie in Google, damit nichts davon verloren geht.${item.htmlLink ? ` <a href="${esc(item.htmlLink)}" target="_blank" rel="noopener">In Google öffnen</a>` : ""}</p></div>` : `<label class="field"><span class="field-label">${own ? "Notizen" : "Beschreibung"}</span><textarea class="field-control" id="calPanelNotes" rows="3" placeholder="${own ? "Was du mitbringen oder vorbereiten willst" : "Was dazu im Kalender stehen soll"}">${esc(item.notes || "")}</textarea></label>`}
       ${own ? "" : `${guestsHtml(item)}${linksHtml(item) ? `<div class="field">${linksHtml(item)}</div>` : ""}`}
       ${draft ? `<div class="cal-save"><button class="btn btn-quiet" type="button" data-draft-cancel>Abbrechen</button><button class="btn btn-primary" type="button" data-draft-save>${icon("check")}Anlegen</button></div>` : `<p class="panel-source">${icon("calendar-days")}${own ? ownSource(item) : "Aus dem Google-Kalender, Änderungen gehen dorthin"}</p>`}
     </div>`;
@@ -984,7 +987,7 @@ function panelRead(item) {
     item.calendarName ? ["Kalender", calendarLine(item)] : null,
     item.place ? ["Ort", `${esc(item.place)}${routeLink(item.place) ? `<div class="cal-route-slot">${routeLink(item.place)}</div>` : ""}`] : null,
     item.notes ? ["Beschreibung", `<span class="cal-notes-text">${linked(plainText(item.notes))}</span>`] : null,
-    item.start && item.reminderMinutes != null ? ["Erinnerung", esc(reminderText(eventMinutes(item, readPrefs().categories.events)))] : null,
+    item.start ? ["Erinnerung", esc(reminderText(readPrefs().enabled ? eventMinutes(item, readPrefs().categories.events) : -1))] : null,
   ];
   return `${panelHead("is-event", "calendar-days", item.title, { style: ` style="--k:${esc(colorOf(item))}"` })}
     ${factsHtml(facts)}${guestsHtml(item)}${linksHtml(item)}
@@ -1257,7 +1260,8 @@ function focusDay(iso, { keyboard = false } = {}) {
   if (keyboard) document.querySelector(`#calView [data-key="day:${iso}"]`)?.focus({ preventScroll: true });
   if (direction) announce();
   const live = $("liveStatus");
-  if (opening && live) live.textContent = `${direction ? `${live.textContent}. ` : ""}Tagesübersicht für ${longDate(parseDate(iso))} geöffnet. Mit Escape schließt du sie.`;
+  const escape = document.documentElement.classList.contains("is-touch") ? "" : " Mit Escape schließt du sie.";
+  if (opening && live) live.textContent = `${direction ? `${live.textContent}. ` : ""}Tagesübersicht für ${longDate(parseDate(iso))} geöffnet.${escape}`;
 }
 
 function onDayKeys(event) {
@@ -1357,13 +1361,14 @@ export function parseEntry(text) {
   const time = parseTime(cut(text, info.phrases.date), info.part);
   let start = time?.start || null;
   let end = time?.end || null;
-  const block = !start && info.block ? blockOf(info.block) : null;
-  if (block) {
+  const block = info.block ? blockOf(info.block) : null;
+  if (block && !start) {
     start = block.start;
     end = block.end;
   }
   if (start && !end) end = hhmm(Math.min(1439, toMin(start) + 60));
-  const title = cleanTitle(cut(text, time?.phrase), info).replace(/\s+(um|am|von|ab)$/i, "").trim();
+  const words = info.block && !block ? { ...info, phrases: { ...info.phrases, block: undefined } } : info;
+  const title = cleanTitle(cut(text, time?.phrase), words).replace(/\s+(um|am|von|ab)$/i, "").trim();
   let kind = "private";
   if (TRAINING_WORDS.test(text)) kind = "training";
   else if (PRIVATE_WORDS.test(text)) kind = "private";
@@ -1496,18 +1501,18 @@ function removeEvent(id, { silent = false } = {}) {
   if (index < 0) return;
   state.events.splice(index, 1);
   removed.add(base.synced ? base.id : serverId(base.id) || base.id);
-  const sent = eventApi.remove(base.id);
+  const sent = eventApi.remove(base.id, { quiet: !!base.synced });
   shareEvents();
   leave();
   if (base.synced) {
     sent.then(() => {
       if (!silent) toast(`Gelöscht: „${esc(base.title)}“, auch im Google-Kalender`, { icon: "trash-2" });
-    }, () => {
+    }, (error) => {
       state.events.splice(Math.min(index, state.events.length), 0, base);
       removed.delete(base.id);
       shareEvents();
       render();
-      toast(`„${esc(base.title)}“ ließ sich im Google-Kalender nicht löschen.`, { icon: "wifi-off" });
+      toast(refusal(error, `„${esc(base.title)}“ ließ sich im Google-Kalender nicht löschen.`), { icon: "wifi-off" });
     });
     return;
   }
@@ -1565,12 +1570,13 @@ function saveChanges(item, changes) {
   const before = Object.fromEntries(Object.keys(changes).map((key) => [key, item[key]]));
   Object.assign(item, changes);
   if (!changes.recurrence && "recurrence" in changes) delete item.recurrence;
-  const sent = eventApi.update(item.id, changes);
+  delete item.googleDays;
+  const sent = eventApi.update(item.id, changes, { quiet: !!item.synced });
   if (item.synced) {
-    sent.catch(() => {
+    sent.catch((error) => {
       Object.assign(item, before);
       render();
-      toast(`Die Änderung an „${esc(item.title)}“ kam nicht im Google-Kalender an.`, { icon: "wifi-off" });
+      toast(refusal(error, `Die Änderung an „${esc(item.title)}“ kam nicht im Google-Kalender an.`), { icon: "wifi-off" });
     });
   }
   shareEvents();
@@ -1607,6 +1613,7 @@ function typed(field, value) {
   const target = item.series ? seriesOf(item) || item : item;
   if (target.synced && !typedBefore.has(`${target.id}:${field}`)) typedBefore.set(`${target.id}:${field}`, { [field]: target[field] });
   target[field] = value;
+  delete target.googleDays;
   return target;
 }
 

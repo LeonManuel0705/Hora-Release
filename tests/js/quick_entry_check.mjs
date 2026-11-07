@@ -205,7 +205,7 @@ const tests = {
     assert.deepEqual(read("Zahnarzt am Donnerstag morgen 8 Uhr"), { title: "Zahnarzt", date: "2026-10-08", start: "08:00", end: "09:00" });
     assert.deepEqual(read("Abgabe Fr. 9.10. 12 Uhr"), { title: "Abgabe", date: "2026-10-09", start: "12:00", end: "13:00" });
     assert.deepEqual(read("Mathe Mo 2. Block"), { title: "Mathe", date: "2026-10-12", start: "09:50", end: "11:20" });
-    assert.deepEqual(read("Mathe Mo 3. Block"), { title: "Mathe", date: "2026-10-12", start: null, end: null });
+    assert.deepEqual(read("Mathe Mo 3. Block"), { title: "Mathe 3. Block", date: "2026-10-12", start: null, end: null });
   },
   "days are counted from the day it is"() {
     const cases = [
