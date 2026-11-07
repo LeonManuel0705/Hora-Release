@@ -43,6 +43,7 @@ class WebShell extends StatefulWidget {
 class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShellHost<WebShell> {
   static const _scope = '/hub';
   static const _worker = 'hub_worker.js';
+  static const _viewKeys = {'app-task-filter', 'app-cal-view', 'app-motion', 'app-theme-choice', 'app-single-keys'};
 
   late final UiBridge _bridge = UiBridge(
     api: UiApi(this),
@@ -57,6 +58,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
   bool _preparing = false;
   bool _fellBack = false;
   bool _elsewhere = false;
+  bool _keeping = false;
   bool? _pageDark;
   int _covered = 0;
   DateTime? _pausedAt;
@@ -96,6 +98,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
 
   Future<void> _boot() async {
     if (!mounted) return;
+    if (_standalone()) unawaited(_keepData());
     if (!_modern()) return _fallBack();
     try {
       await DatabaseService().database;
@@ -115,6 +118,30 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     }
     if (!mounted || _elsewhere) return;
     _createFrame();
+  }
+
+  static bool _standalone() {
+    try {
+      return web.window.matchMedia('(display-mode: standalone)').matches ||
+          (web.window.navigator as JSObject)['standalone'].dartify() == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _keepData() async {
+    if (_keeping || !(web.window.navigator as JSObject).has('storage')) return;
+    _keeping = true;
+    try {
+      final storage = web.window.navigator.storage;
+      if (!(await storage.persisted().toDart).toDart) await storage.persist().toDart;
+    } catch (_) {}
+  }
+
+  static bool _keeps(UiBridgeRequest request, UiBridgeReply reply) {
+    if (request.method == 'GET' || reply.status >= 400 || !request.path.startsWith('/api/ui/')) return false;
+    final segments = Uri.parse(request.path).pathSegments;
+    return !(segments.length == 4 && segments[2] == 'store' && _viewKeys.contains(segments[3]));
   }
 
   Future<void> _register() async {
@@ -178,6 +205,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
 
   Future<void> _answer(web.MessagePort port, UiBridgeRequest request) async {
     final reply = await _bridge.handle(request);
+    if (_keeps(request, reply)) unawaited(_keepData());
     final body = reply.body;
     port.postMessage(_Reply(
       status: reply.status,

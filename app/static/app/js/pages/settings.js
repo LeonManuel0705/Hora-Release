@@ -2928,10 +2928,33 @@ function renderDataMeta() {
   if (node) node.textContent = areas.length ? `Auf diesem Gerät: ${joinWords(areas)}` : "Noch nichts geändert";
 }
 
+let keptData = null;
+
+function storageRow() {
+  if (root.dataset.shell !== "web" || keptData === null) return "";
+  if (appleDevice() && !onHomeScreen()) {
+    return row({ id: "rowStorage", label: "Speicher", desc: `Öffnest du ${BRAND} in Safari sieben Tage lang nicht, löscht Safari alle Einträge. Als App vom Home-Bildschirm passiert das nicht.`, control: `<span class="status is-warn">Vorläufig</span>` });
+  }
+  if (keptData) return row({ id: "rowStorage", label: "Speicher", desc: "Der Browser löscht deine Einträge nicht von sich aus.", control: `<span class="status is-ok">${icon("circle-check")}Dauerhaft</span>` });
+  return row({ id: "rowStorage", label: "Speicher", desc: "Wird der Speicher knapp, darf der Browser deine Einträge löschen.", control: `<button class="btn btn-quiet" type="button" id="dataKeep">${icon("hard-drive")}Dauerhaft speichern</button>` });
+}
+
+async function keepData() {
+  let kept = false;
+  try {
+    kept = await navigator.storage.persist();
+  } catch {}
+  keptData = kept;
+  renderData();
+  if (kept) say("Dauerhaft gespeichert");
+  else toast("Der Browser lässt das gerade nicht zu. Sichere deine Einträge ab und zu mit Exportieren.", { icon: "circle-alert" });
+}
+
 function renderData() {
   const card = $("dataCard");
   keepFocus(card, () => {
     card.innerHTML = [
+      storageRow(),
       row({ id: "rowExport", label: "Sichern", desc: "Stundenplan, Fächer, Noten, Tests, Klausuren, Aufgaben, Termine, Orte und Einstellungen als Datei", control: `<button class="btn btn-quiet" type="button" id="dataExport">${icon("download")}Exportieren</button>` }),
       row({ id: "rowImport", label: "Wiederherstellen", desc: `Übernimmt eine gesicherte Datei von ${BRAND}, auch von einem anderen Gerät. Stundenplan und Einstellungen kommen aus der Datei, vorhandene Noten, Aufgaben und Termine bleiben.`, control: `<button class="btn btn-quiet" type="button" id="dataImport">${icon("upload")}Importieren</button>` }),
       row({ id: "rowWipe", label: "Alles auf diesem Gerät löschen", desc: "Stundenplan, Fächer und Stundenraster wieder wie in IServ, alle Einstellungen wie beim ersten Start.", control: `<button class="btn btn-quiet danger-button" type="button" id="dataWipe">${icon("trash-2")}Löschen</button>` }),
@@ -3209,6 +3232,7 @@ function bindData() {
   const file = $("importFile");
   card.addEventListener("click", (event) => {
     if (event.target.closest("#dataExport")) exportData();
+    else if (event.target.closest("#dataKeep")) keepData();
     else if (event.target.closest("#dataImport")) file.click();
     else if (event.target.closest("#dataWipe")) wipeData();
   });
@@ -3217,6 +3241,12 @@ function bindData() {
     file.value = "";
     if (chosen) importData(chosen);
   });
+  if (root.dataset.shell === "web" && navigator.storage?.persisted) {
+    navigator.storage.persisted().then((kept) => {
+      keptData = kept;
+      renderData();
+    }, () => {});
+  }
 }
 
 function bindAbout() {
