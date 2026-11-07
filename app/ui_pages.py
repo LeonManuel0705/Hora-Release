@@ -32,6 +32,7 @@ PAGES = {
     'vbb': ('/hub/vbb', 'app/transit.html'),
     'email': ('/hub/email', 'app/email.html'),
     'pomodoro': ('/hub/pomodoro', 'app/pomodoro.html'),
+    'bookmarks': ('/hub/bookmarks', 'app/bookmarks.html'),
     'settings': ('/hub/settings', 'app/settings.html'),
 }
 

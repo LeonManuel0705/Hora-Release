@@ -762,9 +762,14 @@ def test_changing_or_deleting_a_bookmark_drops_the_icon_nobody_shows_any_more(cl
 
 
 def test_the_bookmark_page_asks_the_app_and_no_outside_service_for_icons(client):
-    text = client.get('/hub/bookmarks').get_data(as_text=True)
-    assert '/api/hub/bookmarks/${b.id}/icon' in text
-    assert 's2/favicons' not in text
+    page = client.get('/hub/bookmarks').get_data(as_text=True)
+    assert 'data-page-module="bookmarks"' in page
+    script = (ROOT / 'app' / 'static' / 'app' / 'js' / 'pages' / 'bookmarks.js').read_text(encoding='utf-8')
+    assert '${ENDPOINT}/${encodeURIComponent(link.id)}/icon' in script and 'const ENDPOINT = "/api/hub/bookmarks";' in script
+    classic = client.get('/hub/klassisch/bookmarks').get_data(as_text=True)
+    assert '/api/hub/bookmarks/${b.id}/icon' in classic
+    for text in (page, script, classic):
+        assert 's2/favicons' not in text
 
 
 def test_the_script_of_the_older_pages_leaves_the_bookmark_form_alone():

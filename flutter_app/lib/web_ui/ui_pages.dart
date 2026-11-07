@@ -20,6 +20,7 @@ const uiPageRoutes = {
   '/hub/school': 'school',
   '/hub/vbb': 'vbb',
   '/hub/email': 'email',
+  '/hub/bookmarks': 'bookmarks',
   '/hub/settings': 'settings',
 };
 

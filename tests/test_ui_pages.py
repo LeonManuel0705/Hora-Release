@@ -16,7 +16,7 @@ from app import ui_data
 from app.crypto_utils import encrypt_file
 
 ROOT = Path(__file__).resolve().parent.parent
-PAGES = ["/hub", "/hub/tasks", "/hub/calendar", "/hub/school", "/hub/vbb", "/hub/email", "/hub/pomodoro", "/hub/settings"]
+PAGES = ["/hub", "/hub/tasks", "/hub/calendar", "/hub/school", "/hub/vbb", "/hub/email", "/hub/pomodoro", "/hub/bookmarks", "/hub/settings"]
 
 
 @pytest.fixture

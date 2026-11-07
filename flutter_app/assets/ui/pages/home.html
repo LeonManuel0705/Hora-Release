@@ -44,7 +44,7 @@
                 }, 1200);
             });
             // A page outside this interface has no opt-in, so the browser would abort the transition there and report it as an error.
-            var ownPages = /^\/hub(?:\/(?:tasks|calendar|school|vbb|email|pomodoro|settings))?\/?$/;
+            var ownPages = /^\/hub(?:\/(?:tasks|calendar|school|vbb|email|pomodoro|bookmarks|settings))?\/?$/;
             addEventListener("pageswap", function (event) {
                 var transition = event.viewTransition;
                 var entry = event.activation && event.activation.entry;
@@ -56,9 +56,9 @@
     </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
     <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/static/app/css/tokens.css?v=2e67faaab9">
-    <link rel="stylesheet" href="/static/app/css/app.css?v=2e67faaab9">
-    <link rel="stylesheet" href="/static/css/tour.css?v=2e67faaab9">
+    <link rel="stylesheet" href="/static/app/css/tokens.css?v=2cf69e5094">
+    <link rel="stylesheet" href="/static/app/css/app.css?v=2cf69e5094">
+    <link rel="stylesheet" href="/static/css/tour.css?v=2cf69e5094">
     
     <script nonce="__APP_NONCE__">
         (function () {
@@ -74,7 +74,7 @@
             if (root.dataset.themeMode === "auto") root.dataset.theme = system.matches ? "dark" : "light";
         })();
     </script>
-    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=2e67faaab9"></script>
+    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=2cf69e5094"></script>
 </head>
 <body data-tour-auto="__APP_TOUR__" data-server-behind="0">
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -271,19 +271,9 @@
                         <span>Pomodoro</span>
                     </a>
                     
-                    <a class="nav-item" href="/hub/training" data-page="training">
-                        <svg class="icon"><use href="#i-dumbbell"/></svg>
-                        <span>Training</span>
-                    </a>
-                    
                     <a class="nav-item" href="/hub/bookmarks" data-page="bookmarks">
                         <svg class="icon"><use href="#i-bookmark"/></svg>
                         <span>Lesezeichen</span>
-                    </a>
-                    
-                    <a class="nav-item" href="/hub/review" data-page="review">
-                        <svg class="icon"><use href="#i-activity"/></svg>
-                        <span>Review</span>
                     </a>
                     
                 </div>
@@ -418,16 +408,8 @@
             <svg class="icon"><use href="#i-timer"/></svg><span>Pomodoro</span>
         </a>
         
-        <a class="more-tile" href="/hub/training" data-page="training">
-            <svg class="icon"><use href="#i-dumbbell"/></svg><span>Training</span>
-        </a>
-        
         <a class="more-tile" href="/hub/bookmarks" data-page="bookmarks">
             <svg class="icon"><use href="#i-bookmark"/></svg><span>Lesezeichen</span>
-        </a>
-        
-        <a class="more-tile" href="/hub/review" data-page="review">
-            <svg class="icon"><use href="#i-activity"/></svg><span>Review</span>
         </a>
         
         <a class="more-tile" href="/hub/settings" data-page="settings">
@@ -529,8 +511,8 @@
 <div class="tooltip" id="tooltip" role="tooltip"></div>
 
 <script type="application/json" id="appStore">__APP_STORE__</script>
-<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=2e67faaab9" defer></script>
-<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=2e67faaab9" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=2cf69e5094" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=2cf69e5094" defer></script>
 
 
 <script type="application/json" id="appData">__APP_DATA__</script>

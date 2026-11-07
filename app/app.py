@@ -462,7 +462,7 @@ def hub_privacy():
 def hub_email():
     return render_template('hub/email.html', active_tab='email')
 
-@app.route('/hub/bookmarks')
+@app.route('/hub/klassisch/bookmarks')
 def hub_bookmarks():
     return render_template('hub/bookmarks.html', active_tab='bookmarks')
 

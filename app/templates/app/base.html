@@ -44,7 +44,7 @@
                 }, 1200);
             });
             // A page outside this interface has no opt-in, so the browser would abort the transition there and report it as an error.
-            var ownPages = /^\/hub(?:\/(?:tasks|calendar|school|vbb|email|pomodoro|settings))?\/?$/;
+            var ownPages = /^\/hub(?:\/(?:tasks|calendar|school|vbb|email|pomodoro|bookmarks|settings))?\/?$/;
             addEventListener("pageswap", function (event) {
                 var transition = event.viewTransition;
                 var entry = event.activation && event.activation.entry;
@@ -80,7 +80,7 @@
 {% include "app/_icons.svg" %}
 <a class="skip" href="#main">Zum Inhalt springen</a>
 
-{% set routes = {"home": "/hub", "tasks": "/hub/tasks", "calendar": "/hub/calendar", "school": "/hub/school", "vbb": "/hub/vbb", "email": "/hub/email", "settings": "/hub/settings"} %}
+{% set routes = {"home": "/hub", "tasks": "/hub/tasks", "calendar": "/hub/calendar", "school": "/hub/school", "vbb": "/hub/vbb", "email": "/hub/email", "bookmarks": "/hub/bookmarks", "settings": "/hub/settings"} %}
 {% set nav_main = [
     ("home", "Übersicht", "house", None),
     ("tasks", "Aufgaben", "list-checks", None),
@@ -92,9 +92,7 @@
 {% set nav_more = [
     ("assistant", "Assistent", "message-circle"),
     ("pomodoro", "Pomodoro", "timer"),
-    ("training", "Training", "dumbbell"),
     ("bookmarks", "Lesezeichen", "bookmark"),
-    ("review", "Review", "activity"),
 ] %}
 
 <header class="topbar">
@@ -174,7 +172,7 @@
 
 <div class="sheet more-sheet is-glass" id="moreSheet" popover aria-label="Weitere Bereiche">
     <div class="more-grid">
-        {% for key, label, icon in [("vbb", "Fahrplan", "train-front"), ("email", "E-Mail", "mail"), ("assistant", "Assistent", "message-circle"), ("pomodoro", "Pomodoro", "timer"), ("training", "Training", "dumbbell"), ("bookmarks", "Lesezeichen", "bookmark"), ("review", "Review", "activity"), ("settings", "Einstellungen", "settings")] %}
+        {% for key, label, icon in [("vbb", "Fahrplan", "train-front"), ("email", "E-Mail", "mail"), ("assistant", "Assistent", "message-circle"), ("pomodoro", "Pomodoro", "timer"), ("bookmarks", "Lesezeichen", "bookmark"), ("settings", "Einstellungen", "settings")] %}
         <a class="more-tile" href="{{ routes.get(key, '/hub/' ~ key) }}" data-page="{{ key }}"{% if active == key %} aria-current="page"{% endif %}>
             <svg class="icon"><use href="#i-{{ icon }}"/></svg><span>{{ label }}</span>
         </a>

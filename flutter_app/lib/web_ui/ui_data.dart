@@ -640,6 +640,7 @@ class UiData {
       'school' => await pageSchool(setup),
       'vbb' => await pageTransit(),
       'email' => pageEmail(),
+      'bookmarks' => await pageBookmarks(),
       'settings' => await pageSettings(setup, iserv),
       _ => null,
     };
@@ -787,6 +788,14 @@ class UiData {
   }
 
   Map<String, Object?> pageEmail() => {'messages': <Object?>[], 'contacts': <Object?>[], 'native': true};
+
+  static Map<String, Object?> bookmarkView(Map<String, Object?> row) =>
+      {'id': text(row['id']), 'title': text(row['title']), 'url': text(row['url']), 'category': text(row['category']).isEmpty ? 'Other' : text(row['category'])};
+
+  Future<Map<String, Object?>> pageBookmarks() async => {
+        'bookmarks': [for (final row in await db.query('bookmarks', orderBy: 'created_at DESC')) bookmarkView(row)],
+        'siteFallback': false,
+      };
 
   Future<Map<String, Object?>> pageSettings(School setup, Map<String, Object?> iserv) async {
     final known = await knownPlaces();
