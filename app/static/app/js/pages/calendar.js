@@ -1,7 +1,7 @@
 import {
   root, data, flags, params, esc, icon, luna, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, abWeeks, isoWeek, subject, hueVar, blockOf, lessonsFor, inDays, duration, shortDate, longDate, storage, ASSESSMENTS, isAssessment, isOverdue, assessmentCount,
-  WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "../core.js";
+  WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND, periodWords } from "../core.js";
 import { animates, travels, flipKeyed, exitInPlace, crossfade, token, ms } from "../motion.js";
 import { toast, parseNote, cleanTitle, phraseAt, typing, shortcutsEnabled, overlayOpen, registerSearch, pageUrl, placeNear, clampSheet } from "../shell.js";
 import { events as eventApi, debounced, serverId } from "../api.js";
@@ -169,7 +169,7 @@ const sourceLabel = (item) => (item.synced ? item.calendarName || "" : KINDS[ite
 
 function dueTime(item) {
   const block = item.block ? blockOf(item.block) : null;
-  return block ? `${block.n}. Block, ${hm(block.start)} bis ${hm(block.end)}` : "ganztägig";
+  return block ? `${block.n}. ${periodWords().one}, ${hm(block.start)} bis ${hm(block.end)}` : "ganztägig";
 }
 
 function findEntry(id) {
@@ -212,7 +212,7 @@ function schoolLine(date) {
   const cancelled = lessons.filter((lesson) => lesson.cancelled);
   if (!active.length) return "Unterricht entfällt";
   const hours = active[0].startMin === 480 ? `Schule bis ${hm(active[active.length - 1].end)}` : `Schule ${hm(active[0].start)} bis ${hm(active[active.length - 1].end)}`;
-  return cancelled.length ? `${cancelled.map((lesson) => `${lesson.block}.`).join(" und ")} Block entfällt, ${hours}` : hours;
+  return cancelled.length ? `${cancelled.map((lesson) => `${lesson.block}.`).join(" und ")} ${periodWords().one} entfällt, ${hours}` : hours;
 }
 
 function syncStand() {
@@ -389,7 +389,7 @@ function chipHtml(entry, isos) {
     const overdue = isOverdue(item, todayIso());
     const label = `${dueLabel(item, { long: true })}, ${dueTime(item)}${overdue ? ", überfällig" : ""}`;
     const text = state.narrow ? `<span class="cw-chip-text">${esc(item.kind)} ${esc(subjectName(item.subject))}: ${esc(item.title)}</span>` : `<span class="cw-chip-text">${dueLabel(item)}</span>`;
-    return `<button type="button" class="cw-chip${dueTone(item)}${selected}" style="grid-column:${column};--hue:${hueVar(item.subject)}" data-id="${esc(item.id)}" data-key="chip:${esc(item.id)}" data-tip="${esc(`<b>${esc(item.kind)} ${esc(subjectName(item.subject))}</b>: ${esc(item.title)}${item.block ? `, ${item.block}. Block` : ""}${overdue ? "<br>überfällig" : ""}`)}" ${order} aria-label="${esc(label)}">${icon(dueIcon(item))}${text}</button>`;
+    return `<button type="button" class="cw-chip${dueTone(item)}${selected}" style="grid-column:${column};--hue:${hueVar(item.subject)}" data-id="${esc(item.id)}" data-key="chip:${esc(item.id)}" data-tip="${esc(`<b>${esc(item.kind)} ${esc(subjectName(item.subject))}</b>: ${esc(item.title)}${item.block ? `, ${item.block}. ${periodWords().one}` : ""}${overdue ? "<br>überfällig" : ""}`)}" ${order} aria-label="${esc(label)}">${icon(dueIcon(item))}${text}</button>`;
   }
   const past = isPast(item) ? " is-past" : "";
   const when = item.start ? timeText(item) : "ganztägig";
@@ -436,7 +436,7 @@ function lessonBand(lesson, date, pos, len) {
   const info = subject(lesson.subject);
   const iso = isoDate(date);
   const test = deadlines.find((item) => isAssessment(item) && item.date === iso && item.block === lesson.block);
-  const tip = `${lesson.block}. Block, ${hm(lesson.start)} bis ${hm(lesson.end)}: <b>${esc(info.name)}</b> in ${esc(lesson.room)}${lesson.movedFrom ? ` statt ${esc(lesson.movedFrom)}` : ""}, ${esc(lesson.teacher)}${test ? `<br>${esc(test.kind)}: ${esc(test.title)}` : ""}${lesson.cancelled ? "<br>Entfällt" : ""}`;
+  const tip = `${lesson.block}. ${periodWords().one}, ${hm(lesson.start)} bis ${hm(lesson.end)}: <b>${esc(info.name)}</b> in ${esc(lesson.room)}${lesson.movedFrom ? ` statt ${esc(lesson.movedFrom)}` : ""}, ${esc(lesson.teacher)}${test ? `<br>${esc(test.kind)}: ${esc(test.title)}` : ""}${lesson.cancelled ? "<br>Entfällt" : ""}`;
   const room = lesson.cancelled ? "entfällt" : `${esc(lesson.room)}${state.narrow ? `, ${esc(lesson.teacher)}` : ""}`;
   return `<div class="cw-lesson${lesson.cancelled ? " is-cancelled" : ""}${lesson.movedFrom ? " is-moved" : ""}" style="--top:${pos(lesson.startMin)};--len:${len(lesson.startMin, lesson.endMin)};--hue:${hueVar(lesson.subject)}" data-tip="${esc(tip)}" aria-hidden="true">
     <span class="cw-lesson-label"><span class="label-full">${esc(info.label)}</span><span class="label-short">${esc(info.short)}</span></span>
@@ -479,7 +479,7 @@ function draftCard(pos, len) {
 function schoolSummary(date, lessons) {
   const line = schoolLine(date);
   if (!lessons.length) return line || "Kein Unterricht";
-  const names = lessons.filter((lesson) => !lesson.cancelled).map((lesson) => `${lesson.block}. Block ${subject(lesson.subject).name}`).join(", ");
+  const names = lessons.filter((lesson) => !lesson.cancelled).map((lesson) => `${lesson.block}. ${periodWords().one} ${subject(lesson.subject).name}`).join(", ");
   return `${line}. ${names}`;
 }
 
@@ -613,7 +613,7 @@ function monthItemHtml({ type, item }, iso, { wrap = false, focusable = false } 
   const wrapped = wrap ? " is-wrap" : "";
   if (type === "holiday") return `<span class="cm-item is-holiday" data-tip="${esc(`<b>${esc(item.title)}</b>`)}">${esc(item.title)}</span>`;
   if (type === "due") {
-    const tip = `<b>${esc(item.kind)} ${esc(subjectName(item.subject))}</b>: ${esc(item.title)}${item.block ? `, ${item.block}. Block` : ""}`;
+    const tip = `<b>${esc(item.kind)} ${esc(subjectName(item.subject))}</b>: ${esc(item.title)}${item.block ? `, ${item.block}. ${periodWords().one}` : ""}`;
     return `<button type="button" class="cm-item${dueTone(item)}${wrapped}${state.selected === item.id ? " is-selected" : ""}" data-item="${esc(item.id)}"${tab} data-tip="${esc(tip)}" style="--hue:${hueVar(item.subject)}">${icon(dueIcon(item))}<span class="cm-text">${esc(subject(item.subject).label)}${focusable ? `: ${esc(item.title)}` : ""}</span></button>`;
   }
   const bar = !item.start || longTimed(item);
@@ -743,7 +743,7 @@ function listRow({ type, item }, iso) {
     const block = item.block ? blockOf(item.block) : null;
     const overdue = isOverdue(item, todayIso());
     const lesson = item.block ? lessonsFor(parseDate(item.date)).find((entry) => entry.block === item.block) : null;
-    const meta = [`<i class="subject-dot" style="--hue:${hueVar(item.subject)}"></i>${esc(subject(item.subject).label)}`, block ? `${block.n}. Block` : "", lesson ? esc(lesson.room) : "", overdue ? `<span class="cl-urgent">überfällig</span>` : ""].filter(Boolean).join(", ");
+    const meta = [`<i class="subject-dot" style="--hue:${hueVar(item.subject)}"></i>${esc(subject(item.subject).label)}`, block ? `${block.n}. ${periodWords().one}` : "", lesson ? esc(lesson.room) : "", overdue ? `<span class="cl-urgent">überfällig</span>` : ""].filter(Boolean).join(", ");
     return `<li><button type="button" class="cl-row is-due${isAssessment(item) ? " is-test" : ""}${selected}" ${base}>
       <span class="cl-time">${block ? `<b>${hm(block.start)}</b><small>${hm(block.end)}</small>` : `<span class="cl-icon">${icon(dueIcon(item))}</span>`}</span>
       <span class="cl-main"><span class="cl-title">${isAssessment(item) ? icon(dueIcon(item)) : ""}<span class="cl-text">${esc(item.kind)}: ${esc(item.title)}</span></span><span class="cl-meta">${meta}</span></span>${icon("chevron-right", "chev-end")}
@@ -817,7 +817,7 @@ function renderOverview() {
   const test = nextTest();
   let testHtml = "";
   if (test) {
-    const block = test.block ? `, ${test.block}. Block` : "";
+    const block = test.block ? `, ${test.block}. ${periodWords().one}` : "";
     const open = prepTasks(test.id).length;
     testHtml = `<div class="cal-next">
       <h3 class="cal-next-label">${esc(ASSESSMENTS[test.kind].next)}</h3>

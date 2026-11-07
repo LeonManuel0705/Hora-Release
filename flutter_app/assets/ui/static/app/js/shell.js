@@ -1,4 +1,4 @@
-import { data, flags, icon, esc, safeMarkup, root, subject, hueVar, now, addDays, startOfDay, isoDate, parseDate, shortDate, dayDiff, clock, minutesOf, pinnedTime, platform, storage, homeworkDate, stretchOf, BRAND } from "./core.js";
+import { data, flags, icon, esc, safeMarkup, root, subject, hueVar, now, addDays, startOfDay, isoDate, parseDate, shortDate, dayDiff, clock, minutesOf, pinnedTime, platform, storage, homeworkDate, stretchOf, BRAND, periodWords } from "./core.js";
 import { animates, travels, rich } from "./motion.js";
 import { tasks as taskApi, deadlines as deadlineApi, notes as noteApi } from "./api.js";
 import { switchRemindersOn } from "./reminders.js";
@@ -780,7 +780,7 @@ function renderChips() {
     const text = shortDate(new Date(`${info.date}T12:00:00`));
     chips.push(chipButton("date", `${icon("calendar-days")}${esc(text)}`, text));
   }
-  if (info.block) chips.push(chipButton("block", `${icon("nx-block")}${info.block}. Block`, `${info.block}. Block`));
+  if (info.block) chips.push(chipButton("block", `${icon("nx-block")}${info.block}. ${periodWords().one}`, `${info.block}. ${periodWords().one}`));
   const markup = chips.join("");
   if (noteChips.dataset.markup !== markup) {
     noteChips.dataset.markup = markup;
