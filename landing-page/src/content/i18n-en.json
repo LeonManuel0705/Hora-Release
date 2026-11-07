@@ -599,7 +599,7 @@
       }
     ],
     "lock_title": "What is encrypted",
-    "lock_text": "{{BRAND_NAME}} stores your IServ and mail login details encrypted, on the computer with Fernet and a key from 600,000 PBKDF2 rounds, on Android in the system's encrypted storage. On the computer, {{BRAND_NAME}} encrypts grades, homework, tests, exams, events, notes, mail drafts, saved places and your history with Luna the same way. Not encrypted there are the timetable with subjects and rooms, the task list, training, bookmarks, tickets and the settings, and on Android and in the web app everything except the login details. All of it stays on your device.",
+    "lock_text": "{{BRAND_NAME}} stores your IServ and mail login details encrypted, on the computer with Fernet and a key from 600,000 PBKDF2 rounds, on Android in the system's encrypted storage. On the computer, {{BRAND_NAME}} encrypts grades, homework, tests, exams, presentations, events, notes, mail drafts, saved places and your history with Luna the same way. Not encrypted there are the timetable with subjects, teachers, rooms and times, the task list, training, Pomodoro statistics, reviews, bookmarks, tickets, the cached substitution plan and the settings with your birthday and weather location, and on Android and in the web app everything except the login details. All of it stays on your device.",
     "lock_number": "600,000",
     "lock_number_label": "PBKDF2 rounds for your login details on the computer",
     "no_title": "What doesn't exist",

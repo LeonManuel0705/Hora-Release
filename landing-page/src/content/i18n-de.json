@@ -599,7 +599,7 @@
       }
     ],
     "lock_title": "Was verschlüsselt ist",
-    "lock_text": "Zugangsdaten für IServ und Mail speichert {{BRAND_NAME}} verschlüsselt, am Computer mit Fernet und einem Schlüssel aus 600.000 PBKDF2-Runden, auf Android im verschlüsselten Speicher des Systems. Am Computer verschlüsselt {{BRAND_NAME}} so auch Noten, Hausaufgaben, Tests, Klausuren, Termine, Notizen, Mail-Entwürfe, gespeicherte Orte und den Verlauf mit Luna. Unverschlüsselt liegen dort der Stundenplan mit Fächern und Räumen, die Aufgabenliste, Training, Lesezeichen, Tickets und die Einstellungen, auf Android und in der Web-App alles außer den Zugangsdaten. Das alles bleibt auf deinem Gerät.",
+    "lock_text": "Zugangsdaten für IServ und Mail speichert {{BRAND_NAME}} verschlüsselt, am Computer mit Fernet und einem Schlüssel aus 600.000 PBKDF2-Runden, auf Android im verschlüsselten Speicher des Systems. Am Computer verschlüsselt {{BRAND_NAME}} so auch Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Termine, Notizen, Mail-Entwürfe, gespeicherte Orte und den Verlauf mit Luna. Unverschlüsselt liegen dort der Stundenplan mit Fächern, Lehrkräften, Räumen und Zeiten, die Aufgabenliste, Training, Pomodoro-Statistik, Rückblicke, Lesezeichen, Tickets, der zwischengespeicherte Vertretungsplan und die Einstellungen mit Geburtstag und Wetterort, auf Android und in der Web-App alles außer den Zugangsdaten. Das alles bleibt auf deinem Gerät.",
     "lock_number": "600.000",
     "lock_number_label": "PBKDF2-Runden für deine Zugangsdaten am Computer",
     "no_title": "Was es nicht gibt",
