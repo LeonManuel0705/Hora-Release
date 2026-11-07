@@ -17,7 +17,11 @@ from datetime import date, timedelta
 from typing import NamedTuple, Optional
 
 WEEKDAYS = ('montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag', 'samstag', 'sonntag')
-# Short names only count with their capital and right in front of a date: "Do 8.10.", but not "so 5.10.".
+# Days in a list ("Mo, Mi und Fr") name a rhythm, so none of them counts. Short names count as written ("Do", not "do")
+# unless "am" or "bis" stands before them, and only where nothing else can be meant: never after "mit", never in front of
+# a name ("Fr. Müller", "Di Maria") unless a clock time stands before them, and at the start of a sentence only with a
+# dot, a time or a time of day and without a comma behind them ("So, ..." and "So ein Tag", where "So" is the adverb,
+# stay text). The quick fields of the app read days by the same rules (shell.js, shortDay).
 SHORT_WEEKDAYS = ('Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So')
 MONTHS = {'januar': 1, 'februar': 2, 'märz': 3, 'april': 4, 'mai': 5, 'juni': 6,
           'juli': 7, 'august': 8, 'september': 9, 'oktober': 10, 'november': 11, 'dezember': 12}
@@ -52,7 +56,8 @@ _MAYBE_A_LABEL_BEFORE = re.compile(
 NEAR = 21
 _LISTED = re.compile(r'\b(?:und|oder|sowie)\s*$')
 _NOT_TOMORROW_BEFORE = re.compile(
-    rf'(?<!\w)(?:am|jeden|jedem|guten|gestern|heute|frühen|nächsten|das|der|den|dem|diesen|diesem|einen|einem|{_NAME})\s+$')
+    rf'(?<!\w)(?:am|jeden|jedem|guten|gestern|heute|frühen|nächsten|das|der|den|dem|diesen|diesem|einen|einem|{_NAME}'
+    rf'|(?:{"|".join(SHORT_WEEKDAYS)})\.?)\s+$')
 # Behind a weekday: a date or a count of weeks that was not understood. The weekday alone would then be the wrong day.
 _UNREAD_AFTER = re.compile(rf'\s*[,(–-]?\s*(?:de[nmr]\s+)?\d{{1,2}}\.\s?(?:\d{{1,2}}\.|(?:{"|".join(MONTHS)})\b)|\s+in\s+\S+\s+wochen?\b')
 # What a number measures ("um 2 Punkte", "5:30 pro km") and, in _UNIT, also what it may simply count ("halb 10 Seiten").
@@ -91,12 +96,32 @@ _RELATIVE = re.compile(
 )
 _WEEK = r'(?:(?:in\s+)?der\s+)?(?:übernächste[rn]?|nächste[rn]?|kommende[rn]?|diese[rn]?)\s+woche'
 _WEEKDAY = re.compile(
-    rf'{_START}{_LEAD}(?:(?P<week>{_WEEK})\s+(?:am\s+)?)?(?P<name>{_NAME})(?:\s+(?P<part>{_PART}|morgen))?'
-    rf'(?P<range>\s+bis\s+(?:(?:zum|einschließlich)\s+)?(?P<last>{_NAME}))?'
+    rf'{_START}{_LEAD}(?:(?P<week>{_WEEK})\s+(?:am\s+)?)?(?:(?P<name>{_NAME})|(?P<short>{"|".join(SHORT_WEEKDAYS)})\.?)(?:\s+(?P<part>{_PART}|morgen))?'
+    rf'(?P<range>\s+bis\s+(?:(?:zum|einschließlich)\s+)?(?P<last>{_NAME}|{"|".join(SHORT_WEEKDAYS)}))?'
     rf'(?:\s+(?:in\s+(?P<weeks>einer|\d|zwei|drei|vier)\s+wochen?|(?P<after>{_WEEK})))?{_END}'
 )
 _AHEAD = re.compile(rf'{_START}(?:(?:heute|bis)\s+)?in\s+(?P<count>\d{{1,3}}|einem|einer|zwei|drei|vier)\s+(?P<unit>tag(?:en)?|wochen?){_END}')
-_SHORT_DAY = re.compile(rf'(?<![\w.])(?:{"|".join(SHORT_WEEKDAYS)})(?=\.?,?\s+(?:den\s+)?\d{{1,2}}\.)')
+_SHORT_DAY = re.compile(rf'(?<![\w.–/-])(?:{"|".join(SHORT_WEEKDAYS)})(?![\w-])', re.IGNORECASE)
+_SHORT_BEFORE_DATE = re.compile(r'\.?,?\s+(?:den\s+)?\d{1,2}\.')
+_SHORT_MARKED = re.compile(r'(?<!\w)(?:am|bis|zum|ab|spätestens)\s+$', re.IGNORECASE)
+_SHORT_NOT_AFTER = re.compile(r'(?<!\w)(?:herr|frau|hr\.|fr\.|dr\.|prof\.)\s*$|[–/-]\s*$', re.IGNORECASE)
+_SHORT_LISTED = re.compile(r'\s*[–/-]\s*(?:mo|di|mi|do|fr|sa|so)(?!\w)', re.IGNORECASE)
+_SHORT_NAMED = re.compile(r'\s*[,.]?\s*[A-ZÄÖÜ]')
+_CLOCK_BEFORE = re.compile(rf'(?:\d|uhr|{_ADVERB})\s*[,.]?\s*$', re.IGNORECASE)
+_SHORT_WITH = re.compile(r'(?<!\w)mit\s+(?:[^\W\d_][\w.-]*\s*(?:,|&|und)\s*)*$', re.IGNORECASE)
+_DAY_ANY = rf'(?:(?i:{_NAME})|{"|".join(SHORT_WEEKDAYS)})'
+_SHORT_RANGE = re.compile(rf'\s+bis\s+(?:(?:zum|einschließlich)\s+)?(?:{_NAME}|{"|".join(SHORT_WEEKDAYS)})(?!\w)', re.IGNORECASE)
+_LIST_AFTER = re.compile(rf'\.?(?:\s*(?:,|&|(?i:und|oder))\s*|\s+){_DAY_ANY}(?!\w)')
+_LIST_BEFORE = re.compile(rf'(?<!\w){_DAY_ANY}\.?(?:\s*(?:,|&|(?i:und|oder))\s*|\s+)$')
+_TITLE_BEFORE = re.compile(r'(?<!\w)(?:herr|frau|hr\.|fr\.|dr\.|prof\.)\s*$', re.IGNORECASE)
+# "morgen" is left out here: "So, morgen ..." names no day.
+_DAYTIME = r'(?:vormittags?|mittags?|nachmittags?|abends?|nachts?|morgens|früh)'
+_DAYTIME_AFTER = re.compile(rf'\s+{_DAYTIME}(?!\w)', re.IGNORECASE)
+_ANY_DAYTIME = re.compile(rf'(?<!\w){_DAYTIME}(?!\w)', re.IGNORECASE)
+_ANY_CLOCK = re.compile(
+    r'(?<![\d.:])(?:(?:[01]?\d|2[0-3]):[0-5]\d|(?:[01]?\d|2[0-3])(?:\.[0-5]\d)?\s*uhr(?!\w))|(?<!\w)(?:um|ab|gegen)\s+(?:[01]?\d|2[0-3])(?!\d)',
+    re.IGNORECASE)
+_SO_WORD = re.compile(r'\s+(?:viel|wie|lange|dass|ein|eine|einen|einem|einer|gut|oft|sehr|schnell|spät|bald|früh|weit)(?!\w)')
 _NAMED_DAY = (
     rf'(?:(?P<name>{_NAME}|{"|".join(SHORT_WEEKDAYS)})\.?(?:\s*,\s*|\s*[–-]\s+|\s*(?P<open>\()\s*|\s+)(?:de[nmr]\s+)?)?'
 )
@@ -151,10 +176,41 @@ def _low(text):
     return ''.join(char.lower() if len(char.lower()) == 1 else char for char in text)
 
 
+def _listed(text, start, end):
+    return bool(_LIST_BEFORE.search(text[:start]) or _LIST_AFTER.match(text, end))
+
+
+def _short_day(text, match):
+    """The way a short day name is meant to be read, written as the day ("Do"), or None when it may be anything else."""
+    word, before = match.group(), text[:match.start()]
+    dotted = text[match.end():match.end() + 1] == '.'
+    after = text[match.end() + dotted:]
+    if _SHORT_LISTED.match(after) or _SHORT_NOT_AFTER.search(before) or _listed(text, match.start(), match.end()):
+        return None
+    day = word[0].upper() + word[1].lower()
+    if _SHORT_MARKED.search(before):
+        return day
+    if word != day or _SHORT_WITH.search(before):
+        return None
+    opening = not before.strip()
+    if opening and day == 'So' and not dotted and _SO_WORD.match(after):
+        return None
+    if _SHORT_BEFORE_DATE.match(text, match.end()) or _DAYTIME_AFTER.match(after):
+        return day
+    named = _SHORT_NAMED.match(after)
+    if not opening:
+        return None if named and (day == 'Fr' or not _CLOCK_BEFORE.search(before)) else day
+    if after.lstrip().startswith(',') or (named and day == 'Fr'):
+        return None
+    return day if dotted or _SHORT_RANGE.match(after) or _ANY_CLOCK.search(text) or _ANY_DAYTIME.search(text) else None
+
+
 def _low_but_short_days(text):
     low = _low(text)
     for match in _SHORT_DAY.finditer(text):
-        low = low[:match.start()] + match.group() + low[match.end():]
+        day = _short_day(text, match)
+        if day:
+            low = low[:match.start()] + day + low[match.end():]
     return low
 
 
@@ -213,13 +269,16 @@ def _relative_days(low, today):
         yield Day(today + timedelta(days=ahead), match.span(), rank, 'früh' if part == 'morgen' else part)
 
 
-def _weekdays(low, today):
+def _weekdays(text, low, today):
     position = 0
     while True:
         match = _WEEKDAY.search(low, position)
         if not match:
             return
         position = match.end()
+        named = 'name' if match.group('name') else 'short'
+        if _TITLE_BEFORE.search(low[:match.start()]) or _listed(text, match.start(named), match.end(named)):
+            continue
         words = set(match.group('lead').split())
         rank, span = _rank(match.group('lead')), match.span()
         if match.group('range'):
@@ -231,7 +290,7 @@ def _weekdays(low, today):
                 rank = _PLAIN
         if rank is None:
             continue
-        index = WEEKDAYS.index(match.group('name'))
+        index = WEEKDAYS.index(match.group('name')) if match.group('name') else SHORT_WEEKDAYS.index(match.group('short'))
         week, weeks = match.group('week') or match.group('after'), match.group('weeks')
         ranged = span == match.span()
         if week and ranged:
@@ -348,7 +407,7 @@ def days(text, today):
     the first one counts.
     """
     low = _low_but_short_days(text)
-    found = [*_relative_days(low, today), *_weekdays(low, today), *_days_ahead(low, today), *_numeric_days(low, today), *_month_days(low, today)]
+    found = [*_relative_days(low, today), *_weekdays(text, low, today), *_days_ahead(low, today), *_numeric_days(low, today), *_month_days(low, today)]
     return sorted(_outermost(found), key=lambda item: (item.rank, item.span[0]))
 
 

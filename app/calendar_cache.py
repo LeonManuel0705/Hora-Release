@@ -16,6 +16,7 @@ a page comes to the front, so the copy is fresh before anyone opens the calendar
 import copy
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -332,7 +333,101 @@ def _body(item):
         body['start'] = {'date': first, 'dateTime': None, 'timeZone': None}
         body['end'] = {'date': (date.fromisoformat(last) + timedelta(days=1)).isoformat(), 'dateTime': None, 'timeZone': None}
     body['extendedProperties'] = {'private': {OPEN_END: '1' if start and not end else None}}
+    rule = ui_data.recurrence_rule(item.get('recurrence'))
+    # Only a rule changed here goes out: one Google changed, or made from a single event, must not be flattened.
+    if item.get('rule_changed'):
+        body['recurrence'] = _rrule(rule, start) if rule else []
+    if start and (rule or item.get('recurrence')):
+        body['start']['timeZone'] = body['end']['timeZone'] = _zone()
+    # Like the rule, a reminder goes out only when it was changed here, and then only the pop-up is replaced.
+    if item.get('reminder_changed'):
+        minutes, others = item.get('reminder_minutes'), list(item.get('reminder_others') or [])
+        if minutes is not None:
+            body['reminders'] = {'useDefault': False, 'overrides': others + ([] if minutes < 0 else [{'method': 'popup', 'minutes': minutes}])}
+        elif not others:
+            body['reminders'] = {'useDefault': True, 'overrides': None}
     return body
+
+
+def _zone():
+    """The name of this computer's time zone. Google needs one to repeat a timed event across a change of summer time."""
+    name = os.environ.get('TZ', '').lstrip(':')
+    if '/' in name:
+        return name
+    try:
+        target = os.path.realpath('/etc/localtime')
+    except OSError:
+        target = ''
+    return target.split('zoneinfo/', 1)[1] if 'zoneinfo/' in target else 'Europe/Berlin'
+
+
+def _rrule(rule, start):
+    """The rule as Google takes it: RRULE plus EXDATE for the days left out."""
+    parts = [f"FREQ={rule['freq'].upper()}"]
+    if rule['interval'] > 1:
+        parts.append(f"INTERVAL={rule['interval']}")
+    if rule['count']:
+        parts.append(f"COUNT={rule['count']}")
+    elif rule['until']:
+        last = datetime.fromisoformat(f"{rule['until']}T23:59:59").astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        parts.append(f"UNTIL={last if start else rule['until'].replace('-', '')}")
+    lines = ['RRULE:' + ';'.join(parts)]
+    if rule['exceptions'] and start:
+        days = ','.join(f"{day.replace('-', '')}T{start.replace(':', '')}00" for day in rule['exceptions'])
+        lines.append(f'EXDATE;TZID={_zone()}:{days}')
+    elif rule['exceptions']:
+        lines.append('EXDATE;VALUE=DATE:' + ','.join(day.replace('-', '') for day in rule['exceptions']))
+    return lines
+
+
+WEEKDAY_CODES = ('MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU')
+
+
+def _rule_of(lines, first=None):
+    """A rule written in Google back in the shape the app keeps, None for an event that does not repeat. False when
+    the rule says more than the app can show ("every Monday and Thursday"), so it is left as it is. Google's own
+    pages name the weekday or the day of the month of the first time, which says nothing more."""
+    if not lines:
+        return None
+    fields, exceptions = None, []
+    for line in lines:
+        name, _, value = str(line).partition(':')
+        if name == 'RRULE':
+            fields = dict(part.split('=', 1) for part in value.split(';') if '=' in part)
+        elif name.startswith('EXDATE'):
+            for stamp in value.split(','):
+                moment = _rule_moment(stamp)
+                if moment:
+                    exceptions.append(moment)
+        else:
+            return False
+    start = ui_data.iso_day(first)
+    if start and fields:
+        day = date.fromisoformat(start)
+        if fields.get('BYDAY') == WEEKDAY_CODES[day.weekday()] and fields.get('FREQ') == 'WEEKLY':
+            fields.pop('BYDAY')
+        if fields.get('BYMONTHDAY') == str(day.day) and fields.get('FREQ') in ('MONTHLY', 'YEARLY'):
+            fields.pop('BYMONTHDAY')
+        if fields.get('BYMONTH') == str(day.month) and fields.get('FREQ') == 'YEARLY':
+            fields.pop('BYMONTH')
+    if not fields or set(fields) - {'FREQ', 'INTERVAL', 'COUNT', 'UNTIL', 'WKST'} or fields.get('FREQ', '').lower() not in ui_data.EVENT_REPEATS:
+        return False
+    if not re.fullmatch(r'0*(?:[1-9]|1[0-2])', fields.get('INTERVAL', '1')) or not re.fullmatch(r'0*(?:[1-9]\d{0,2}|1000)', fields.get('COUNT', '1')):
+        return False
+    until = _rule_moment(fields['UNTIL']) if 'UNTIL' in fields else None
+    rule = ui_data.recurrence_rule({'freq': fields['FREQ'].lower(), 'interval': fields.get('INTERVAL'), 'count': fields.get('COUNT'), 'until': until, 'exceptions': exceptions})
+    return rule or False
+
+
+def _rule_moment(stamp):
+    """The local day of a time written in a rule: 20261112, 20261112T160000 or 20261112T150000Z."""
+    stamp = stamp.strip()
+    try:
+        if stamp.endswith('Z'):
+            return datetime.strptime(stamp, '%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc).astimezone().date().isoformat()
+        return datetime.strptime(stamp[:8], '%Y%m%d').date().isoformat()
+    except ValueError:
+        return None
 
 
 def _without_nulls(value):
@@ -544,7 +639,7 @@ def _local_fields(view):
     first = view.get('start_date')
     timed = not view.get('all_day')
     open_end = timed and view.get('open_end')
-    return {
+    fields = {
         'title': view.get('title') or 'Termin',
         'date': first,
         'end_date': last if last and last > first and not open_end else '',
@@ -553,6 +648,14 @@ def _local_fields(view):
         'location': view.get('location') or '',
         'description': view.get('description') or '',
     }
+    rule = _rule_of(view.get('recurrence'), first)
+    fields['recurrence'] = {'google': list(view['recurrence'])} if rule is False else rule
+    fields['rule_changed'] = None
+    if 'reminder_minutes' in view:
+        fields['reminder_minutes'] = view['reminder_minutes']
+        fields['reminder_others'] = view.get('reminder_others') or None
+        fields['reminder_changed'] = None
+    return fields
 
 
 def _settled(item):
@@ -928,13 +1031,132 @@ def view(item):
         'title': str(item.get('title') or 'Termin'),
         'place': str(item.get('location') or ''),
         'kind': kind_of(item.get('calendar'), item.get('title')),
-        'notes': str(item.get('description') or '')[:2000],
+        'notes': str(item.get('description') or ''),
         'source': SOURCE,
         'synced': True,
     }
     if last and last > day:
         result['endDate'] = last
+    color = str(item.get('color') or item.get('calendar_color') or '')
+    result.update(
+        color=color if re.fullmatch(r'#[0-9a-fA-F]{6}', color) else '',
+        calendarName=str(item.get('calendar') or ''),
+        htmlLink=str(item.get('html_link') or ''),
+        meetLink=str(item.get('meet_link') or ''),
+        attendees=item.get('attendees') or [],
+    )
+    if (item.get('attendee_total') or 0) > len(result['attendees']):
+        result['attendeeTotal'] = item['attendee_total']
+    if item.get('reminder_minutes') is not None:
+        result['reminderMinutes'] = item['reminder_minutes']
+    if item.get('recurring_event_id'):
+        result['inSeries'] = True
     return result
+
+
+def _days_drawn(item, rule, start, end):
+    first = date.fromisoformat(item['date'])
+    days, produced, index = set(), 0, 0
+    while index < 20000 and not (rule['count'] and produced >= rule['count']):
+        day = ui_data.nth_day(first, rule, index)
+        index += 1
+        if day is None:
+            continue
+        produced += 1
+        iso = day.isoformat()
+        if iso > end or (rule['until'] and iso > rule['until']):
+            break
+        if iso >= start and iso not in rule['exceptions']:
+            days.add(iso)
+    return days
+
+
+def _untouched(view, item):
+    end = '' if view.get('open_end') else ui_data.clock(view.get('end_time')) or ''
+    return ((view.get('original_date') or view.get('start_date')) == view.get('start_date')
+            and (view.get('original_time') or view.get('start_time')) == view.get('start_time')
+            and (view.get('title') or '') == (item.get('title') or '') and (view.get('location') or '') == (item.get('location') or '')
+            and end == (ui_data.clock(item.get('end_time')) or ''))
+
+
+def _overlay(items, buckets, start, end):
+    """Google's occurrences of a series written here against the ones the app draws from its own rule.
+
+    Untouched occurrences are hidden. One that was moved, changed or deleted in Google is left to Google, so the app
+    leaves its day out of the series. While an edit made here still waits, Google's occurrences are the old ones and
+    all of them are hidden; a rule only Google can show is left to Google's occurrences entirely.
+    """
+    by_series = {}
+    for calendar, bucket in buckets.items():
+        for key, view in bucket.items():
+            if view.get('recurring_event_id'):
+                by_series.setdefault(view['recurring_event_id'], []).append((calendar, key, view))
+    hide, skip = set(), {}
+    for item in items:
+        instances = by_series.get(item.get('google_id')) if item.get('google_id') else None
+        if not instances:
+            continue
+        # Right after a change sent from here the copy still holds Google's old occurrences: all of them are stale.
+        stale = max(view.get('updated') or '' for _, _, view in instances) < (item.get('google_seen') or '')
+        if not _settled(item) or stale:
+            hide.update((calendar, key) for calendar, key, _ in instances)
+            continue
+        rule = ui_data.recurrence_rule(item.get('recurrence'))
+        if not rule:
+            continue
+        drawn = _days_drawn(item, rule, start, end)
+        seen, changed = set(), set()
+        for calendar, key, view in instances:
+            original = view.get('original_date') or view.get('start_date')
+            seen.add(original)
+            if original in drawn and _untouched(view, item):
+                hide.add((calendar, key))
+            elif original in drawn:
+                changed.add(original)
+        if changed | (drawn - seen):
+            skip[str(item.get('id'))] = changed | (drawn - seen)
+    return hide, skip
+
+
+def series_overlay():
+    cache = _load(shared=True)
+    if not cache:
+        return set(), {}
+    return _overlay(ui_data.load_list('calendar'), cache.get('events', {}), cache['start'], cache['end'])
+
+
+def live_overlay(found, start, end):
+    """The same for events fetched beyond the copy: the (calendar, id) pairs to hide."""
+    buckets = {}
+    for view in found:
+        buckets.setdefault(view.get('calendar_id'), {})[view.get('id')] = view
+    return _overlay(ui_data.load_list('calendar'), buckets, start, end)[0]
+
+
+def own_views(views):
+    """Own event views as they stand beside Google's: a series names the days Google took over in `googleDays`, which the
+    page leaves out but never stores, and an event whose rule only Google can show gets no view, as Google shows it."""
+    if not connected():
+        return views
+    items = {f"loc-{item.get('id')}": item for item in ui_data.load_list('calendar')}
+    _, skip = series_overlay()
+    result = []
+    for view in views:
+        item = items.get(view['id']) or {}
+        if item.get('google_id') and isinstance(item.get('recurrence'), dict) and 'google' in item['recurrence']:
+            continue
+        days = skip.get(str(item.get('id')))
+        if days and view.get('recurrence'):
+            view = {**view, 'googleDays': sorted(days)}
+        result.append(view)
+    return result
+
+
+def taken_days(item):
+    """The days of an own series that Google shows itself. A page sends them back as exceptions only by mistake."""
+    if not connected() or not item.get('google_id'):
+        return set()
+    return set(series_overlay()[1].get(str(item.get('id'))) or ())
 
 
 def events(start, end):
@@ -945,13 +1167,14 @@ def events(start, end):
     linked = {item.get('google_id') for item in ui_data.load_list('calendar') if item.get('google_id')}
     calendars = {calendar['id']: calendar for calendar in cache.get('calendars', [])}
     open_to_edits = _open_to_edits(cache)
+    covered, _ = series_overlay()
     result = []
     for calendar_id, bucket in cache.get('events', {}).items():
         if calendar_id in hidden:
             continue
         editable = open_to_edits and _writable(calendars.get(calendar_id))
         for key, item in bucket.items():
-            if key in linked:
+            if key in linked or (calendar_id, key) in covered:
                 continue
             shown = view(item)
             if shown and (shown.get('endDate') or shown['date']) >= start and shown['date'] <= end:

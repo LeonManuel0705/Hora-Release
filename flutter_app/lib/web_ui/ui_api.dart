@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -425,6 +426,18 @@ class UiApi {
     if (payload.containsKey('place')) merged['place'] = text(payload['place'], 300);
     if (payload.containsKey('notes')) merged['notes'] = text(payload['notes'], 5000);
     if (payload.containsKey('kind')) merged['kind'] = payload['kind'];
+    if (payload.containsKey('recurrence')) {
+      final rule = recurrenceRule(payload['recurrence']);
+      if (payload['recurrence'] != null && rule == null) throw const _Invalid('Wiederholung ungültig');
+      merged['recurrence'] = rule;
+    }
+    if (payload.containsKey('reminderMinutes')) {
+      try {
+        merged['reminderMinutes'] = reminderMinutes(payload['reminderMinutes']);
+      } on FormatException {
+        throw const _Invalid('Erinnerung ungültig');
+      }
+    }
     final date = merged['date'] as String;
     var last = merged['endDate'] as String?;
     if (last == null || last.compareTo(date) < 0) last = date;
@@ -446,6 +459,8 @@ class UiApi {
       'end_time': endStamp.toIso8601String(),
       'all_day': allDay ? 1 : 0,
       'category': _eventCategories[merged['kind']] ?? 'personal',
+      'recurrence': merged['recurrence'] == null ? null : jsonEncode(merged['recurrence']),
+      'reminder_minutes': merged['reminderMinutes'],
     };
   }
 
@@ -528,6 +543,8 @@ class UiApi {
         'notes': text(row['description'], 2000),
         'source': 'dem Google-Kalender',
         'synced': true,
+        'color': [text(row['color']), text(calendar?['color'])].firstWhere((color) => RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(color), orElse: () => ''),
+        'calendarName': text(calendar?['name']),
       };
       if (last != null && last.compareTo(day) > 0) view['endDate'] = last;
       add(view);

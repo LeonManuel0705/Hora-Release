@@ -16,7 +16,11 @@ async function send(method, url, body) {
   try {
     payload = await response.json();
   } catch {}
-  if (!response.ok || payload?.success === false) throw new Error(payload?.error || `HTTP ${response.status}`);
+  if (!response.ok || payload?.success === false) {
+    const error = new Error(payload?.error || `HTTP ${response.status}`);
+    error.server = payload?.message || null;
+    throw error;
+  }
   return payload;
 }
 
@@ -24,10 +28,11 @@ function failed(error) {
   window.dispatchEvent(new CustomEvent("app:save-failed", { detail: { message: error?.message || "" } }));
 }
 
-function queue(key, job) {
+// A caller that tells about a failure itself asks for quiet, so the general warning does not come on top.
+function queue(key, job, { quiet = false } = {}) {
   const next = (queues.get(key) || Promise.resolve()).catch(() => {}).then(job);
   queues.set(key, next);
-  next.catch(failed);
+  next.catch(quiet ? () => {} : failed);
   return next;
 }
 
@@ -138,6 +143,8 @@ function eventBody(item) {
     place: item.place || "",
     kind: item.kind || "private",
     notes: item.notes || "",
+    ...(item.recurrence ? { recurrence: item.recurrence } : {}),
+    ...(item.reminderMinutes != null ? { reminderMinutes: item.reminderMinutes } : {}),
   };
 }
 
@@ -145,12 +152,12 @@ export const events = {
   create(item) {
     return create(item.id, "/api/ui/events", eventBody(item), (payload) => payload.event);
   },
-  update(id, changes) {
+  update(id, changes, options) {
     const body = Object.fromEntries(Object.entries(changes).map(([key, value]) => [key, clean(value)]));
-    return queue(id, async () => send("PATCH", `/api/ui/events/${encodeURIComponent(await resolved(id))}`, body));
+    return queue(id, async () => send("PATCH", `/api/ui/events/${encodeURIComponent(await resolved(id))}`, body), options);
   },
-  remove(id) {
-    return queue(id, async () => send("DELETE", `/api/ui/events/${encodeURIComponent(await resolved(id))}`));
+  remove(id, options) {
+    return queue(id, async () => send("DELETE", `/api/ui/events/${encodeURIComponent(await resolved(id))}`), options);
   },
   restore(item) {
     serverIds.delete(item.id);

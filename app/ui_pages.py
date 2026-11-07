@@ -472,6 +472,20 @@ def _event_payload(payload, item, creating):
         item['description'] = _text(payload.get('notes'), 5000)
     if 'kind' in payload:
         item['category'] = EVENT_CATEGORIES.get(payload.get('kind'), 'personal')
+    if 'recurrence' in payload:
+        if payload.get('recurrence') is not None and not ui_data.recurrence_rule(payload.get('recurrence')):
+            raise ValueError('Wiederholung ungültig')
+        rule = ui_data.recurrence_rule(payload.get('recurrence'))
+        if rule and not creating:
+            kept = set((ui_data.recurrence_rule(item.get('recurrence')) or {}).get('exceptions') or ())
+            taken = calendar_cache.taken_days(item)
+            rule['exceptions'] = [day for day in rule['exceptions'] if day in kept or day not in taken]
+        if rule != ui_data.recurrence_rule(item.get('recurrence')):
+            item.update(recurrence=rule, rule_changed=True)
+    if 'reminderMinutes' in payload:
+        minutes = ui_data.reminder_minutes(payload.get('reminderMinutes'))
+        if minutes != item.get('reminder_minutes'):
+            item.update(reminder_minutes=minutes, reminder_changed=True)
 
 
 @bp.route('/api/ui/events', methods=['POST'])
@@ -664,7 +678,9 @@ def _google_range(start, end):
         return None
     hidden = calendar_cache.hidden_calendars()
     linked = {item.get('google_id') for item in ui_data.load_list('calendar') if item.get('google_id')}
-    views = [calendar_cache.view(item) for item in result.get('events', []) if item.get('calendar_id') not in hidden and item.get('id') not in linked]
+    found = [item for item in result.get('events', []) if item.get('calendar_id') not in hidden and item.get('id') not in linked]
+    covered = calendar_cache.live_overlay(found, start, end)
+    views = [calendar_cache.view(item) for item in found if (item.get('calendar_id'), item.get('id')) not in covered]
     return [view for view in views if view]
 
 
@@ -690,7 +706,7 @@ def synced_events():
                 events = None
             if events is None:
                 events, problem = calendar_cache.events(start, end), problem or 'offline'
-        own = [view for view in (ui_data.event_view(item) for item in ui_data.load_list('calendar')) if view]
+        own = calendar_cache.own_views([view for view in (ui_data.event_view(item) for item in ui_data.load_list('calendar')) if view])
         first, last = calendar_cache.window(today)
         return jsonify({
             'success': True,

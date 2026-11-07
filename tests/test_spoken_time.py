@@ -244,3 +244,77 @@ def test_every_find_lies_inside_the_text_and_none_reaches_into_another():
 ])
 def test_behind_a_word_that_may_number_something_only_a_near_date_is_a_day(today, text, day):
     assert read(text, today)[1] == day
+
+
+@pytest.mark.parametrize('text, rest, day, clock', [
+    ('Zahnarzt Do 15:30–16:15', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Zahnarzt Do 15:30-16:15', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Zahnarzt Do. 15 Uhr', 'Zahnarzt', '2026-10-08', '15:00'),
+    ('Do 15:30 Zahnarzt', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('15:30 Do Zahnarzt', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Zahnarzt 15:30 Do', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Zahnarzt Do', 'Zahnarzt', '2026-10-08', None),
+    ('Zahnarzt am do 15:30', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Zahnarzt Do mit Mama', 'Zahnarzt mit Mama', '2026-10-08', None),
+    ('Brunch So 10 Uhr', 'Brunch', '2026-10-11', '10:00'),
+    ('Mi 18 Uhr Kino', 'Kino', '2026-10-07', '18:00'),
+    ('Zahnarzt Do morgen 8 Uhr', 'Zahnarzt', '2026-10-08', '08:00'),
+    ('Kino Fr', 'Kino', '2026-10-09', None),
+    ('Do Zahnarzt 15:30–16:15', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Do. Zahnarzt 15:30', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Do. Zahnarzt', 'Zahnarzt', '2026-10-08', None),
+    ('Mo Training 18 Uhr', 'Training', '2026-10-12', '18:00'),
+    ('Sa nachmittags Fußball', 'Fußball', '2026-10-10', None),
+    ('Mi Training abends', 'Training abends', '2026-10-07', None),
+    ('So 10 Uhr Brunch', 'Brunch', '2026-10-11', '10:00'),
+    ('So gegen 15 Uhr Kaffee', 'Kaffee', '2026-10-11', '15:00'),
+    ('Mi Amor anrufen um 15 Uhr', 'Amor anrufen', '2026-10-07', '15:00'),
+    ('Kino Do Abend', 'Kino', '2026-10-08', None),
+    ('Kino Do Abend 8 Uhr', 'Kino', '2026-10-08', '20:00'),
+    ('Do Abend 7 bis 9 Uhr Kino', 'Kino', '2026-10-08', '19:00'),
+    ('Kino Fr Abend 20 Uhr', 'Kino', '2026-10-09', '20:00'),
+    ('Mo bis Fr Praktikum', 'Praktikum', '2026-10-12', None),
+    ('Praktikum Mo bis Fr', 'Praktikum', '2026-10-12', None),
+    ('Praktikum Mo bis Freitag 8 Uhr', 'Praktikum', '2026-10-12', '08:00'),
+    ('Treffen Freitag und so', 'Treffen und so', '2026-10-09', None),
+    ('So bei Oma 15 Uhr', 'bei Oma', '2026-10-11', '15:00'),
+    ('So im Kino 20 Uhr', 'im Kino', '2026-10-11', '20:00'),
+    ('Mo früh Zahnarzt', 'Zahnarzt', '2026-10-12', None),
+])
+def test_a_short_weekday_counts_where_nothing_else_can_be_meant(text, rest, day, clock):
+    assert read(text) == (rest, day, clock)
+
+
+@pytest.mark.parametrize('text, rest, clock', [
+    ('Gespräch mit Fr. Müller 15 Uhr', 'Gespräch mit Fr. Müller', '15:00'),
+    ('Treffen mit Di Maria um 15 Uhr', 'Treffen mit Di Maria', '15:00'),
+    ('Fr. Dr. Weber anrufen um 15 Uhr', 'Fr. Dr. Weber anrufen', '15:00'),
+    ('Lady Di Doku schauen um 20 Uhr', 'Lady Di Doku schauen', '20:00'),
+    ('Anruf bei Mi Amor 15 Uhr', 'Anruf bei Mi Amor', '15:00'),
+    ('Fr Müller anrufen 15 Uhr', 'Fr Müller anrufen', '15:00'),
+    ('Zahnarzt do 15:30', 'Zahnarzt do', '15:30'),
+    ('Mo-Fr Praktikum 8 Uhr', 'Mo-Fr Praktikum', '08:00'),
+    ('Praktikum Mo - Fr 8 Uhr', 'Praktikum Mo - Fr', '08:00'),
+    ('Treffen mit Mo um 19 Uhr', 'Treffen mit Mo', '19:00'),
+    ('Pizza mit Sa', 'Pizza mit Sa', None),
+    ('Gym Mo, Mi, Fr 7 Uhr', 'Gym Mo, Mi, Fr', '07:00'),
+    ('Training Mo und Mi 18 Uhr', 'Training Mo und Mi', '18:00'),
+    ('Training Montag und Mittwoch 18 Uhr', 'Training Montag und Mittwoch', '18:00'),
+    ('Lauftreff Di oder Do 18 Uhr', 'Lauftreff Di oder Do', '18:00'),
+    ('Frau Freitag anrufen 15 Uhr', 'Frau Freitag anrufen', '15:00'),
+    ('Herr Montag kommt 15 Uhr', 'Herr Montag kommt', '15:00'),
+    ('Do Zahnarzt', 'Do Zahnarzt', None),
+    ('So ein Tag', 'So ein Tag', None),
+    ('So, noch Mathe lernen 15 Uhr', 'So, noch Mathe lernen', '15:00'),
+    ('Do, Zahnarzt 15 Uhr', 'Do, Zahnarzt', '15:00'),
+    ('So viel lernen 15 Uhr', 'So viel lernen', '15:00'),
+    ('So früh wie möglich anrufen', 'So früh wie möglich anrufen', None),
+    ('So lange lernen 15 Uhr', 'So lange lernen', '15:00'),
+    ('Pizza mit Lea und Mo um 19 Uhr', 'Pizza mit Lea und Mo', '19:00'),
+    ('Kino mit Lea & Mo', 'Kino mit Lea & Mo', None),
+    ('Essen mit Lea, Ben und Mo 18 Uhr', 'Essen mit Lea, Ben und Mo', '18:00'),
+    ('Gym Mo Mi Fr 7 Uhr', 'Gym Mo Mi Fr', '07:00'),
+    ('Gym Montag Mittwoch 7 Uhr', 'Gym Montag Mittwoch', '07:00'),
+])
+def test_a_short_weekday_in_a_name_a_list_or_opening_a_sentence_without_a_time_stays_text(text, rest, clock):
+    assert read(text) == (rest, None, clock)

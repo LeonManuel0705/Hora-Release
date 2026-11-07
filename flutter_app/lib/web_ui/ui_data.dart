@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
@@ -104,6 +105,75 @@ String? clock(Object? value) {
   final hour = int.parse(match[1]!), minute = int.parse(match[2]!);
   if (hour > 23 || minute > 59) return null;
   return '${two(hour)}:${two(minute)}';
+}
+
+const uiEventRepeats = {'daily', 'weekly', 'monthly', 'yearly'};
+const uiReminderRange = (-1, 40320);
+
+/// A repeat rule as events keep it, {freq, interval, until, count, exceptions}, or null. Same shape as recurrence.js.
+Map<String, Object?>? recurrenceRule(Object? value) {
+  if (value is String && value.trim().startsWith('{')) {
+    try {
+      value = jsonDecode(value);
+    } catch (_) {
+      return null;
+    }
+  }
+  if (value is! Map || !uiEventRepeats.contains(value['freq'])) return null;
+  int? whole(Object? item) => item is num ? item.round() : int.tryParse('${item ?? ''}');
+  final interval = math.max(1, math.min(12, whole(value['interval']) ?? 1));
+  final counted = whole(value['count']) ?? 0;
+  final count = counted >= 1 ? math.min(counted, 1000) : null;
+  final exceptions = value['exceptions'] is List ? (value['exceptions'] as List).take(500) : const [];
+  return {
+    'freq': value['freq'],
+    'interval': interval,
+    'until': count == null ? isoDay(value['until']) : null,
+    'count': count,
+    'exceptions': ({for (final day in exceptions) isoDay(day)}..remove(null)).cast<String>().toList()..sort(),
+  };
+}
+
+DateTime? _nthDay(DateTime first, Map<String, Object?> rule, int index) {
+  final step = index * (rule['interval'] as int);
+  if (rule['freq'] == 'daily' || rule['freq'] == 'weekly') {
+    return DateTime(first.year, first.month, first.day + step * (rule['freq'] == 'weekly' ? 7 : 1));
+  }
+  final day = DateTime(first.year, first.month + (rule['freq'] == 'monthly' ? step : step * 12), first.day);
+  return day.day == first.day ? day : null;
+}
+
+/// The last day an event view reaches, every repetition included, or null for a series without end.
+String? seriesLastDay(Map<String, Object?> view) {
+  final first = dayOf(view['date'] as String);
+  final span = view['endDate'] is String ? daysBetween(first, dayOf(view['endDate'] as String)) : 0;
+  final rule = recurrenceRule(view['recurrence']);
+  if (rule == null) return (view['endDate'] as String?) ?? view['date'] as String;
+  DateTime last;
+  if (rule['until'] != null) {
+    final until = dayOf(rule['until'] as String);
+    last = until.isBefore(first) ? first : until;
+  } else if (rule['count'] != null) {
+    last = first;
+    var produced = 0;
+    for (var index = 0; produced < (rule['count'] as int) && index < 20000; index++) {
+      final day = _nthDay(first, rule, index);
+      if (day == null) continue;
+      last = day;
+      produced++;
+    }
+  } else {
+    return null;
+  }
+  return isoOf(DateTime(last.year, last.month, last.day + span));
+}
+
+/// Minutes before the start, -1 for none, null for the default of the settings. Throws FormatException otherwise.
+int? reminderMinutes(Object? value) {
+  if (value == null || value == '') return null;
+  final minutes = value is num && value == value.roundToDouble() ? value.toInt() : value is String ? int.tryParse(value) : null;
+  if (minutes == null || minutes < uiReminderRange.$1 || minutes > uiReminderRange.$2) throw const FormatException('Erinnerung ungültig');
+  return minutes;
 }
 
 String text(Object? value, [int limit = 1 << 20]) {
@@ -668,6 +738,10 @@ class UiData {
       'synced': false,
     };
     if (last.compareTo(date) > 0) view['endDate'] = last;
+    final rule = recurrenceRule(row['recurrence']);
+    if (rule != null) view['recurrence'] = rule;
+    final minutes = row['reminder_minutes'];
+    if (minutes is int && minutes >= uiReminderRange.$1 && minutes <= uiReminderRange.$2) view['reminderMinutes'] = minutes;
     return view;
   }
 
@@ -683,8 +757,8 @@ class UiData {
     for (final row in await _ownEvents()) {
       final view = eventView(row);
       if (view == null) continue;
-      final last = (view['endDate'] as String?) ?? view['date'] as String;
-      if (last.compareTo(start) >= 0 && (view['date'] as String).compareTo(end) <= 0) result.add(view);
+      final last = seriesLastDay(view);
+      if ((last == null || last.compareTo(start) >= 0) && (view['date'] as String).compareTo(end) <= 0) result.add(view);
     }
     result.sort((a, b) {
       final byDate = (a['date'] as String).compareTo(b['date'] as String);
