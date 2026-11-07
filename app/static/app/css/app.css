@@ -1377,7 +1377,10 @@ label.switch:is(:active, .is-pressed) input:checked + .switch-track::after { tra
 .today.is-desk .segment.is-tight { gap: 0; padding: 0 3px; }
 .today.is-desk .segment.is-tight .segment-time { display: none; }
 .today.is-desk .segment.is-tight .segment-label { font-size: var(--text-xs); letter-spacing: -0.01em; }
+.today.is-desk .segment.is-bare .segment-label { display: none; }
+.today.is-desk .segment.is-bare:not(.is-free)::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--hue, var(--ink-muted)); }
 .today.is-desk .track[hidden] { display: none; }
+.today.is-desk .today-title { hyphens: auto; overflow-wrap: break-word; }
 .today.is-desk .today-nextline:has(.today-setup) { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 24px; }
 .today-setup { height: 44px; padding: 0 20px; border-radius: var(--radius-pill); font-size: var(--text-base); }
 .today-setup .icon { --s: 18; }

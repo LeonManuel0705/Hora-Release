@@ -500,10 +500,13 @@ function boardHead() {
 
 function fitCells() {
   const cells = [...flow.stage.querySelectorAll(".setup-cell:not(.is-free)")];
+  const range = document.createRange();
   cells.forEach((cell) => cell.classList.remove("is-short"));
   cells.filter((cell) => {
     const full = cell.querySelector(".setup-cell-full");
-    return full && full.offsetParent && full.scrollWidth > full.clientWidth + 0.5;
+    if (!full?.offsetParent) return false;
+    range.selectNodeContents(full);
+    return range.getBoundingClientRect().width > full.getBoundingClientRect().width + 0.05;
   }).forEach((cell) => cell.classList.add("is-short"));
 }
 

@@ -370,7 +370,7 @@ function renderTrack(day) {
       const info = subject(lesson.subject);
       const test = testOnDate(isoDate(model.date), block.n);
       const tip = `${nth(block.n)}, ${time}: <b>${esc(info.name)}</b>${lesson.room ? ` in ${esc(lesson.room)}` : ""}${lesson.teacher && lesson.teacher !== NO_TEACHER ? `, ${esc(lesson.teacher)}` : ""}${test ? `<br>${esc(test.kind)}: ${esc(test.title)}` : ""}${lesson.cancelled ? "<br>Entfällt" : ""}`;
-      return `<div class="segment" role="button" data-block="${block.n}" tabindex="-1" data-tip="${esc(tip)}" data-tip-side="below" data-page-action="school" ${place}>
+      return `<div class="segment" role="button" data-block="${block.n}" tabindex="-1" data-tip="${esc(tip)}" data-tip-side="below" data-page-action="school" style="left:${left.toFixed(3)}%;width:${width.toFixed(3)}%;--hue:${hueVar(lesson.subject)}">
         <span class="segment-fill" aria-hidden="true"></span>
         <svg class="segment-outline" aria-hidden="true" focusable="false"><rect pathLength="1"/></svg>
         <span class="segment-time"><span class="segment-done-icon">${icon("check")}</span><span class="segment-clock">${time}</span></span>
@@ -402,13 +402,23 @@ function renderTrack(day) {
   placeMarker(day, model);
 }
 
+// The text's own width, unclipped and to the fraction of a pixel. scrollWidth rounds and misses an ellipsis by a few tenths.
+function textWidth(node) {
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  return range.getBoundingClientRect().width;
+}
+
 function fitTrack() {
   const segments = [...$("track").querySelectorAll(".segment")];
-  segments.forEach((node) => node.classList.remove("is-tight"));
-  segments.filter((node) => {
+  const over = (node) => {
     const label = node.querySelector(".segment-label");
-    return label && label.scrollWidth > label.clientWidth + 0.5;
-  }).forEach((node) => node.classList.add("is-tight"));
+    return !!label && textWidth(label) > label.getBoundingClientRect().width + 0.05;
+  };
+  segments.forEach((node) => node.classList.remove("is-tight", "is-bare"));
+  segments.filter(over).forEach((node) => node.classList.add("is-tight"));
+  // One lesson shown as a dot among labelled ones looks broken. Then the whole track shows dots, the tooltip keeps the name.
+  if (segments.some((node) => node.classList.contains("is-tight") && over(node))) segments.forEach((node) => node.classList.add("is-bare"));
 }
 
 function markerFor(day, model) {
@@ -1467,6 +1477,7 @@ export function initHome() {
     cancelAnimationFrame(fitFrame);
     fitFrame = requestAnimationFrame(fitTrack);
   }).observe($("track"));
+  document.fonts?.ready.then(fitTrack);
   scheduleTick();
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
