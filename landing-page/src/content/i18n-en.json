@@ -635,7 +635,7 @@
       },
       {
         "q": "Do I have to type in my timetable?",
-        "a": "Yes, once. {{BRAND_NAME}} can't fetch it from IServ or WebUntis. The setup in the app walks you through it in a few minutes."
+        "a": "Yes, once. {{BRAND_NAME}} can't fetch it from IServ or WebUntis. The setup in the app walks you through it in a few minutes, and if someone in your course has already entered the plan, they can send it to you. Then you only change what's different for you."
       },
       {
         "q": "I already have IServ and WebUntis. What does {{BRAND_NAME}} add?",

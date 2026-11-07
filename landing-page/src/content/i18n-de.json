@@ -635,7 +635,7 @@
       },
       {
         "q": "Muss ich meinen Stundenplan abtippen?",
-        "a": "Ja, einmal. Aus IServ oder WebUntis kann {{BRAND_NAME}} ihn nicht holen. Die Einrichtung in der App führt dich in ein paar Minuten durch."
+        "a": "Ja, einmal. Aus IServ oder WebUntis kann {{BRAND_NAME}} ihn nicht holen. Die Einrichtung in der App führt dich in ein paar Minuten durch, und hat jemand aus deinem Kurs den Plan schon eingetragen, kann er ihn dir schicken. Dann änderst du nur, was bei dir anders ist."
       },
       {
         "q": "Ich habe schon IServ und WebUntis. Was bringt mir {{BRAND_NAME}}?",
