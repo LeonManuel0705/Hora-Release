@@ -858,7 +858,7 @@ def view(item):
     if item.get('reminder_minutes') is not None:
         result['reminderMinutes'] = item['reminder_minutes']
     if item.get('recurring_event_id'):
-        result['series'] = True
+        result['inSeries'] = True
     return result
 
 

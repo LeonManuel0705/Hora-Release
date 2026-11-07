@@ -34,17 +34,14 @@
                 <span class="quick-hint" id="calQuickHint"><kbd>↵</kbd> anlegen</span>
             </form>
 
-            <div class="cal-toolbar">
-                <div class="segmented" id="calViews" role="group" aria-label="Ansicht">
-                    <button type="button" data-view="woche" aria-pressed="true">Woche</button>
-                    <button type="button" data-view="monat" aria-pressed="false">Monat</button>
-                    <button type="button" data-view="liste" aria-pressed="false">Liste</button>
-                </div>
-            </div>
-
             <section class="cal-stage" id="calStage" aria-labelledby="calRange">
                 <div class="cal-stage-head">
                     <h2 class="cal-range" id="calRange"><span id="calRangeText"></span><small id="calRangeMeta"></small></h2>
+                    <div class="segmented" id="calViews" role="group" aria-label="Ansicht">
+                        <button type="button" data-view="woche" aria-pressed="true">Woche</button>
+                        <button type="button" data-view="monat" aria-pressed="false">Monat</button>
+                        <button type="button" data-view="liste" aria-pressed="false">Liste</button>
+                    </div>
                     <div class="cal-nav">
                         <button class="icon-button" type="button" data-step="-1" id="calPrev">
                             <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
@@ -53,6 +50,10 @@
                         <button class="icon-button" type="button" data-step="1" id="calNext">
                             <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
                         </button>
+                        <button class="icon-button cal-jump" type="button" id="calJump" aria-label="Zu einem Datum springen" data-tip="Zu einem Datum">
+                            <svg class="icon" aria-hidden="true"><use href="#i-calendar-days"/></svg>
+                        </button>
+                        <input class="date-proxy" type="date" id="calJumpDate" tabindex="-1" aria-hidden="true">
                     </div>
                 </div>
                 <div class="cal-view" id="calView"></div>
@@ -64,6 +65,8 @@
             <section class="side-card cal-panel" id="calPanel" aria-label="Termin" tabindex="-1" hidden></section>
         </aside>
     </div>
+
+    <div class="sheet cal-more-sheet is-glass" id="calMore" popover role="dialog" aria-labelledby="calMoreTitle"></div>
 </div>
 {% endblock %}
 

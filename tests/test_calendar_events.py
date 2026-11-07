@@ -123,7 +123,7 @@ def test_google_events_carry_colour_links_guests_and_reminder(google):
     shown = {item['title']: item for item in calendar_cache.events(day(0), day(10))}
     plain, meet, series = shown['Training'], shown['Lerngruppe Mathe'], shown['Serie']
     assert (plain['color'], plain['calendarName'], plain['meetLink'], plain['attendees']) == ('#33b679', 'Handball', '', [])
-    assert 'reminderMinutes' not in plain and 'series' not in plain
+    assert 'reminderMinutes' not in plain and 'inSeries' not in plain
     assert meet['color'] == '#d50000'
     assert meet['calendarName'] == 'Privat'
     assert meet['htmlLink'] == 'https://www.google.com/calendar/event?eid=abc'
@@ -133,7 +133,7 @@ def test_google_events_carry_colour_links_guests_and_reminder(google):
         {'email': 'mia@example.com', 'name': '', 'status': 'needsAction', 'organizer': False, 'self': False},
     ]
     assert meet['reminderMinutes'] == 30
-    assert series['meetLink'] == 'https://meet.google.com/xyz' and series['series'] is True
+    assert series['meetLink'] == 'https://meet.google.com/xyz' and series['inSeries'] is True
 
 
 def test_a_link_that_is_no_web_address_is_left_out():
