@@ -7,6 +7,7 @@ import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web/web.dart' as web;
 
 import '../brand.dart';
@@ -14,6 +15,7 @@ import '../main.dart' show buildClassicHome;
 import '../services/database_service.dart';
 import '../services/web_tab_guard.dart';
 import '../theme.dart';
+import 'home_screen_hint.dart';
 import 'ui_api.dart';
 import 'ui_bridge.dart';
 import 'ui_pages.dart';
@@ -98,7 +100,8 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
 
   Future<void> _boot() async {
     if (!mounted) return;
-    if (_standalone()) unawaited(_keepData());
+    final device = _device();
+    if (device.standalone) unawaited(_keepData());
     if (!_modern()) return _fallBack();
     try {
       await DatabaseService().database;
@@ -110,6 +113,11 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     if (!mounted || _elsewhere) return;
     unawaited(UiWeather.instance.refresh());
     _listen();
+    if (await homeScreenHintDue(device) && mounted) {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) await overPage(() => showHomeScreenHint(context, device, withData: prefs.containsKey('user_bundesland')));
+    }
+    if (!mounted) return;
     if (await askWelcome() && mounted) {
       setState(() => _preparing = true);
       await importWelcomeHolidays().timeout(const Duration(seconds: 12), onTimeout: () {});
@@ -120,13 +128,19 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     _createFrame();
   }
 
-  static bool _standalone() {
+  static HomeScreenDevice _device() {
+    final navigator = web.window.navigator;
+    var standalone = false;
     try {
-      return web.window.matchMedia('(display-mode: standalone)').matches ||
-          (web.window.navigator as JSObject)['standalone'].dartify() == true;
-    } catch (_) {
-      return false;
-    }
+      standalone = web.window.matchMedia('(display-mode: standalone)').matches ||
+          (navigator as JSObject)['standalone'].dartify() == true;
+    } catch (_) {}
+    return HomeScreenDevice(
+      agent: navigator.userAgent,
+      touchPoints: navigator.maxTouchPoints,
+      platform: navigator.platform,
+      standalone: standalone,
+    );
   }
 
   Future<void> _keepData() async {
