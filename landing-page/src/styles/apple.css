@@ -1110,3 +1110,13 @@ body.sheet-open { overflow: hidden; }
   .legal-toc a { display: flex; align-items: center; min-height: 44px; }
   .legal-other { min-height: 44px; }
 }
+.ap-sheet-mark.is-pair { grid-auto-flow: column; gap: 12px; width: auto; margin-left: 0; }
+.ap-sheet-picks { display: grid; gap: 10px; margin-top: 22px; }
+.ap-sheet-pick { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 56px; padding: 12px 18px; border-radius: 18px; background: #2C2C2E; color: var(--ap-text); text-align: left; transition: background 200ms var(--ap-ease), scale 160ms var(--ap-ease); }
+.ap-sheet-pick:active { scale: 0.98; }
+.ap-sheet-pick-mark { display: grid; place-items: center; }
+.ap-sheet-pick-name { font-size: 17px; font-weight: 600; }
+.ap-sheet-pick-meta { font-size: 14px; color: #A1A1A6; }
+@media (hover: hover) and (pointer: fine) {
+  .ap-sheet-pick:hover { background: #3A3A3C; }
+}

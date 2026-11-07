@@ -16,8 +16,9 @@ const keepHyphens = (text) => escapeHtml(text).replace(/(\S+-\S+)/g, '<span clas
 const words = (text) => escapeHtml(text).split(/\s+/).map((word) => `<span class="w">${word}</span>`).join(" ");
 
 function hero() {
-  const { id, button, note } = cta();
-  const lede = ISERV_HOMEWORK.has(id) ? t("start.lede") : t("start.lede_plain");
+  const { id, choices, button, note } = cta();
+  const ids = choices?.length ? choices : [id];
+  const lede = ids.every((one) => ISERV_HOMEWORK.has(one)) ? t("start.lede") : t("start.lede_plain");
   return `<section class="ap-hero" aria-labelledby="ap-hero-title">
     <div class="ap-hero-copy" data-hero-copy>
       <h1 class="ap-hero-head" id="ap-hero-title"><span class="ap-hero-name">${escapeHtml(t("start.intro"))}</span><span class="ap-hero-title">${escapeHtml(t("start.title"))}</span></h1>

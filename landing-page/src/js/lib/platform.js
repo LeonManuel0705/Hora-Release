@@ -27,16 +27,28 @@ export const ISERV_HOMEWORK = new Set(["android"]);
 
 const ipad = () => /iPad/.test(navigator.userAgent || "") || (/Mac/.test(navigator.userAgentData?.platform || navigator.platform || "") && navigator.maxTouchPoints > 1);
 
+const linux = (ua, platform) => /Linux|X11/i.test(platform) || /Linux/.test(ua);
+
+// Android tablets in Chrome's desktop view send a Linux user agent, so Linux on a touch screen or on ARM could be either.
+const tabletLike = () => navigator.maxTouchPoints > 1 || /arm|aarch/i.test(navigator.platform || "");
+
 export function detectPlatform() {
   const ua = navigator.userAgent || "";
-  const platform = navigator.userAgentData?.platform || navigator.platform || "";
+  const hints = navigator.userAgentData?.platform || "";
+  const platform = hints || navigator.platform || "";
   if (/iPhone|iPod/.test(ua) || ipad()) return "ios";
-  if (/Android/i.test(ua)) return "android";
+  if (/Android/i.test(ua) || /Android/i.test(hints)) return "android";
   if (/CrOS/.test(ua) || /Chrome ?OS/i.test(platform)) return "web";
   if (/Mac/i.test(platform) || /Mac OS X/.test(ua)) return "macos";
   if (/Win/i.test(platform) || /Windows/.test(ua)) return "windows";
-  if (/Linux|X11/i.test(platform) || /Linux/.test(ua)) return "linux";
+  if (linux(ua, platform)) return tabletLike() ? null : "linux";
   return null;
+}
+
+export function platformChoices() {
+  const id = detectPlatform();
+  if (id) return [id];
+  return linux(navigator.userAgent || "", navigator.userAgentData?.platform || navigator.platform || "") ? ["android", "linux"] : [];
 }
 
 export function deviceName(id) {

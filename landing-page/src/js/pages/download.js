@@ -1,6 +1,6 @@
 import { brandHost, escapeHtml, raw, t } from "../lib/i18n.js";
 import { icon } from "../lib/icons.js";
-import { detectPlatform, megabytes, ORDER, PLATFORMS } from "../lib/platform.js";
+import { detectPlatform, megabytes, ORDER, platformChoices, PLATFORMS } from "../lib/platform.js";
 import { revealOnce } from "../lib/scroll.js";
 import { cta } from "../components/cta.js";
 import { mountDownloads, platformMark, stepText } from "../components/downloads.js";
@@ -35,8 +35,9 @@ export default {
   description: () => t("meta.desc.download"),
   render: () => {
     const mine = detectPlatform();
-    const ids = [...ORDER];
-    if (mine) ids.sort((a, b) => (a === mine ? -1 : b === mine ? 1 : 0));
+    const first = platformChoices();
+    const rank = (id) => (first.includes(id) ? first.indexOf(id) : first.length);
+    const ids = [...ORDER].sort((a, b) => rank(a) - rank(b));
     const faq = raw("download_page.faq") || [];
     const { button, note } = cta();
     const extra = `<div class="ap-hero-cta ap-reveal">${button}</div>

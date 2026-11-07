@@ -19,7 +19,7 @@ globalThis.localStorage = { getItem: () => null, setItem() {} };
 const device = { userAgent: "", platform: "", maxTouchPoints: 0, userAgentData: undefined };
 Object.defineProperty(globalThis, "navigator", { value: device, configurable: true, writable: true });
 
-const { detectPlatform, deviceName, ISERV_HOMEWORK } = await import(pathToFileURL(resolve(site, "js/lib/platform.js")).href);
+const { detectPlatform, deviceName, ISERV_HOMEWORK, platformChoices } = await import(pathToFileURL(resolve(site, "js/lib/platform.js")).href);
 const { cta } = await import(pathToFileURL(resolve(site, "js/components/cta.js")).href);
 
 const MAC_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
@@ -33,6 +33,10 @@ const DEVICES = {
   oldChromebook: { userAgent: CROS_UA, platform: "Linux x86_64", maxTouchPoints: 0 },
   windows: { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36", platform: "Win32", maxTouchPoints: 0, userAgentData: { platform: "Windows" } },
   linux: { userAgent: "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0", platform: "Linux x86_64", maxTouchPoints: 0 },
+  tabletDesktopView: { userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36", platform: "Linux armv81", maxTouchPoints: 5 },
+  tabletWithHints: { userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36", platform: "Linux armv81", maxTouchPoints: 5, userAgentData: { platform: "Android" } },
+  touchLaptop: { userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36", platform: "Linux x86_64", maxTouchPoints: 10, userAgentData: { platform: "Linux" } },
+  armLinux: { userAgent: "Mozilla/5.0 (X11; Linux aarch64; rv:140.0) Gecko/20100101 Firefox/140.0", platform: "Linux aarch64", maxTouchPoints: 0 },
   unknown: { userAgent: "", platform: "", maxTouchPoints: 0 },
 };
 const use = (name) => Object.assign(device, { userAgentData: undefined }, DEVICES[name]);
@@ -42,11 +46,26 @@ const shape = (value) => (Array.isArray(value) ? value.map(shape) : value && typ
 
 const tests = {
   "every device lands on its own download or on the web app"() {
-    const expected = { iphone: "ios", ipad: "ios", mac: "macos", android: "android", chromebook: "web", oldChromebook: "web", windows: "windows", linux: "linux", unknown: null };
+    const expected = { iphone: "ios", ipad: "ios", mac: "macos", android: "android", chromebook: "web", oldChromebook: "web", windows: "windows", linux: "linux", unknown: null, tabletDesktopView: null, tabletWithHints: "android", touchLaptop: null, armLinux: null };
     for (const [name, id] of Object.entries(expected)) {
       use(name);
       assert.equal(detectPlatform(), id, name);
     }
+  },
+  "linux on a touch screen or arm asks between android and linux instead of offering the package"() {
+    for (const name of ["tabletDesktopView", "touchLaptop", "armLinux"]) {
+      use(name);
+      assert.deepEqual(platformChoices(), ["android", "linux"], name);
+      const { button, note } = cta();
+      assert.match(button, /href="\/download" data-install="choice"/, name);
+      assert.equal(note, "Für Android oder Linux. Auch für Mac, Windows und iPhone.", name);
+    }
+    use("linux");
+    assert.deepEqual(platformChoices(), ["linux"]);
+    use("tabletWithHints");
+    assert.match(cta().button, /data-install="android"/);
+    use("unknown");
+    assert.deepEqual(platformChoices(), []);
   },
   "the web app note names the device the visitor holds"() {
     use("iphone");

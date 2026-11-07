@@ -142,7 +142,9 @@
     "after": "After the download",
     "done": "Done",
     "web_title": "{{BRAND_NAME}} on {device}",
-    "web_lead": "The web app only shows reminders once it is on your Home Screen."
+    "web_lead": "The web app only shows reminders once it is on your Home Screen.",
+    "choice_title": "{{BRAND_NAME}} for Android or Linux",
+    "choice_lead": "Your browser reports Linux with a touch screen. That can also be an Android tablet in desktop view."
   },
   "platforms": {
     "macos": {
@@ -802,6 +804,7 @@
     "cta_note": "For {platform}, {size} MB. Also for {others}.",
     "cta_note_web": "On {device}, {{BRAND_NAME}} runs as a web app. Also for {others}.",
     "cta_note_generic": "For Mac, Windows, Linux, Android and iPhone.",
+    "cta_note_choice": "For {first} or {second}. Also for {others}.",
     "more": "See a school day",
     "hero_alt": "{{BRAND_NAME}} at 7:12 in the morning (German): chemistry in room B206 next, with today's tasks and upcoming deadlines below.",
     "hero_alt_phone": "{{BRAND_NAME}} on iPhone at 7:12 in the morning (German): chemistry in room B206 next, with today's tasks below.",

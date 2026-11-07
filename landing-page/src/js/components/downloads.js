@@ -56,7 +56,23 @@ export const stepText = (step) => escapeHtml(step).replace("{share}", icon("shar
 
 const stepsHTML = (steps) => `<ol class="ap-sheet-steps">${steps.map((step, i) => `<li style="--i: ${i}">${stepText(step)}</li>`).join("")}</ol>`;
 
+const CHOICES = ["android", "linux"];
+
+const markOf = (id) => (id === "choice" ? CHOICES.map((choice) => platformMark(choice, 26)).join("") : platformMark(id, 30));
+
+function choiceBody() {
+  const pick = (id) => `<button type="button" class="ap-sheet-pick" data-sheet-pick="${id}">
+      <span class="ap-sheet-pick-mark">${platformMark(id, 24)}</span>
+      <span class="ap-sheet-pick-name">${escapeHtml(t(`platforms.${id}.name`))}</span>
+      <span class="ap-sheet-pick-meta">${megabytes(PLATFORMS[id].bytes)}&nbsp;MB</span>
+    </button>`;
+  return `<h2 class="ap-sheet-title" id="ap-sheet-title" tabindex="-1" autofocus aria-live="polite">${escapeHtml(t("install.choice_title"))}</h2>
+    <p class="ap-sheet-lead">${escapeHtml(t("install.choice_lead"))}</p>
+    <div class="ap-sheet-picks">${CHOICES.map(pick).join("")}</div>`;
+}
+
 function sheetBody(id) {
+  if (id === "choice") return choiceBody();
   const p = PLATFORMS[id];
   if (p.kind === "pwa") {
     return `<h2 class="ap-sheet-title" id="ap-sheet-title" tabindex="-1" autofocus aria-live="polite">${escapeHtml(t("install.web_title", { device: deviceName(id) }))}</h2>
@@ -119,15 +135,23 @@ export function openSheet(id) {
   el.setAttribute("aria-labelledby", "ap-sheet-title");
   el.innerHTML = `<div class="ap-sheet-card">
       <div class="ap-sheet-top">
-        <span class="ap-sheet-mark" data-sheet-mark>${platformMark(id, 30)}</span>
+        <span class="ap-sheet-mark${id === "choice" ? " is-pair" : ""}" data-sheet-mark>${markOf(id)}</span>
         <button type="button" class="ap-sheet-close" data-sheet-close aria-label="${escapeHtml(t("home_download.done_close"))}">${icon("x", { size: 18 })}</button>
       </div>
-      ${sheetBody(id)}
+      <div class="ap-sheet-body" data-sheet-body>${sheetBody(id)}</div>
     </div>`;
   el.addEventListener("click", (event) => {
     if (event.target.closest("a[data-sheet-close]")) return closeSheet({ instant: true });
     if (event.target === el || event.target.closest("[data-sheet-close]")) return closeSheet();
     if (event.target.closest("[data-sheet-get]")) setTimeout(() => el.isConnected && started(el), 0);
+    const pick = event.target.closest("[data-sheet-pick]");
+    if (pick) {
+      const mark = el.querySelector("[data-sheet-mark]");
+      mark.classList.remove("is-pair");
+      mark.innerHTML = markOf(pick.dataset.sheetPick);
+      el.querySelector("[data-sheet-body]").innerHTML = sheetBody(pick.dataset.sheetPick);
+      el.querySelector(".ap-sheet-title").focus({ preventScroll: true });
+    }
   });
   el.addEventListener("cancel", (event) => {
     event.preventDefault();
@@ -159,7 +183,7 @@ export function mountDownloads(root) {
       return;
     }
     const install = event.target.closest("[data-install]");
-    if (install && dialogs && plainClick(event) && PLATFORMS[install.dataset.install]) {
+    if (install && dialogs && plainClick(event) && (PLATFORMS[install.dataset.install] || install.dataset.install === "choice")) {
       event.preventDefault();
       openSheet(install.dataset.install);
       return;

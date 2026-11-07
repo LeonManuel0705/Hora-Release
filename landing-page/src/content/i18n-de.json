@@ -142,7 +142,9 @@
     "after": "Nach dem Laden",
     "done": "Fertig",
     "web_title": "{{BRAND_NAME}} auf dem {device}",
-    "web_lead": "Erinnerungen zeigt die Web-App nur, wenn sie auf dem Home-Bildschirm liegt."
+    "web_lead": "Erinnerungen zeigt die Web-App nur, wenn sie auf dem Home-Bildschirm liegt.",
+    "choice_title": "{{BRAND_NAME}} für Android oder Linux",
+    "choice_lead": "Dein Browser meldet Linux mit Touchscreen. Das kann auch ein Android-Tablet in der Desktop-Ansicht sein."
   },
   "platforms": {
     "macos": {
@@ -802,6 +804,7 @@
     "cta_note": "Für {platform}, {size} MB. Auch für {others}.",
     "cta_note_web": "Auf dem {device} läuft {{BRAND_NAME}} als Web-App. Auch für {others}.",
     "cta_note_generic": "Für Mac, Windows, Linux, Android und iPhone.",
+    "cta_note_choice": "Für {first} oder {second}. Auch für {others}.",
     "more": "Schultag ansehen",
     "hero_alt": "Die Übersicht von {{BRAND_NAME}} um 7:12 Uhr: Gleich Chemie in Raum B206, darunter die Aufgaben für heute und die nächsten Abgaben.",
     "hero_alt_phone": "Die Übersicht von {{BRAND_NAME}} auf dem iPhone um 7:12 Uhr: Gleich Chemie in Raum B206, darunter die Aufgaben für heute.",
