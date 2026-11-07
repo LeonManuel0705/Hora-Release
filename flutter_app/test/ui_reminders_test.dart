@@ -147,7 +147,7 @@ void main() {
     expect(_clock(open.at), '2026-11-09 06:58');
   });
 
-  test('a test is announced the evening before and the morning of the day, homework the same', () {
+  test('a test is announced the day before and on the day, at the first minute after the quiet hours, homework the same', () {
     final data = _data(deadlines: [
       {'id': 'test-1', 'kind': 'Test', 'title': 'Analysis', 'subject': '1', 'date': '2026-11-11', 'time': '08:00', 'detail': '- Ableitungen\n- Kurvendiskussion;', 'status': 'offen'},
       {'id': 'hw-1', 'kind': 'Hausaufgabe', 'title': 'Gedichtanalyse', 'subject': '2', 'date': '2026-11-10', 'detail': '', 'status': 'offen'},
@@ -155,9 +155,9 @@ void main() {
     ]);
     final plan = _plan(data, _store(), sunday, days: 4).where((item) => item.key.startsWith('deadline:')).toList();
     expect([for (final item in plan) '${_clock(item.at)} ${item.key}'], [
-      '2026-11-09 18:00 deadline:hw-1:2026-11-09',
+      '2026-11-09 07:00 deadline:hw-1:2026-11-09',
       '2026-11-10 07:00 deadline:hw-1:2026-11-10',
-      '2026-11-10 18:00 deadline:test-1:2026-11-10',
+      '2026-11-10 07:00 deadline:test-1:2026-11-10',
       '2026-11-11 07:00 deadline:test-1:2026-11-11',
     ]);
     expect(plan[0].title, 'Hausaufgabe: Gedichtanalyse');
@@ -168,7 +168,7 @@ void main() {
     expect(plan[3].body, 'Heute um 8:00, Mathe\nLernstoff: Ableitungen, Kurvendiskussion');
   });
 
-  test('a longer lead reminds every evening before, and a quiet evening moves to the morning', () {
+  test('a longer lead reminds every day up to the date, and the time follows the quiet hours like the page', () {
     final data = _data(deadlines: [
       {'id': 'exam-1', 'kind': 'Klausur', 'title': 'Klausur', 'subject': null, 'date': '2026-11-12', 'detail': '', 'status': 'offen'},
     ]);
@@ -177,15 +177,18 @@ void main() {
     });
     final plan = _plan(data, store, sunday, days: 5).where((item) => item.kind == 'tests').toList();
     expect([for (final item in plan) '${_clock(item.at)} ${item.body}'], [
-      '2026-11-09 18:00 In 3 Tagen',
-      '2026-11-10 18:00 In 2 Tagen',
-      '2026-11-11 18:00 Morgen',
+      '2026-11-09 07:00 In 3 Tagen',
+      '2026-11-10 07:00 In 2 Tagen',
+      '2026-11-11 07:00 Morgen',
       '2026-11-12 07:00 Heute',
     ]);
-    final quiet = _plan(data, _store(notify: {
-      'quiet': {'from': '17:00', 'to': '07:30'},
-    }), sunday, days: 5).where((item) => item.kind == 'tests');
-    expect([for (final item in quiet) _clock(item.at)], ['2026-11-11 07:30', '2026-11-12 07:30']);
+    List<String> times(Map<String, Object?> quiet) => [
+          for (final item in _plan(data, _store(notify: {'quiet': quiet}), sunday, days: 5).where((item) => item.kind == 'tests')) _clock(item.at),
+        ];
+    expect(times({'from': '17:00', 'to': '07:30'}), ['2026-11-11 07:30', '2026-11-12 07:30']);
+    expect(times({'from': '23:00', 'to': '06:00'}), ['2026-11-11 06:00', '2026-11-12 06:00']);
+    expect(times({'from': '13:00', 'to': '14:00'}), ['2026-11-11 00:00', '2026-11-12 00:00']);
+    expect(times({'from': '08:00', 'to': '08:00'}), ['2026-11-11 00:00', '2026-11-12 00:00'], reason: 'equal times mean no quiet hours');
   });
 
   test('an event uses its own minutes when it has them, the category lead otherwise', () {
@@ -354,50 +357,54 @@ void main() {
       markTestSkipped('node is not installed');
       return;
     }
-    final data = _data(
-      deadlines: [
-        {'id': 'test-1', 'kind': 'Test', 'title': 'Analysis', 'subject': '1', 'date': '2026-11-11', 'time': '08:00', 'detail': '- Ableitungen\n- Kurven', 'status': 'offen'},
-        {'id': 'hw-1', 'kind': 'Hausaufgabe', 'title': 'Gedicht', 'subject': '2', 'date': '2026-11-10', 'detail': '', 'status': 'offen'},
-        {'id': 'hw-2', 'kind': 'Hausaufgabe', 'title': 'Abgegeben', 'subject': '2', 'date': '2026-11-10', 'detail': '', 'status': 'abgegeben'},
-      ],
-      events: [
-        {'id': 'loc-a', 'date': '2026-11-09', 'start': '15:00', 'end': '16:30', 'title': 'Zahnarzt', 'place': 'Praxis', 'kind': 'private'},
-        {'id': 'loc-b', 'date': '2026-11-12', 'start': '07:10', 'title': 'Früh', 'place': '', 'kind': 'private'},
-      ],
-      tasks: [
-        {'id': 't1', 'title': 'Vokabeln', 'date': '2026-11-18', 'done': false},
-        {'id': 't2', 'title': 'Üben', 'date': '2026-11-18', 'dueTime': '16:30', 'done': false},
-        {'id': 't3', 'title': 'Ohne Datum', 'date': null, 'done': false},
-      ],
-      holidays: [
-        {'id': 'h-1', 'title': 'Feiertag', 'date': '2026-11-13', 'endDate': null, 'type': 'feiertag'},
-      ],
-    );
-    final store = _store(extra: {
-      'app-subjects': {
-        'items': {'1': {'name': 'Mathematik'}},
-        'removed': <String>[],
-      },
-      'app-timetable-edits': {'A:2:1': {'subject': '3', 'room': 'R9'}},
-    });
-    final folder = await Directory.systemTemp.createTemp('reminders-');
-    addTearDown(() => folder.delete(recursive: true));
-    final fixture = File('${folder.path}/fixture.json')
-      ..writeAsStringSync(jsonEncode({'brand': Brand.name, 'from': '2026-11-09', 'days': 10, 'data': data, 'store': store}));
-    final run = await Process.run('node', ['test/js/reminders_dump.mjs', fixture.path], stdoutEncoding: utf8, stderrEncoding: utf8);
-    expect(run.exitCode, 0, reason: '${run.stderr}');
-    final page = {for (final item in (jsonDecode('${run.stdout}') as List).cast<Map<String, Object?>>()) item['key'] as String: item};
-    final phone = _byKey(_plan(data, store, DateTime(2026, 11, 9), days: 10));
-    expect(page.keys.map((key) => key.split(':').first).toSet(), {'lesson', 'deadline', 'event', 'task', 'tasks'});
-    expect(phone.keys.toSet(), page.keys.toSet());
-    for (final MapEntry(:key, value: shown) in page.entries) {
-      final planned = phone[key]!;
-      expect(planned.title, shown['title'], reason: key);
-      expect(planned.body, shown['body'], reason: key);
-      final day = DateTime.parse(shown['day'] as String);
-      final minute = shown['minute'] as int;
-      final evening = key.startsWith('deadline:') && !planned.body.startsWith(RegExp('Heute|Fällig heute'));
-      expect(planned.at, evening ? DateTime(day.year, day.month, day.day, 18) : DateTime(day.year, day.month, day.day, 0, minute), reason: key);
+    for (final quiet in [null, {'from': '08:00', 'to': '08:00'}, {'from': '23:00', 'to': '06:00'}]) {
+      await _compareWithPage(quiet);
     }
   });
+}
+
+Future<void> _compareWithPage(Map<String, String>? quiet) async {
+  final data = _data(
+    deadlines: [
+      {'id': 'test-1', 'kind': 'Test', 'title': 'Analysis', 'subject': '1', 'date': '2026-11-11', 'time': '08:00', 'detail': '- Ableitungen\n- Kurven', 'status': 'offen'},
+      {'id': 'hw-1', 'kind': 'Hausaufgabe', 'title': 'Gedicht', 'subject': '2', 'date': '2026-11-10', 'detail': '', 'status': 'offen'},
+      {'id': 'hw-2', 'kind': 'Hausaufgabe', 'title': 'Abgegeben', 'subject': '2', 'date': '2026-11-10', 'detail': '', 'status': 'abgegeben'},
+    ],
+    events: [
+      {'id': 'loc-a', 'date': '2026-11-09', 'start': '15:00', 'end': '16:30', 'title': 'Zahnarzt', 'place': 'Praxis', 'kind': 'private'},
+      {'id': 'loc-b', 'date': '2026-11-12', 'start': '07:10', 'title': 'Früh', 'place': '', 'kind': 'private'},
+    ],
+    tasks: [
+      {'id': 't1', 'title': 'Vokabeln', 'date': '2026-11-18', 'done': false},
+      {'id': 't2', 'title': 'Üben', 'date': '2026-11-18', 'dueTime': '16:30', 'done': false},
+      {'id': 't3', 'title': 'Ohne Datum', 'date': null, 'done': false},
+    ],
+    holidays: [
+      {'id': 'h-1', 'title': 'Feiertag', 'date': '2026-11-13', 'endDate': null, 'type': 'feiertag'},
+    ],
+  );
+  final store = _store(notify: {if (quiet != null) 'quiet': quiet}, extra: {
+    'app-subjects': {
+      'items': {'1': {'name': 'Mathematik'}},
+      'removed': <String>[],
+    },
+    'app-timetable-edits': {'A:2:1': {'subject': '3', 'room': 'R9'}},
+  });
+  final folder = await Directory.systemTemp.createTemp('reminders-');
+  addTearDown(() => folder.delete(recursive: true));
+  final fixture = File('${folder.path}/fixture.json')
+    ..writeAsStringSync(jsonEncode({'brand': Brand.name, 'from': '2026-11-09', 'days': 10, 'data': data, 'store': store}));
+  final run = await Process.run('node', ['test/js/reminders_dump.mjs', fixture.path], stdoutEncoding: utf8, stderrEncoding: utf8);
+  expect(run.exitCode, 0, reason: '${run.stderr}');
+  final page = {for (final item in (jsonDecode('${run.stdout}') as List).cast<Map<String, Object?>>()) item['key'] as String: item};
+  final phone = _byKey(_plan(data, store, DateTime(2026, 11, 8, 23, 59), days: 10));
+  expect(page.keys.map((key) => key.split(':').first).toSet(), {'lesson', 'deadline', 'event', 'task', 'tasks'});
+  expect(phone.keys.toSet(), page.keys.toSet());
+  for (final MapEntry(:key, value: shown) in page.entries) {
+    final planned = phone[key]!;
+    expect(planned.title, shown['title'], reason: '$key $quiet');
+    expect(planned.body, shown['body'], reason: '$key $quiet');
+    final day = DateTime.parse(shown['day'] as String);
+    expect(planned.at, DateTime(day.year, day.month, day.day, 0, shown['minute'] as int), reason: '$key $quiet');
+  }
 }
