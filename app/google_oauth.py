@@ -204,7 +204,9 @@ def get_credentials(email: str) -> Optional[Credentials]:
         token_uri='https://oauth2.googleapis.com/token',
         client_id=GOOGLE_CLIENT_ID or token_data.get('client_id'),
         client_secret=GOOGLE_CLIENT_SECRET or token_data.get('client_secret'),
-        scopes=scopes_of(token_data),
+        # No scope list: a refresh then gets whatever the grant covers. A list larger than the refresh token
+        # covers, as after an extended sign-in that kept the old token, would be refused for good.
+        scopes=None,
         expiry=expiry,
     )
 
@@ -269,9 +271,18 @@ def _requested(features) -> List[str]:
     return sorted({scope for name in features for scope in FEATURES[name]})
 
 
-def start_oauth_flow(features=('calendar',)) -> Dict:
+def _renewed(entry, account) -> List[str]:
+    """What a sign-in that no longer works was used for. Renewing it asks for all of that again, so an expired account
+    keeps its mailbox, and the school calendar where it is switched on."""
+    from . import google_school
+    covered = scopes_of(entry)
+    return [name for name in FEATURES if covers(covered, name) and (name != 'school' or google_school.is_on(account))]
+
+
+def start_oauth_flow(features=('calendar',), another=False) -> Dict:
     """Asks Google only for what the named parts need. What was granted before stays granted, and a sign-in that
-    still works is extended without asking for the whole consent again: Google gives a new refresh token only with it."""
+    still works is extended without asking for the whole consent again: Google gives a new refresh token only with it.
+    With `another` the person picks an account in Google, which may be a second one."""
 
     if not GOOGLE_API_AVAILABLE:
         return {"success": False, "error": "Die Google-Bibliotheken fehlen"}
@@ -285,22 +296,25 @@ def start_oauth_flow(features=('calendar',)) -> Dict:
         return {"success": False, "error": "Google ist in dieser Installation nicht eingerichtet"}
 
     tokens = load_tokens()
-    account = calendar_account(tokens) or next(iter(tokens), None)
+    account = None if another else calendar_account(tokens) or next(iter(tokens), None)
     entry = tokens.get(account) or {}
     working = bool(entry.get('refresh_token')) and not entry.get('expired')
     if working and all(covers(scopes_of(entry), name) for name in features):
         return {"success": True, "granted": True, "email": account, "features": features}
 
+    asked = features if working or not entry else features_of(features + _renewed(entry, account))
     params = {'access_type': 'offline', 'include_granted_scopes': 'true'}
     if account:
         params['login_hint'] = account
-    if not working:
+    if another:
+        params['prompt'] = 'select_account consent'
+    elif not working:
         params['prompt'] = 'consent'
 
     try:
         flow = Flow.from_client_config(
             client_config,
-            scopes=_requested(features),
+            scopes=_requested(asked),
             redirect_uri=GOOGLE_REDIRECT_URI
         )
 
@@ -311,6 +325,7 @@ def start_oauth_flow(features=('calendar',)) -> Dict:
             "auth_url": auth_url,
             "state": state,
             "features": features,
+            "asked": asked,
             "message": "Melde dich im Browser bei Google an"
         }
     except Exception as e:
@@ -364,6 +379,8 @@ def complete_oauth_flow(auth_code: str, features=('calendar',)) -> Dict:
             'expiry': creds.expiry.isoformat() if getattr(creds, 'expiry', None) else None,
         }
         save_tokens(tokens)
+        from . import calendar_cache
+        calendar_cache.signed_in()
 
         return {
             "success": True,

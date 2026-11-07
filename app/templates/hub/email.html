@@ -197,7 +197,7 @@
                     const response = await fetch('/api/email/google/auth', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ features: ['gmail'] })
+                        body: JSON.stringify({ features: ['gmail'], another: true })
                     });
                     const data = await response.json();
 

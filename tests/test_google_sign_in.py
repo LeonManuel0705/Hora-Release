@@ -48,7 +48,7 @@ def google(monkeypatch):
     calls = []
     states = iter(f'state-{n}' for n in range(1, 100))
 
-    def start(features=('calendar',)):
+    def start(features=('calendar',), another=False):
         state = next(states)
         return {'success': True, 'auth_url': f'https://accounts.google.com/o/oauth2/auth?state={state}', 'state': state}
 
@@ -178,8 +178,7 @@ def test_calendar_alone_is_enough_and_its_scopes_are_kept(monkeypatch, token_sto
     assert result['success'] is True and result['email'] == 'kalender@example.com'
     assert token_store['kalender@example.com']['scopes'] == [CALENDAR]
     assert token_store['kalender@example.com']['expiry']
-    creds = google_oauth.get_credentials('kalender@example.com')
-    assert list(creds.scopes) == [CALENDAR]
+    assert google_oauth.covers(token_store['kalender@example.com']['scopes'], 'calendar')
 
 
 def test_gmail_gives_the_address_when_it_was_granted(monkeypatch, token_store):
@@ -334,7 +333,7 @@ def test_only_accounts_with_gmail_count_as_mailboxes_and_the_calendar_uses_one_t
 
 def test_a_sign_in_started_for_gmail_is_finished_for_gmail(app_window, browser, monkeypatch):
     finished = []
-    monkeypatch.setattr(google_oauth, 'start_oauth_flow', lambda features: {'success': True, 'auth_url': 'https://accounts.google.com/x', 'state': 'gmail-state', 'features': list(features)})
+    monkeypatch.setattr(google_oauth, 'start_oauth_flow', lambda features, another=False: {'success': True, 'auth_url': 'https://accounts.google.com/x', 'state': 'gmail-state', 'features': list(features)})
     monkeypatch.setattr(google_oauth, 'complete_oauth_flow', lambda code, features=('calendar',): finished.append(list(features)) or {'success': True, 'email': 'lea@example.com'})
     started = app_window.post('/api/email/google/auth', json={'features': ['gmail']}).get_json()
     assert started['features'] == ['gmail']
@@ -365,3 +364,86 @@ def test_a_new_sign_in_after_expiry_takes_only_what_google_granted_now(flows):
     assert google_oauth.complete_oauth_flow('code')['success'] is True
     entry = saved['kalender@example.com']
     assert entry['scopes'] == sorted([EVENTS, LISTING]) and 'expired' not in entry and entry['refresh_token'] == 'refresh'
+
+
+def renew_and_grant_what_was_asked(answer, features=('calendar',)):
+    query = asked(google_oauth.start_oauth_flow(list(features)))
+    answer.scopes, answer.refresh = query['scope'].split(), 'neu'
+    return query, google_oauth.complete_oauth_flow('code', list(features))
+
+
+@pytest.mark.parametrize('scopes', [None, list(google_oauth.LEGACY_SCOPES), [EVENTS, LISTING, *GMAIL]], ids=['legacy-unlisted', 'legacy-listed', 'split'])
+def test_renewing_an_expired_sign_in_keeps_its_mailbox(flows, monkeypatch, scopes):
+    saved, answer, _ = flows
+    monkeypatch.setattr(FakeService, 'getProfile', lambda self, userId: Call({'emailAddress': 'kalender@example.com'}))
+    saved['kalender@example.com'] = {'token': 'a', 'refresh_token': 'alt', 'expired': True, **({'scopes': scopes} if scopes else {})}
+    query, done = renew_and_grant_what_was_asked(answer)
+    assert query['prompt'] == 'consent' and set(GMAIL) <= set(query['scope'].split())
+    assert google_oauth.APP_CALENDARS_SCOPE not in query['scope'], 'the school calendar is off, so it is not asked for'
+    assert done['success'] is True
+    assert google_oauth.get_google_accounts() == [{'email': 'kalender@example.com', 'provider': 'gmail_oauth'}]
+    assert google_oauth.calendar_account() == 'kalender@example.com' and not google_oauth.login_expired()
+
+
+@pytest.mark.parametrize('scopes', [None, list(google_oauth.LEGACY_SCOPES), [EVENTS, LISTING, google_oauth.APP_CALENDARS_SCOPE]], ids=['legacy-unlisted', 'legacy-listed', 'split'])
+def test_renewing_keeps_the_school_calendar_where_it_is_on(flows, monkeypatch, scopes):
+    from app import google_school
+
+    saved, answer, _ = flows
+    monkeypatch.setattr(FakeService, 'getProfile', lambda self, userId: Call({'emailAddress': 'kalender@example.com'}))
+    monkeypatch.setattr(google_school, 'is_on', lambda account: account == 'kalender@example.com')
+    saved['kalender@example.com'] = {'token': 'a', 'refresh_token': 'alt', 'expired': True, **({'scopes': scopes} if scopes else {})}
+    query, done = renew_and_grant_what_was_asked(answer)
+    assert google_oauth.APP_CALENDARS_SCOPE in query['scope'].split() and done['success'] is True
+    assert google_oauth.can('school')
+
+
+def test_a_renewal_without_the_extra_parts_still_renews_the_calendar(flows):
+    saved, answer, _ = flows
+    saved['kalender@example.com'] = {'token': 'a', 'refresh_token': 'alt', 'expired': True}
+    google_oauth.start_oauth_flow(['calendar'])
+    answer.scopes = [EVENTS, LISTING]
+    assert google_oauth.complete_oauth_flow('code', ['calendar'])['success'] is True
+    assert google_oauth.calendar_account() == 'kalender@example.com' and not google_oauth.login_expired()
+
+
+def test_another_account_can_always_be_added(flows):
+    saved, _, made = flows
+    saved['lea@example.com'] = {'token': 'a', 'refresh_token': 'alt'}
+    result = google_oauth.start_oauth_flow(['gmail'], another=True)
+    query = asked(result)
+    assert 'granted' not in result and 'login_hint' not in query and query['prompt'] == 'select_account consent'
+
+
+def test_the_route_passes_the_wish_for_another_account(app_window, monkeypatch):
+    seen = []
+    monkeypatch.setattr(google_oauth, 'start_oauth_flow', lambda features, another=False: seen.append((list(features), another)) or {'success': True, 'granted': True})
+    app_window.post('/api/email/google/auth', json={'features': ['gmail'], 'another': True})
+    app_window.post('/api/email/google/auth')
+    assert seen == [(['gmail'], True), (['calendar'], False)]
+
+
+def test_a_refresh_asks_for_no_scope_list_so_a_larger_stored_list_cannot_break_it(monkeypatch):
+    stored = {'lea@example.com': {'token': 'a', 'refresh_token': 'alt', 'client_id': 'c', 'client_secret': 's',
+                                  'scopes': [EVENTS, LISTING, *GMAIL], 'expiry': (datetime.utcnow() - timedelta(minutes=5)).isoformat()}}
+    monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {key: dict(value) for key, value in stored.items()})
+    monkeypatch.setattr(google_oauth, 'save_tokens', lambda tokens: stored.update(tokens) or True)
+
+    def refresh(self, request):
+        if self.scopes:
+            raise RuntimeError('invalid_scope: Some requested scopes were invalid')
+        self.token = 'neu'
+        self.expiry = datetime.utcnow() + timedelta(hours=1)
+
+    monkeypatch.setattr(google_oauth.Credentials, 'refresh', refresh)
+    assert google_oauth.get_credentials('lea@example.com').token == 'neu'
+    assert 'expired' not in stored['lea@example.com'] and stored['lea@example.com']['scopes'] == [EVENTS, LISTING, *GMAIL]
+
+
+def test_the_classic_pages_offer_google_only_where_it_is_set_up(app_window, monkeypatch):
+    monkeypatch.setattr(google_oauth, 'is_google_oauth_configured', lambda: False)
+    assert 'connectGoogleAccount()">Konto verbinden' not in app_window.get('/hub/klassisch/settings').get_data(as_text=True)
+    assert 'id="googleSignInBtn"' not in app_window.get('/hub/klassisch/email').get_data(as_text=True)
+    monkeypatch.setattr(google_oauth, 'is_google_oauth_configured', lambda: True)
+    assert 'connectGoogleAccount()">Konto verbinden' in app_window.get('/hub/klassisch/settings').get_data(as_text=True)
+    assert 'id="googleSignInBtn"' in app_window.get('/hub/klassisch/email').get_data(as_text=True)

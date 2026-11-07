@@ -748,6 +748,13 @@ def wake():
     _worker['wake'].set()
 
 
+def signed_in():
+    """A new sign-in worked: the expiry the last check saw is over, and the next check follows at once."""
+    if _status['problem'] == 'login':
+        _status.update(problem=None, checked=None, checked_at=None)
+    nudge()
+
+
 def _background():
     stop, wake = _worker['stop'], _worker['wake']
     while not stop.is_set():

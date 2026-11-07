@@ -448,7 +448,8 @@ def hub_assistant():
 
 @app.route('/hub/klassisch/settings')
 def hub_settings():
-    return render_template('hub/settings.html', active_tab='settings')
+    from .google_oauth import is_google_oauth_configured
+    return render_template('hub/settings.html', active_tab='settings', google_configured=is_google_oauth_configured())
 
 @app.route('/hub/terms')
 def hub_terms():
@@ -2318,9 +2319,9 @@ def _google_page(title, body, ok=False, script=''):
 def start_google_auth():
 
     from .google_oauth import start_oauth_flow
-    data = request.get_json(silent=True)
-    features = data.get('features') if isinstance(data, dict) else None
-    result = start_oauth_flow(features or ['calendar'])
+    data = request.get_json(silent=True) if request.is_json else None
+    data = data if isinstance(data, dict) else {}
+    result = start_oauth_flow(data.get('features') or ['calendar'], another=data.get('another') is True)
     if result.get('success') and result.get('state'):
         _remember_google_state(result['state'], result.get('features') or ['calendar'])
     return jsonify(result)

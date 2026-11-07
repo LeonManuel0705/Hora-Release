@@ -686,6 +686,12 @@ def google_events():
     return jsonify({'success': True, 'events': ui_data.events(today), **calendar_cache.page_state()})
 
 
+@bp.route('/api/ui/google/account')
+def google_account():
+    """What Settings shows about Google, read again after a sign-in, since Google may have granted less than was asked."""
+    return jsonify({'success': True, 'account': ui_data.google_account()})
+
+
 @bp.route('/api/ui/google/school', methods=['GET', 'POST', 'DELETE'])
 def google_school_calendar():
     """The switch for the school week in Google. Off asks the page first whether the calendar stays in Google."""

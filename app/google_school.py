@@ -120,6 +120,11 @@ def _account():
         return None
 
 
+def is_on(account):
+    state = _read()
+    return bool(state.get('on')) and state.get('account') == account
+
+
 def view():
     """What Settings shows: whether it is on for the connected account, how far it got and what stands in the way."""
     state = _read()

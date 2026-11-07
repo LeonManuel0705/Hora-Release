@@ -402,7 +402,7 @@
                 <span class="settings-label">Verbundene Konten</span>
                 <span class="settings-desc" id="googleAccountsDisplay">Keine Konten verbunden</span>
             </div>
-            <button class="btn-primary" onclick="connectGoogleAccount()">Konto verbinden</button>
+            {% if google_configured %}<button class="btn-primary" onclick="connectGoogleAccount()">Konto verbinden</button>{% endif %}
         </div>
         <div id="connectedAccounts" style="margin-top: 16px;"></div>
 
@@ -1243,12 +1243,18 @@ function saveAccountPreference(type, email) {
 async function connectGoogleAccount() {
     console.log('[app] connectGoogleAccount() called');
     try {
-        const response = await fetch('/api/email/google/auth', { method: 'POST' });
+        const response = await fetch('/api/email/google/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ features: ['calendar'], another: true })
+        });
         console.log('[app] Google auth response status:', response.status);
         if (response.ok) {
             const data = await response.json();
             console.log('[app] Google auth response data:', data);
-            if (data.success && data.auth_url) {
+            if (data.success && data.granted) {
+                window.location.reload();
+            } else if (data.success && data.auth_url) {
                 console.log('[app] Redirecting to:', data.auth_url);
                 window.location.href = data.auth_url;
             } else {
