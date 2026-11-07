@@ -46,6 +46,7 @@
         })();
     </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
+    {% if offline_worker %}
     <script nonce="{{ g.csp_nonce }}">
         // A page the offline worker serves gets the font from it. WebKit then never counts a preload as used and warns.
         if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
@@ -58,6 +59,9 @@
             document.head.appendChild(font);
         }
     </script>
+    {% else %}
+    <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
+    {% endif %}
     <link rel="stylesheet" href="/static/app/css/tokens.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/static/app/css/app.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/static/css/tour.css?v={{ asset_version }}">
