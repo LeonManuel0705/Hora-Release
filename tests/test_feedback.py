@@ -31,6 +31,10 @@ def test_feedback_goes_to_the_address_the_legal_pages_publish():
     published = json.loads((ROOT / 'landing-page' / 'src' / 'content' / 'company.json').read_text(encoding='utf-8'))['email']
     script = (ROOT / 'app' / 'static' / 'app' / 'js' / 'feedback.js').read_text(encoding='utf-8')
     assert re.search(r'export const CONTACT = "([^"]+)";', script).group(1) == published
+    electron = (ROOT / 'desktop' / 'src' / 'rules.js').read_text(encoding='utf-8')
+    assert re.search(r"const FEEDBACK_ADDRESS = '([^']+)';", electron).group(1) == published
+    mac = (ROOT / 'flutter_app' / 'lib' / 'screens' / 'desktop_webview_screen.dart').read_text(encoding='utf-8')
+    assert re.search(r"const feedbackAddress = '([^']+)';", mac).group(1) == published
 
 
 @pytest.mark.parametrize('path', ['/hub', '/hub/tasks', '/hub/bookmarks', '/hub/settings'])

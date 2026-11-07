@@ -73,10 +73,21 @@ test('the browser opens the local hub only with a well-formed one-time login cod
   assert.equal(browserLoginUrl('http://localhost:5050/hub', code), null);
 });
 
-test('the page may only hand over a mail draft to one address, nothing else', () => {
-  assert.equal(isMailDraft('mailto:someone@example.org?subject=R%C3%BCckmeldung&body=Version%3A%200.5.2'), true);
-  assert.equal(isMailDraft('mailto:someone@example.org'), true);
-  for (const value of ['https://example.org/', 'http://127.0.0.1:5050/hub', 'file:///etc/passwd', 'javascript:alert(1)', 'mailto:', 'mailto:a@b.org,c@d.org', 'mailto:a@b.org,c', 'mailto:%E0%A4%A', 'mailto:not an address', 'tel:+4930', null, 42, `mailto:a@b.org?body=${'x'.repeat(9000)}`]) {
-    assert.equal(isMailDraft(value), false, String(value).slice(0, 40));
+test('the page may only hand over a feedback draft to the published address, nothing else', () => {
+  assert.equal(isMailDraft('mailto:horaapp.team@gmail.com?subject=R%C3%BCckmeldung&body=Version%3A%200.5.2'), true);
+  assert.equal(isMailDraft('mailto:horaapp.team@gmail.com'), true);
+  for (const value of [
+    'mailto:someone@example.org?subject=x',
+    'mailto:horaapp.team@gmail.com?subject=x&bcc=someone@example.org',
+    'mailto:horaapp.team@gmail.com?cc=someone@example.org',
+    'mailto:horaapp.team@gmail.com?to=someone@example.org',
+    'mailto:horaapp.team@gmail.com?attach=C:/Users/user/secret.txt',
+    'mailto:horaapp.team@gmail.com?Subject=x',
+    'mailto:horaapp.team@gmail.com#x',
+    'mailto:horaapp.team@gmail.com,someone@example.org',
+    'https://example.org/', 'http://127.0.0.1:5050/hub', 'file:///etc/passwd', 'javascript:alert(1)', 'mailto:', 'mailto:%E0%A4%A', 'tel:+4930', null, 42,
+    `mailto:horaapp.team@gmail.com?body=${'x'.repeat(9000)}`,
+  ]) {
+    assert.equal(isMailDraft(value), false, String(value).slice(0, 60));
   }
 });

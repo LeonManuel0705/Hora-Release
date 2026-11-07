@@ -16,13 +16,16 @@ import '../services/update_service.dart';
 import '../theme.dart';
 import '../widgets/app_background.dart';
 
-/// The page may hand over a mail draft to one address, and nothing that is not a mail draft.
+const feedbackAddress = 'horaapp.team@gmail.com';
+
+/// The page may hand over a feedback draft to the published address with a subject and a body, and nothing else.
 Uri? mailDraft(Object? value) {
   if (value is! String || value.length > 8000) return null;
   final uri = Uri.tryParse(value);
-  if (uri == null || uri.scheme != 'mailto') return null;
+  if (uri == null || uri.scheme != 'mailto' || uri.hasFragment) return null;
   try {
-    return RegExp(r'^[^\s@/?#,;]+@[^\s@/?#,;]+$').hasMatch(Uri.decodeComponent(uri.path)) ? uri : null;
+    if (Uri.decodeComponent(uri.path).toLowerCase() != feedbackAddress) return null;
+    return uri.queryParametersAll.keys.every((key) => key == 'subject' || key == 'body') ? uri : null;
   } on ArgumentError {
     return null;
   } on FormatException {
