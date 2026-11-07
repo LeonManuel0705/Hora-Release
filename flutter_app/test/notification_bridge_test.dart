@@ -76,7 +76,7 @@ void main() {
     expect((await SharedPreferences.getInstance()).getBool(NotificationPermission.deniedKey), isNull);
   });
 
-  test('the page script hands reminders and the permission question to the app', () async {
+  test('the page script hands reminders, the permission question and downloads to the app', () async {
     final node = await Process.run('node', ['--version']).then((result) => result.exitCode == 0).catchError((Object _) => false);
     if (!node) {
       markTestSkipped('node is not installed');
@@ -94,5 +94,6 @@ void main() {
     for (final state in ['granted', 'denied', 'default']) {
       expect(mobileStartScript(ios: false, insets: '', permission: state), contains('var permission = "$state";'));
     }
+    expect(mobileStartScript(ios: true, insets: '', permission: 'default'), isNot(contains('createObjectURL')));
   });
 }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 // Loads the script the phone injects into every page with a fake WebView bridge and checks
-// what reaches the app for reminders and the permission question.
+// what reaches the app for reminders, the permission question and downloads.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
@@ -25,7 +25,24 @@ globalThis.MutationObserver = class { observe() {} };
 globalThis.CSS = { supports: () => true };
 globalThis.HTMLElement = class {};
 HTMLElement.prototype.popover = null;
+globalThis.FileReader = class {
+  readAsDataURL(blob) {
+    blob.arrayBuffer().then((buffer) => {
+      this.result = `data:${blob.type || "application/octet-stream"};base64,${Buffer.from(buffer).toString("base64")}`;
+      this.onload();
+    });
+  }
+};
+
 new Function(readFileSync(process.argv[2], "utf8"))();
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+const click = (attributes) => {
+  const link = { getAttribute: (name) => attributes[name] ?? null };
+  const event = { target: { closest: (selector) => (selector === "a[download]" && "download" in attributes ? link : null) }, prevented: false, preventDefault() { this.prevented = true; } };
+  for (const { type, handler } of listeners.document) if (type === "click") handler(event);
+  return event;
+};
 
 new Notification("Titel", { body: "Mathe um 8:00 in R101.", tag: "lesson:2026-11-09:1", silent: true });
 new Notification("Probe");
@@ -43,4 +60,18 @@ assert.deepEqual(calls.splice(0), [["notifyPermission", true]]);
 for (const { type, handler } of listeners.window) if (type === "app:notify-permission") handler({ detail: "denied" });
 assert.equal(Notification.permission, "denied");
 
+const blob = new Blob(['{"a":1}'], { type: "application/json" });
+const url = URL.createObjectURL(blob);
+const saved = click({ href: url, download: "sicherung.json" });
+assert.equal(saved.prevented, true);
+await settle();
+assert.deepEqual(calls.splice(0), [["saveFile", { name: "sicherung.json", data: Buffer.from('{"a":1}').toString("base64") }]]);
+
+URL.revokeObjectURL(url);
+assert.equal(click({ href: url, download: "weg.json" }).prevented, false, "a revoked blob is left to the WebView");
+const inline = click({ href: "data:text/plain,Hallo", download: "gruss.txt" });
+assert.equal(inline.prevented, true);
+assert.deepEqual(calls.splice(0), [["saveFile", { name: "gruss.txt", url: "data:text/plain,Hallo" }]]);
+assert.equal(click({ href: "/hub/tasks" }).prevented, false);
+assert.equal(calls.length, 0);
 process.stdout.write("ok");

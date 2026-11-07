@@ -15,6 +15,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart' show buildClassicHome;
 import '../services/android_device.dart';
+import '../services/downloads.dart';
 import '../services/notification_service.dart';
 import '../services/reminder_scheduler.dart';
 import '../services/update_service.dart';
@@ -49,6 +50,7 @@ String mobileStartScript({required bool ios, required String insets, required St
   window.addEventListener("app:notify-permission", function (event) {
     if (event.detail) permission = String(event.detail);
   });
+  ${ios ? '' : _downloadScript}
   function send() {
     try {
       if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
@@ -63,6 +65,44 @@ String mobileStartScript({required bool ios, required String insets, required St
   document.addEventListener("DOMContentLoaded", function () { send(); check(); });
 })();
 ''';
+
+// The WebView saves no downloads, and blob: addresses are out of reach of fetch under the
+// page's CSP, so the page's blobs are kept by address and handed over when a link saves one.
+const _downloadScript = '''
+  var blobs = new Map();
+  var create = URL.createObjectURL;
+  var revoke = URL.revokeObjectURL;
+  URL.createObjectURL = function (object) {
+    var url = create.call(URL, object);
+    if (object instanceof Blob) blobs.set(url, object);
+    return url;
+  };
+  URL.revokeObjectURL = function (url) {
+    blobs.delete(url);
+    return revoke.call(URL, url);
+  };
+  function save(name, blob) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var text = String(reader.result || "");
+      bridge("saveFile", { name: name, data: text.slice(text.indexOf(",") + 1) });
+    };
+    reader.onerror = function () { bridge("saveFile", { name: name }); };
+    reader.readAsDataURL(blob);
+  }
+  document.addEventListener("click", function (event) {
+    var link = event.target && event.target.closest ? event.target.closest("a[download]") : null;
+    if (!link) return;
+    var href = link.getAttribute("href") || "";
+    var name = link.getAttribute("download") || "";
+    if (href.indexOf("blob:") === 0 && blobs.has(href)) {
+      event.preventDefault();
+      save(name, blobs.get(href));
+    } else if (href.indexOf("data:") === 0) {
+      event.preventDefault();
+      bridge("saveFile", { name: name, url: href });
+    }
+  }, true);''';
 
 class MobileShell extends StatefulWidget {
   const MobileShell({super.key});
@@ -181,6 +221,31 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
       kind: NotificationKind.reminders,
       silent: value['silent'] == true,
     );
+  }
+
+  Future<Map<String, Object?>?> _saveFile(Map<Object?, Object?> value) async {
+    Uint8List? bytes;
+    final data = value['data'], address = value['url'];
+    try {
+      if (data is String && data.length <= (Downloads.maxBytes + 2) ~/ 3 * 4) {
+        bytes = base64Decode(data);
+      } else if (address is String) {
+        bytes = UriData.parse(address).contentAsBytes();
+      }
+    } on FormatException {
+      bytes = null;
+    }
+    final saved = bytes == null ? null : await AndroidDevice.saveDownload('${value['name'] ?? ''}', bytes);
+    if (saved == null) {
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+          content: Text('Die Datei ließ sich nicht speichern.'),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+      return null;
+    }
+    return {'name': saved.name, 'folder': saved.folder};
   }
 
   @override
@@ -393,6 +458,10 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
                       controller.addJavaScriptHandler(
                         handlerName: 'notify',
                         callback: (args) => _notify(args.isNotEmpty && args.first is Map ? args.first as Map : const {}),
+                      );
+                      controller.addJavaScriptHandler(
+                        handlerName: 'saveFile',
+                        callback: (args) => _saveFile(args.isNotEmpty && args.first is Map ? args.first as Map : const {}),
                       );
                       controller.addJavaScriptHandler(
                         handlerName: 'support',

@@ -3,23 +3,29 @@ package com.leon.nexus
 import android.Manifest
 import android.app.ActivityManager
 import android.app.NotificationManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.StatFs
+import android.provider.MediaStore
 import android.provider.Settings
 import android.view.WindowManager
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.io.IOException
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "app/focus_mode"
@@ -82,6 +88,12 @@ class MainActivity: FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "requestLocation" -> requestLocation(result)
+                "saveDownload" -> {
+                    val name = call.argument<String>("name")
+                    val type = call.argument<String>("type")
+                    val bytes = call.argument<ByteArray>("bytes")
+                    result.success(if (name == null || type == null || bytes == null) null else saveDownload(name, type, bytes))
+                }
                 else -> result.notImplemented()
             }
         }
@@ -128,6 +140,45 @@ class MainActivity: FlutterActivity() {
         locationResult = result
         requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), LOCATION_REQUEST)
     }
+
+    private fun saveDownload(name: String, type: String, bytes: ByteArray): Map<String, Any>? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, type)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
+            return try {
+                contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: throw IOException("no stream")
+                contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+                mapOf("name" to (displayName(uri) ?: name), "folder" to Environment.DIRECTORY_DOWNLOADS)
+            } catch (e: Exception) {
+                contentResolver.delete(uri, null, null)
+                null
+            }
+        }
+        return try {
+            val folder = File(cacheDir, "shared").apply { mkdirs() }
+            val file = File(folder, name)
+            file.writeBytes(bytes)
+            val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+            val send = Intent(Intent.ACTION_SEND)
+                .setType(type)
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            startActivity(Intent.createChooser(send, null))
+            mapOf("name" to name, "shared" to true)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun displayName(uri: Uri): String? =
+        contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
 
     private fun networkStatus(): Map<String, Boolean> {
         val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
