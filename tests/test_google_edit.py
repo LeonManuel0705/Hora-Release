@@ -3,6 +3,8 @@
 
 import threading
 
+import pytest
+
 from app import calendar_cache
 from app import google_oauth
 from tests.google_fake import FakeHttpError, local_stamp
@@ -53,15 +55,42 @@ def test_a_new_time_and_day_reach_google_as_one_change(google, client):
     assert (shown()['Zahnarzt']['date'], shown()['Zahnarzt']['start'], shown()['Zahnarzt']['end']) == (day(4), '15:30', '16:15')
 
 
-def test_a_long_description_survives_a_change_of_the_title(google, client):
-    long_text = 'Lernplan ' * 400
-    key = google.put('primary', 'Lerngruppe', day(2), '17:00', '18:00', description=long_text)
+def test_an_editable_event_gets_its_whole_description_and_a_changed_word_keeps_the_rest(google, client):
+    long_text = ('Agenda Zeile ' * 160) + 'ENDE: Link zum Treffen https://example.org/join'
+    key = google.put('primary', 'Teams', day(2), '17:00', '18:00', description=long_text)
     calendar_cache.sync()
-    notes = shown()['Lerngruppe']['notes']
-    assert len(notes) == calendar_cache.NOTES_SHOWN
-    client.patch(f'/api/ui/events/g-{google.primary}-{key}', json={'title': 'Lerngruppe Mathe', 'notes': notes})
-    assert patches(google) == [{'summary': 'Lerngruppe Mathe'}]
+    notes = shown()['Teams']['notes']
+    assert notes == long_text, 'the form gets the whole description, not the first 2000 characters'
+    edited = notes.replace('Agenda', 'Tagesordnung', 1)
+    assert client.patch(f'/api/ui/events/g-{google.primary}-{key}', json={'notes': edited}).status_code == 200
+    assert google.store[google.primary][key]['description'] == edited
+    assert shown()['Teams']['notes'].endswith('https://example.org/join')
+
+
+def test_a_description_sent_back_unchanged_is_never_written(google, client):
+    long_text = 'a' * 1999 + ' ' + 'b' * 1000 + '\n'
+    key = google.put('primary', 'Lang', day(2), '17:00', '18:00', description=long_text)
+    calendar_cache.sync()
+    notes = shown()['Lang']['notes']
+    reply = client.patch(f'/api/ui/events/g-{google.primary}-{key}', json={'title': 'Lang 2', 'notes': '  ' + notes.replace('\n', '\r\n') + '  '})
+    assert reply.status_code == 200
+    assert patches(google) == [{'summary': 'Lang 2'}]
     assert google.store[google.primary][key]['description'] == long_text
+
+
+@pytest.mark.parametrize('description', [
+    'Agenda<br><a href="https://example.org/join">Teilnehmen</a>',
+    'Plan ' * 1300,
+], ids=['formatted', 'too-long'])
+def test_a_description_the_form_cannot_take_in_full_is_never_replaced(google, client, description):
+    key = google.put('primary', 'Treffen', day(2), '17:00', '18:00', description=description)
+    calendar_cache.sync()
+    notes = shown()['Treffen']['notes']
+    refused = client.patch(f'/api/ui/events/g-{google.primary}-{key}', json={'notes': notes + ' neu'})
+    assert refused.status_code == 409 and refused.get_json()['message'] == calendar_cache.KEEP_NOTES
+    assert client.patch(f'/api/ui/events/g-{google.primary}-{key}', json={'title': 'Treffen 2', 'notes': notes}).status_code == 200
+    assert patches(google) == [{'summary': 'Treffen 2'}]
+    assert google.store[google.primary][key]['description'] == description
 
 
 def test_a_change_made_in_google_meanwhile_is_never_overwritten(google, client):
@@ -209,3 +238,31 @@ def test_a_change_google_declines_is_named_as_such(google, client):
     reply = client.patch(f'/api/ui/events/g-{google.primary}-{key}', json={'title': 'Gym Rücken'})
     assert reply.status_code == 400 and reply.get_json()['message'] == calendar_cache.DECLINED
     assert titles() == ['Gym']
+
+
+@pytest.mark.parametrize('status, reason, message, code', [
+    (403, 'rateLimitExceeded', calendar_cache.SLOW_DOWN, 503),
+    (429, None, calendar_cache.SLOW_DOWN, 503),
+    (403, 'forbidden', calendar_cache.DECLINED, 403),
+    (403, 'forbiddenForNonOrganizer', calendar_cache.READ_ONLY, 403),
+    (401, None, calendar_cache.SIGNED_OUT, 409),
+])
+def test_a_refusal_from_google_is_named_by_its_reason(google, client, status, reason, message, code):
+    key = google.put('primary', 'Gym', day(1), '16:30', '18:00')
+    calendar_cache.sync()
+    google.hooks['events.patch'] = lambda details: (_ for _ in ()).throw(FakeHttpError(status, reason))
+    reply = client.patch(f'/api/ui/events/g-{google.primary}-{key}', json={'title': 'Gym 2'})
+    assert (reply.status_code, reply.get_json()['message']) == (code, message)
+
+
+def test_an_invitation_from_someone_else_stays_read_only_unless_guests_may_change_it(google, client):
+    boss = {'email': 'chef@example.org'}
+    invited = google.put('primary', 'Einladung', day(2), '10:00', '11:00', organizer=boss)
+    open_one = google.put('primary', 'Offene Runde', day(2), '12:00', '13:00', organizer=boss, guestsCanModify=True)
+    google.put('primary', 'Eigenes', day(2), '14:00', '15:00', organizer={'email': google.primary, 'self': True})
+    calendar_cache.sync()
+    assert {title: event['editable'] for title, event in shown().items()} == {'Einladung': False, 'Offene Runde': True, 'Eigenes': True}
+    google.calls.clear()
+    reply = client.patch(f'/api/ui/events/g-{google.primary}-{invited}', json={'title': 'X'})
+    assert reply.status_code == 403 and reply.get_json()['message'] == calendar_cache.INVITED and google.calls == []
+    assert client.patch(f'/api/ui/events/g-{google.primary}-{open_one}', json={'title': 'Offene Runde 2'}).status_code == 200

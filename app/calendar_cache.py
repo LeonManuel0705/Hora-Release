@@ -16,6 +16,7 @@ a page comes to the front, so the copy is fresh before anyone opens the calendar
 import copy
 import json
 import logging
+import re
 import threading
 import time
 import uuid
@@ -209,7 +210,7 @@ def _load_calendar(service, cache, calendar):
     time_min, time_max = _bounds(cache)
     items = google.list_calendar_events(service, calendar['id'], timeMin=time_min, timeMax=time_max, singleEvents=True)
     return {
-        event['id']: google.calendar_event_view(event, calendar)
+        event['id']: _cached_view(event, calendar)
         for event in items if event.get('id') and event.get('status') != 'cancelled'
     }
 
@@ -300,7 +301,7 @@ def _pull_changes(service, cache):
             if item.get('status') == 'cancelled':
                 changed = bucket.pop(key, None) is not None or changed
                 continue
-            view = google.calendar_event_view(item, calendar)
+            view = _cached_view(item, calendar)
             seen[(name, key)] = view
             if not _in_window(view, cache):
                 changed = bucket.pop(key, None) is not None or changed
@@ -954,8 +955,7 @@ def events(start, end):
                 continue
             shown = view(item)
             if shown and (shown.get('endDate') or shown['date']) >= start and shown['date'] <= end:
-                shown['editable'] = editable
-                result.append(shown)
+                result.append(_marked(shown, item, editable and item.get('own_copy') is not False))
     result.sort(key=lambda item: (item['date'], item['start'] or ''))
     return result
 
@@ -989,7 +989,14 @@ UNREACHABLE = 'Google ist gerade nicht erreichbar. Die Änderung ist nicht gespe
 CHANGED_THERE = 'Der Termin wurde gerade in Google geändert. Schau ihn dir noch einmal an.'
 GONE_THERE = 'Den Termin gibt es in Google nicht mehr.'
 DECLINED = 'Google hat diese Änderung nicht angenommen.'
+SLOW_DOWN = 'Google bremst gerade. Versuch es gleich noch einmal.'
+INVITED = 'Diesen Termin kann nur ändern, wer dazu eingeladen hat.'
+KEEP_NOTES = 'Diese Beschreibung ist lang oder formatiert. Ändere sie in Google, damit nichts davon verloren geht.'
 NOTES_SHOWN = 2000
+NOTES_KEPT = 5000
+LIMITS = {'rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded'}
+ACCESS = {'requiredAccessLevel', 'forbiddenForNonOrganizer'}
+FORMATTED = re.compile(r'<(a|b|i|u|br|p|div|span|ul|ol|li|strong|em|h\d)\b[^>]*>|&(nbsp|amp|lt|gt|quot);', re.I)
 
 
 def _locate(cache, ref):
@@ -1016,6 +1023,8 @@ def _reachable(ref):
         raise Refusal(SIGNED_OUT)
     if not _writable(calendar) or not google.can('write'):
         raise Refusal(READ_ONLY, 403)
+    if item.get('own_copy') is False:
+        raise Refusal(INVITED, 403)
     try:
         service, email = google.calendar_service()
     except Exception:
@@ -1029,11 +1038,32 @@ def _reachable(ref):
     return calendar, key, item, service
 
 
-def _kept_notes(before, after):
-    """Pages see only the first NOTES_SHOWN characters of a description. Sent back unchanged, the rest must not get lost."""
+def _plain(text):
+    return re.sub(r'\r\n?', '\n', str(text or '')).strip()
+
+
+def notes_fit(description):
+    """True when a description can be changed here without losing anything: plain text the form takes in full."""
+    description = str(description or '')
+    return len(description) <= NOTES_KEPT and not FORMATTED.search(description)
+
+
+def _kept_notes(before, after, notes):
+    """The description is written back only when the page sent one that differs from Google's, compared before the
+    form's trimming. A description the form cannot take in full, long or formatted, is never replaced from here."""
     full = before.get('description') or ''
-    if len(full) > NOTES_SHOWN and after.get('description') == full[:NOTES_SHOWN]:
+    shown = full if notes_fit(full) else full[:NOTES_SHOWN]
+    if notes is None or _plain(notes) in (_plain(full), _plain(shown)):
         after['description'] = full
+    elif not notes_fit(full):
+        raise Refusal(KEEP_NOTES)
+
+
+def _reasons(error):
+    try:
+        return {str(entry.get('reason')) for entry in json.loads(getattr(error, 'content', b'') or b'{}')['error']['errors']}
+    except Exception:
+        return set()
 
 
 def _answer_of(request, calendar, key, service):
@@ -1048,25 +1078,28 @@ def _answer_of(request, calendar, key, service):
         if status in GONE:
             _keep(calendar['id'], key, None)
             raise Refusal(GONE_THERE, 404) from error
-        if status in (401, 403):
-            raise Refusal(READ_ONLY, 403) from error
+        if status == 401 or type(error).__name__ == 'RefreshError':
+            raise Refusal(SIGNED_OUT) from error
+        if status == 429 or (status == 403 and _reasons(error) & LIMITS):
+            raise Refusal(SLOW_DOWN, 503) from error
+        if status == 403:
+            raise Refusal(READ_ONLY if _reasons(error) & ACCESS else DECLINED, 403) from error
         if status == 400:
             raise Refusal(DECLINED, 400) from error
-        if type(error).__name__ == 'RefreshError':
-            raise Refusal(SIGNED_OUT) from error
         raise Refusal(UNREACHABLE, 503) from error
 
 
-def edit_remote(ref, change):
+def edit_remote(ref, change, notes=None):
     """Writes a change of a Google event straight to Google, onto the very state the copy shows, and keeps the answer in the copy.
 
-    Only what the form changed is sent, so what the page cannot show stays as it is: a long description, a time zone, guests.
+    Only what the form changed is sent, so what the page cannot show stays as it is: a time zone, guests, a description
+    the page did not change. `notes` is the description as the page sent it, None when it sent none.
     """
     calendar, key, item, service = _reachable(ref)
     before = _local_fields(item)
     after = dict(before)
     change(after)
-    _kept_notes(before, after)
+    _kept_notes(before, after, notes)
     old, new = _body(before), _body(after)
     body = {name: value for name, value in new.items() if value != old.get(name)}
     if not body:
@@ -1074,7 +1107,7 @@ def edit_remote(ref, change):
     request = service.events().patch(calendarId=calendar['id'], eventId=key, body=body)
     if item.get('etag'):
         request.headers['If-Match'] = item['etag']
-    fresh = _google().calendar_event_view(_answer_of(request, calendar, key, service), calendar)
+    fresh = _cached_view(_answer_of(request, calendar, key, service), calendar)
     _keep(calendar['id'], key, fresh)
     return _shown(fresh, calendar)
 
@@ -1093,10 +1126,25 @@ def delete_remote(ref):
 
 
 def _shown(item, calendar):
-    shown = view(item)
+    return _marked(view(item), item, True)
+
+
+def _marked(shown, item, editable):
+    """A page event with what it may do here. An editable one gets its whole description, so the form never cuts it."""
     if shown:
-        shown['editable'] = True
+        shown['editable'] = editable
+        if editable and notes_fit(item.get('description')):
+            shown['notes'] = str(item.get('description') or '')
     return shown
+
+
+def _cached_view(event, calendar):
+    """The event as the copy keeps it, with whether this copy may be changed: an invitation from someone else may not,
+    unless the guests were allowed to."""
+    kept = _google().calendar_event_view(event, calendar)
+    organizer = event.get('organizer')
+    kept['own_copy'] = not organizer or organizer.get('self') is True or event.get('guestsCanModify') is True
+    return kept
 
 
 def _refetch(service, calendar, key):
@@ -1105,7 +1153,7 @@ def _refetch(service, calendar, key):
         event = _there(service, calendar['id'], key)
     except Exception:
         return True
-    fresh = None if event is None or event.get('status') == 'cancelled' else _google().calendar_event_view(event, calendar)
+    fresh = None if event is None or event.get('status') == 'cancelled' else _cached_view(event, calendar)
     _keep(calendar['id'], key, fresh)
     return fresh is not None
 
