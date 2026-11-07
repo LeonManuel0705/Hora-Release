@@ -6,8 +6,6 @@ const MANIFEST = null;
 const BASE = new URL("./", self.location).pathname;
 const SHELL = "app-shell-";
 const PINS = "app-pins";
-const FONTS = "app-fonts";
-const FONT_HOST = "https://fonts.gstatic.com";
 const READY = `${BASE}__ready`;
 const FILES = `${BASE}__files`;
 const LANES = 6;
@@ -163,7 +161,7 @@ async function tidy() {
 
 async function retire() {
   for (const name of await caches.keys()) {
-    if (name.startsWith(SHELL) || name.startsWith("flutter-") || name === PINS || name === FONTS) await caches.delete(name);
+    if (name.startsWith(SHELL) || name.startsWith("flutter-") || name === PINS) await caches.delete(name);
   }
   await self.registration.unregister();
 }
@@ -192,15 +190,6 @@ async function serve(event, url) {
   return hit || fetch(event.request);
 }
 
-async function font(request) {
-  const cache = await caches.open(FONTS);
-  const hit = await cache.match(request, { ignoreVary: true });
-  if (hit) return hit;
-  const response = await fetch(request);
-  if (response.ok && response.type === "cors") await cache.put(request, response.clone());
-  return response;
-}
-
 self.addEventListener("install", (event) => {
   if (off) {
     event.waitUntil(self.skipWaiting());
@@ -225,9 +214,8 @@ if (!off) {
     const request = event.request;
     if (request.method !== "GET") return;
     const url = new URL(request.url);
-    let answer = null;
-    if (url.origin === FONT_HOST) answer = font(request);
-    else if (url.origin === self.location.origin && url.pathname.startsWith(BASE)) answer = request.mode === "navigate" ? open(event, url) : serve(event, url);
-    if (answer) event.respondWith(answer.catch(() => fetch(request)));
+    if (url.origin !== self.location.origin || !url.pathname.startsWith(BASE)) return;
+    const answer = request.mode === "navigate" ? open(event, url) : serve(event, url);
+    event.respondWith(answer.catch(() => fetch(request)));
   });
 }

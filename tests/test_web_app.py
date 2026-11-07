@@ -118,6 +118,30 @@ def test_a_build_is_only_published_with_its_full_list_and_unchanged_files(tmp_pa
     ]
 
 
+def test_a_build_only_passes_with_the_fallback_fonts_the_engine_asks_for(tmp_path):
+    build = script('build_web_app')
+    engine = 'x="roboto/v32/Abc.woff2";y="notocoloremoji/v32/Emo.8.woff2"'
+    files = {
+        'index.html': '<html></html>',
+        'flutter_bootstrap.js': '_flutter.loader.load({ config: { canvasKitVariant: "full", fontFallbackBaseUrl: "fonts/" } });',
+        'main.dart.js': engine,
+        'fonts/roboto/v32/Abc.woff2': 'r',
+        'fonts/notocoloremoji/v32/Emo.8.woff2': 'e',
+    }
+    fake_build(tmp_path, files)
+    build.stamp(tmp_path)
+    assert build.verify(tmp_path) == []
+    (tmp_path / 'fonts' / 'notocoloremoji' / 'v32' / 'Old.7.woff2').write_text('o', encoding='utf-8')
+    (tmp_path / 'fonts' / 'roboto' / 'v32' / 'Abc.woff2').unlink()
+    (tmp_path / 'flutter_bootstrap.js').write_text('_flutter.loader.load();', encoding='utf-8')
+    build.stamp(tmp_path)
+    assert build.verify(tmp_path) == [
+        'flutter_bootstrap.js lets the engine load fonts from Google',
+        'fonts/roboto/v32/Abc.woff2 is missing, the engine loads it at every start',
+        'fonts/notocoloremoji/v32/Old.7.woff2 is no longer asked for by this Flutter version',
+    ]
+
+
 def test_the_off_switch_replaces_the_list_and_passes_the_check(tmp_path):
     build = script('build_web_app')
     fake_build(tmp_path, {'index.html': '<html></html>', 'main.dart.js': 'main'})

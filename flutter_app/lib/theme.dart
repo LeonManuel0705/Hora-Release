@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 class AppPalette {
@@ -269,6 +270,7 @@ class AppTheme {
       scaffoldBackgroundColor: canvas,
       canvasColor: canvas,
       fontFamily: fontFamily,
+      fontFamilyFallback: kIsWeb ? const ['Inter'] : null,
       splashFactory: InkSparkle.splashFactory,
       dividerColor: lineSoft,
       dividerTheme: DividerThemeData(color: lineSoft, thickness: 1, space: 1),

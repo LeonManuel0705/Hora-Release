@@ -100,6 +100,24 @@ def verify(out):
             problems.append(f'{name} changed after the list was written')
     for name in sorted(set(offline_files(out)) - set(listed)):
         problems.append(f'{name} is not in the list')
+    return problems + font_problems(out)
+
+
+def font_problems(out):
+    boot = out / 'flutter_bootstrap.js'
+    if not boot.is_file():
+        return []
+    problems = []
+    if 'fontFallbackBaseUrl: "fonts/"' not in boot.read_text(encoding='utf-8'):
+        problems.append('flutter_bootstrap.js lets the engine load fonts from Google')
+    engine = (out / 'main.dart.js').read_text(encoding='utf-8', errors='ignore')
+    for path in sorted(set(re.findall(r'roboto/v\d+/[\w-]+\.woff2', engine))):
+        if not (out / 'fonts' / path).is_file():
+            problems.append(f'fonts/{path} is missing, the engine loads it at every start')
+    for font in sorted((out / 'fonts').rglob('*.woff2')):
+        path = font.relative_to(out / 'fonts').as_posix()
+        if path not in engine:
+            problems.append(f'fonts/{path} is no longer asked for by this Flutter version')
     return problems
 
 

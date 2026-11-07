@@ -51,6 +51,8 @@ void main() {
     expect(builder, contains("'canvaskit/chromium/'"));
     expect(File('web/flutter_bootstrap.js').readAsStringSync(), contains('canvasKitVariant: "full"'));
     expect(page, contains("register('app_worker.js'"));
+    expect(File('web/flutter_bootstrap.js').readAsStringSync(), contains('fontFallbackBaseUrl: "fonts/"'));
+    expect(Directory('web/fonts').listSync(recursive: true).whereType<File>().where((file) => file.path.endsWith('.woff2')), isNotEmpty);
     expect(page, contains(r'app_worker\.js'));
     expect(page, isNot(contains('caches.delete')));
   });
@@ -75,6 +77,8 @@ void main() {
     expect(block('/pwa/*'), contains('geolocation=(self)'));
     expect(connect, containsAll(['https://de.wikipedia.org', 'https://en.wikipedia.org']));
     expect(RegExp('frame-src ([^;]+)').firstMatch(policy)!.group(1)!.split(' '), containsAll(["'self'", 'blob:']));
+    expect(policy, isNot(contains('google')), reason: 'the web app loads no font and no style from Google');
+    expect(File('web/app_worker.js').readAsStringSync(), isNot(contains('gstatic')));
     expect(File('lib/web_ui/web_shell.dart').readAsStringSync(), contains("allow = 'geolocation; web-share'"));
   });
 }
