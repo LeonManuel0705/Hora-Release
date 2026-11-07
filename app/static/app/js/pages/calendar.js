@@ -107,7 +107,6 @@ function load() {
 const todayIso = () => isoDate(now());
 const nowMin = () => minutesOf(now());
 const mondayOf = (date) => addDays(startOfDay(date), 1 - (date.getDay() || 7));
-// An event that ends at 0:00 of the next day belongs to the day before.
 const endsAtMidnight = (item) => !!item.start && item.end === "00:00" && !!item.endDate && item.endDate > item.date;
 const lastDay = (item) => (endsAtMidnight(item) ? isoDate(addDays(parseDate(item.endDate), -1)) : item.endDate || item.date);
 const covers = (item, iso) => item.date <= iso && iso <= lastDay(item);
@@ -136,7 +135,6 @@ function refreshShown() {
   state.shown = expandEvents(state.events, isoDate(from), isoDate(to));
 }
 
-/* The part of an event that lies on one day, in minutes of that day. */
 function segmentOf(item, iso) {
   const head = item.date === iso;
   const tail = lastDay(item) === iso || !overnight(item);
@@ -285,8 +283,6 @@ function hourRange(days) {
   return { start, end, hours: (end - start) / 60 };
 }
 
-/* Overlapping events side by side, each at least LANE_MIN wide. What does not fit waits behind "+n" in the last
-   lane. Events that start half an hour or more apart overlap like cards instead, each a little further in. */
 function layoutLanes(segments, columns) {
   const sorted = segments.map((segment) => ({ ...segment, lane: 0, lanes: 1, indent: 0 })).sort((a, b) => a.s - b.s || b.e - a.e);
   const shown = [];
@@ -565,8 +561,6 @@ function renderWeek() {
   </div>${empty}`;
 }
 
-/* The week shows the whole day in a pane of its own that ends at the bottom of the window. It opens at the hour
-   that matters: now when the week holds today, else the first lesson or event of the week. */
 function placeWeek() {
   const scroller = $("calView").querySelector(".cw-scroll");
   if (!scroller || state.narrow) {
@@ -673,7 +667,6 @@ function renderMonth() {
   return `<div class="cm-wrap">${state.loading ? loadingHtml() : ""}<table class="cm${state.narrow ? " is-narrow" : ""}" style="--cm-row:${state.monthRow}px" aria-label="${MONTHS[month]} ${span.start.getFullYear()}"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-/* Month rows share the height of the window, so a tall window shows more of each day. True when that height changed. */
 function placeMonth() {
   const table = $("calView").querySelector(".cm:not(.is-narrow)");
   if (!table) return false;
@@ -863,7 +856,7 @@ function reminderText(minutes) {
   return `${minutes} Min. vorher`;
 }
 
-/* Google keeps descriptions as HTML. The sheet shows them as text with their web links, nothing else. */
+// Google keeps descriptions as HTML.
 function plainText(value) {
   const text = String(value || "");
   if (!/<[a-z!/]/i.test(text)) return text;
@@ -1431,7 +1424,6 @@ function createEvent(text) {
   addEvent({ date: entry.date, start: entry.start, end: entry.end, title: entry.title, kind: entry.kind });
 }
 
-/* A new event that is not saved yet: it shows in the grid while its sheet asks for a title. */
 function openDraft(fields) {
   if (state.draft) dropDraft();
   state.selected = null;
@@ -1535,8 +1527,6 @@ function removeEvent(id, { silent = false } = {}) {
 
 const seriesOf = (item) => (item?.series ? state.events.find((entry) => entry.id === item.series) || null : null);
 
-/* What a change from the open sheet applies to. One occurrence of a series becomes an event of its own and is left
-   out of the series; for all of them the series itself changes, its days moved by as much as this one. */
 function targetFor(item, changes) {
   if (item.draft || !item.series) return { target: item, changes };
   const series = seriesOf(item);
@@ -1603,7 +1593,6 @@ function updateEvent(changes, { flip = true } = {}) {
 
 const panelItem = () => findEntry(state.selected)?.item || null;
 
-/* A typed change: on one occurrence of a series it first turns that one into an event of its own. */
 function typed(field, value) {
   const item = panelItem();
   if (!item || !(item.draft || editable(item))) return null;
@@ -1917,8 +1906,7 @@ function swallowClick() {
   setTimeout(() => (state.dragged = false));
 }
 
-/* A click on a free slot makes a one-hour event there, dragging makes the dragged span. Touch only taps,
-   so a swipe still scrolls. */
+// Touch only taps, so a swipe still scrolls.
 function pickSlot(event, col) {
   const origin = withinDay(minuteAt(col, event.clientY));
   const touch = event.pointerType === "touch";
@@ -1971,7 +1959,6 @@ function pickSlot(event, col) {
   addEventListener("pointercancel", up);
 }
 
-/* Dragging an event moves it, across days too; its lower edge changes the end. A click without moving opens it. */
 function holdCard(event, card, col) {
   const id = card.dataset.id;
   const item = findEntry(id)?.item;

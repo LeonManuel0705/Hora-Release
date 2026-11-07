@@ -529,11 +529,9 @@ const PARTS = "abends?|nachmittags?|vormittags?|mittags?|morgens?|nachts?|früh"
 const DAYTIME = "abends?|nachmittags?|vormittags?|mittags?|morgens|nachts?";
 const DAY_WORD = new RegExp(`(?<![\\p{L}\\p{N}.\\-–/])(${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})(?![\\p{L}\\p{N}\\-])`, "giu");
 const DAY_LEADS = /(?<![\p{L}\p{N}])((?:(?:am|bis|zum|ab|für|den|nächsten|kommenden|diesen|übernächsten|spätestens)\s+)+)$/iu;
-// After these words a day belongs to the content ("Stoff von Freitag", "jeden Montag") or is a name ("Frau Freitag").
 const DAY_NOT_AFTER = /(?<![\p{L}\p{N}])(?:von|vom|seit|über|letzte[nmrs]?|vergangene[nmrs]?|jeden|jedem|herr|frau|hr\.|fr\.|dr\.|prof\.)\s*$/iu;
 const DAY_RANGE = new RegExp(`^\\s+bis\\s+(?:(?:zum|einschließlich)\\s+)?${DAY_ANY}(?![\\p{L}])`, "iu");
 const DAY_LIST = /^\s*[-–/]\s*(?:mo|di|mi|do|fr|sa|so)(?![\p{L}])/iu;
-// Days in a list ("Mo, Mi und Fr") name a rhythm, not one day.
 const LIST_AFTER = new RegExp(`^\\.?\\s*(?:,|&|und|oder)\\s*(${DAY_ANY})(?![\\p{L}])`, "iu");
 const LIST_BEFORE = new RegExp(`(?<![\\p{L}])(${DAY_ANY})\\.?\\s*(?:,|&|und|oder)\\s*$`, "iu");
 const WITH_BEFORE = /(?<![\p{L}])mit\s+$/iu;
@@ -541,13 +539,11 @@ const PART_AFTER = new RegExp(`^\\s+(${PARTS})(?![\\p{L}])`, "iu");
 const DAYTIME_AFTER = new RegExp(`^\\s+(?:${DAYTIME})(?![\\p{L}])`, "iu");
 const ANY_DAYTIME = new RegExp(`(?<![\\p{L}])(?:${DAYTIME})(?![\\p{L}])`, "iu");
 const ANY_CLOCK = /(?<![\p{N}.:])(?:(?:[01]?\d|2[0-3]):[0-5]\d|(?:[01]?\d|2[0-3])(?:\.[0-5]\d)?\s*uhr(?![\p{L}]))|(?<![\p{L}])(?:um|ab|gegen)\s+(?:[01]?\d|2[0-3])(?![\p{N}])/iu;
-// A sentence may open with the word "so" ("So viel lernen", "So ein Tag"), never with "so um 8".
 const SO_WORD = /^\s+(?!(?:um|ab|gegen)(?![\p{L}]))\p{Ll}/u;
 const WEEK_BEFORE = /(?<![\p{L}\p{N}])((?:in\s+)?(?:der\s+)?(nächste[nr]?|kommende[nr]?|übernächste[nr]?|diese[nr]?)\s+woche\s+(?:am\s+)?)$/iu;
 const WEEK_AFTER = /^\s+(?:(?:in\s+)?der\s+)?(nächste[nr]?|kommende[nr]?|übernächste[nr]?)\s+woche(?![\p{L}])/iu;
 const WEEKS_AHEAD = /^\s+in\s+(\S+)\s+wochen?(?![\p{L}])/iu;
 const WEEK_COUNTS = { einer: 1, 1: 1, zwei: 2, 2: 2, drei: 3, 3: 3, vier: 4, 4: 4 };
-// Behind a day, a date that was not understood: the day alone would be the wrong one.
 const DATE_AFTER = new RegExp(`^\\s*[,(–-]?\\s*(?:de[nmr]\\s+)?\\d{1,2}\\.\\s?(?:\\d{1,2}\\.|(?:${MONTH_WORDS})(?![\\p{L}]))`, "iu");
 const CLOCK_BEFORE = /(?:\d|uhr|früh|morgens|vormittags|mittags|nachmittags|abends|nachts)\s*[,.]?\s*$/iu;
 const RELATIVE = new RegExp(`(?<![\\p{L}\\p{N}])((?:(?:bis|für|am|ab)\\s+)?)(übermorgen|morgen|heute)(?:\\s+(${PARTS}))?(?![\\p{L}\\p{N}])`, "giu");
@@ -566,10 +562,10 @@ function listed(before, after) {
   return (next && isDay(next[1])) || (previous && isDay(previous[1]));
 }
 
-/* A wrong day is worse than none, so a short name without "am" or "bis" counts only where nothing else can be meant:
-   as written ("Do"), not after "mit", not in front of a name ("Fr. Müller"), and at the start of a sentence only with
-   a dot, a time or a time of day and without a comma behind it ("So, ..." and "So ein Tag" stay text). The assistant
-   reads them by the same rules (spoken_time.py, _short_day). */
+/* A wrong day is worse than none. Days in a list ("Mo, Mi und Fr") name a rhythm, so none of them counts. A short
+   name without "am" or "bis" counts only as written ("Do"), not after "mit", not in front of a name ("Fr. Müller"),
+   and at the start of a sentence only with a dot, a time or a time of day and without a comma behind it ("So, ..."
+   and "So ein Tag" stay text). The assistant reads days by the same rules (spoken_time.py). */
 function shortDay(word, text, before, after, dotted, range) {
   if (word !== `${word[0].toUpperCase()}${word[1].toLowerCase()}` || WITH_BEFORE.test(before)) return false;
   if (DAYTIME_AFTER.test(after)) return true;

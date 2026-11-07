@@ -18,7 +18,6 @@ const shifted = (iso, days) => {
   return isoOf(new Date(date.getFullYear(), date.getMonth(), date.getDate() + days));
 };
 
-/* The rule as it is stored, or null: { freq, interval, until, count, exceptions }. */
 export function normalizeRecurrence(value) {
   if (!value || typeof value !== "object" || !FREQUENCIES.includes(value.freq)) return null;
   const interval = Math.min(12, Math.max(1, Math.round(Number(value.interval) || 1)));
@@ -28,8 +27,7 @@ export function normalizeRecurrence(value) {
   return { freq: value.freq, interval, until, count, exceptions };
 }
 
-/* The day of the n-th time the rule comes round, or null when that day does not exist (the 31st in April,
-   the 29th of February in a common year). Google skips those days too. */
+// Null for a day that does not exist (the 31st in April, the 29th of February in a common year): Google skips those too.
 function nth(start, rule, index) {
   const first = dayOf(start);
   const step = index * rule.interval;
@@ -41,8 +39,7 @@ function nth(start, rule, index) {
   return date.getDate() === first.getDate() ? isoOf(date) : null;
 }
 
-/* The start days of an event's occurrences that touch the days from `from` to `to`. An exception still counts
-   towards a limit of n times, as in RFC 5545. */
+// An exception still counts towards a limit of n times, as in RFC 5545.
 export function occurrenceDates(item, from, to) {
   const rule = normalizeRecurrence(item.recurrence);
   const span = item.endDate && item.endDate > item.date ? daysBetween(item.date, item.endDate) : 0;
@@ -73,7 +70,6 @@ export function splitOccurrence(id) {
   return match ? { series: match[1], date: match[2] } : null;
 }
 
-/* One entry per occurrence for the days from `from` to `to`. Events that do not repeat stay as they are. */
 export function expandEvents(list, from, to) {
   const result = [];
   for (const item of list || []) {
@@ -89,7 +85,6 @@ export function expandEvents(list, from, to) {
   return result;
 }
 
-/* The rule in words for the event sheet: "Jede Woche", "Alle 2 Wochen, 10 Mal". */
 export function ruleText(value, longDate = (iso) => iso) {
   const rule = normalizeRecurrence(value);
   if (!rule) return "";

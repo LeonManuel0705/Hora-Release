@@ -101,7 +101,6 @@ export function eventMinutes(event, category) {
   return event.reminderMinutes ?? (category.on ? lead : -1);
 }
 
-// "1 Tag vorher" reminds today of tomorrow, and every occurrence of a series reminds of its own.
 function eventReminders(prefs, day, minute) {
   const category = prefs.categories.events;
   const today = isoDate(day);

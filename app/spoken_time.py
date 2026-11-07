@@ -17,10 +17,11 @@ from datetime import date, timedelta
 from typing import NamedTuple, Optional
 
 WEEKDAYS = ('montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag', 'samstag', 'sonntag')
-# Short names count as written ("Do", not "do") unless "am" or "bis" stands before them, and only where nothing else can
-# be meant: never after "mit", never in front of a name ("Fr. Müller", "Di Maria") unless a clock time stands before them,
-# and at the start of a sentence only with a dot, a time or a time of day and without a comma behind them ("So, ..." and
-# "So ein Tag" stay text). The quick fields of the app read them by the same rules (shell.js, shortDay).
+# Days in a list ("Mo, Mi und Fr") name a rhythm, so none of them counts. Short names count as written ("Do", not "do")
+# unless "am" or "bis" stands before them, and only where nothing else can be meant: never after "mit", never in front of
+# a name ("Fr. Müller", "Di Maria") unless a clock time stands before them, and at the start of a sentence only with a
+# dot, a time or a time of day and without a comma behind them ("So, ..." and "So ein Tag" stay text). The quick fields
+# of the app read days by the same rules (shell.js, shortDay).
 SHORT_WEEKDAYS = ('Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So')
 MONTHS = {'januar': 1, 'februar': 2, 'märz': 3, 'april': 4, 'mai': 5, 'juni': 6,
           'juli': 7, 'august': 8, 'september': 9, 'oktober': 10, 'november': 11, 'dezember': 12}
@@ -110,7 +111,6 @@ _CLOCK_BEFORE = re.compile(rf'(?:\d|uhr|{_ADVERB})\s*[,.]?\s*$', re.IGNORECASE)
 _SHORT_WITH = re.compile(r'(?<!\w)mit\s+$', re.IGNORECASE)
 _DAY_ANY = rf'(?:(?i:{_NAME})|{"|".join(SHORT_WEEKDAYS)})'
 _SHORT_RANGE = re.compile(rf'\s+bis\s+(?:(?:zum|einschließlich)\s+)?(?:{_NAME}|{"|".join(SHORT_WEEKDAYS)})(?!\w)', re.IGNORECASE)
-# Days in a list ("Mo, Mi und Fr") name a rhythm, not one day.
 _LIST_AFTER = re.compile(rf'\.?\s*(?:,|&|(?i:und|oder))\s*{_DAY_ANY}(?!\w)')
 _LIST_BEFORE = re.compile(rf'(?<!\w){_DAY_ANY}\.?\s*(?:,|&|(?i:und|oder))\s*$')
 _TITLE_BEFORE = re.compile(r'(?<!\w)(?:herr|frau|hr\.|fr\.|dr\.|prof\.)\s*$', re.IGNORECASE)
@@ -121,7 +121,6 @@ _ANY_DAYTIME = re.compile(rf'(?<!\w){_DAYTIME}(?!\w)', re.IGNORECASE)
 _ANY_CLOCK = re.compile(
     r'(?<![\d.:])(?:(?:[01]?\d|2[0-3]):[0-5]\d|(?:[01]?\d|2[0-3])(?:\.[0-5]\d)?\s*uhr(?!\w))|(?<!\w)(?:um|ab|gegen)\s+(?:[01]?\d|2[0-3])(?!\d)',
     re.IGNORECASE)
-# A sentence may open with the word "so" ("So viel lernen", "So ein Tag"), never with "so um 8".
 _SO_WORD = re.compile(r'\s+(?!(?:um|ab|gegen)(?!\w))[a-zäöüß]')
 _NAMED_DAY = (
     rf'(?:(?P<name>{_NAME}|{"|".join(SHORT_WEEKDAYS)})\.?(?:\s*,\s*|\s*[–-]\s+|\s*(?P<open>\()\s*|\s+)(?:de[nmr]\s+)?)?'
