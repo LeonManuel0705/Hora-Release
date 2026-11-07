@@ -1830,7 +1830,7 @@ class _EditDayDialogState extends State<_EditDayDialog> {
               controller: _titleController,
               decoration: const InputDecoration(
                 labelText: 'Titel',
-                hintText: 'z.B. Chestday',
+                hintText: 'z. B. Laufen',
               ),
             ),
             const SizedBox(height: 16),

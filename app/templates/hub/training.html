@@ -64,7 +64,6 @@
             </div>
             <div class="edit-mode-actions">
                 <button class="btn-secondary small" onclick="openModal('clearScheduleModal')">Alles löschen</button>
-                <button class="btn-secondary small" onclick="loadDefaultTemplate()">Standard laden</button>
                 <button class="btn-primary small" onclick="toggleEditMode()">Fertig</button>
             </div>
         </div>
@@ -308,7 +307,7 @@
 
             <div class="form-group">
                 <label for="trainingTitle">Titel</label>
-                <input type="text" id="trainingTitle" name="title" placeholder="z.B. Chestday" required>
+                <input type="text" id="trainingTitle" name="title" placeholder="z. B. Laufen" required>
             </div>
 
             <div class="form-group">
@@ -455,26 +454,6 @@ const CACHE_KEYS = {
     scheduleEntries: 'app-training-schedule-entries',
     lastSync: 'app-training-last-sync'
 };
-
-const DEFAULT_REGULAR_TEMPLATE = [
-    { day: 1, schedule_type: 'regular', training_type: 'rest', title: 'Ruhetag', icon: '😴', notes: 'DLRG Schwimmen' },
-    { day: 2, schedule_type: 'regular', training_type: 'strength', title: 'Chestday', icon: '🏋️', muscle_groups: 'Brustmuskulatur' },
-    { day: 3, schedule_type: 'regular', training_type: 'strength', title: 'Backday + Schultern', icon: '🎯', muscle_groups: 'Rucken & Schultern' },
-    { day: 4, schedule_type: 'regular', training_type: 'strength', title: 'Armday', icon: '💪', muscle_groups: 'Bizeps & Trizeps' },
-    { day: 5, schedule_type: 'regular', training_type: 'strength', title: 'Legday', icon: '🦵', muscle_groups: 'Beinmuskulatur' },
-    { day: 6, schedule_type: 'regular', training_type: 'strength', title: 'Backday', icon: '🎯', muscle_groups: 'Rucken (optional)' },
-    { day: 0, schedule_type: 'regular', training_type: 'rest', title: 'Ruhetag', icon: '😴', notes: 'Regeneration' }
-];
-
-const DEFAULT_HOLIDAY_TEMPLATE = [
-    { day: 1, schedule_type: 'holiday', training_type: 'strength', title: 'Chestday', icon: '🏋️', muscle_groups: 'Brustmuskulatur' },
-    { day: 2, schedule_type: 'holiday', training_type: 'strength', title: 'Backday', icon: '🎯', muscle_groups: 'Rucken' },
-    { day: 3, schedule_type: 'holiday', training_type: 'strength', title: 'Schulter + Trizep', icon: '💪', muscle_groups: 'Schultern & Trizeps' },
-    { day: 4, schedule_type: 'holiday', training_type: 'strength', title: 'Legday', icon: '🦵', muscle_groups: 'Beinmuskulatur' },
-    { day: 5, schedule_type: 'holiday', training_type: 'strength', title: 'Brust + Bizep', icon: '🏋️', muscle_groups: 'Brust & Bizeps' },
-    { day: 6, schedule_type: 'holiday', training_type: 'strength', title: 'Backday + Schultern', icon: '🎯', muscle_groups: 'Rucken & Schultern' },
-    { day: 0, schedule_type: 'holiday', training_type: 'cardio', title: 'Leichtes Cardio', icon: '🏃', muscle_groups: 'Ausdauer' }
-];
 
 function loadCachedData() {
     try {
@@ -997,12 +976,6 @@ async function loadScheduleData() {
 
 async function initializeDefaultSchedules() {
     try {
-        await fetch('/api/hub/training/schedule/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(addUserIdToBody({ entries: [...DEFAULT_REGULAR_TEMPLATE, ...DEFAULT_HOLIDAY_TEMPLATE] }))
-        });
-
         await fetch('/api/hub/training/schedule/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1188,31 +1161,6 @@ async function deleteTrainingEntry() {
         await loadScheduleData();
     } catch (err) {
         console.error('Error deleting entry:', err);
-    }
-}
-
-async function loadDefaultTemplate() {
-    if (!confirm('Standard-Trainingsplan laden? Bestehende Einträge werden überschrieben.')) return;
-
-    const scheduleType = getEffectiveScheduleType();
-    const template = scheduleType === 'holiday' ? DEFAULT_HOLIDAY_TEMPLATE : DEFAULT_REGULAR_TEMPLATE;
-
-    try {
-        await fetch('/api/hub/training/schedule/clear', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(addUserIdToBody({ schedule_type: scheduleType }))
-        });
-
-        await fetch('/api/hub/training/schedule/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(addUserIdToBody({ entries: template }))
-        });
-
-        await loadScheduleData();
-    } catch (err) {
-        console.error('Error loading template:', err);
     }
 }
 
