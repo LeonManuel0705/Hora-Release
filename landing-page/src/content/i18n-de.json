@@ -333,8 +333,8 @@
             "i": "yes"
           },
           {
-            "name": "E-Mail für IServ, Gmail und Outlook",
-            "note": "per IMAP, lesen, schreiben, antworten",
+            "name": "E-Mail für IServ, Gmail und andere IMAP-Postfächer",
+            "note": "lesen, schreiben, antworten. Outlook.com nimmt seit 2024 keine Anmeldung mit Passwort mehr an",
             "d": "yes",
             "a": "no",
             "i": "no"

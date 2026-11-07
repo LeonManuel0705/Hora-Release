@@ -333,8 +333,8 @@
             "i": "yes"
           },
           {
-            "name": "Email for IServ, Gmail and Outlook",
-            "note": "via IMAP: read, write, reply",
+            "name": "Email for IServ, Gmail and other IMAP mailboxes",
+            "note": "read, write, reply. Since 2024, Outlook.com no longer accepts sign-in with a password",
             "d": "yes",
             "a": "no",
             "i": "no"
