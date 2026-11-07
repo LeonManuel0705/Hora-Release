@@ -248,6 +248,83 @@ def test_the_unread_counter_follows_the_mailboxes_without_asking_them_on_every_p
     assert page_data(client, '/hub')['mailUnread'] == 1
 
 
+def unread(*mail_ids):
+    mailboxes = {mail_id.split('|', 1)[0] for mail_id in mail_ids}
+    ui_data.note_unread([{'id': mail_id, 'folder': 'inbox', 'read': False} for mail_id in mail_ids], mailboxes, mailboxes)
+
+
+def test_disconnecting_iserv_takes_its_unread_mails_and_its_stand_with_it(client, monkeypatch):
+    connect()
+    unread('ben.k@iserv|1', 'ben.k@iserv|2', 'a@x.de|5')
+    ui_data.mark_synced('iserv', 'plan', ui_data.iserv_key())
+    assert page_data(client, '/hub')['mailUnread'] == 3
+    fake = FakeIserv()
+    fake.delete_credentials = lambda: ui_data._path('iserv').unlink()
+    monkeypatch.setattr(iserv_service, 'get_iserv_service', lambda: fake)
+    assert client.post('/api/iserv/disconnect').get_json() == {'success': True}
+    data = page_data(client, '/hub')
+    assert data['mailUnread'] == 1 and data['status']['synced']['iserv'] is None
+    assert ui_data.mail_unread_ids() == ['a@x.de|5']
+    connect()
+    data = page_data(client, '/hub')
+    assert data['mailUnread'] == 1 and data['status']['synced']['iserv'] is None
+
+
+def test_a_removed_mailbox_no_longer_counts_its_unread_mails(client, monkeypatch):
+    from app import email_service, google_oauth
+    unread('a@x.de|1', 'a@x.de|2', 'b@gmail.com|3', 'c@x.de|4')
+    monkeypatch.setattr(google_oauth, 'get_google_accounts', lambda: [{'email': 'b@gmail.com'}])
+    monkeypatch.setattr(google_oauth, 'remove_google_account', lambda email: email == 'b@gmail.com')
+    monkeypatch.setattr(email_service, 'remove_email_account', lambda email: email == 'a@x.de')
+    assert client.delete('/api/email/accounts/a@x.de').status_code == 200
+    assert page_data(client, '/hub')['mailUnread'] == 2
+    assert client.delete('/api/email/google/remove/b@gmail.com').get_json() == {'success': True}
+    assert client.delete('/api/email/accounts/nobody@x.de').status_code == 404
+    assert ui_data.mail_unread_ids() == ['c@x.de|4']
+
+
+def test_another_iserv_account_starts_without_the_stand_and_the_mails_of_the_last_one(client, monkeypatch):
+    connect()
+    meta = DATA_DIR / 'vertretungsplan_cache' / 'cache_meta.json'
+    meta.parent.mkdir(parents=True, exist_ok=True)
+    encrypt_file({'version': 2, 'cached_at': '2026-11-06T07:36:12.123456', 'files': []}, meta)
+    ui_data._cache.pop('plan_meta', None)
+    unread('ben.k@iserv|1', 'a@x.de|5')
+    fake = FakeIserv()
+
+    def sign_in(username=None, password=None, iserv_url=None):
+        connect(user=username, host=iserv_url)
+        return {'success': True}
+
+    fake.connect = sign_in
+    monkeypatch.setattr(iserv_service, 'get_iserv_service', lambda: fake)
+    try:
+        assert client.post('/api/iserv/connect', json={'username': 'ben.k', 'password': 'neu', 'iserv_url': 'iserv.schule.de'}).status_code == 200
+        data = page_data(client, '/hub')
+        assert data['status']['synced']['iserv'] == '2026-11-06T07:36' and data['mailUnread'] == 2
+        assert client.post('/api/iserv/connect', json={'username': 'mia.k', 'password': 'geheim', 'iserv_url': 'iserv.schule.de'}).status_code == 200
+        data = page_data(client, '/hub')
+        assert data['status']['synced']['iserv'] is None and data['mailUnread'] == 1
+        assert ui_data.mail_unread_ids() == ['a@x.de|5']
+        stamp = datetime.now().isoformat(timespec='minutes')
+        encrypt_file({'version': 2, 'cached_at': f'{stamp}:30.5', 'files': []}, meta)
+        ui_data._cache.pop('plan_meta', None)
+        assert page_data(client, '/hub')['status']['synced']['iserv'] == stamp
+    finally:
+        meta.unlink()
+        ui_data._cache.pop('plan_meta', None)
+
+
+def test_the_counter_leaves_out_the_mails_of_an_iserv_account_that_is_not_signed_in(client):
+    connect()
+    unread('ben.k@iserv|1', 'a@x.de|5')
+    assert page_data(client, '/hub')['mailUnread'] == 2
+    connect(user='mia.k')
+    assert page_data(client, '/hub')['mailUnread'] == 1
+    connect()
+    assert page_data(client, '/hub')['mailUnread'] == 2
+
+
 def test_the_service_reads_the_exercise_list_and_tells_why_nothing_came(monkeypatch):
     class Response:
         def __init__(self, status, body, url='https://iserv.schule.de/iserv/exercise/api/exercises', kind='application/json'):

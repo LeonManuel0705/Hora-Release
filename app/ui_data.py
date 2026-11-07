@@ -917,7 +917,7 @@ def mark_synced(source, part, account):
     def change(state):
         entry = state.get(source) if isinstance(state.get(source), dict) else {}
         if entry.get('account') != account:
-            entry = {'account': account}
+            entry = {'account': account, 'since': stamp}
         entry[part] = stamp
         state[source] = entry
 
@@ -925,16 +925,47 @@ def mark_synced(source, part, account):
 
 
 def iserv_parts(account):
-    """When each part of IServ last came, for the account signed in now. The plan also counts from its own copy, which older versions kept."""
+    """When each part of IServ last came, for the account signed in now.
+
+    The plan also counts from its own copy, which older versions kept without naming the account. That copy only counts
+    when nothing says another account came since: no record yet, or one of this account that began before it.
+    """
     entry = load_dict('sync').get('iserv') if account else None
     parts = {part: None for part in ISERV_PARTS}
-    if isinstance(entry, dict) and entry.get('account') == account:
+    mine = isinstance(entry, dict) and entry.get('account') == account
+    if mine:
         parts.update({part: entry[part] for part in ISERV_PARTS if isinstance(entry.get(part), str)})
-    if account:
+    if account and (entry is None or mine):
         kept = str(load_dict('plan_meta').get('cached_at') or '')[:16]
-        if re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}', kept) and kept > (parts['plan'] or ''):
+        since = str(entry.get('since') or '') if mine else ''
+        if re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}', kept) and kept >= since and kept > (parts['plan'] or ''):
             parts['plan'] = kept
     return parts
+
+
+def note_iserv_account(account, before):
+    """An account was signed in, before was the one signed in until then.
+
+    For another account, times and unread mails kept for the last one no longer count, nor the plan copy from before.
+    """
+    def change(state):
+        entry = state.get('iserv')
+        same = entry.get('account') == account if isinstance(entry, dict) else account == before
+        if not same:
+            state['iserv'] = {'account': account, 'since': datetime.now().isoformat(timespec='minutes')}
+            _drop_unread(state, _is_iserv_mailbox)
+
+    if account:
+        modify_dict('sync', change)
+
+
+def forget_iserv():
+    """IServ was disconnected: its times go, and so do the unread mails of its mailbox."""
+    def change(state):
+        state.pop('iserv', None)
+        _drop_unread(state, _is_iserv_mailbox)
+
+    modify_dict('sync', change)
 
 
 HOMEWORK_MAX_AGE = timedelta(minutes=30)
@@ -1097,7 +1128,7 @@ def build(active, store, now):
         'transit': way_home(settings, store, now),
         'weather': weather(settings, now),
         'status': sync_status(iserv, now),
-        'mailUnread': len(mail_unread_ids()),
+        'mailUnread': len(mail_unread_ids(iserv)),
     }
     if not school['abWeeks']:
         store.setdefault('app-ab-weeks', False)
@@ -1420,9 +1451,33 @@ def note_read(mail_ids):
         modify_dict('sync', change)
 
 
-def mail_unread_ids():
+def _mailbox_of(mail_id):
+    return mail_id.split('|', 1)[0]
+
+
+def _is_iserv_mailbox(mailbox):
+    return mailbox.endswith('@iserv')
+
+
+def _drop_unread(state, gone):
+    mail = state.get('mail') if isinstance(state.get('mail'), dict) else {}
+    state['mail'] = {'unread': [mail_id for mail_id in mail.get('unread') or [] if isinstance(mail_id, str) and not gone(_mailbox_of(mail_id))]}
+
+
+def mail_unread_ids(iserv=None):
+    """The unread mails kept from the last fetch. With the IServ account given, mails of an IServ mailbox that is not its own drop out."""
     mail = load_dict('sync').get('mail')
-    return [mail_id for mail_id in (mail.get('unread') or []) if isinstance(mail_id, str)] if isinstance(mail, dict) else []
+    ids = [mail_id for mail_id in (mail.get('unread') or []) if isinstance(mail_id, str)] if isinstance(mail, dict) else []
+    if iserv is None:
+        return ids
+    own = f"{iserv['name']}@iserv" if iserv.get('connected') else None
+    return [mail_id for mail_id in ids if not _is_iserv_mailbox(_mailbox_of(mail_id)) or _mailbox_of(mail_id) == own]
+
+
+def forget_mailbox(mailbox):
+    """A mailbox was removed: its unread mails no longer count."""
+    if mailbox and any(_mailbox_of(mail_id) == mailbox for mail_id in mail_unread_ids()):
+        modify_dict('sync', lambda state: _drop_unread(state, lambda name: name == mailbox))
 
 
 def page_email(data, school, settings, today, iserv):
