@@ -15,24 +15,24 @@
 .is-touch .row-meta .subject-filter { position: relative; z-index: 1; }
 .is-touch .row-meta .subject-filter::after { content: ""; position: absolute; inset: -3px -6px -9px; }
 
-.is-touch :is(.btn, .segmented button, .text-button, .pill, .empty-action, .section-link, .switch[role="switch"], .brand, .chip-x) { position: relative; }
-.is-touch :is(.btn, .segmented button, .text-button, .pill, .empty-action, .section-link, .switch[role="switch"], .brand, .chip-x)::after { content: ""; position: absolute; inset: calc(var(--touch-y, 0px) * -1) calc(var(--touch-x, 0px) * -1); }
-.is-touch :is(.btn, .segmented button) { --touch-y: 5px; }
-.is-touch .empty-action { --touch-y: 4px; }
-.is-touch :is(.text-button, .pill) { --touch-y: 6px; }
-.is-touch .switch[role="switch"] { --touch-y: 8px; }
-.is-touch .section-link { --touch-y: 13px; --touch-x: 6px; }
+/* A hit area of 44 by 44 px around the middle of a smaller control. A side that is long enough keeps its edge. */
+.is-touch :is(.btn, .segmented button, .text-button, .pill, .empty-action, .section-link, .switch[role="switch"], .brand, .chip-x, button.chip) { position: relative; }
+.is-touch :is(.btn, .segmented button, .text-button, .pill, .empty-action, .section-link, .switch[role="switch"], .brand, .chip-x, button.chip)::after {
+  content: "";
+  position: absolute;
+  inset: min(0px, calc((100% - 44px) / 2));
+}
 .is-touch .section-head { margin-bottom: 10px; }
-.is-touch .brand { --touch-y: 3px; --touch-x: 8px; }
-.is-touch .chip-x { --touch-y: 10px; --touch-x: 10px; }
 /* Wrapped rows of pills and chips get room for those hit areas. */
 .is-touch :is(.about-links, .room-chips) { row-gap: 12px; }
+.is-touch .chips { row-gap: 16px; }
 
 .is-touch :is(.done-toggle, .day, .set-nav-item) { min-height: 44px; }
 .is-touch .set-nav-item { height: 44px; }
 .is-touch .today .track { height: 44px; }
-.is-touch .field-control { min-height: 44px; }
+.is-touch :is(input, select).field-control, .is-touch textarea.field-control.is-line { min-height: 44px; }
+.is-touch .add-input { height: 44px; }
 
-/* Safari zooms into a field whose text is smaller than 16 px. */
-.is-touch :is(.quick-field input, .field-control, .input, .textarea) { font-size: 16px; }
+/* Safari zooms into a field whose text is smaller than 16 px. Fields with larger text keep it. */
+.is-touch :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"], [type="image"]), textarea, select):not(.palette-input, .panel-title, .stepper-input) { font-size: 16px; }
 .is-touch .quick-field input { padding-block: 12px; margin-block: -4px; }
