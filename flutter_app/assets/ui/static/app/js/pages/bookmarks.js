@@ -33,17 +33,14 @@ function webAddress(url) {
 
 const hostOf = (url) => (webAddress(url)?.hostname || url).replace(/^www\./, "");
 
-function hueOf(text) {
+function hashOf(text) {
   let hash = 0;
   for (const letter of text) hash = (hash * 31 + letter.codePointAt(0)) >>> 0;
-  return HUES[hash % HUES.length];
+  return hash;
 }
 
-function iconVersion(url) {
-  let hash = 0;
-  for (const letter of url) hash = (hash * 31 + letter.codePointAt(0)) >>> 0;
-  return hash.toString(36);
-}
+const hueOf = (text) => HUES[hashOf(text) % HUES.length];
+const iconVersion = (url) => hashOf(url).toString(36);
 
 // The window may ask the site itself where the app could not, but only where the page's own rules allow outside images.
 function siteIcon(url) {
