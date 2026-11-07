@@ -251,7 +251,7 @@ class StartText {
   static const privacySettings = 'x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders';
   static const setup = 'Einmalige Einrichtung, das dauert ein paar Minuten.';
   static const environment = '$setup\nDie Python-Umgebung wird angelegt …';
-  static const slow = 'Der erste Start dauert etwas länger.';
+  static const slow = 'Der Start dauert etwas länger.';
   static String get starting => '${Brand.name} startet …';
   static String get verySlow => 'Das dauert ungewöhnlich lange. ${Brand.name} wartet noch bis zu 30 Sekunden.';
   static String package(int count, String name) => '$setup\nPaket $count: $name';

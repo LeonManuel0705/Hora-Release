@@ -161,34 +161,34 @@ function problem(kind, info = {}) {
       };
     case 'crashed':
       return {
-        heading: 'Der Server wurde unerwartet beendet.',
-        message: `Mit „${labels.retry}“ startet ${name} ihn neu.`,
+        heading: `${name} wurde unerwartet beendet.`,
+        message: `Mit „${labels.retry}“ startet ${name} neu.`,
         detail: exitDetail(info),
         actions: withLog,
       };
     case 'exited':
       return {
-        heading: 'Der Server hat sich beim Start beendet.',
+        heading: `${name} hat sich beim Start beendet.`,
         message: 'Woran es lag, steht im Protokoll. Versuch es noch einmal.',
         detail: exitDetail(info),
         actions: withLog,
       };
     case 'timeout':
       return {
-        heading: 'Der Server antwortet nicht.',
+        heading: `${name} antwortet nicht.`,
         message: 'Nach 60 Sekunden kam noch keine Antwort. Versuch es noch einmal.',
         actions: withLog,
       };
     case 'spawn':
       return {
-        heading: 'Der Server ließ sich nicht starten.',
+        heading: `${name} ließ sich nicht starten.`,
         message: `Versuch es noch einmal. Klappt es dann auch nicht, installier ${name} neu. Deine Daten bleiben dabei erhalten.`,
         detail: info.code ? `Fehler ${info.code}` : null,
         actions: withLog,
       };
     case 'missing':
       return {
-        heading: 'Der Server fehlt in dieser Installation.',
+        heading: `Diese Installation von ${name} ist unvollständig.`,
         message: `Installier ${name} neu. Deine Daten bleiben dabei erhalten.`,
         actions: { retry: labels.retry },
       };
@@ -206,13 +206,13 @@ function problem(kind, info = {}) {
       };
     case 'identity':
       return {
-        heading: `Der Server auf Port ${port} hat sich nicht als ${name} ausgewiesen.`,
+        heading: `Das Programm auf Port ${port} hat sich nicht als ${name} ausgewiesen.`,
         message: 'Versuch es noch einmal.',
         actions: { retry: labels.retry },
       };
     case 'unreachable':
       return {
-        heading: 'Der Server antwortet gerade nicht.',
+        heading: `${name} antwortet gerade nicht.`,
         message: 'Versuch es noch einmal. Hilft das nicht, steht im Protokoll, woran es liegt.',
         actions: withLog,
       };
