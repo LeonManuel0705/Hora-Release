@@ -52,14 +52,16 @@ function openToast(id) {
 let sheetEl = null;
 let sheetTimer = 0;
 
-const stepsHTML = (steps) => `<ol class="ap-sheet-steps">${steps.map((step, i) => `<li style="--i: ${i}">${escapeHtml(step).replace("{share}", icon("share", { size: 17, cls: "ap-sheet-glyph" }))}</li>`).join("")}</ol>`;
+export const stepText = (step) => escapeHtml(step).replace("{share}", icon("share", { size: 17, cls: "ap-share-glyph" }));
+
+const stepsHTML = (steps) => `<ol class="ap-sheet-steps">${steps.map((step, i) => `<li style="--i: ${i}">${stepText(step)}</li>`).join("")}</ol>`;
 
 function sheetBody(id) {
   const p = PLATFORMS[id];
   if (p.kind === "pwa") {
     return `<h2 class="ap-sheet-title" id="ap-sheet-title" tabindex="-1" autofocus aria-live="polite">${escapeHtml(t("install.web_title", { device: deviceName(id) }))}</h2>
       <p class="ap-sheet-lead">${escapeHtml(t("install.web_lead"))}</p>
-      ${stepsHTML(raw("install.web_steps") || [])}
+      ${stepsHTML(raw(`steps.${id}`) || [])}
       <div class="ap-sheet-actions"><a class="ap-btn ap-sheet-primary" href="${p.href}">${escapeHtml(t("start.cta_web"))}</a></div>`;
   }
   const alt = p.alt ? `<p class="ap-sheet-alt">${escapeHtml(t(`platforms.${id}.alt`))} <a href="${p.alt.href}" download data-sheet-get>${escapeHtml(p.alt.file)}, ${megabytes(p.alt.bytes)}&nbsp;MB</a></p>` : "";

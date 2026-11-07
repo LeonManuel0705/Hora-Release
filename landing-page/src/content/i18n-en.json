@@ -134,12 +134,7 @@
     "after": "After the download",
     "done": "Done",
     "web_title": "{{BRAND_NAME}} on {device}",
-    "web_lead": "The web app only shows reminders once it is on your Home Screen.",
-    "web_steps": [
-      "Open the web app in Safari.",
-      "There, tap Share {share}, then “Add to Home Screen”.",
-      "From now on, start {{BRAND_NAME}} from the new icon and set it up there. What you enter in the Safari tab doesn't carry over."
-    ]
+    "web_lead": "The web app only shows reminders once it is on your Home Screen."
   },
   "platforms": {
     "macos": {
@@ -189,8 +184,9 @@
       "{{BRAND_NAME}} tells you when an update is ready."
     ],
     "ios": [
-      "Open the link in Safari.",
-      "Tap Share, then “Add to Home Screen”."
+      "Open the web app in Safari.",
+      "There, tap Share {share}, then “Add to Home Screen”.",
+      "From now on, start {{BRAND_NAME}} from the new icon and set it up there. What you enter in the Safari tab doesn't carry over."
     ],
     "web": [
       "Open the link and {{BRAND_NAME}} runs right in your browser.",

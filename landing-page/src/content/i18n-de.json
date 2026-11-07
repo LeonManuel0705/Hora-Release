@@ -134,12 +134,7 @@
     "after": "Nach dem Laden",
     "done": "Fertig",
     "web_title": "{{BRAND_NAME}} auf dem {device}",
-    "web_lead": "Erinnerungen zeigt die Web-App nur, wenn sie auf dem Home-Bildschirm liegt.",
-    "web_steps": [
-      "Web-App in Safari öffnen.",
-      "Dort Teilen {share} antippen, dann „Zum Home-Bildschirm“.",
-      "{{BRAND_NAME}} ab jetzt über das neue Symbol starten und erst dort einrichten. Was du im Safari-Tab einträgst, kommt dort nicht mit."
-    ]
+    "web_lead": "Erinnerungen zeigt die Web-App nur, wenn sie auf dem Home-Bildschirm liegt."
   },
   "platforms": {
     "macos": {
@@ -189,8 +184,9 @@
       "{{BRAND_NAME}} meldet sich, sobald es ein Update gibt."
     ],
     "ios": [
-      "Den Link in Safari öffnen.",
-      "Teilen antippen, dann „Zum Home-Bildschirm“."
+      "Web-App in Safari öffnen.",
+      "Dort Teilen {share} antippen, dann „Zum Home-Bildschirm“.",
+      "{{BRAND_NAME}} ab jetzt über das neue Symbol starten und erst dort einrichten. Was du im Safari-Tab einträgst, kommt dort nicht mit."
     ],
     "web": [
       "Link öffnen, {{BRAND_NAME}} läuft direkt im Browser.",
