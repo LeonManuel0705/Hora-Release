@@ -13,9 +13,14 @@ Publish only a folder that passes --verify. A worker without the list refuses to
 file changed after the list was written makes every device refuse the whole build.
 
 To undo a bad publish, or to go back to a build without offline use, run --off on the folder you
-publish next (any build, old or new) and publish it. On its next start each device removes the
-worker and every offline copy and loads from the network again; a later normal build turns it
-back on. Arguments the script does not know go to `flutter build web`.
+publish next (any build, old or new; a folder without a worker gets one) and publish it. On its next
+start each device removes the worker and every offline copy and loads from the network again; a
+later normal build turns it back on. Arguments the script does not know go to `flutter build web`.
+
+Fonts: the engine loads its default font and the fallbacks for glyphs the app fonts lack from
+fonts/ in the build, never from Google. The build ships Roboto, all 12 emoji parts and Noto Sans
+Math (about 2.3 MB). Other scripts (Arabic, Cyrillic, CJK and so on) have no fallback file, so such
+characters in user text show as empty boxes on screens Flutter draws itself.
 """
 
 import argparse
@@ -76,6 +81,8 @@ def stamp(out):
 
 
 def switch_off(out):
+    if not (out / WORKER).is_file():
+        shutil.copy(APP / 'web' / WORKER, out / WORKER)
     write_manifest(out, 'off')
     print(f'{out}: the worker now removes itself and every offline copy on the next start of each device')
 
@@ -111,9 +118,10 @@ def font_problems(out):
     if 'fontFallbackBaseUrl: "fonts/"' not in boot.read_text(encoding='utf-8'):
         problems.append('flutter_bootstrap.js lets the engine load fonts from Google')
     engine = (out / 'main.dart.js').read_text(encoding='utf-8', errors='ignore')
-    for path in sorted(set(re.findall(r'roboto/v\d+/[\w-]+\.woff2', engine))):
+    wanted = re.findall(r'roboto/v\d+/[\w-]+\.woff2|notocoloremoji/v\d+/[\w-]+\.\d+\.woff2', engine)
+    for path in sorted(set(wanted)):
         if not (out / 'fonts' / path).is_file():
-            problems.append(f'fonts/{path} is missing, the engine loads it at every start')
+            problems.append(f'fonts/{path} is missing, the engine asks for it')
     for font in sorted((out / 'fonts').rglob('*.woff2')):
         path = font.relative_to(out / 'fonts').as_posix()
         if path not in engine:

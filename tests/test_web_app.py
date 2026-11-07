@@ -133,13 +133,23 @@ def test_a_build_only_passes_with_the_fallback_fonts_the_engine_asks_for(tmp_pat
     assert build.verify(tmp_path) == []
     (tmp_path / 'fonts' / 'notocoloremoji' / 'v32' / 'Old.7.woff2').write_text('o', encoding='utf-8')
     (tmp_path / 'fonts' / 'roboto' / 'v32' / 'Abc.woff2').unlink()
+    (tmp_path / 'fonts' / 'notocoloremoji' / 'v32' / 'Emo.8.woff2').unlink()
     (tmp_path / 'flutter_bootstrap.js').write_text('_flutter.loader.load();', encoding='utf-8')
     build.stamp(tmp_path)
     assert build.verify(tmp_path) == [
         'flutter_bootstrap.js lets the engine load fonts from Google',
-        'fonts/roboto/v32/Abc.woff2 is missing, the engine loads it at every start',
+        'fonts/notocoloremoji/v32/Emo.8.woff2 is missing, the engine asks for it',
+        'fonts/roboto/v32/Abc.woff2 is missing, the engine asks for it',
         'fonts/notocoloremoji/v32/Old.7.woff2 is no longer asked for by this Flutter version',
     ]
+
+
+def test_the_off_switch_also_works_on_a_build_from_before_the_worker(tmp_path):
+    build = script('build_web_app')
+    (tmp_path / 'index.html').write_text('<html></html>', encoding='utf-8')
+    build.switch_off(tmp_path)
+    assert manifest_of(tmp_path) == 'off'
+    assert build.verify(tmp_path) == []
 
 
 def test_the_off_switch_replaces_the_list_and_passes_the_check(tmp_path):
