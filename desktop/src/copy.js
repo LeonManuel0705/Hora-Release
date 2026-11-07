@@ -6,8 +6,8 @@ const { brand, port } = require('./config');
 const name = brand.name;
 
 const progress = {
-  starting: 'Server wird gestartet …',
-  leftover: `Ein älterer Server von ${name} läuft noch und wird beendet …`,
+  starting: `${name} startet …`,
+  leftover: `Ein älteres ${name} läuft noch im Hintergrund und wird beendet …`,
   slow: 'Beim ersten Start nach einer Installation dauert das etwas länger.',
   verySlow: `Das dauert ungewöhnlich lange. ${name} wartet noch bis zu 30 Sekunden.`,
 };

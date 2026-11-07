@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../brand.dart';
 import '../services/downloads.dart';
+import '../services/backend_setup.dart';
 import '../services/flask_server_service.dart';
 import '../services/notification_service.dart';
 import '../services/update_service.dart';
@@ -182,6 +183,12 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
     if (state == AppLifecycleState.detached) {
       _flask.shutdown();
     }
+    // Back from the Python installer or the privacy settings: try again by itself.
+    if (state == AppLifecycleState.resumed &&
+        _flask.state.value == FlaskServerState.error &&
+        (_flask.problem == StartProblem.pythonMissing || _flask.problem == StartProblem.documentsDenied)) {
+      _flask.restart();
+    }
   }
 
   void _onStateChange() {
@@ -310,7 +317,7 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
                       ValueListenableBuilder<String>(
                         valueListenable: _flask.setupProgress,
                         builder: (context, progress, _) => Text(
-                          progress.isEmpty ? 'Server wird gestartet …' : progress,
+                          progress.isEmpty ? StartText.starting : progress,
                           textAlign: TextAlign.center,
                           style: TextStyle(color: c.muted, fontSize: 13, height: 1.5),
                         ),
@@ -326,9 +333,25 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
     });
   }
 
+  ({String label, IconData icon, Uri target})? get _errorAction => switch (_flask.problem) {
+        StartProblem.pythonMissing => (
+            label: 'Python laden',
+            icon: Icons.download_rounded,
+            target: Uri.parse(Platform.isMacOS ? MacPython.installerUrl : 'https://www.python.org/downloads/'),
+          ),
+        StartProblem.documentsDenied => (
+            label: 'Systemeinstellungen öffnen',
+            icon: Icons.settings_outlined,
+            target: Uri.parse(StartText.privacySettings),
+          ),
+        _ => null,
+      };
+
   Widget _buildErrorScreen() {
     return Builder(builder: (context) {
       final c = _DesktopColors.of(context);
+      final action = _errorAction;
+      final detail = _flask.errorDetail;
       return AppBackground(
         child: Scaffold(
           backgroundColor: Colors.transparent,
@@ -350,84 +373,50 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
                     margin: const EdgeInsets.symmetric(horizontal: 40),
                     constraints: const BoxConstraints(maxWidth: 480),
                     decoration: BoxDecoration(
-                      color: _flask.isSettingUp ? c.surface : c.urgentSoft,
+                      color: action == null ? c.urgentSoft : c.surface,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: _flask.isSettingUp ? c.line : c.urgent.withValues(alpha: .35)),
+                      border: Border.all(color: action == null ? c.urgent.withValues(alpha: .35) : c.line),
                     ),
                     child: Column(
                       children: [
                         Icon(
-                          _flask.isSettingUp ? Icons.hourglass_top_rounded : Icons.error_outline,
-                          color: _flask.isSettingUp ? c.ink : c.urgent,
+                          action == null ? Icons.error_outline : Icons.info_outline_rounded,
+                          color: action == null ? c.urgent : c.ink,
                           size: 28,
                         ),
                         const SizedBox(height: 12),
-                        if (_flask.isSettingUp)
-                          ValueListenableBuilder<String>(
-                            valueListenable: _flask.setupProgress,
-                            builder: (context, progress, _) {
-                              return Column(
-                                children: [
-                                  SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: c.sage, backgroundColor: c.line),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    progress,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: c.soft, fontSize: 13, height: 1.5),
-                                  ),
-                                ],
-                              );
-                            },
-                          )
-                        else
-                          Text(
-                            _flask.errorMessage,
+                        Text(
+                          _flask.errorMessage,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: c.soft, fontSize: 15, height: 1.5),
+                        ),
+                        if (detail != null && detail.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          SelectableText(
+                            detail,
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: c.soft, fontSize: 15, height: 1.5),
+                            style: TextStyle(color: c.muted, fontSize: 12, height: 1.4, fontFamily: 'Menlo'),
                           ),
+                        ],
                       ],
                     ),
                   ),
                   const SizedBox(height: 24),
-                  if (!_flask.isSettingUp) ...[
-                    if (_flask.isPythonMissing) ...[
-                      if (Platform.isMacOS) ...[
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            final future = _flask.setupPython();
-                            setState(() {});
-                            await future;
-                            if (mounted) setState(() {});
-                          },
-                          icon: const Icon(Icons.download_rounded, size: 18),
-                          label: const Text('Python automatisch installieren'),
-                          style: c.primaryButton,
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      TextButton.icon(
-                        onPressed: () {
-                          launchUrl(
-                            Uri.parse('https://www.python.org/downloads/'),
-                            mode: LaunchMode.externalApplication,
-                          );
-                        },
-                        icon: Icon(Icons.open_in_new, size: 16, color: c.muted),
-                        label: Text('Von python.org herunterladen', style: TextStyle(color: c.muted, fontSize: 13)),
-                      ),
-                      const SizedBox(height: 4),
-                    ],
+                  if (action != null) ...[
                     ElevatedButton.icon(
-                      onPressed: () => _flask.restart(),
-                      icon: const Icon(Icons.refresh, size: 18),
-                      label: const Text('Erneut versuchen'),
-                      style: _flask.isPythonMissing ? c.quietButton : c.primaryButton,
+                      onPressed: () => launchUrl(action.target, mode: LaunchMode.externalApplication),
+                      icon: Icon(action.icon, size: 18),
+                      label: Text(action.label),
+                      style: c.primaryButton,
                     ),
+                    const SizedBox(height: 12),
                   ],
+                  ElevatedButton.icon(
+                    onPressed: () => _flask.restart(),
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Erneut versuchen'),
+                    style: action == null ? c.primaryButton : c.quietButton,
+                  ),
                 ],
               ),
             ),

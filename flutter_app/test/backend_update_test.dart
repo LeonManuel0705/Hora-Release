@@ -59,6 +59,12 @@ void main() {
     expect(Directory(p.join(dest, 'app.incoming')).existsSync(), isFalse);
   });
 
+  test('the desktop requirements come along for the Python fallback', () {
+    write(p.join(bundle, 'requirements-desktop.txt'), 'flask\nrequests\n');
+    FlaskServerService.installBundledBackend(bundle, dest, 35);
+    expect(File(p.join(dest, 'requirements-desktop.txt')).readAsStringSync(), 'flask\nrequests\n');
+  });
+
   test('a backend extracted before the build was recorded is refreshed', () {
     write(p.join(dest, 'app', 'app.py'), 'old app');
     expect(FlaskServerService.bundleIsNewer(dest, 35), isTrue);
