@@ -4,9 +4,16 @@
 
 """Builds the web app for /pwa/ and writes the list of its files into the offline worker.
 
-Without that list the worker keeps nothing for offline use, so publish only builds made here.
-Arguments it does not know go to `flutter build web`. With --stamp DIR it only rewrites the
-list of a build that already exists.
+  python3 scripts/build_web_app.py               build flutter_app/build/web and write the list
+  python3 scripts/build_web_app.py --stamp DIR   only rewrite the list of an existing build
+  python3 scripts/build_web_app.py --off DIR     turn the offline copy off on every device
+
+A worker without the list refuses to install, so publish only builds made here.
+
+To undo a bad publish, or to go back to a build without offline use, run --off on the folder you
+publish next (any build, old or new) and publish it. On its next start each device removes the
+worker and every offline copy and loads from the network again; a later normal build turns it
+back on. Arguments the script does not know go to `flutter build web`.
 """
 
 import argparse
@@ -37,24 +44,37 @@ def offline_files(out):
     return files
 
 
-def stamp(out):
+def write_manifest(out, manifest):
     worker = out / WORKER
     source = worker.read_text(encoding='utf-8')
     if not SLOT.search(source):
         sys.exit(f'{worker} has no manifest line')
+    line = f'const MANIFEST = {json.dumps(manifest, sort_keys=True, separators=(",", ":"))};'
+    worker.write_bytes(SLOT.sub(lambda _: line, source, count=1).encode('utf-8'))
+
+
+def stamp(out):
     files = offline_files(out)
     build = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()[:16]
-    manifest = json.dumps({'build': build, 'files': files}, sort_keys=True, separators=(',', ':'))
-    worker.write_bytes(SLOT.sub(lambda _: f'const MANIFEST = {manifest};', source, count=1).encode('utf-8'))
+    write_manifest(out, {'build': build, 'files': files})
     size = sum((out / name).stat().st_size for name in files)
     print(f'{out}: build {build}, {len(files)} files, {size / 1e6:.1f} MB kept for offline use')
     return build
 
 
+def switch_off(out):
+    write_manifest(out, 'off')
+    print(f'{out}: the worker now removes itself and every offline copy on the next start of each device')
+
+
 def main():
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0], epilog=__doc__.split('\n', 2)[2], formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--stamp', metavar='DIR', help='only rewrite the file list of an existing build')
+    parser.add_argument('--off', metavar='DIR', help='make the worker of DIR remove itself and every offline copy')
     args, extra = parser.parse_known_args()
+    if args.off:
+        switch_off(Path(args.off))
+        return
     if args.stamp:
         stamp(Path(args.stamp))
         return

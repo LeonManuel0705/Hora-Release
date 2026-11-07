@@ -92,6 +92,14 @@ def test_the_file_list_holds_what_the_app_loads_and_leaves_out_the_rest(tmp_path
     assert b'\r\n' not in written
 
 
+def test_the_off_switch_replaces_the_list(tmp_path):
+    build = script('build_web_app')
+    fake_build(tmp_path, {'index.html': '<html></html>', 'main.dart.js': 'main'})
+    build.stamp(tmp_path)
+    build.switch_off(tmp_path)
+    assert manifest_of(tmp_path) == 'off'
+
+
 @pytest.fixture()
 def local_host(tmp_path):
     serve = script('serve_web_app')

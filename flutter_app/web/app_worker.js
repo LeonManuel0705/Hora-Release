@@ -12,9 +12,11 @@ const READY = `${BASE}__ready`;
 const FILES = `${BASE}__files`;
 const LANES = 6;
 
-const build = MANIFEST ? MANIFEST.build : "";
+const off = MANIFEST === "off";
+const build = MANIFEST && !off ? MANIFEST.build : "";
 const pins = new Map();
 const opened = new Map();
+let filling = null;
 
 const shellName = (id) => `${SHELL}${id}`;
 const pinUrl = (client) => `${BASE}__pin/${encodeURIComponent(client)}`;
@@ -24,6 +26,19 @@ function later(event, promise) {
   try {
     event.waitUntil(promise);
   } catch (error) {}
+}
+
+function remember(memo, key, promise, keep) {
+  memo.set(key, promise);
+  promise.then(
+    (value) => {
+      if (!keep(value) && memo.get(key) === promise) memo.delete(key);
+    },
+    () => {
+      if (memo.get(key) === promise) memo.delete(key);
+    },
+  );
+  return promise;
 }
 
 async function digest(response) {
@@ -58,7 +73,6 @@ async function fetched(path) {
 }
 
 async function fill() {
-  if (!build) return;
   const cache = await caches.open(shellName(build));
   if (await cache.match(READY)) return;
   const known = await earlier();
@@ -75,22 +89,30 @@ async function fill() {
   };
   await Promise.all(Array.from({ length: LANES }, lane));
   await cache.put(FILES, new Response(JSON.stringify(MANIFEST.files)));
-  await cache.put(READY, new Response(build));
+  await cache.put(READY, new Response(String(Date.now())));
+  opened.delete(build);
+}
+
+function refill() {
+  if (!filling) filling = fill().finally(() => (filling = null));
+  return filling;
 }
 
 function ready(id) {
   if (!id) return Promise.resolve(null);
-  if (!opened.has(id)) {
-    opened.set(id, caches.has(shellName(id)).then(async (there) => {
-      if (!there) return null;
-      const cache = await caches.open(shellName(id));
-      return (await cache.match(READY)) ? cache : null;
-    }));
-  }
-  return opened.get(id).then((cache) => {
-    if (!cache) opened.delete(id);
-    return cache;
+  if (opened.has(id)) return opened.get(id);
+  const probe = caches.has(shellName(id)).then(async (there) => {
+    if (!there) return null;
+    const cache = await caches.open(shellName(id));
+    return (await cache.match(READY)) ? cache : null;
   });
+  return remember(opened, id, probe, (cache) => !!cache);
+}
+
+async function finished(id) {
+  const cache = await ready(id);
+  const stamp = cache && (await cache.match(READY));
+  return stamp ? Number(await stamp.text()) || 0 : null;
 }
 
 async function pin(client, id) {
@@ -100,16 +122,15 @@ async function pin(client, id) {
 
 function pinned(client) {
   if (!client) return Promise.resolve(build);
-  if (!pins.has(client)) {
-    pins.set(client, caches.open(PINS).then(async (store) => {
-      const stored = await store.match(pinUrl(client));
-      if (stored) return stored.text();
-      const id = (await ready(build)) ? build : "";
-      await store.put(pinUrl(client), new Response(id));
-      return id;
-    }));
-  }
-  return pins.get(client);
+  if (pins.has(client)) return pins.get(client);
+  const lookup = caches.open(PINS).then(async (store) => {
+    const stored = await store.match(pinUrl(client));
+    if (stored) return stored.text();
+    const id = (await ready(build)) ? build : "";
+    await store.put(pinUrl(client), new Response(id));
+    return id;
+  });
+  return remember(pins, client, lookup, () => true);
 }
 
 async function tidy() {
@@ -126,30 +147,42 @@ async function tidy() {
       await store.delete(request);
     }
   }
+  const own = await finished(build);
   for (const name of await caches.keys()) {
-    const old = name.startsWith(SHELL) && !kept.has(name.slice(SHELL.length));
-    if (!old && !name.startsWith("flutter-")) continue;
-    opened.delete(name.slice(SHELL.length));
+    const id = name.startsWith(SHELL) ? name.slice(SHELL.length) : null;
+    if (id === null ? !name.startsWith("flutter-") : kept.has(id)) continue;
+    if (id !== null) {
+      const at = await finished(id);
+      const busy = !!(self.registration.installing || self.registration.waiting);
+      if (at === null ? busy : own === null || at >= own) continue;
+      opened.delete(id);
+    }
     await caches.delete(name);
   }
 }
 
+async function retire() {
+  for (const name of await caches.keys()) {
+    if (name.startsWith(SHELL) || name.startsWith("flutter-") || name === PINS || name === FONTS) await caches.delete(name);
+  }
+  await self.registration.unregister();
+}
+
 async function freshen(cache, cached) {
-  try {
-    const response = await plain(await fetch(BASE, { cache: "no-cache" }));
-    if (response.ok && (await response.clone().text()) === (await cached.text())) {
-      await cache.put(`${BASE}index.html`, response);
-    }
-  } catch (error) {}
+  const response = await plain(await fetch(BASE, { cache: "no-cache" }));
+  if (response.ok && (await response.clone().text()) === (await cached.text())) {
+    await cache.put(`${BASE}index.html`, response);
+  }
 }
 
 async function open(event, url) {
   const cache = await ready(build);
   const path = url.pathname === BASE ? "index.html" : url.pathname.slice(BASE.length);
   const hit = cache && (await cache.match(BASE + path, { ignoreVary: true }));
-  if (event.resultingClientId) later(event, pin(event.resultingClientId, hit ? build : ""));
+  if (event.resultingClientId) later(event, pin(event.resultingClientId, hit ? build : "").catch(() => {}));
+  if (!cache) later(event, refill().catch(() => {}));
   if (!hit) return fetch(event.request);
-  if (path === "index.html") later(event, freshen(cache, hit.clone()).then(tidy));
+  if (path === "index.html") later(event, freshen(cache, hit.clone()).catch(() => {}).then(tidy).catch(() => {}));
   return hit;
 }
 
@@ -169,20 +202,32 @@ async function font(request) {
 }
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(fill().then(() => self.skipWaiting()));
+  if (off) {
+    event.waitUntil(self.skipWaiting());
+  } else if (build) {
+    event.waitUntil(refill().then(() => self.skipWaiting()));
+  } else {
+    event.waitUntil(Promise.reject(new Error("This build has no file list. Build it with scripts/build_web_app.py.")));
+  }
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(tidy());
+  if (off) {
+    event.waitUntil(retire());
+    return;
+  }
+  event.waitUntil(tidy().catch(() => {}));
+  refill().catch(() => {});
 });
 
-self.addEventListener("fetch", (event) => {
-  const request = event.request;
-  if (request.method !== "GET") return;
-  const url = new URL(request.url);
-  if (url.origin === FONT_HOST) {
-    event.respondWith(font(request));
-  } else if (url.origin === self.location.origin && url.pathname.startsWith(BASE)) {
-    event.respondWith(request.mode === "navigate" ? open(event, url) : serve(event, url));
-  }
-});
+if (!off) {
+  self.addEventListener("fetch", (event) => {
+    const request = event.request;
+    if (request.method !== "GET") return;
+    const url = new URL(request.url);
+    let answer = null;
+    if (url.origin === FONT_HOST) answer = font(request);
+    else if (url.origin === self.location.origin && url.pathname.startsWith(BASE)) answer = request.mode === "navigate" ? open(event, url) : serve(event, url);
+    if (answer) event.respondWith(answer.catch(() => fetch(request)));
+  });
+}
