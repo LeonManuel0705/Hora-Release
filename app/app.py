@@ -61,24 +61,33 @@ try:
 except ImportError:
     pass
 
+BUILD_INFO = Path(__file__).resolve().parent.parent / 'flutter_app' / 'lib' / 'build_info.dart'
+
+
+# An installed app runs this backend from a copy that holds only app/, so its shell hands over what it was built as.
 def _read_build_info():
+    version = (env('APP_VERSION') or '').strip()
+    if version:
+        build = (env('APP_BUILD') or '').strip()
+        return f"{version} (Build {build})" if build.isdigit() else version
     try:
-        build_info_path = Path(__file__).parent.parent / 'flutter_app' / 'lib' / 'build_info.dart'
-        content = build_info_path.read_text()
+        content = BUILD_INFO.read_text()
         version_name = re.search(r"versionName = '(.+?)'", content)
         build_number = re.search(r"buildNumber = (\d+)", content)
         if version_name and build_number:
             return f"{version_name.group(1)} (Build {build_number.group(1)})"
     except Exception:
         pass
-    return brand.NAME
+    return ''
 
 _cached_version = None
 _cached_version_mtime = 0
 
 def _get_app_version():
     global _cached_version, _cached_version_mtime
-    build_info_path = Path(__file__).parent.parent / 'flutter_app' / 'lib' / 'build_info.dart'
+    if env('APP_VERSION'):
+        return _read_build_info()
+    build_info_path = BUILD_INFO
     try:
         mtime = build_info_path.stat().st_mtime
         if mtime != _cached_version_mtime:

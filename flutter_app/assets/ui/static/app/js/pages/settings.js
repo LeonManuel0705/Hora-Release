@@ -3276,7 +3276,7 @@ function bindAbout() {
 function renderAbout() {
   const card = $("aboutCard");
   const about = page.about || {};
-  const version = esc(card.dataset.version || about.version || "").replace(/^(.+?) (\([^)]*\))$/, `<span class="about-part">$1</span> <span class="about-part">$2</span>`);
+  const version = esc(card.dataset.version || about.version || "unbekannt").replace(/^(.+?) (\([^)]*\))$/, `<span class="about-part">$1</span> <span class="about-part">$2</span>`);
   const where = platformName();
   const browser = typeof window.hubShell?.openInBrowser === "function"
     ? `<button class="pill" type="button" id="openInBrowser">${icon("arrow-up-right")}Im Browser öffnen</button>`
