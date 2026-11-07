@@ -903,9 +903,9 @@ def google_status():
     """What the pages need to know about Google before they ask: whether it can be connected here, and how the copy stands."""
     from . import calendar_cache
     try:
-        return {'google': calendar_cache.page_state()['google']}
+        return {'googleConfigured': calendar_cache.configured(), 'google': calendar_cache.page_state()['google']}
     except Exception:
-        return {'google': None}
+        return {'googleConfigured': False, 'google': None}
 
 
 def page_assistant(data, school, settings, today, iserv):
@@ -1173,8 +1173,15 @@ def keep_used_subjects(value):
     return kept
 
 
+def google_account():
+    from . import calendar_cache
+    try:
+        return calendar_cache.settings_view()
+    except Exception:
+        return {'configured': False, 'connected': False, 'calendars': []}
+
+
 def page_settings(data, school, settings, today, iserv):
-    google = load_dict('google')
     chosen = (chosen_weather_place(settings) or {}).get('city') or ''
     followed = weather_from_home(settings)
     city = chosen or followed or ''
@@ -1192,7 +1199,7 @@ def page_settings(data, school, settings, today, iserv):
         'courses': school['courses'],
         'accounts': {
             'iserv': iserv,
-            'google': {'connected': bool(google), 'calendars': []},
+            'google': google_account(),
         },
         'notifications': copy.deepcopy(NOTIFY_DEFAULTS),
         'subjectUse': subject_use(),

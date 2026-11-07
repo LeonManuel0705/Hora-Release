@@ -794,6 +794,36 @@ def waits_elsewhere(item):
         return False
 
 
+def configured():
+    """True where this installation can sign in to Google at all. Released apps bring no OAuth client of their own."""
+    try:
+        return bool(_google().is_google_oauth_configured())
+    except Exception:
+        return False
+
+
+def settings_view():
+    """What Settings shows about Google, read from the copy so the page never waits for Google."""
+    google = _google()
+    tokens = google.load_tokens()
+    account = google.calendar_account(tokens)
+    view = {'configured': configured(), 'connected': bool(account), 'account': account or '', 'calendars': []}
+    if not account:
+        return view
+    scopes = google.scopes_of(tokens[account])
+    cache = _load(shared=True) or {}
+    view.update(
+        state=page_state()['google'],
+        stand=stand(),
+        gmail=google.covers(scopes, 'gmail'),
+        calendars=[
+            {'id': item['id'], 'name': item.get('summary') or 'Kalender', 'color': item.get('backgroundColor') or '', 'primary': bool(item.get('primary'))}
+            for item in cache.get('calendars', []) if cache.get('account') == account
+        ],
+    )
+    return view
+
+
 def page_state():
     """How the copy stands, in the words of the pages: no Google, fine, signed out, or out of reach."""
     if not connected():

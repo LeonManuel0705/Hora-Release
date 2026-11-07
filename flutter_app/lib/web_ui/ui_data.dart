@@ -634,6 +634,7 @@ class UiData {
       'status': {'iserv': iserv['connected'], 'lastSync': '${now.hour}:${two(now.minute)}'},
       'mailUnread': 0,
     };
+    (data['status'] as Map<String, Object?>)['googleConfigured'] = false;
     if (!setup.abWeeks) store.putIfAbsent('app-ab-weeks', () => false);
     final page = switch (active) {
       'calendar' => pageCalendar(holidayList),
