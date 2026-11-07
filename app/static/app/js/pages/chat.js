@@ -57,7 +57,7 @@ async function checkAIStatus() {
       activeBackend = data.backend || 'offline';
 
       if (data.backend === 'local') {
-        ollamaAvailable = true; // keep legacy flag for old code paths
+        ollamaAvailable = true;
         statusEl.textContent = `Lokale KI (${data.model || 'local'})`;
         statusEl.dataset.tone = 'live';
         return;
@@ -154,7 +154,6 @@ async function streamAIResponse(message, typingId) {
 
     removeTypingIndicator(typingId);
 
-    // Create message bubble with avatar (same format as addMessageToUI)
     const msgEl = document.createElement('div');
     msgEl.className = 'message assistant streaming-message is-new';
     const avatar = icon('message-circle');
@@ -295,7 +294,6 @@ async function streamAIResponse(message, typingId) {
       }
     }
 
-    // Process remaining buffer
     if (buffer.trim()) {
       for (const line of buffer.split('\n')) {
         if (!line.startsWith('data: ')) continue;
@@ -428,7 +426,7 @@ async function clearChat() {
   `;
   try {
     await fetch('/api/hub/assistant/history', { method: 'DELETE' });
-  } catch (e) { /* ignore */ }
+  } catch {}
 }
 
 function selectMathCategory(cat) {
@@ -623,14 +621,14 @@ function getEssayTemplate(type, topic, language) {
       <p><strong>Einleitung:</strong></p>
       <p>Das Thema "${topic}" ist in der heutigen Gesellschaft von großer Relevanz. In der folgenden Erörterung sollen die verschiedenen Aspekte dieses Themas beleuchtet und gegeneinander abgewogen werden.</p>
 
-      <p><strong>Hauptteil - Pro-Argumente:</strong></p>
+      <p><strong>Hauptteil, Pro-Argumente:</strong></p>
       <ul>
         <li>Argument 1: [Hier Pro-Argument einfügen]</li>
         <li>Argument 2: [Hier weiteres Pro-Argument einfügen]</li>
         <li>Argument 3: [Hier drittes Pro-Argument einfügen]</li>
       </ul>
 
-      <p><strong>Hauptteil - Contra-Argumente:</strong></p>
+      <p><strong>Hauptteil, Contra-Argumente:</strong></p>
       <ul>
         <li>Argument 1: [Hier Contra-Argument einfügen]</li>
         <li>Argument 2: [Hier weiteres Contra-Argument einfügen]</li>
@@ -648,7 +646,7 @@ function getEssayTemplate(type, topic, language) {
       <p><strong>Einleitung:</strong></p>
       <p>Der vorliegende Text/Das vorliegende Werk behandelt... [Kurze Einordnung in Kontext, Autor, Entstehungszeit]</p>
 
-      <p><strong>Hauptteil - Inhaltliche Analyse:</strong></p>
+      <p><strong>Hauptteil, inhaltliche Analyse:</strong></p>
       <ul>
         <li>Thema und Kernaussage</li>
         <li>Aufbau und Struktur</li>

@@ -663,7 +663,7 @@ export function solveProbability(input) {
 
   return `<p>Stochastik-Formeln:</p>
     <ul>
-      <li>Binomial: B(n, p, k) - z.B. B(10, 0.5, 3)</li>
+      <li>Binomial: B(n, p, k), zum Beispiel B(10, 0.5, 3)</li>
       <li>Erwartungswert: E(X) für B(n, p)</li>
       <li>Normalverteilung: P(X < x) für N(μ, σ)</li>
     </ul>`;

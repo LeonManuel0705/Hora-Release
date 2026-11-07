@@ -108,7 +108,9 @@
 #feedbackHint { text-align: right; }
 
 .is-touch .app-dialog .field-control { font-size: 16px; min-height: 44px; }
-.is-touch .app-dialog .btn, .is-touch .mailbox-remove { min-height: 44px; }
+.is-touch .app-dialog .btn, .is-touch .mailbox-remove, .is-touch .mailbox-where, .is-touch .mailbox-help { min-height: 44px; }
+.is-touch .app-dialog .sheet-head .icon-button { width: 44px; height: 44px; }
+.is-touch .more-foot [data-feedback] { min-height: 44px; }
 
 @media (max-width: 759px) {
   .app-dialog {

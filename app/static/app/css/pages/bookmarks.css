@@ -122,7 +122,8 @@
 
 .link-sheet .field-error .icon { --s: 16; margin-top: 1px; }
 
-.is-touch .link-edit { width: 44px; height: 44px; }
+.is-touch .link-edit, .is-touch .link-sheet .sheet-head .icon-button { width: 44px; height: 44px; }
+.is-touch .link-filters .pill { min-height: 44px; }
 .is-touch .link-sheet .field-control { font-size: 16px; min-height: 44px; }
 .is-touch .link-sheet .btn { min-height: 44px; }
 

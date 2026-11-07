@@ -80,3 +80,13 @@ def test_the_new_chat_scripts_never_build_code_from_text():
 
 def test_the_classic_assistant_page_is_gone():
     assert not (ROOT / 'app' / 'templates' / 'hub' / 'assistant.html').exists()
+
+
+def test_the_ported_copy_reads_like_the_rest_of_the_app():
+    template = (ROOT / 'app' / 'templates' / 'app' / 'chat.html').read_text(encoding='utf-8')
+    assert 'id="chatInput"' in template and 'maxlength' not in template.split('id="chatInput"')[1].split('>')[0]
+    for name in ('pages/chat.js', 'chat-math.js'):
+        script = (ROOT / 'app' / 'static' / 'app' / 'js' / name).read_text(encoding='utf-8')
+        visible = re.findall(r'<(?:p|li|h4|strong)>([^<]*)', script)
+        assert not [line for line in visible if re.search(r'[A-Za-zäöüÄÖÜ)] - [A-Za-zäöüÄÖÜ]', line)], name
+        assert not re.search(r'//\s*(keep legacy|Create message|Process remaining)|/\*\s*ignore\s*\*/', script), name
