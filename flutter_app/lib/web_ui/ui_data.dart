@@ -264,7 +264,20 @@ class UiData {
 
   DateTime get today => DateTime(now.year, now.month, now.day);
   String get todayIso => isoOf(today);
-  int get classLevel => prefs.getInt('school_class_level') ?? 10;
+  int? get knownClassLevel {
+    final saved = prefs.getInt('school_class_level');
+    if (saved != null && saved >= 5 && saved <= 13) return saved;
+    final year = prefs.getInt('graduation_year');
+    return year == null ? null : levelForGraduation(year, today);
+  }
+
+  int get classLevel => knownClassLevel ?? 10;
+
+  // The welcome asks for the graduation year. Counted as in Brandenburg, where the Abitur comes after class 12.
+  static int levelForGraduation(int year, DateTime today) {
+    final started = today.month >= 8 ? today.year : today.year - 1;
+    return math.min(13, math.max(5, 12 - (year - (started + 1))));
+  }
 
   Future<School> school() async {
     var subjectRows = await db.query('subjects', orderBy: 'id ASC');
@@ -617,7 +630,7 @@ class UiData {
     final iserv = await iservAccount();
     final holidayList = await holidays();
     final data = <String, Object?>{
-      'user': <String, Object?>{},
+      'user': {'state': stateCode(prefs.getString('user_bundesland')), 'grade': knownClassLevel, 'iserv': browser ? '' : 'android'},
       'blocks': setup.blocks,
       'subjects': setup.subjects,
       'courses': setup.courses,
@@ -796,7 +809,7 @@ class UiData {
         'name': iserv['school'],
         'town': city,
         'state': stateCode(prefs.getString('user_bundesland')),
-        'grade': classLevel,
+        'grade': knownClassLevel,
         'semester': semesterFor(today, classLevel),
         'birthday': isoDay(prefs.getString('user_birthday')) ?? '',
       },
