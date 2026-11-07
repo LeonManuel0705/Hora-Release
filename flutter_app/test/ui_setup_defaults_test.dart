@@ -76,7 +76,7 @@ void main() {
   });
 
   test('the forecast passes the weather code on', () async {
-    final today = '2026-11-07';
+    const today = '2026-11-07';
     SharedPreferences.setMockInitialValues({
       'weather_city': 'Potsdam',
       'ui_weather_cache': jsonEncode({
