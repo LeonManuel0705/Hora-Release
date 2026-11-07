@@ -71,16 +71,18 @@ def connected():
         return False
 
 
-def write_enabled():
+def google_settings():
     settings = db.get_ui_store().get('app-settings')
     google = settings.get('google') if isinstance(settings, dict) else None
-    return not (isinstance(google, dict) and google.get('write') is False)
+    return google if isinstance(google, dict) else {}
+
+
+def write_enabled():
+    return google_settings().get('write') is not False
 
 
 def hidden_calendars():
-    settings = db.get_ui_store().get('app-settings')
-    google = settings.get('google') if isinstance(settings, dict) else None
-    calendars = google.get('calendars') if isinstance(google, dict) else None
+    calendars = google_settings().get('calendars')
     if not isinstance(calendars, dict):
         return set()
     return {key for key, shown in calendars.items() if shown is False}
@@ -462,10 +464,20 @@ def _send(service, item, target):
     return (remote, calendar, answer) if answer is not None else None
 
 
+def target_calendar(cache, account=None):
+    """Where new events go: the calendar chosen in the settings while the account may still write to it, else the main one.
+    Events already in Google stay in the calendar they were written to."""
+    chosen = google_settings().get('target')
+    for calendar in (cache or {}).get('calendars', []):
+        if chosen and calendar['id'] == chosen and _writable(calendar):
+            return chosen
+    return _primary(cache) or account or 'primary'
+
+
 def _push(service, cache, account=None):
     if not write_enabled():
         return False
-    target = _primary(cache) or account or 'primary'
+    target = target_calendar(cache, account)
     sent = _push_deletes(service, target)
     for item in ui_data.load_list('calendar'):
         if not item.get('google_dirty') or not ui_data.iso_day(item.get('date')) or not _own_account(account, item):
@@ -821,9 +833,13 @@ def settings_view():
         stand=stand(),
         gmail=google.covers(scopes, 'gmail'),
         calendars=[
-            {'id': item['id'], 'name': item.get('summary') or 'Kalender', 'color': item.get('backgroundColor') or '', 'primary': bool(item.get('primary'))}
+            {
+                'id': item['id'], 'name': item.get('summary') or 'Kalender', 'color': item.get('backgroundColor') or '',
+                'primary': bool(item.get('primary')), 'writable': _writable(item),
+            }
             for item in cache.get('calendars', []) if cache.get('account') == account
         ],
+        target=target_calendar(cache if cache.get('account') == account else None, account),
     )
     return view
 
