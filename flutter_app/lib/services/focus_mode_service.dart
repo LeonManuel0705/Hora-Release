@@ -1,12 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class FocusModeService {
   static final FocusModeService _instance = FocusModeService._internal();
   factory FocusModeService() => _instance;
   FocusModeService._internal();
+
+  static bool get available => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   static const MethodChannel _channel = MethodChannel('app/focus_mode');
 

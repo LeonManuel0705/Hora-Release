@@ -56,8 +56,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> with TickerProviderStat
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    _pulseController.repeat(reverse: true);
-    _checkFocusModePermission();
+    if (FocusModeService.available) _checkFocusModePermission();
     _loadStats();
   }
 
@@ -104,8 +103,18 @@ class _PomodoroScreenState extends State<PomodoroScreen> with TickerProviderStat
     super.dispose();
   }
 
+  void _pulse(bool on) {
+    if (on && !MediaQuery.of(context).disableAnimations) {
+      _pulseController.repeat(reverse: true);
+    } else {
+      _pulseController.stop();
+      _pulseController.value = 0;
+    }
+  }
+
   void _startTimer() async {
     _timer?.cancel();
+    _pulse(true);
     setState(() {
       _isRunning = true;
       if (_currentMode == PomodoroMode.work && _sessionStartedAt == null) {
@@ -125,7 +134,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> with TickerProviderStat
       }
     });
 
-    if (_currentMode == PomodoroMode.work) {
+    if (_currentMode == PomodoroMode.work && FocusModeService.available) {
       final enabled = await _focusModeService.enableFocusMode();
       if (mounted) {
         setState(() => _focusModeEnabled = enabled);
@@ -135,6 +144,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> with TickerProviderStat
 
   void _pauseTimer() async {
     _timer?.cancel();
+    _pulse(false);
     setState(() => _isRunning = false);
 
     if (_focusModeEnabled) {
@@ -147,6 +157,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> with TickerProviderStat
 
   void _resetTimer() async {
     _timer?.cancel();
+    _pulse(false);
     setState(() {
       _isRunning = false;
       _remainingSeconds = _currentDuration;
@@ -162,6 +173,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> with TickerProviderStat
 
   void _onTimerComplete() async {
     _timer?.cancel();
+    _pulse(false);
     HapticFeedback.heavyImpact();
 
     if (_focusModeEnabled) {
@@ -463,12 +475,13 @@ class _PomodoroScreenState extends State<PomodoroScreen> with TickerProviderStat
           child: _buildStatsSection(isDark),
         ),
 
-        const SizedBox(height: 16),
-
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: _buildFocusModeCard(isDark),
-        ),
+        if (FocusModeService.available) ...[
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildFocusModeCard(isDark),
+          ),
+        ],
 
         const SizedBox(height: 120),
       ],
