@@ -428,7 +428,7 @@ export function fitPlan(model, { mine, defaults, own = {} }, { mode = "replace",
   const most = (field) => Math.max(count.A[field], count.B[field]);
   const result = fitSchool(values, source, { ...defaults, own }).values;
   if (!replace && aside.size) result[KEYS.lessons] = { ...record(result[KEYS.lessons]), ...Object.fromEntries([...aside].map((key) => [key, mine.edits[key]])) };
-  return { added, filled: most("filled"), kept: most("kept"), dropped: most("dropped"), changed: replace || placed.length > 0, values: result };
+  return { added, subjects: subjectKey.size, filled: most("filled"), kept: most("kept"), dropped: most("dropped"), changed: replace || placed.length > 0, values: result };
 }
 
 export const changedKeys = (before, after) => PLAN_KEYS.filter((key) => !sameValue(before[key], after[key]));

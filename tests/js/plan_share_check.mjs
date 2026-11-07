@@ -298,7 +298,7 @@ const tests = {
   "lessons beyond the blocks this app shows are counted, not refused"() {
     const fitted = fitPlan(planOf(oberstufe()), { mine: emptyState(), defaults: empty }, { maxBlocks: 8 });
     assert.equal(fitted.values["app-block-times"].blocks.length, 8);
-    assert.deepEqual([fitted.filled, fitted.dropped], [40, 2]);
+    assert.deepEqual([fitted.filled, fitted.dropped, fitted.subjects], [40, 2, 13]);
     assert.equal(Object.keys(fitted.values["app-timetable-edits"]).some((key) => Number(key.split(":")[2]) > 8), false);
   },
   "a plan ends at its last block with a lesson"() {

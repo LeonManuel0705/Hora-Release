@@ -659,11 +659,10 @@ function previewView(model, origin = {}) {
         apply.disabled = false;
         return;
       }
-      const size = describePlan(model, left);
       const lessons = fitted.filled;
       const message = mode === "merge"
         ? `${plural(lessons, "Stunde", "Stunden")} pro Woche ergänzt`
-        : `Plan übernommen: ${plural(size.subjects, "Fach", "Fächer")} und ${plural(lessons, "Stunde", "Stunden")} pro Woche`;
+        : `Plan übernommen: ${plural(fitted.subjects, "Fach", "Fächer")} und ${plural(lessons, "Stunde", "Stunden")} pro Woche`;
       const outcome = await commit(fitted, message);
       if (outcome === "failed") {
         setError(body, "Der Plan ließ sich gerade nicht speichern. Versuch es gleich noch einmal.");
@@ -671,7 +670,7 @@ function previewView(model, origin = {}) {
         return;
       }
       const reload = flowOptions.reload !== false;
-      close(outcome === "same" ? null : { mode, subjects: size.subjects, lessons });
+      close(outcome === "same" ? null : { mode, subjects: fitted.subjects, lessons });
       if (outcome === "same") {
         const nothing = fitted.dropped && !fitted.filled ? "Nichts ergänzt, diese Stunden passen nicht in dein Raster." : "Nichts ergänzt, bei dir ist schon jede dieser Stunden belegt.";
         toast(mode === "merge" ? nothing : "Diesen Plan hast du schon.", { icon: "check" });
