@@ -61,7 +61,8 @@ class IServService {
 
   /// Why IServ answers with old data: 'setup' (never connected), 'login' (the sign-in was refused,
   /// asks for a second factor or another service, or a session could not be renewed) or
-  /// 'offline' (IServ was out of reach). Null after the last sign-in worked.
+  /// 'offline' (IServ was out of reach for a sign-in, an API call or the plan). Null while the
+  /// last sign-in worked and IServ answers.
   String? get signInCause => _signInCause;
 
   bool get hasDioSession => _dio != null && _cookieJar != null;
@@ -454,7 +455,20 @@ class IServService {
     return false;
   }
 
-  Future<Response<Object?>?> _api(String path, [Map<String, dynamic>? query]) => iservApi(() => _session, _renewal.call, path, query: query);
+  Future<Response<Object?>?> _api(String path, [Map<String, dynamic>? query]) async {
+    try {
+      final response = await iservApi(() => _session, _renewal.call, path, query: query);
+      if (response != null) _reached();
+      return response;
+    } on DioException {
+      _signInCause = 'offline';
+      rethrow;
+    }
+  }
+
+  void _reached() {
+    if (_signInCause == 'offline') _signInCause = null;
+  }
 
   Future<List<IServNotification>> getNotifications() async {
     if (!isConnected || _dio == null) return getCachedNotifications();
@@ -886,6 +900,11 @@ class IServService {
         if (session != null) plan = await fetchIServPlan(session, displayId: displayId);
       }
 
+      if (plan.state == IServPlanState.failed) {
+        _signInCause = 'offline';
+      } else if (plan.state != IServPlanState.expired) {
+        _reached();
+      }
       switch (plan.state) {
         case IServPlanState.found:
           final files = <Map<String, dynamic>>[];
@@ -905,6 +924,7 @@ class IServService {
           return _getCachedVertretungsplanResult(cause: 'offline');
       }
     } catch (e) {
+      _signInCause = 'offline';
       return _getCachedVertretungsplanResult(cause: 'offline');
     }
   }
