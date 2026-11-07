@@ -19,6 +19,7 @@ import '../theme.dart';
 import 'ui_server.dart';
 import 'ui_shell.dart';
 import 'ui_weather.dart';
+import 'week_question.dart';
 
 class MobileShell extends StatefulWidget {
   const MobileShell({super.key});
@@ -247,6 +248,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     _setupRunning = true;
     await welcomeOrHolidays();
     if (!mounted) return;
+    if (await askWeekOnce(context) && mounted) await reloadPage();
     unawaited(_checkForUpdates());
   }
 

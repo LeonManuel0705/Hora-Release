@@ -433,7 +433,7 @@ class UiData {
     }
 
     await AppProvider.settleWeekRule(db, prefs, now);
-    final reference = AppProvider.abReferenceOf(inverted: prefs.getBool('ab_week_inverted') ?? false);
+    final reference = AppProvider.abReferenceOf(prefs);
 
     final store = await UiDb.store(db);
     final custom = customSubjects(store['app-subjects'], subjects);
