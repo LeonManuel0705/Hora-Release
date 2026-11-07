@@ -687,7 +687,7 @@ function openBackup(payload) {
 
 export function askBackup(line) {
   const done = begin();
-  show("Ganze Sicherung übernehmen?", `<p class="share-lead">In der Datei stecken ${esc(line)}. Kommt sie von jemand anderem, übernimm nur den Stundenplan.</p><div class="share-actions">${button("backupPlan", "table-2", "Nur Stundenplan")}${button("backupAll", "upload", "Alles übernehmen", true)}</div>`, (body) => {
+  show("Ganze Sicherung übernehmen?", `<p class="share-lead">Die Datei enthält ${esc(line)}. Kommt sie von jemand anderem, übernimm nur den Stundenplan.</p><div class="share-actions">${button("backupPlan", "table-2", "Nur Stundenplan")}${button("backupAll", "upload", "Alles übernehmen", true)}</div>`, (body) => {
     body.querySelector("#backupPlan").addEventListener("click", () => close("plan"));
     body.querySelector("#backupAll").addEventListener("click", () => close("all"));
   });
