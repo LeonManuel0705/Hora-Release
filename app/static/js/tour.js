@@ -19,6 +19,13 @@
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
+  function withPinned(page) {
+    const kept = new URLSearchParams();
+    const current = new URLSearchParams(location.search);
+    ['datum', 't', 'theme', 'variante', 'clean'].forEach(key => current.has(key) && kept.set(key, current.get(key)));
+    return kept.toString() ? `${page}?${kept}` : page;
+  }
+
   function navList() {
     return narrow() ? q('.tabbar') : q('.sidebar .nav');
   }
@@ -28,34 +35,39 @@
     return id ? q(`#taskGroups .row[data-id="${CSS.escape(id)}"]`) : null;
   }
 
+  const setupNeeded = () => !!(self.AppSetup && self.AppSetup.needed());
+  const value = v => typeof v === 'function' ? v() : v;
+
   const STEPS = [
     {
       id: 'hello', mode: 'hello',
-      text: () => `Hi, ich bin Luna! Ich zeige dir in einer Minute, wo in ${brand()} was ist. Unterwegs legen wir zusammen deine erste Aufgabe an.`,
+      text: () => setupNeeded()
+        ? `Hi, ich bin Luna! Ich zeig dir kurz, wo in ${brand()} was ist. Danach tragen wir zusammen deinen Stundenplan ein.`
+        : `Hi, ich bin Luna! Ich zeig dir kurz, wo in ${brand()} was ist.`,
       primary: 'Los geht’s', secondary: 'Später', onSecondary: 'skip'
     },
     {
       id: 'nav', dot: true, mode: 'point', target: navList, back: null,
       text: () => narrow()
-        ? `Unten findest du die Bereiche von ${brand()}. Ein Tipp, und du bist da.`
-        : `Links findest du alle Bereiche von ${brand()}. Ein Klick, und du bist da.`
+        ? 'Unten findest du die Bereiche. Ein Tipp, und du bist da.'
+        : 'Links findest du alle Bereiche. Ein Klick, und du bist da.'
     },
     {
       id: 'home', dot: true, mode: 'point', target: () => navItem('home'),
-      text: 'In der Übersicht siehst du deinen Tag auf einen Blick: was jetzt dran ist, deine Aufgaben, was fällig wird und die Woche.'
+      text: 'Die Übersicht zeigt dir, welche Stunde gerade dran ist und was heute ansteht.'
     },
     {
       id: 'tasks', dot: true, mode: 'point', target: () => navItem('tasks'),
-      text: 'Unter Aufgaben sammelst du alles, was ansteht. Komm, wir legen gleich deine erste an!',
-      primary: 'Zeig’s mir', secondary: 'Überspringen', onSecondary: 'calendar'
+      text: 'Unter Aufgaben sammelst du, was zu tun ist. Leg gleich deine erste an!',
+      primary: 'Zeig’s mir', secondary: 'Überspringen', onSecondary: 'school'
     },
     {
-      id: 'task-new', page: '/hub/tasks', mode: 'watch', target: () => q('#quickAdd'), dim: false,
+      id: 'task-new', page: '/hub/tasks', mode: 'watch', target: () => q('#quickAdd'), dim: false, avoid: () => [q('#taskFilter')],
       text: () => narrow()
         ? 'Schreib hier rein, was ansteht, zum Beispiel „Vokabeln lernen“, und tipp auf Fertig.'
         : 'Schreib hier rein, was ansteht, zum Beispiel „Vokabeln lernen“, und drück Enter.',
       short: 'Eintippen, dann auf Fertig tippen.',
-      wait: 'created', secondary: 'Überspringen', onSecondary: 'calendar'
+      wait: 'created', secondary: 'Überspringen', onSecondary: 'school'
     },
     {
       id: 'task-done', page: '/hub/tasks', mode: 'cheer', target: newestTask,
@@ -63,31 +75,17 @@
       back: null
     },
     {
-      id: 'calendar', dot: true, mode: 'point', target: () => navItem('calendar'), back: 'tasks',
-      text: 'Im Kalender stehen deine Termine, Ferien und Feiertage. Den Google-Kalender kannst du in den Einstellungen verbinden.'
-    },
-    {
-      id: 'school', dot: true, mode: 'point', target: () => navItem('school'),
-      text: 'Unter Schule liegen Stundenplan, Tests, Klausuren, Vorträge, Hausaufgaben und Noten.'
-    },
-    {
-      id: 'email', dot: true, mode: 'point', target: () => navItem('email'), skip: narrow,
-      text: 'Hier liest du deine E-Mails, sobald dein Postfach verbunden ist.'
-    },
-    {
-      id: 'more', dot: true, mode: 'point', target: moreButton,
-      text: () => narrow()
-        ? 'Unter „Mehr“ liegen E-Mail, Fahrplan, Pomodoro, Training, Lesezeichen und die Einstellungen. Dort kannst du mich auch jederzeit wieder rufen.'
-        : 'Unter „Mehr“ findest du Assistent, Pomodoro, Training, Lesezeichen und Review. Stöber einfach mal rein.'
-    },
-    {
-      id: 'settings', dot: true, mode: 'point', target: () => navItem('settings'), skip: narrow,
-      text: () => `In den Einstellungen passt du ${brand()} an dich an. Dort kannst du mich auch jederzeit wieder rufen.`
+      id: 'school', dot: true, mode: 'point', target: () => navItem('school'), back: 'tasks',
+      text: 'Unter Schule findest du deinen Stundenplan und trägst Tests und Noten ein.'
     },
     {
       id: 'bye', mode: 'present',
-      text: () => `Das war’s schon! Viel Spaß mit ${brand()}.`,
-      primary: 'Fertig', onPrimary: 'done'
+      text: () => setupNeeded()
+        ? 'Jetzt fehlt nur noch dein Stundenplan. Ich helf dir beim Eintragen, das dauert etwa fünf Minuten.'
+        : `Das war’s schon! ${narrow() ? 'In den Einstellungen unter „Mehr“' : 'In den Einstellungen'} kannst du mich jederzeit wieder rufen.`,
+      primary: () => setupNeeded() ? 'Stundenplan eintragen' : 'Fertig',
+      onPrimary: () => setupNeeded() ? 'setup' : 'done',
+      secondary: () => setupNeeded() ? 'Später' : '', onSecondary: 'done'
     }
   ];
   const skipped = step => !!(step && step.skip && step.skip());
@@ -219,7 +217,7 @@
       hideBubble();
       run.ui.guide.excite();
       await wait(still() ? 0 : 260);
-      location.href = step.page;
+      location.href = withPinned(step.page);
       return;
     }
     run.step = step;
@@ -330,6 +328,8 @@
     const bw = b.offsetWidth, bh = b.offsetHeight;
     const fits = (x, y, w, h) => x >= m - .5 && y >= m - .5 && x + w <= W - m + .5 && y + h <= H - m + .5;
     const overlaps = (x, y, w, h, r) => r && x < r.right && x + w > r.left && y < r.bottom && y + h > r.top;
+    const avoid = (step.avoid ? step.avoid() : []).filter(shown).map(el => el.getBoundingClientRect());
+    const free = (x, y, w, h) => !avoid.some(a => overlaps(x, y, w, h, a));
     if (!target) {
       const left = narrow() ? 0 : (q('.sidebar')?.getBoundingClientRect().right || 0);
       const row = s + 8 + bw <= W - left - 2 * m;
@@ -380,7 +380,7 @@
     });
     for (const t of tries) {
       const p = t();
-      if (fits(p.gx, p.gy, s, s) && fits(p.bx, p.by, bw, bh) && !overlaps(p.bx, p.by, bw, bh, r) && !overlaps(p.gx + s * .2, p.gy + s * .2, s * .6, s * .6, r)) return p;
+      if (fits(p.gx, p.gy, s, s) && fits(p.bx, p.by, bw, bh) && !overlaps(p.bx, p.by, bw, bh, r) && !overlaps(p.gx + s * .2, p.gy + s * .2, s * .6, s * .6, r) && free(p.gx, p.gy, s, s) && free(p.bx, p.by, bw, bh)) return p;
     }
     for (const right of [true, false]) {
       const avail = right ? W - m - (r.right + gap) : r.left - gap - m;
@@ -397,8 +397,10 @@
     b.classList.add('is-docked');
     const dh = b.offsetHeight, need = Math.max(s, dh);
     const above = r.top - gap - m, below = H - r.bottom - gap - m;
-    if (above >= need || below >= need) {
-      const top = above >= need;
+    const roomAbove = above >= need && free(m, r.top - gap - need, W - 2 * m, need);
+    const roomBelow = below >= need && free(m, r.bottom + gap, W - 2 * m, need);
+    if (roomAbove || roomBelow || above >= need || below >= need) {
+      const top = roomAbove || (!roomBelow && above >= need);
       const y0 = top ? r.top - gap - need : r.bottom + gap;
       return { gx: W - m - s, gy: y0 + (need - s) / 2, bx: m, by: y0 + (need - dh) / 2, tail: 'right', width: dw, docked: true };
     }
@@ -461,9 +463,9 @@
     const primary = bubble.querySelector('[data-act=primary]'), secondary = bubble.querySelector('[data-act=secondary]');
     const back = backOf(step);
     primary.hidden = !!step.wait;
-    primary.textContent = step.primary || 'Weiter';
-    secondary.hidden = !(step.secondary || back);
-    secondary.textContent = step.secondary || 'Zurück';
+    primary.textContent = value(step.primary) || 'Weiter';
+    secondary.hidden = !(value(step.secondary) || back);
+    secondary.textContent = value(step.secondary) || 'Zurück';
     bubble.classList.toggle('is-waiting', !!step.wait);
   }
 
@@ -542,14 +544,17 @@
     if (act === 'primary') return next(step);
     if (act === 'secondary') {
       if (step.onSecondary === 'skip') return end('skipped');
-      if (step.onSecondary) return go(step.onSecondary);
+      if (step.onSecondary === 'done' && value(step.secondary)) return end('done');
+      if (step.onSecondary && step.onSecondary !== 'done') return go(step.onSecondary);
       const back = backOf(step);
       if (back) go(back);
     }
   }
 
   function next(step) {
-    if (step.onPrimary === 'done') return end('done');
+    const after = value(step.onPrimary);
+    if (after === 'setup') return handOver();
+    if (after === 'done') return end('done');
     let i = indexOf(step.id) + 1;
     while (i < STEPS.length && skipped(STEPS[i])) i++;
     const following = STEPS[i];
@@ -634,10 +639,20 @@
     run = null;
   }
 
+  function handOver() {
+    end('done');
+    if (self.AppSetup) {
+      self.AppSetup.open({ from: 'tour' });
+      return;
+    }
+    const home = withPinned('/hub');
+    location.href = `${home}${home.includes('?') ? '&' : '?'}einrichtung=1`;
+  }
+
   function resume(saved) {
     const step = STEPS[indexOf(saved.id)];
     if (step.page && location.pathname !== step.page) {
-      start('calendar', saved);
+      start('school', saved);
       return;
     }
     const id = step.id === 'task-form' || step.id === 'task-done' ? 'task-new' : step.id;
@@ -661,9 +676,9 @@
       start('hello');
       return;
     }
-    if (document.body.dataset.tourAuto === '1' && location.pathname === '/hub') {
+    if (document.body.dataset.tourAuto === '1' && location.pathname === '/hub' && !new URLSearchParams(location.search).has('einrichtung')) {
       setTimeout(() => {
-        if (!run && !load()) start('hello');
+        if (!run && !load() && !document.documentElement.classList.contains('setup-open')) start('hello');
       }, 1200);
     }
   }
