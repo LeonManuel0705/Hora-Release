@@ -44,6 +44,10 @@ const tests = {
     assert.deepEqual(occurrenceDates({ date: "2026-01-31", recurrence: { freq: "monthly" } }, "2026-01-01", "2026-06-30"), ["2026-01-31", "2026-03-31", "2026-05-31"]);
     assert.deepEqual(occurrenceDates({ date: "2028-02-29", recurrence: { freq: "yearly" } }, "2028-01-01", "2036-12-31"), ["2028-02-29", "2032-02-29", "2036-02-29"]);
   },
+  "a number of times counts only days that exist, as COUNT does in Google"() {
+    assert.deepEqual(occurrenceDates({ date: "2027-01-31", recurrence: { freq: "monthly", count: 6 } }, "2027-01-01", "2028-12-31"), ["2027-01-31", "2027-03-31", "2027-05-31", "2027-07-31", "2027-08-31", "2027-10-31"]);
+    assert.deepEqual(occurrenceDates({ date: "2028-02-29", recurrence: { freq: "yearly", count: 3 } }, "2028-01-01", "2040-12-31"), ["2028-02-29", "2032-02-29", "2036-02-29"]);
+  },
   "a series that started long ago is counted from far away without walking every day"() {
     assert.deepEqual(occurrenceDates({ date: "2020-01-06", recurrence: { freq: "weekly" } }, "2026-11-09", "2026-11-15"), ["2026-11-09"]);
     assert.deepEqual(occurrenceDates({ date: "2020-01-01", recurrence: { freq: "daily" } }, "2026-11-09", "2026-11-10"), ["2026-11-09", "2026-11-10"]);

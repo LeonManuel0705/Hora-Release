@@ -54,10 +54,12 @@ export function occurrenceDates(item, from, to) {
     const step = rule.interval * (rule.freq === "weekly" ? 7 : 1);
     index = Math.max(0, Math.floor((daysBetween(item.date, from) - span) / step));
   }
-  for (let guard = 0; guard < 5000; guard += 1, index += 1) {
-    if (rule.count && index >= rule.count) break;
+  let produced = 0;
+  for (let guard = 0; guard < 20000; guard += 1, index += 1) {
+    if (rule.count && produced >= rule.count) break;
     const date = nth(item.date, rule, index);
     if (date === null) continue;
+    produced += 1;
     if (date > to || (rule.until && date > rule.until)) break;
     if (shifted(date, span) >= from && !skip.has(date)) dates.push(date);
   }
