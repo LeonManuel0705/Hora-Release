@@ -147,7 +147,8 @@ async function close({ to = "" } = {}) {
     leave();
     return;
   }
-  const fade = flow.dialog.querySelector(".setup-frame").animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(12px) scale(0.98)" }], { duration: 180, easing: "ease-in", fill: "forwards" });
+  const frames = travels() ? [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(12px) scale(0.98)" }] : [{ opacity: 1 }, { opacity: 0 }];
+  const fade = flow.dialog.querySelector(".setup-frame").animate(frames, { duration: 180, easing: "ease-in", fill: "forwards" });
   const done = () => {
     leave();
     fade.cancel();
