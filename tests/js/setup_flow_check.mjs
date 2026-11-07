@@ -323,6 +323,44 @@ CASES["reminders switched on and allowed are reported as on"] = async () => {
   assert.ok(run.stage().includes("Sind an.") && !run.stage().includes("data-setup-remind"));
 };
 
+async function toWeeks(run) {
+  await answerSchool(run);
+  await run.next();
+  await run.change({ name: "times", value: "90" });
+  await run.next();
+  assert.equal(run.step(), "weeks");
+}
+
+CASES["on a weekend the A/B question is about the coming week and waits for Weiter"] = async () => {
+  const page = await boot({ plan: EMPTY, search: "?datum=2026-11-07&t=10:00" });
+  page.flow.open({});
+  const run = driver(page);
+  await toWeeks(run);
+  assert.ok(run.stage().includes("Ist die Woche ab Montag, dem 9. November, eine A-Woche?"));
+  await run.change({ name: "ab", value: "yes" });
+  await run.change({ name: "letter", value: "A" });
+  await new Promise((done) => setTimeout(done, 450));
+  assert.equal(run.step(), "weeks", "choosing an answer does not leave the step");
+  await run.next();
+  assert.equal(run.step(), "subjects");
+  assert.equal(page.core.storage.get("app-ab-weeks"), true);
+  assert.equal(page.core.weekType(new Date(2026, 10, 9, 9)), "A");
+  assert.equal(page.core.weekType(new Date(2026, 10, 6, 9)), "B");
+};
+
+CASES["on a school day the A/B question is about this week"] = async () => {
+  const page = await boot({ plan: EMPTY, search: "?datum=2026-11-04&t=10:00" });
+  page.flow.open({});
+  const run = driver(page);
+  await toWeeks(run);
+  assert.ok(run.stage().includes("Ist diese Woche, KW 45, eine A-Woche?"));
+  await run.change({ name: "ab", value: "yes" });
+  await run.change({ name: "letter", value: "B" });
+  await run.next();
+  assert.equal(page.core.weekType(new Date(2026, 10, 4, 9)), "B");
+  assert.equal(page.core.weekType(new Date(2026, 10, 9, 9)), "A");
+};
+
 const only = process.argv[2];
 if (only) {
   await CASES[only]();

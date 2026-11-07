@@ -3,7 +3,7 @@
 
 import {
   data, esc, icon, luna, now, storage, LOCAL_KEYS, HUES, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, abSettled,
-  activeSubjectKeys, subject, hueVar, slug, teacherId, teacherLabel, weekType, WEEKDAYS, WEEKDAYS_SHORT, isoWeek, hm, BRAND,
+  activeSubjectKeys, subject, hueVar, slug, teacherId, teacherLabel, weekType, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, isoWeek, hm, addDays, startOfDay, BRAND,
 } from "./core.js";
 import { animates, travels, token } from "./motion.js";
 import { askPermission, readPrefs, switchRemindersOn } from "./reminders.js";
@@ -49,6 +49,18 @@ const DEFAULT_TIMES = plan.blockTimes(plan.TEMPLATES[90]);
 const sameTimes = (one, other) => one.length === other.length && one.every((block, index) => block.start === other[index].start && block.end === other[index].end);
 const ownTimes = () => storage.get(LOCAL_KEYS.blocks) != null || !sameTimes(schoolDefaults?.blocks || [], DEFAULT_TIMES);
 
+// On a weekend the question is about the coming week, the next one the plan is needed for.
+function askedMonday() {
+  const day = now().getDay();
+  return day === 0 || day === 6 ? addDays(startOfDay(now()), day === 6 ? 2 : 1) : null;
+}
+const askedDay = () => askedMonday() || now();
+
+function weekQuestion() {
+  const monday = askedMonday();
+  return monday ? `Ist die Woche ab Montag, dem ${monday.getDate()}.\u00a0${MONTHS[monday.getMonth()]}, eine A-Woche?` : `Ist diese Woche, KW\u00a0${isoWeek(now())}, eine A-Woche?`;
+}
+
 function pickOf(key) {
   const info = data.subjects[key];
   return { key, name: plan.plainName(info.label), short: info.short, hue: info.hue, type: info.type || "GK", teacher: info.teacher || "", room: info.room || "", existing: true };
@@ -70,7 +82,7 @@ function initial() {
     times: keep ? "keep" : null,
     template: { length: template.length, start: blocks[0]?.start || "08:00", count: keep && length ? blocks.length : template.count, small: template.small, big: template.big },
     ab: abAnswered() || keep ? (abWeeks() ? "yes" : "no") : null,
-    letter: (abAnswered() || keep) && abWeeks() ? weekType(now()) : null,
+    letter: (abAnswered() || keep) && abWeeks() ? weekType(askedDay()) : null,
     picks,
     week: "A",
     brush: picks[0]?.key || null,
@@ -318,7 +330,7 @@ const VIEWS = {
   weeks: {
     html() {
       const answer = [radio("ab", "yes", model.ab === "yes", "<b>Ja</b><small>Zwei Pläne im Wechsel</small>", "is-card"), radio("ab", "no", model.ab === "no", "<b>Nein</b><small>Jede Woche gleich</small>", "is-card")].join("");
-      const letter = `<fieldset class="setup-followup" id="setupLetter"${model.ab === "yes" ? "" : " hidden"}><legend class="setup-label">Ist diese Woche, KW\u00a0${isoWeek(now())}, eine A-Woche?</legend><div class="setup-cards is-pair">${radio("letter", "A", model.letter === "A", "<b>Ja, A-Woche</b>", "is-card")}${radio("letter", "B", model.letter === "B", "<b>Nein, B-Woche</b>", "is-card")}</div></fieldset>`;
+      const letter = `<fieldset class="setup-followup" id="setupLetter"${model.ab === "yes" ? "" : " hidden"}><legend class="setup-label">${weekQuestion()}</legend><div class="setup-cards is-pair">${radio("letter", "A", model.letter === "A", "<b>Ja, A-Woche</b>", "is-card")}${radio("letter", "B", model.letter === "B", "<b>Nein, B-Woche</b>", "is-card")}</div></fieldset>`;
       return `${bubble("Hat deine Schule A- und B-Wochen?")}<div class="setup-cards is-pair" role="radiogroup" aria-label="A- und B-Wochen">${answer}</div>${letter}`;
     },
     ready: () => model.ab === "no" || (model.ab === "yes" && !!model.letter),
@@ -769,7 +781,7 @@ function leaveStep(id) {
       storage.set(LOCAL_KEYS.abWeeks, wanted);
       changed = true;
     }
-    const swap = wanted && plan.swapFor(model.letter, now(), schoolDefaults.abReference);
+    const swap = wanted && plan.swapFor(model.letter, askedDay(), schoolDefaults.abReference);
     if (wanted && swap !== (storage.get(LOCAL_KEYS.abSwap) === true)) {
       if (swap) storage.set(LOCAL_KEYS.abSwap, true);
       else storage.remove(LOCAL_KEYS.abSwap);
@@ -912,14 +924,11 @@ function onChange(event) {
     if (followup) followup.hidden = model.ab !== "yes";
     if (followup && model.ab === "yes" && travels()) followup.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: token("--ease-out") || "ease-out" });
     paintFoot();
-    flow.stage.querySelector(`input[name="${model.ab === "yes" ? "letter" : "ab"}"]`)?.focus({ preventScroll: true });
-    if (model.ab === "no") setTimeout(() => current() === "weeks" && model.ab === "no" && go(1), animates() ? 320 : 0);
     return;
   }
   if (target.name === "letter") {
     model.letter = target.value;
     paintFoot();
-    setTimeout(() => current() === "weeks" && model.letter === target.value && go(1), animates() ? 320 : 0);
     return;
   }
   if (target.dataset.type) {
