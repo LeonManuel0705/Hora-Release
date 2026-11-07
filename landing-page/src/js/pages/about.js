@@ -5,6 +5,7 @@ import { CHEVRON, pageHeroHTML } from "../components/page.js";
 
 export default {
   title: () => t("meta.about"),
+  description: () => t("meta.desc.about"),
   render: () => {
     const story = raw("about_page.story") || [];
     const open = raw("about_page.open") || [];

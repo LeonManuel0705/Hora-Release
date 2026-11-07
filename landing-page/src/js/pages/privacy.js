@@ -16,6 +16,7 @@ function flowRow(row) {
 
 export default {
   title: () => t("meta.privacy"),
+  description: () => t("meta.desc.privacy"),
   render: () => {
     const where = raw("privacy_page.where") || [];
     const flow = raw("privacy_page.flow") || [];

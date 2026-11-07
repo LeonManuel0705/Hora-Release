@@ -942,7 +942,7 @@
 
 /* 404 */
 
-.not-found { display: grid; min-height: 100svh; place-items: center; }
+.not-found { display: grid; min-height: 100svh; place-items: center; color-scheme: dark; background: #000000; color: var(--ink); }
 .nf {
   display: grid;
   justify-items: center;
@@ -960,4 +960,4 @@
   text-wrap: balance;
 }
 .nf-text { max-width: 44ch; color: var(--ink-soft); }
-.nf-en { margin-bottom: var(--space-4); font-size: var(--text-sm); color: var(--ink-muted); }
+.nf-en { margin-bottom: var(--space-4); font-size: var(--text-sm); color: #A1A1A6; }

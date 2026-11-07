@@ -23,7 +23,15 @@
     "download": "{{BRAND_NAME}} laden",
     "about": "Über {{BRAND_NAME}}",
     "terms": "Nutzungsbedingungen · {{BRAND_NAME}}",
-    "privacy_policy": "Datenschutzerklärung · {{BRAND_NAME}}"
+    "privacy_policy": "Datenschutzerklärung · {{BRAND_NAME}}",
+    "desc": {
+      "features": "Was {{BRAND_NAME}} am Computer, auf Android und als Web-App auf dem iPhone kann, mit einer Tabelle für jede Funktion und jedes Gerät.",
+      "privacy": "Welche Verbindungen {{BRAND_NAME}} ins Netz aufbaut und wofür. Deine Daten bleiben auf deinem Gerät, einen {{BRAND_NAME}}-Server gibt es nicht.",
+      "download": "{{BRAND_NAME}} kostenlos für Mac, Windows, Linux und Android laden oder als Web-App auf dem iPhone öffnen, mit der Anleitung für jedes Gerät.",
+      "about": "{{BRAND_NAME}} ist ein Schülerprojekt aus Brandenburg. Warum es die App gibt und was du mit ihr machen darfst.",
+      "terms": "Die Nutzungsbedingungen von {{BRAND_NAME}}.",
+      "privacy_policy": "Die Datenschutzerklärung von {{BRAND_NAME}}."
+    }
   },
   "home_features": {
     "devices_all": "Computer, Android, iPhone",

@@ -23,7 +23,15 @@
     "download": "Get {{BRAND_NAME}}",
     "about": "About {{BRAND_NAME}}",
     "terms": "Terms of Service · {{BRAND_NAME}}",
-    "privacy_policy": "Privacy Policy · {{BRAND_NAME}}"
+    "privacy_policy": "Privacy Policy · {{BRAND_NAME}}",
+    "desc": {
+      "features": "What {{BRAND_NAME}} does on the computer, on Android and as a web app on iPhone, with a table for every feature and device.",
+      "privacy": "Which connections {{BRAND_NAME}} makes and why. Your data stays on your device, and there is no {{BRAND_NAME}} server.",
+      "download": "Download {{BRAND_NAME}} for free for Mac, Windows, Linux and Android, or open it as a web app on iPhone, with instructions for every device.",
+      "about": "{{BRAND_NAME}} is a student project from Brandenburg. Why the app exists and what you may do with it.",
+      "terms": "The Terms of Service of {{BRAND_NAME}}.",
+      "privacy_policy": "The Privacy Policy of {{BRAND_NAME}}."
+    }
   },
   "home_features": {
     "devices_all": "Computer, Android, iPhone",

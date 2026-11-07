@@ -58,6 +58,7 @@ function matrix() {
 
 export default {
   title: () => t("meta.features"),
+  description: () => t("meta.desc.features"),
   render: () => {
     const areas = raw("home_features.areas") || [];
     const items = raw("features_page.new_items") || [];

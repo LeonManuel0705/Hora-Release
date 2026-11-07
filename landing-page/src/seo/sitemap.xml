@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Leon Manuel Töpper -->
+<!-- SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>{{BRAND_WEBSITE}}/</loc></url>
+  <url><loc>{{BRAND_WEBSITE}}/features</loc></url>
+  <url><loc>{{BRAND_WEBSITE}}/privacy-philosophy</loc></url>
+  <url><loc>{{BRAND_WEBSITE}}/download</loc></url>
+  <url><loc>{{BRAND_WEBSITE}}/about</loc></url>
+  <url><loc>{{BRAND_WEBSITE}}/nutzungsbedingungen</loc></url>
+  <url><loc>{{BRAND_WEBSITE}}/datenschutz</loc></url>
+</urlset>
