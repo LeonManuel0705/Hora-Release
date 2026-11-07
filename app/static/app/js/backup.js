@@ -400,6 +400,30 @@ export function subjectsInUse(plan) {
   return used;
 }
 
+const appleTouch = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform || ""));
+
+// On iPhone and iPad a download from a home screen app goes nowhere, the share sheet offers "In Dateien sichern" in both modes.
+export async function offerFile(name, text, type = "application/json") {
+  const file = new File([text], name, { type });
+  if (appleTouch() && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      return "shared";
+    } catch (error) {
+      if (error?.name === "AbortError") return "cancelled";
+    }
+  }
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return "saved";
+}
+
 export function summary({ settings = false, made = {}, known = 0, failed = 0, unread = false } = {}) {
   const parts = [];
   if (settings) parts.push("Stundenplan und Einstellungen");

@@ -68,5 +68,7 @@ void main() {
     expect(hosts.difference(connect), isEmpty);
     expect(block('/pwa/*'), contains('geolocation=(self)'));
     expect(connect, containsAll(['https://de.wikipedia.org', 'https://en.wikipedia.org']));
+    expect(RegExp('frame-src ([^;]+)').firstMatch(policy)!.group(1)!.split(' '), containsAll(["'self'", 'blob:']));
+    expect(File('lib/web_ui/web_shell.dart').readAsStringSync(), contains("allow = 'geolocation; web-share'"));
   });
 }

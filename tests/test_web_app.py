@@ -38,15 +38,23 @@ def manifest_of(folder):
     return json.loads(re.search(r'^const MANIFEST = (.*);$', source, re.M).group(1))
 
 
-def test_the_offline_worker_serves_every_tab_the_build_it_started_with():
+def run_check(name):
     node = shutil.which('node')
     if not node:
         pytest.skip('node is not installed')
     major = int(re.match(r'v(\d+)', subprocess.run([node, '--version'], capture_output=True, text=True).stdout).group(1))
-    if major < 18:
+    if major < 20:
         pytest.skip('node is too old')
-    result = subprocess.run([node, str(ROOT / 'tests' / 'js' / 'app_worker_check.mjs')], capture_output=True, text=True, timeout=120)
+    result = subprocess.run([node, str(ROOT / 'tests' / 'js' / name)], capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_the_offline_worker_serves_every_tab_the_build_it_started_with():
+    run_check('app_worker_check.mjs')
+
+
+def test_a_backup_reaches_the_files_app_on_iphone_and_the_downloads_elsewhere():
+    run_check('offer_file_check.mjs')
 
 
 def test_the_file_list_holds_what_the_app_loads_and_leaves_out_the_rest(tmp_path):

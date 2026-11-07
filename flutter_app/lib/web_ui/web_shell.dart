@@ -209,7 +209,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     frame
       ..id = 'hub-frame'
       ..title = Brand.name
-      ..allow = 'geolocation'
+      ..allow = 'geolocation; web-share'
       ..src = _scope;
     web.document.body?.append(frame);
     _frame = frame;

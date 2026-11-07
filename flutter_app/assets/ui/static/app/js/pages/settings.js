@@ -4,7 +4,7 @@ import {
   LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, activeSubjectKeys, motionDefault, slug, teacherLabel, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
 import { toast, setTheme, syncTime } from "../shell.js";
-import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary } from "../backup.js";
+import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, offerFile } from "../backup.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -2990,14 +2990,7 @@ async function exportData() {
     toast(`Gesichert in „${esc(saved.folder)}“ als „${esc(saved.name)}“${missing}`, { icon: missing ? "triangle-alert" : "download", action: reveal });
     return;
   }
-  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  if ((await offerFile(name, JSON.stringify(payload, null, 2))) === "cancelled") return;
   toast(`Gesichert als „${esc(name)}“${missing}`, { icon: missing ? "triangle-alert" : "download" });
 }
 
