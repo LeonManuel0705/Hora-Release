@@ -1331,6 +1331,7 @@ function schoolDesc(info, school) {
   if (!school.on) {
     if (school.removing) return `Der Kalender ${name} wird gelöscht, sobald Google erreichbar ist.`;
     if (school.notice === "gone") return `Du hast den Kalender ${name} in Google gelöscht. Schalte das wieder ein, dann legt ${BRAND} ihn neu an.`;
+    if (school.notice === "kept") return `Google hat das Löschen abgelehnt. Der Kalender ${name} bleibt in Google, dort kannst du ihn selbst löschen.`;
     if (!info.configured && !info.may_make_calendars) return "Geht in dieser Version nicht.";
     if (info.state === "login") return "Geht wieder, sobald Google neu verbunden ist.";
     return `${BRAND} legt dafür den Kalender ${name} an und trägt die nächsten vier Wochen ein.`;
@@ -1406,7 +1407,11 @@ function renderAccountsMeta() {
   const iserv = prefs.iserv.connected;
   const google = prefs.google.connected;
   const offered = google || googleInfo().configured;
-  $("accountsMeta").textContent = iserv && google ? "IServ und Google verbunden" : iserv ? (offered ? "IServ verbunden, Google nicht" : "IServ verbunden") : google ? "Google verbunden, IServ nicht" : "Nichts verbunden";
+  const expired = google && googleInfo().state === "login";
+  const text = expired
+    ? (iserv ? "IServ verbunden, Google abgelaufen" : "Google abgelaufen, IServ nicht")
+    : iserv && google ? "IServ und Google verbunden" : iserv ? (offered ? "IServ verbunden, Google nicht" : "IServ verbunden") : google ? "Google verbunden, IServ nicht" : "Nichts verbunden";
+  $("accountsMeta").textContent = text;
 }
 
 function validateIserv(formNode) {
@@ -1562,19 +1567,25 @@ async function grantGoogle(features, done) {
   }
 }
 
-function googleConnected(email) {
-  const info = googleInfo();
-  page.accounts.google = { ...info, connected: true, account: email || info.account || "", state: "ok", stand: info.state === "login" ? info.stand : null };
-  prefs.google.connected = true;
+async function reloadGoogle() {
+  try {
+    const result = await request("GET", "/api/ui/google/account");
+    page.accounts.google = result.account;
+    prefs.google.connected = !!result.account.connected;
+  } catch {}
+}
+
+async function googleConnected() {
+  await reloadGoogle();
   renderGoogle();
   toast("Google-Kalender verbunden", { icon: "calendar-days" });
   loadGoogleCalendars();
 }
 
-function gmailAdded() {
-  page.accounts.google = { ...googleInfo(), gmail: true };
+async function gmailAdded() {
+  await reloadGoogle();
   renderGoogle();
-  toast("Gmail ist verbunden", { icon: "mail" });
+  toast(googleInfo().gmail ? "Gmail ist verbunden" : "Google hat Gmail nicht freigegeben.", { icon: googleInfo().gmail ? "mail" : "circle-alert" });
   $("rowGmail")?.scrollIntoView({ block: "nearest" });
 }
 

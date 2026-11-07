@@ -1316,6 +1316,13 @@ function firstHint(problem) {
   return true;
 }
 
+let freshAt = 0;
+addEventListener("app:google-fresh", () => {
+  if (!$("calendarPage") || sync.busy || Date.now() - freshAt < 60000) return;
+  freshAt = Date.now();
+  startSync({ first: true });
+});
+
 function revealSynced() {
   if (!animates()) return;
   const nodes = [...document.querySelectorAll("#calView .ev, #calView .cw-chip.is-event, #calView .cm-item.is-event, #calView .cal-dot.is-event, #calView .cl-row.is-event, #calOverview .cal-agenda-item")];
