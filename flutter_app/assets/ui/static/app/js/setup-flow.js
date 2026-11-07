@@ -427,10 +427,15 @@ function roomOf(text, rooms) {
   const typed = tidy(text).slice(0, 12);
   if (!typed) return "";
   const room = plan.normalizeRoom(typed);
-  const known = [...data.rooms, ...rooms.added].find((item) => lower(item) === lower(typed) || lower(item) === lower(room));
+  const matches = (item) => lower(item) === lower(typed) || lower(item) === lower(room);
+  const known = [...data.rooms, ...rooms.added].find(matches);
   if (known) return known;
+  const removed = rooms.removed.find(matches);
+  if (removed) {
+    rooms.removed = rooms.removed.filter((item) => item !== removed);
+    return removed;
+  }
   rooms.added.push(room);
-  rooms.removed = rooms.removed.filter((item) => item !== room);
   return room;
 }
 
