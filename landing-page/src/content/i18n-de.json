@@ -149,7 +149,7 @@
   "platforms": {
     "macos": {
       "name": "macOS",
-      "note": "Braucht Python 3 (z. B. über die Xcode-Befehlszeilentools) und beim ersten Start Internet."
+      "note": "Auf Macs mit Apple Chip ohne Python. Intel-Macs brauchen Python 3 (z. B. über die Xcode-Befehlszeilentools) und beim ersten Start Internet."
     },
     "windows": {
       "name": "Windows",
@@ -559,7 +559,7 @@
         "icon": "terminal",
         "to": "PyPI",
         "what": "der Abruf der Python-Pakete, mit denen die App läuft",
-        "when": "Mac, beim ersten Start und nach Updates",
+        "when": "Intel-Mac, beim ersten Start und nach Updates",
         "tone": "ok"
       },
       {
@@ -766,7 +766,7 @@
     "s3_list5": "Wikipedia: der Begriff, nach dem du den Assistenten fragst",
     "s3_list6": "Anthropic: deine Frage an den Assistenten und die Daten aus der App, die er zum Antworten braucht, nur wenn du einen eigenen Claude-Schlüssel einträgst (Apps für Computer)",
     "s3_list7": "Hugging Face und GitHub: der Abruf des Sprachmodells für den Assistenten",
-    "s3_list8": "PyPI: der Abruf der Python-Pakete beim ersten Start der Mac-App und nach Updates",
+    "s3_list8": "PyPI: der Abruf der Python-Pakete beim ersten Start der Mac-App auf Intel-Macs und nach Updates",
     "s3_list9": "Diese Website: die Frage nach der neuesten Version, beim Start und danach alle zwei Stunden (von selbst, Apps für Computer und Android)",
     "s3_list10": "Google Fonts: eine Schriftdatei, die der Browser beim Öffnen der Web-App lädt (von selbst)",
     "s3_list11": "Die Websites deiner Lesezeichen: ein Abruf der Seite, um ihr Logo neben dem Lesezeichen zu zeigen",

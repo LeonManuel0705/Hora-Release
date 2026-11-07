@@ -149,7 +149,7 @@
   "platforms": {
     "macos": {
       "name": "macOS",
-      "note": "Needs Python 3 (for example via the Xcode command line tools) and internet on first launch."
+      "note": "No Python needed on Macs with Apple silicon. Intel Macs need Python 3 (for example via the Xcode command line tools) and internet on first launch."
     },
     "windows": {
       "name": "Windows",
@@ -559,7 +559,7 @@
         "icon": "terminal",
         "to": "PyPI",
         "what": "the download of the Python packages the app runs on",
-        "when": "Mac, on first start and after updates",
+        "when": "Intel Mac, on first start and after updates",
         "tone": "ok"
       },
       {
@@ -766,7 +766,7 @@
     "s3_list5": "Wikipedia: the term you ask the assistant about",
     "s3_list6": "Anthropic: your question to the assistant and the data from the App it needs to answer, only if you enter your own Claude key (apps for computers)",
     "s3_list7": "Hugging Face and GitHub: the download of the assistant's language model",
-    "s3_list8": "PyPI: the download of the Python packages on the Mac app's first start and after updates",
+    "s3_list8": "PyPI: the download of the Python packages on the Mac app's first start on Intel Macs and after updates",
     "s3_list9": "This website: the request for the latest version, at start and then every two hours (by itself, apps for computers and Android)",
     "s3_list10": "Google Fonts: one font file the browser loads when you open the web app (by itself)",
     "s3_list11": "The websites of your bookmarks: a request to the page, to show its logo next to the bookmark",
