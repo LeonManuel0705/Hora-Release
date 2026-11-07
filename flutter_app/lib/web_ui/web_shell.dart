@@ -27,7 +27,7 @@ import 'web_start_script.dart';
 Widget buildWebHome() => const WebShell();
 
 extension type _Reply._(JSObject _) implements JSObject {
-  external factory _Reply({int status, JSObject headers, JSAny? body, bool busy});
+  external factory _Reply({int status, JSObject headers, JSAny? body, bool busy, int protocol});
 }
 
 extension type _HubHistory._(JSObject _) implements JSObject {
@@ -205,7 +205,11 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     final data = event.data.dartify();
     if (data is! Map<Object?, Object?> || data['type'] != 'hub-request') return;
     final port = ports.first;
-    if (_elsewhere || !mounted || (data['protocol'] ?? 1) != _protocol) {
+    if ((data['protocol'] ?? 1) != _protocol) {
+      port.postMessage(_Reply(busy: true, protocol: _protocol));
+      return;
+    }
+    if (_elsewhere || !mounted) {
       port.postMessage(_Reply(busy: true));
       return;
     }

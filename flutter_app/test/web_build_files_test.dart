@@ -40,6 +40,10 @@ void main() {
     final worker = RegExp(r'const PROTOCOL = (\d+);').firstMatch(File('web/hub_worker.js').readAsStringSync())!.group(1);
     final page = RegExp(r'_protocol = (\d+);').firstMatch(File('lib/web_ui/web_shell.dart').readAsStringSync())!.group(1);
     expect(worker, page);
+    final relay = File('web/hub_worker.js').readAsStringSync();
+    expect(relay, contains('reply.protocol > PROTOCOL) self.registration.update()'), reason: 'an older worker fetches its newer self');
+    expect(relay, contains('reply.protocol < PROTOCOL) outdated = true'), reason: 'a newer worker stops refreshing for an older page');
+    expect(File('lib/web_ui/web_shell.dart').readAsStringSync(), contains('_Reply(busy: true, protocol: _protocol)'));
   });
 
   test('the offline worker keeps the whole build and the start no longer throws it away', () {
