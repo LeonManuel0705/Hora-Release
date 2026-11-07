@@ -40,13 +40,6 @@ class HostSystem {
     }
   }
 
-  void delete(String path) {
-    final entity = Directory(path);
-    if (entity.existsSync()) entity.deleteSync(recursive: true);
-  }
-
-  void rename(String from, String to) => Directory(from).renameSync(to);
-
   Future<ProcessResult?> run(
     String executable,
     List<String> arguments, {
@@ -227,39 +220,14 @@ class FrozenBackend {
       (await host.run('/usr/bin/xattr', ['-p', _quarantine, path]))?.exitCode == 0;
 
   // A browser download marks every file in the app as quarantined, and opening
-  // the app does not clear the flag on the server inside it, so macOS could
-  // still stop the server. When the app itself cannot be changed (it runs from
-  // a read-only translocated copy or belongs to another user), a copy without
-  // the flag in the app's own support folder is started instead.
-  static Future<String> runnable(
-    HostSystem host,
-    String server, {
-    required String copies,
-    required int build,
-    void Function()? onCopy,
-  }) async {
-    if (!await quarantined(host, server)) return server;
-    final folder = _macPath.dirname(server);
-    await host.run('/usr/bin/xattr', ['-dr', _quarantine, folder], timeout: const Duration(minutes: 1));
-    if (!await quarantined(host, server)) return server;
-    final target = _macPath.join(copies, '$build');
-    final copy = _macPath.join(target, 'server', 'server');
-    try {
-      if (!host.isFile(copy)) {
-        onCopy?.call();
-        for (final old in host.list(copies)) {
-          host.delete(old);
-        }
-        final staging = '$target.incoming';
-        final copied = await host.run('/usr/bin/ditto', ['--noqtn', folder, _macPath.join(staging, 'server')],
-            timeout: const Duration(minutes: 5));
-        if (copied?.exitCode != 0 || !host.isFile(_macPath.join(staging, 'server', 'server'))) return server;
-        host.rename(staging, target);
-      }
-    } on FileSystemException {
-      return server;
-    }
-    return host.isFile(copy) && !await quarantined(host, copy) ? copy : server;
+  // the app may leave the flag on the server inside it. It is removed where the
+  // app can be changed. A read-only app (opened straight from Downloads, or one
+  // that belongs to another user) starts its server as it is; should macOS stop
+  // it, the start explains what to do. Nothing outside the app is copied or
+  // deleted, so no folder the app writes to can redirect what it runs.
+  static Future<void> clearQuarantine(HostSystem host, String server) async {
+    if (!await quarantined(host, server)) return;
+    await host.run('/usr/bin/xattr', ['-dr', _quarantine, _macPath.dirname(server)], timeout: const Duration(minutes: 1));
   }
 }
 
@@ -282,7 +250,6 @@ class StartText {
   static const environment = '$setup\nDie Python-Umgebung wird angelegt …';
   static const slow = 'Der erste Start dauert etwas länger.';
   static String get starting => '${Brand.name} startet …';
-  static String get preparing => '${Brand.name} wird für den ersten Start vorbereitet …';
   static String get verySlow => 'Das dauert ungewöhnlich lange. ${Brand.name} wartet noch bis zu 30 Sekunden.';
   static String package(int count, String name) => '$setup\nPaket $count: $name';
   static String installing(int count) => '$setup\n$count Pakete werden eingerichtet …';

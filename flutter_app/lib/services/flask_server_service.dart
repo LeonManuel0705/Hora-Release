@@ -366,22 +366,9 @@ class FlaskServerService {
       _fail(denied ? StartText.documentsDenied(project) : StartText.notStartable('${error.message}: ${error.path}'));
       return;
     }
-    var runnable = server;
-    try {
-      final support = await getApplicationSupportDirectory();
-      runnable = await FrozenBackend.runnable(
-        _host,
-        server,
-        copies: p.join(support.path, 'backend'),
-        build: BuildInfo.buildNumber,
-        onCopy: () => setupProgress.value = StartText.preparing,
-      );
-    } catch (e) {
-      if (kDebugMode) print('FlaskServer: Could not prepare the backend: $e');
-    }
-    setupProgress.value = '';
+    await FrozenBackend.clearQuarantine(_host, server);
     await _launch(
-      runnable,
+      server,
       const [],
       project,
       {

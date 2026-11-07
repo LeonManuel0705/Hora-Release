@@ -44,24 +44,6 @@ class FakeHost extends HostSystem {
   List<int> head(String path, int length) => heads[path] ?? const [];
 
   @override
-  void delete(String path) {
-    files.removeWhere((entry) => entry == path || p.isWithin(path, entry));
-    directories.removeWhere((entry) => entry == path || p.isWithin(path, entry));
-  }
-
-  @override
-  void rename(String from, String to) {
-    String moved(String entry) => entry == from ? to : p.join(to, p.relative(entry, from: from));
-    final inside = {for (final entry in files) if (entry == from || p.isWithin(from, entry)) entry};
-    files
-      ..removeAll(inside)
-      ..addAll(inside.map(moved));
-    directories
-      ..remove(from)
-      ..add(to);
-  }
-
-  @override
   Future<ProcessResult?> run(String executable, List<String> arguments, {Duration timeout = const Duration(seconds: 20)}) async {
     runs.add([executable, ...arguments]);
     return answer(executable, arguments);
@@ -249,65 +231,58 @@ void main() {
 
   group('the quarantine flag on the frozen server', () {
     const server = '/A.app/Contents/Resources/backend/server/server';
-    const copies = '/support/backend';
 
-    FakeHost hostWith({required bool quarantined, required bool writable, bool copyable = true}) {
+    FakeHost hostWith({required bool quarantined, required bool writable}) {
       final flagged = <String>{if (quarantined) server};
-      late final FakeHost host;
-      host = FakeHost(files: {server}, answer: (executable, arguments) {
+      return FakeHost(files: {server}, answer: (executable, arguments) {
         if (executable == '/usr/bin/xattr' && arguments.first == '-p') return result('', flagged.contains(arguments.last) ? 0 : 1);
         if (executable == '/usr/bin/xattr' && arguments.first == '-dr') {
           if (!writable) return result('', 1);
           flagged.removeWhere((path) => path == arguments.last || p.isWithin(arguments.last, path));
           return result('');
         }
-        if (executable == '/usr/bin/ditto') {
-          if (!copyable) return result('', 1);
-          host.files.add(p.join(arguments.last, 'server'));
-          return result('');
-        }
         return null;
       });
-      return host;
     }
 
     Iterable<List<String>> changes(FakeHost host) => host.runs.where((run) => !(run.first == '/usr/bin/xattr' && run[1] == '-p'));
 
-    test('a server without the flag starts from the app', () async {
+    test('a server without the flag is left alone', () async {
       final host = hostWith(quarantined: false, writable: true);
-      expect(await FrozenBackend.runnable(host, server, copies: copies, build: 41), server);
+      await FrozenBackend.clearQuarantine(host, server);
       expect(changes(host), isEmpty);
     });
 
-    test('the flag is cleared inside the app when the app can be changed', () async {
+    test('the flag is cleared inside the app and nowhere else', () async {
       final host = hostWith(quarantined: true, writable: true);
-      expect(await FrozenBackend.runnable(host, server, copies: copies, build: 41), server);
+      await FrozenBackend.clearQuarantine(host, server);
       expect(changes(host), [
         ['/usr/bin/xattr', '-dr', 'com.apple.quarantine', p.dirname(server)],
       ]);
     });
 
-    test('a read-only app starts a copy without the flag and drops older copies', () async {
-      final host = hostWith(quarantined: true, writable: false)
-        ..files.add('$copies/40/server/server')
-        ..directories.add('$copies/40');
-      var copied = false;
-      final path = await FrozenBackend.runnable(host, server, copies: copies, build: 41, onCopy: () => copied = true);
-      expect(path, '$copies/41/server/server');
-      expect(copied, isTrue);
-      expect(host.runs, contains(equals(['/usr/bin/ditto', '--noqtn', p.dirname(server), '$copies/41.incoming/server'])));
-      expect(host.files, isNot(contains('$copies/40/server/server')));
+    test('a read-only app is started as it is, without copies outside it', () async {
+      final host = hostWith(quarantined: true, writable: false);
+      await FrozenBackend.clearQuarantine(host, server);
+      expect(changes(host), [
+        ['/usr/bin/xattr', '-dr', 'com.apple.quarantine', p.dirname(server)],
+      ]);
     });
 
-    test('a copy made for this build is reused', () async {
-      final host = hostWith(quarantined: true, writable: false)..files.add('$copies/41/server/server');
-      expect(await FrozenBackend.runnable(host, server, copies: copies, build: 41), '$copies/41/server/server');
-      expect(host.runs.where((run) => run.first == '/usr/bin/ditto'), isEmpty);
-    });
-
-    test('when no copy can be made the server in the app is tried', () async {
-      final host = hostWith(quarantined: true, writable: false, copyable: false);
-      expect(await FrozenBackend.runnable(host, server, copies: copies, build: 41), server);
+    test('a support folder linked to Documents keeps everything in it', () async {
+      final root = Directory.systemTemp.createTempSync('quarantine-');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final documents = Directory(path.join(root.path, 'Documents', 'Schule'))..createSync(recursive: true);
+      final note = File(path.join(documents.path, 'note.txt'))..writeAsStringSync('x');
+      final support = Directory(path.join(root.path, 'support'))..createSync();
+      Link(path.join(support.path, 'backend')).createSync(path.join(root.path, 'Documents'));
+      final bundled = File(path.join(root.path, 'server'))..writeAsStringSync('bin');
+      final host = FakeHost(answer: (executable, arguments) => executable == '/usr/bin/xattr' ? result('', arguments.first == '-p' ? 0 : 1) : null);
+      await FrozenBackend.clearQuarantine(host, bundled.path);
+      expect(host.runs.map((run) => run.first).toSet(), {'/usr/bin/xattr'});
+      expect(note.existsSync(), isTrue);
+      expect(Directory(path.join(root.path, 'Documents')).listSync(), hasLength(1));
+      expect(support.listSync(), hasLength(1));
     });
   });
 
@@ -430,7 +405,7 @@ void main() {
 
     test('nothing the start shows speaks of a server', () {
       final texts = [
-        StartText.starting, StartText.preparing, StartText.slow, StartText.verySlow, StartText.environment,
+        StartText.starting, StartText.slow, StartText.verySlow, StartText.environment,
         StartText.package(1, 'flask'), StartText.installing(2), StartText.pythonMissing.message,
         StartText.pythonNotFound.message, StartText.documentsDenied().message, StartText.notStartable(null).message,
         StartText.timedOut(const []).message, StartText.crashed(const [], 1).message, StartText.exited(const [], 1, frozen: true).message,
