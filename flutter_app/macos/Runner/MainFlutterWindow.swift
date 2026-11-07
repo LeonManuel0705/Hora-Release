@@ -110,7 +110,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       }
       let service = SMAppService.mainApp
       func state() -> [String: Any] {
-        ["supported": true, "enabled": service.status == .enabled, "pending": service.status == .requiresApproval]
+        let pending = service.status == .requiresApproval
+        return ["supported": true, "enabled": service.status == .enabled || pending, "pending": pending]
       }
       switch call.method {
       case "status":

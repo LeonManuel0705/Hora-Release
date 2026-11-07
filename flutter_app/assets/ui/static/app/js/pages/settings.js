@@ -1780,7 +1780,7 @@ async function setLaunch(wanted) {
   launch.state = state?.supported ? state : launch.state;
   renderLaunch();
   if (state?.error) toast(`Das hat nicht geklappt. ${esc(systemName())} meldet: „${esc(state.error)}“`, { icon: "circle-alert", duration: 9000 });
-  else if (wanted && state && !state.enabled) toast(`${esc(systemName())} hat den Autostart nicht übernommen.`, { icon: "circle-alert" });
+  else if (wanted && state && !state.enabled && !state.pending) toast(`${esc(systemName())} hat den Autostart nicht übernommen.`, { icon: "circle-alert" });
   else if (state) say(state.enabled ? "Beim Anmelden starten an" : "Beim Anmelden starten aus");
 }
 
