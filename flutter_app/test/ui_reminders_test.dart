@@ -207,17 +207,24 @@ void main() {
       '2026-11-09 15:45 event:loc-g:2026-11-09 Um 16:00',
       '2026-11-09 16:00 event:loc-b:2026-11-09 Um 17:00',
       '2026-11-09 19:00 event:loc-d:2026-11-10 Morgen um 19:00 in Aula',
-      '2026-11-09 20:00 event:loc-e:2026-11-09 Um 20:00',
+      '2026-11-09 20:00 event:loc-e:2026-11-09 Jetzt',
     ]);
     expect(plan.first.until, DateTime(2026, 11, 9, 16, 30));
     expect(plan[2].until, DateTime(2026, 11, 9, 18));
     final off = _plan(data, _store(notify: {
       'categories': {'events': {'on': false}},
     }), sunday, days: 3);
-    expect(off.where((item) => item.kind == 'events'), isEmpty);
+    expect([for (final item in off) if (item.kind == 'events') item.key], ['event:loc-b:2026-11-09', 'event:loc-d:2026-11-10', 'event:loc-e:2026-11-09'],
+        reason: 'a minute chosen for one event counts even with Termine off');
+    final synced = _plan(_data(events: [
+      {'id': 'g-1', 'date': '2026-11-09', 'start': '15:00', 'title': 'Google', 'synced': true, 'reminderMinutes': 30},
+    ]), _store(notify: {
+      'categories': {'events': {'on': false}},
+    }), sunday, days: 3);
+    expect(synced.where((item) => item.kind == 'events'), isEmpty, reason: 'a synced event follows the switch');
   });
 
-  test('tasks with a time remind at that time, the others of the day and those without a date in one morning reminder', () {
+  test('tasks with a time remind at that time, the others in one morning reminder led by the overdue, oldest first', () {
     final data = _data(tasks: [
       {'id': 't1', 'title': 'Vokabeln', 'date': '2026-11-09', 'done': false},
       {'id': 't2', 'title': 'Referat üben', 'date': '2026-11-09', 'dueTime': '16:30', 'done': false},
@@ -231,18 +238,24 @@ void main() {
     final plan = _byKey(_plan(data, _store(), sunday, days: 3).where((item) => item.kind == 'tasks').toList());
     expect(plan.keys, containsAll(['tasks:2026-11-09', 'task:t2:2026-11-09', 'tasks:2026-11-10', 'tasks:2026-11-11']));
     expect(_clock(plan['tasks:2026-11-09']!.at), '2026-11-09 07:00');
-    expect(plan['tasks:2026-11-09']!.title, '2 Aufgaben heute fällig');
-    expect(plan['tasks:2026-11-09']!.body, 'Vokabeln, Ohne Datum', reason: 'an overdue task is left out, as reminders.js does');
+    expect(plan['tasks:2026-11-09']!.title, '3 Aufgaben für heute, 1 davon überfällig');
+    expect(plan['tasks:2026-11-09']!.body, 'Längst fällig, Vokabeln, Ohne Datum');
     expect(_clock(plan['task:t2:2026-11-09']!.at), '2026-11-09 16:30');
     expect(plan['task:t2:2026-11-09']!.body, 'Fällig um 16:30');
-    expect(plan['tasks:2026-11-10']!.title, 'Heute fällig');
-    expect(plan['tasks:2026-11-11']!.title, '2 Aufgaben heute fällig');
-    expect(plan['tasks:2026-11-11']!.body, 'Ohne Datum, Mittwoch');
+    expect(plan['tasks:2026-11-10']!.title, '4 Aufgaben für heute, 3 davon überfällig');
+    expect(plan['tasks:2026-11-10']!.body, 'Längst fällig, Vokabeln, Referat üben');
+    expect(plan['tasks:2026-11-11']!.title, '5 Aufgaben für heute, 3 davon überfällig');
     expect(plan.keys.where((key) => key.startsWith('task:')), ['task:t2:2026-11-09']);
     final single = _plan(_data(tasks: [
       {'id': 't1', 'title': 'Vokabeln', 'date': '2026-11-09', 'done': false},
     ]), _store(), sunday, days: 1);
     expect(single.where((item) => item.kind == 'tasks').single.title, 'Heute fällig');
+    List<String> titles(List<Object?> tasks) => [for (final item in _plan(_data(tasks: tasks), _store(), sunday, days: 1)) if (item.kind == 'tasks') item.title];
+    expect(titles([{'id': 'o1', 'title': 'Alt', 'date': '2026-11-02', 'done': false}]), ['Überfällig']);
+    expect(titles([
+      {'id': 'o1', 'title': 'Alt', 'date': '2026-11-02', 'done': false},
+      {'id': 'o2', 'title': 'Älter', 'date': '2026-10-30', 'dueTime': '9:00', 'done': false},
+    ]), ['2 Aufgaben überfällig']);
   });
 
   test('subjects take their new name, a removed one drops its lessons and dates, and an own subject works', () {
@@ -362,10 +375,11 @@ void main() {
     for (final quiet in [null, {'from': '08:00', 'to': '08:00'}, {'from': '23:00', 'to': '06:00'}]) {
       await _compareWithPage(quiet);
     }
+    await _compareWithPage(null, eventsOn: false);
   });
 }
 
-Future<void> _compareWithPage(Map<String, String>? quiet) async {
+Future<void> _compareWithPage(Map<String, String>? quiet, {bool eventsOn = true}) async {
   final data = _data(
     deadlines: [
       {'id': 'test-1', 'kind': 'Test', 'title': 'Analysis', 'subject': '1', 'date': '2026-11-11', 'time': '08:00', 'detail': '- Ableitungen\n- Kurven', 'status': 'offen'},
@@ -375,6 +389,15 @@ Future<void> _compareWithPage(Map<String, String>? quiet) async {
     events: [
       {'id': 'loc-a', 'date': '2026-11-09', 'start': '15:00', 'end': '16:30', 'title': 'Zahnarzt', 'place': 'Praxis', 'kind': 'private'},
       {'id': 'loc-b', 'date': '2026-11-12', 'start': '07:10', 'title': 'Früh', 'place': '', 'kind': 'private'},
+      {
+        'id': 'loc-w', 'date': '2026-11-02', 'start': '16:00', 'end': '17:00', 'title': 'Klavier', 'place': 'Musikschule', 'kind': 'private',
+        'recurrence': {'freq': 'weekly', 'interval': 1, 'until': null, 'count': null, 'exceptions': ['2026-11-16']},
+      },
+      {'id': 'loc-j', 'date': '2026-11-10', 'start': '07:30', 'title': 'Joggen', 'kind': 'training', 'recurrence': {'freq': 'daily', 'count': 3}},
+      {'id': 'loc-r', 'date': '2026-11-11', 'start': '18:30', 'title': 'Konzert', 'place': 'Aula', 'kind': 'private', 'reminderMinutes': 1440},
+      {'id': 'loc-z', 'date': '2026-11-12', 'start': '10:00', 'title': 'Zum Beginn', 'kind': 'private', 'reminderMinutes': 0},
+      {'id': 'loc-n', 'date': '2026-11-13', 'start': '09:00', 'title': 'Nie', 'kind': 'private', 'reminderMinutes': -1},
+      {'id': 'loc-d', 'date': '2026-11-14', 'start': null, 'title': 'Ausflug', 'kind': 'private'},
     ],
     tasks: [
       {'id': 't1', 'title': 'Vokabeln', 'date': '2026-11-18', 'done': false},
@@ -388,7 +411,10 @@ Future<void> _compareWithPage(Map<String, String>? quiet) async {
       {'id': 'h-1', 'title': 'Feiertag', 'date': '2026-11-13', 'endDate': null, 'type': 'feiertag'},
     ],
   );
-  final store = _store(notify: {if (quiet != null) 'quiet': quiet}, extra: {
+  final store = _store(notify: {
+    if (quiet != null) 'quiet': quiet,
+    if (!eventsOn) 'categories': {'events': {'on': false, 'lead': 15}},
+  }, extra: {
     'app-subjects': {
       'items': {'1': {'name': 'Mathematik'}},
       'removed': <String>[],
@@ -404,11 +430,14 @@ Future<void> _compareWithPage(Map<String, String>? quiet) async {
   final page = {for (final item in (jsonDecode('${run.stdout}') as List).cast<Map<String, Object?>>()) item['key'] as String: item};
   final phone = _byKey(_plan(data, store, DateTime(2026, 11, 8, 23, 59), days: 10));
   expect(page.keys.map((key) => key.split(':').first).toSet(), {'lesson', 'deadline', 'event', 'task', 'tasks'});
+  if (eventsOn) expect(page.keys, containsAll(['event:loc-w~2026-11-09:2026-11-09', 'event:loc-j~2026-11-12:2026-11-12']));
+  expect(page.keys, contains('event:loc-r:2026-11-11'));
+  expect(page.keys.where((key) => key.contains('loc-w~2026-11-16') || key.contains('loc-n') || key.contains('loc-d')), isEmpty);
   expect(phone.keys.toSet(), page.keys.toSet());
   for (final MapEntry(:key, value: shown) in page.entries) {
     final planned = phone[key]!;
-    expect(planned.title, shown['title'], reason: '$key $quiet');
-    expect(planned.body, shown['body'], reason: '$key $quiet');
+    expect(planned.title, shown['title'], reason: '$key $quiet $eventsOn');
+    expect(planned.body, shown['body'], reason: '$key $quiet $eventsOn');
     final day = DateTime.parse(shown['day'] as String);
     expect(planned.at, DateTime(day.year, day.month, day.day, 0, shown['minute'] as int), reason: '$key $quiet');
   }

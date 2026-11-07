@@ -3,6 +3,7 @@
 
 import '../brand.dart';
 import 'ui_data.dart' show daysBetween, dayOf, isoOf, uiCourseTypes, uiHues, uiNotifyDefaults;
+import 'ui_recurrence.dart';
 
 // The phone plans its reminders ahead with the same rules app/static/app/js/reminders.js applies
 // minute by minute in the open page, read from the same page data and store, so both agree on
@@ -105,6 +106,8 @@ bool _truthy(Object? value) => switch (value) {
     };
 
 String _text(Object? value) => value == null ? '' : '$value';
+
+num? _number(Object? value) => value is num ? value : value is String ? num.tryParse(value.trim()) : null;
 
 final _clock = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$');
 
@@ -354,46 +357,64 @@ class _Planner {
     }
   }
 
+  // eventMinutes() in reminders.js: an own choice counts even with "Termine" off, a synced event
+  // follows the switch, and -1 means never.
+  int _minutesBefore(Map<String, Object?> event, int lead) {
+    final category = prefs['events'];
+    final own = event['reminderMinutes'];
+    final chosen = own == null ? null : (_number(own) ?? -1).round();
+    if (_truthy(event['synced'])) return category.on ? chosen ?? lead : -1;
+    return chosen ?? (category.on ? lead : -1);
+  }
+
   void events(DateTime day, List<Map<String, Object?>> items) {
-    if (!prefs['events'].on) return;
-    final fallback = prefs['events'].leadOr(15);
-    for (final event in items) {
+    final lead = prefs['events'].leadOr(15);
+    final today = isoOf(day);
+    for (final event in uiExpandEvents(items, today, isoOf(DateTime(day.year, day.month, day.day + 28)))) {
       final start = _minuteOf(event['start']);
       final date = _text(event['date']);
       if (start == null || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date)) continue;
-      final own = event.containsKey('reminderMinutes') && event['reminderMinutes'] != null;
-      final minutes = event['reminderMinutes'];
-      if (own && (minutes is! num || minutes < 0)) continue;
-      final lead = own ? (minutes as num).round() : fallback;
-      final begins = _at(dayOf(date), start);
-      final at = _at(dayOf(date), start - lead);
-      if (!own && start - lead < 0) continue;
-      if (isoOf(at) != isoOf(day)) continue;
-      final days = daysBetween(day, dayOf(date));
+      final ahead = daysBetween(day, dayOf(date));
+      final minutes = _minutesBefore(event, lead);
+      if (ahead < 0 || minutes < 0) continue;
+      final when = ahead == 0 ? (minutes == 0 ? 'Jetzt' : 'Um ${_hm(event['start'])}') : '${_capitalized(_whenText(ahead))} um ${_hm(event['start'])}';
       final place = _text(event['place']).isEmpty ? '' : ' in ${event['place']}';
-      final opening = days == 0 ? 'Um' : days == 1 ? 'Morgen um' : 'In $days Tagen um';
       final end = _minuteOf(event['end']);
-      _add('event:${event['id']}:$date', day, _awake(at.hour * 60 + at.minute), _text(event['title']), '$opening ${_hm(event['start'])}$place', 'events',
+      final begins = _at(dayOf(date), start);
+      _add('event:${event['id']}:$date', day, _awake(ahead * 1440 + start - minutes), _text(event['title']), '$when$place', 'events',
           until: end != null && end > start ? _at(dayOf(date), end) : begins.add(const Duration(hours: 1)));
     }
   }
 
+  // taskReminders() in reminders.js: overdue tasks lead the morning reminder, oldest first, and a
+  // time of day from an earlier day does not ring again.
   void tasks(DateTime day, List<Map<String, Object?>> items) {
     if (!prefs['tasks'].on) return;
     final today = isoOf(day);
-    final summary = <String>[];
-    for (final task in items) {
-      if (_truthy(task['done']) || _truthy(task['someday'])) continue;
-      final date = task['date'] is String ? task['date'] as String : '';
+    final open = [for (final task in items) if (!_truthy(task['done']) && !_truthy(task['someday'])) task];
+    String dateOf(Map<String, Object?> task) => task['date'] is String ? task['date'] as String : '';
+    final dueToday = [for (final task in open) if (dateOf(task).isEmpty || dateOf(task) == today) task];
+    final overdue = [
+      for (final (index, task) in open.indexed)
+        if (dateOf(task).isNotEmpty && dateOf(task).compareTo(today) < 0) (index, task),
+    ]..sort((a, b) {
+        final byDate = dateOf(a.$2).compareTo(dateOf(b.$2));
+        return byDate != 0 ? byDate : a.$1.compareTo(b.$1);
+      });
+    for (final task in dueToday) {
       final due = _minuteOf(task['dueTime']);
-      if (date == today && due != null) {
-        _add('task:${task['id']}:$today', day, _awake(due), _text(task['title']), 'Fällig um ${task['dueTime']}', 'tasks');
-      } else if (date.isEmpty || date == today) {
-        summary.add(_text(task['title']));
-      }
+      if (due != null) _add('task:${task['id']}:$today', day, _awake(due), _text(task['title']), 'Fällig um ${task['dueTime']}', 'tasks');
     }
-    if (summary.isEmpty) return;
-    _add('tasks:$today', day, prefs.morning, summary.length == 1 ? 'Heute fällig' : '${summary.length} Aufgaben heute fällig', summary.take(3).join(', '), 'tasks');
+    final morning = [for (final (_, task) in overdue) task, for (final task in dueToday) if (!_truthy(task['dueTime'])) task];
+    if (morning.isEmpty) return;
+    final count = '${morning.length} Aufgaben';
+    var title = morning.length == 1 ? 'Heute fällig' : '$count heute fällig';
+    if (overdue.length == morning.length) {
+      title = morning.length == 1 ? 'Überfällig' : '$count überfällig';
+    } else if (overdue.isNotEmpty) {
+      title = '$count für heute, ${overdue.length} davon überfällig';
+    }
+    _add('tasks:$today', day, prefs.morning, title, morning.take(3).map((task) => _text(task['title'])).join(', '), 'tasks');
   }
 }
 
