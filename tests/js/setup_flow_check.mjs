@@ -296,6 +296,33 @@ CASES["closing a step left half done keeps nothing of it"] = async () => {
   assert.deepEqual(storeWrites(page), ["PUT app-settings"]);
 };
 
+async function toDone(run) {
+  await answerSchool(run);
+  for (let index = 0; index < 6; index += 1) await run.next();
+  assert.equal(run.step(), "done");
+}
+
+CASES["the last step says reminders are on only when they are switched on"] = async () => {
+  const page = await boot({ store: { "app-settings": { notify: { enabled: false } } }, notification: "granted" });
+  page.flow.open({});
+  const run = driver(page);
+  await toDone(run);
+  assert.ok(run.stage().includes("Sind aus.") && run.stage().includes("data-setup-remind-on"), "a granted permission with reminders off offers to switch them on");
+  assert.ok(!run.stage().includes("Sind an."));
+  await run.fire("click", { target: run.control("[data-setup-remind-on]") });
+  assert.equal(page.core.storage.get("app-settings").notify.enabled, true);
+  const row = run.dialog.querySelector("#setupStage").querySelector("#setupRemind");
+  assert.ok(row.outerHTML.includes("Sind an.") && !row.outerHTML.includes("data-setup-remind-on"));
+};
+
+CASES["reminders switched on and allowed are reported as on"] = async () => {
+  const page = await boot({ store: { "app-settings": { notify: { enabled: true } } }, notification: "granted" });
+  page.flow.open({});
+  const run = driver(page);
+  await toDone(run);
+  assert.ok(run.stage().includes("Sind an.") && !run.stage().includes("data-setup-remind"));
+};
+
 const only = process.argv[2];
 if (only) {
   await CASES[only]();

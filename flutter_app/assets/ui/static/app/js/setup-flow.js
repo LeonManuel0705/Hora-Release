@@ -6,7 +6,7 @@ import {
   activeSubjectKeys, subject, hueVar, slug, teacherId, teacherLabel, weekType, WEEKDAYS, WEEKDAYS_SHORT, isoWeek, hm, BRAND,
 } from "./core.js";
 import { animates, travels, token } from "./motion.js";
-import { askPermission, switchRemindersOn } from "./reminders.js";
+import { askPermission, readPrefs, switchRemindersOn } from "./reminders.js";
 import { pageUrl } from "./shell.js";
 import * as plan from "./setup-data.js";
 
@@ -667,13 +667,30 @@ function reminderRow() {
       ? `<div class="setup-extra"><span class="setup-extra-icon">${icon("bell")}</span><p><b>Erinnerungen</b><small>Auf dem iPhone erinnert ${esc(BRAND)} nur vom Home-Bildschirm aus. In Safari auf Teilen tippen, dann „Zum Home-Bildschirm“.</small></p></div>`
       : "";
   }
-  const text = state === "granted"
-    ? "Sind an. Ich melde mich vor jeder Stunde und am Vortag eines Tests."
-    : state === "denied"
-      ? "Sind blockiert. Freigeben kannst du sie in den Einstellungen des Geräts oder Browsers."
-      : "Ich melde mich vor jeder Stunde und am Vortag eines Tests.";
-  const control = state === "default" ? `<button class="btn btn-quiet" type="button" data-setup-remind>${icon("bell")}Erlauben</button>` : state === "granted" ? `<span class="setup-extra-ok">${icon("circle-check")}</span>` : "";
-  return `<div class="setup-extra" id="setupRemind"><span class="setup-extra-icon">${icon("bell")}</span><p><b>Erinnerungen</b><small>${text}</small></p>${control}</div>`;
+  const what = "vor jeder Stunde und am Vortag eines Tests";
+  // The desktop app always reports the permission as granted, so only the saved switch tells whether reminders are on.
+  const on = state === "granted" && readPrefs().enabled;
+  const text = on
+    ? `Sind an. Ich melde mich ${what}.`
+    : state === "granted"
+      ? `Sind aus. Schalte sie ein, dann melde ich mich ${what}.`
+      : state === "denied"
+        ? "Sind blockiert. Freigeben kannst du sie in den Einstellungen des Geräts oder Browsers."
+        : `Ich melde mich ${what}.`;
+  const control = on
+    ? `<span class="setup-extra-ok">${icon("circle-check")}</span>`
+    : state === "granted"
+      ? `<button class="btn btn-quiet" type="button" data-setup-remind-on>${icon("bell")}Einschalten</button>`
+      : state === "default" ? `<button class="btn btn-quiet" type="button" data-setup-remind>${icon("bell")}Erlauben</button>` : "";
+  return `<div class="setup-extra" id="setupRemind" tabindex="-1"><span class="setup-extra-icon">${icon("bell")}</span><p><b>Erinnerungen</b><small>${text}</small></p>${control}</div>`;
+}
+
+function repaintReminder() {
+  const row = flow.stage.querySelector("#setupRemind");
+  if (!row) return;
+  const focused = row.contains(document.activeElement);
+  row.outerHTML = reminderRow();
+  if (focused) flow.stage.querySelector("#setupRemind")?.focus({ preventScroll: true });
 }
 
 function iservRow() {
@@ -814,10 +831,12 @@ function onClick(event) {
   if (goTo) return close({ to: pageUrl("settings", goTo.dataset.setupGo) });
   if (target.closest("[data-setup-remind]")) {
     switchRemindersOn();
-    askPermission().then(() => {
-      const row = flow.stage.querySelector("#setupRemind");
-      if (row) row.outerHTML = reminderRow();
-    });
+    askPermission().then(repaintReminder);
+    return;
+  }
+  if (target.closest("[data-setup-remind-on]")) {
+    switchRemindersOn();
+    repaintReminder();
     return;
   }
   const pick = target.closest("[data-pick]");
