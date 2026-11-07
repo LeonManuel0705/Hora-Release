@@ -72,7 +72,7 @@ function sheetBody(id) {
     ${stepsHTML(raw(`steps.${id}`) || [])}
     <div class="ap-sheet-actions">
       <a class="ap-btn ap-sheet-primary" href="${p.href}" download data-sheet-get>${escapeHtml(t("install.get"))}</a>
-      <a class="ap-link" href="/download">${escapeHtml(t("start.get_all"))}${CHEVRON}</a>
+      <a class="ap-link" href="/download#${id}" data-sheet-close>${escapeHtml(t("start.get_all"))}${CHEVRON}</a>
     </div>
     ${alt}`;
 }
@@ -125,6 +125,7 @@ export function openSheet(id) {
       ${sheetBody(id)}
     </div>`;
   el.addEventListener("click", (event) => {
+    if (event.target.closest("a[data-sheet-close]")) return closeSheet({ instant: true });
     if (event.target === el || event.target.closest("[data-sheet-close]")) return closeSheet();
     if (event.target.closest("[data-sheet-get]")) setTimeout(() => el.isConnected && started(el), 0);
   });
