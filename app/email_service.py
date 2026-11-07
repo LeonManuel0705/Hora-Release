@@ -156,12 +156,12 @@ def save_email_config(config: Dict) -> bool:
 
 def add_email_account(email: str, password: str, provider: str) -> Dict:
     if provider not in PROVIDER_SETTINGS:
-        return {"success": False, "error": "Unsupported provider"}
+        return {"success": False, "error": "Unsupported provider", "code": "provider"}
 
     if provider == "iserv":
         settings = get_iserv_settings(email)
         if not settings:
-            return {"success": False, "error": "Invalid email address for IServ"}
+            return {"success": False, "error": "Invalid email address for IServ", "code": "address"}
     else:
         settings = PROVIDER_SETTINGS[provider]
 
@@ -172,15 +172,17 @@ def add_email_account(email: str, password: str, provider: str) -> Dict:
         imap.logout()
     except imaplib.IMAP4.error as e:
         error_msg = str(e)
+        if "Application-specific password required" in error_msg:
+            return {"success": False, "error": "This account needs an app password.", "code": "app_password"}
         if "AUTHENTICATIONFAILED" in error_msg or "Invalid credentials" in error_msg:
             if provider == "gmail":
-                return {"success": False, "error": "Authentication failed. For Gmail, you need to use an App Password. Go to Google Account > Security > 2-Step Verification > App Passwords."}
-            return {"success": False, "error": "Authentication failed. Check your email and password."}
+                return {"success": False, "error": "Authentication failed. For Gmail, you need to use an App Password. Go to Google Account > Security > 2-Step Verification > App Passwords.", "code": "login"}
+            return {"success": False, "error": "Authentication failed. Check your email and password.", "code": "login"}
         logging.error(f"Email IMAP error: {error_msg}")
-        return {"success": False, "error": "Connection failed"}
+        return {"success": False, "error": "Connection failed", "code": "refused"}
     except Exception as e:
         logging.error(f"Email connection error: {e}")
-        return {"success": False, "error": "Connection failed"}
+        return {"success": False, "error": "Connection failed", "code": "unreachable"}
 
     config = load_email_config()
     existing = next((a for a in config["accounts"] if a["email"] == email), None)

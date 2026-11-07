@@ -59,6 +59,15 @@ def test_no_new_page_links_into_the_classic_interface(client, path):
     assert 'data-page="training"' not in html and 'data-page="review"' not in html
 
 
+def test_the_new_scripts_send_nobody_to_a_classic_page():
+    offenders = []
+    for path in (ROOT / "app" / "static" / "app" / "js").rglob("*.js"):
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(r"/hub/(klassisch|training|review)\b", line):
+                offenders.append(f"{path.relative_to(ROOT)}:{number}")
+    assert not offenders
+
+
 def test_the_phone_bundle_carries_the_bookmarks_page():
     page = (ROOT / "flutter_app" / "assets" / "ui" / "pages" / "bookmarks.html").read_text(encoding="utf-8")
     assert 'data-page-module="bookmarks"' in page
