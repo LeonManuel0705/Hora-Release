@@ -327,6 +327,12 @@ class NotificationService {
     await _flnPlugin.cancel(id);
   }
 
+  Future<Set<int>> pendingIds() async {
+    if (!_isAndroid) return {};
+    if (!_initialized) await initialize();
+    return {for (final request in await _flnPlugin.pendingNotificationRequests()) request.id};
+  }
+
 
   Future<Map<String, int>> getAuthorizationStatus() async {
     if (!_isMacOS) return {};

@@ -43,6 +43,10 @@ class AndroidDevice {
 
   static Future<bool> requestLocation() async => await _call<bool>('requestLocation') ?? false;
 
+  /// Null where the channel is missing, as in a WorkManager isolate, so nothing counts as present.
+  static Future<Set<int>?> missingAlarms(List<int> ids) async =>
+      (await _call<List<Object?>>('missingAlarms', {'ids': ids}))?.whereType<int>().toSet();
+
   /// The name the page offered and the extension decide the type, and only kinds the app
   /// itself writes are saved.
   static (String, String)? fileFor(String offered) {

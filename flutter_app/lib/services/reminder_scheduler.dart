@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../web_ui/ui_data.dart';
 import '../web_ui/ui_db.dart';
 import '../web_ui/ui_reminders.dart';
+import 'android_device.dart';
 import 'notification_service.dart';
 
 abstract class ReminderAlarms {
@@ -17,6 +18,12 @@ abstract class ReminderAlarms {
   Future<bool> exact();
   Future<void> schedule(int id, UiReminder reminder, {required bool exact});
   Future<void> cancel(int id);
+
+  /// The ones among [ids] the system no longer holds, after a force stop or a reboot.
+  Future<Set<int>> missing(List<int> ids);
+
+  /// Every reminder the notification plugin keeps planned, also those another isolate set.
+  Future<Set<int>> pending();
 }
 
 typedef ReminderSource = Future<List<UiReminder>> Function(DateTime now);
@@ -43,6 +50,12 @@ class _DeviceAlarms implements ReminderAlarms {
 
   @override
   Future<void> cancel(int id) => _service.cancel(id);
+
+  @override
+  Future<Set<int>> missing(List<int> ids) async => await AndroidDevice.missingAlarms(ids) ?? ids.toSet();
+
+  @override
+  Future<Set<int>> pending() => _service.pendingIds();
 }
 
 class _Planned {
@@ -78,7 +91,7 @@ class ReminderScheduler {
   final Duration patience;
   final ReminderSource _source;
   final DateTime Function() _clock;
-  Future<void>? _running;
+  Future<bool>? _running;
   bool _again = false;
   bool _againWhole = false;
   bool _dirty = false;
@@ -120,7 +133,8 @@ class ReminderScheduler {
     _caughtUp ??= Completer<void>();
   }
 
-  Future<void> reschedule({bool whole = false}) {
+  /// Completes with false when a step failed, so a background run asks WorkManager to retry.
+  Future<bool> reschedule({bool whole = false}) {
     final running = _running;
     if (running != null) {
       _again = true;
@@ -130,15 +144,17 @@ class ReminderScheduler {
     return _running = _run(whole).whenComplete(() => _running = null);
   }
 
-  Future<void> _run(bool whole) async {
+  Future<bool> _run(bool whole) async {
     var next = whole;
+    var done = true;
     do {
       _again = false;
       _dirty = false;
       try {
-        await _sync(next);
+        done = await _sync(next);
       } catch (error) {
         if (kDebugMode) print('ReminderScheduler: $error');
+        done = false;
       }
       next = _againWhole;
       _againWhole = false;
@@ -147,24 +163,29 @@ class ReminderScheduler {
       _caughtUp?.complete();
       _caughtUp = null;
     }
+    return done;
   }
 
-  Future<Map<String, _Planned>> _registry(SharedPreferences prefs) async {
-    await prefs.reload();
-    final raw = prefs.getString(registryKey);
-    if (raw == null) return {};
+  static (int, Map<String, _Planned>) _decode(String? raw) {
+    if (raw == null) return (0, {});
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! Map) return {};
+      final items = decoded is Map ? decoded['items'] : null;
+      if (items is! Map) return (0, {});
       final result = <String, _Planned>{};
-      decoded.forEach((key, value) {
+      items.forEach((key, value) {
         final planned = _Planned.fromJson(value);
         if (key is String && planned != null) result[key] = planned;
       });
-      return result;
+      return (decoded['rev'] is int ? decoded['rev'] as int : 0, result);
     } on FormatException {
-      return {};
+      return (0, {});
     }
+  }
+
+  Future<(int, Map<String, _Planned>)> _registry(SharedPreferences prefs) async {
+    await prefs.reload();
+    return _decode(prefs.getString(registryKey));
   }
 
   Future<bool> _quietly(Future<void> Function() action) async {
@@ -177,14 +198,31 @@ class ReminderScheduler {
     }
   }
 
-  Future<void> _sync(bool whole) async {
+  Future<bool> _sync(bool whole) async {
     final prefs = await SharedPreferences.getInstance();
-    final known = await _registry(prefs);
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final (rev, known) = await _registry(prefs);
+      final result = await _apply(prefs, known, whole);
+      if (result == null) return true;
+      final (done, next, everything, now) = result;
+      final (latest, _) = await _registry(prefs);
+      if (latest != rev) continue;
+      await prefs.setString(registryKey, jsonEncode({
+        'rev': rev + 1,
+        'items': {for (final entry in next.entries) entry.key: entry.value.toJson()},
+      }));
+      if (everything) await prefs.setInt(wholeKey, now.millisecondsSinceEpoch);
+      return done;
+    }
+    return false;
+  }
+
+  Future<(bool, Map<String, _Planned>, bool, DateTime)?> _apply(SharedPreferences prefs, Map<String, _Planned> known, bool whole) async {
     final now = _clock();
     final last = prefs.getInt(wholeKey);
     final everything = whole || last == null || now.difference(DateTime.fromMillisecondsSinceEpoch(last)) > wholeEvery;
     final allowed = await alarms.allowed();
-    if (!allowed && known.isEmpty) return;
+    if (!allowed && known.isEmpty) return null;
     final soonest = now.add(lead);
     final plan = [
       if (allowed)
@@ -194,25 +232,37 @@ class ReminderScheduler {
     final wanted = {for (final reminder in plan) reminder.key: reminder};
     final ids = idsFor(wanted.keys);
     final exact = plan.isNotEmpty && await alarms.exact();
+    bool unchanged(String key, _Planned? before) =>
+        before != null && before.at.isAfter(now) && before.id == ids[key] && before.fingerprint == wanted[key]!.fingerprint;
+    final kept = [for (final key in wanted.keys) if (unchanged(key, known[key])) known[key]!.id];
+    final lost = everything && kept.isNotEmpty ? await alarms.missing(kept) : const <int>{};
+    var done = true;
     final next = <String, _Planned>{};
     for (final MapEntry(:key, value: entry) in known.entries) {
       if (!entry.at.isAfter(soonest)) {
         if (now.difference(entry.at) < keep) next[key] = entry;
       } else if (!wanted.containsKey(key) || ids[key] != entry.id) {
-        await _quietly(() => alarms.cancel(entry.id));
+        done &= await _quietly(() => alarms.cancel(entry.id));
       }
     }
     for (final reminder in plan) {
       final id = ids[reminder.key]!;
       final before = known[reminder.key];
-      if (!everything && before != null && before.at.isAfter(now) && before.id == id && before.fingerprint == reminder.fingerprint) {
-        next[reminder.key] = before;
+      if (unchanged(reminder.key, before) && !lost.contains(id)) {
+        next[reminder.key] = before!;
       } else if (await _quietly(() => alarms.schedule(id, reminder, exact: exact))) {
         next[reminder.key] = _Planned(id, reminder.at, reminder.fingerprint);
+      } else {
+        done = false;
       }
     }
-    await prefs.setString(registryKey, jsonEncode({for (final entry in next.entries) entry.key: entry.value.toJson()}));
-    if (everything) await prefs.setInt(wholeKey, now.millisecondsSinceEpoch);
+    if (everything) {
+      final planned = {for (final entry in next.values) entry.id};
+      for (final id in await alarms.pending()) {
+        if (id >= firstId && !planned.contains(id)) done &= await _quietly(() => alarms.cancel(id));
+      }
+    }
+    return (done, next, everything, now);
   }
 
   Future<bool> covers(String key) async {
@@ -220,7 +270,8 @@ class ReminderScheduler {
     if (caughtUp != null) await caughtUp.future.timeout(patience, onTimeout: () {});
     final running = _running;
     if (running != null) await running;
-    final entry = (await _registry(await SharedPreferences.getInstance()))[key];
+    final (_, known) = await _registry(await SharedPreferences.getInstance());
+    final entry = known[key];
     return entry != null && _clock().difference(entry.at) < keep;
   }
 }

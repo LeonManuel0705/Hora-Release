@@ -3,6 +3,7 @@ package com.leon.nexus
 import android.Manifest
 import android.app.ActivityManager
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -20,6 +21,7 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.view.WindowManager
 import androidx.core.content.FileProvider
+import com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -88,6 +90,10 @@ class MainActivity: FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "requestLocation" -> requestLocation(result)
+                "missingAlarms" -> {
+                    val ids = call.argument<List<Int>>("ids") ?: emptyList()
+                    result.success(ids.filter { !alarmPlanned(it) })
+                }
                 "saveDownload" -> {
                     val name = call.argument<String>("name")
                     val type = call.argument<String>("type")
@@ -128,6 +134,13 @@ class MainActivity: FlutterActivity() {
         val waiting = locationResult ?: return
         locationResult = null
         waiting.success(grantResults.any { it == PackageManager.PERMISSION_GRANTED })
+    }
+
+    // flutter_local_notifications keys the alarm of a reminder by its id and its receiver; a
+    // force stop or a reboot removes that PendingIntent together with the alarm.
+    private fun alarmPlanned(id: Int): Boolean {
+        val intent = Intent(this, ScheduledNotificationReceiver::class.java)
+        return PendingIntent.getBroadcast(this, id, intent, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE) != null
     }
 
     private fun locationGranted(): Boolean =

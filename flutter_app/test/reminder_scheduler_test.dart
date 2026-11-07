@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:app/services/reminder_scheduler.dart';
@@ -19,7 +20,15 @@ class _Alarms implements ReminderAlarms {
   bool precise = true;
   final scheduled = <int, (UiReminder, bool)>{};
   final log = <String>[];
+  final gone = <int>{};
+  final strays = <int>{};
   String? failing;
+
+  @override
+  Future<Set<int>> missing(List<int> ids) async => {for (final id in ids) if (gone.contains(id) || !scheduled.containsKey(id)) id};
+
+  @override
+  Future<Set<int>> pending() async => {...scheduled.keys, ...strays};
 
   @override
   Future<bool> allowed() async => permitted;
@@ -36,8 +45,9 @@ class _Alarms implements ReminderAlarms {
 
   @override
   Future<void> cancel(int id) async {
-    final gone = scheduled.remove(id);
-    log.add('cancel ${gone?.$1.key ?? id}');
+    strays.remove(id);
+    final removed = scheduled.remove(id);
+    log.add('cancel ${removed?.$1.key ?? id}');
   }
 }
 
@@ -136,9 +146,17 @@ void main() {
     expect(await scheduler.covers('lesson:2026-11-09:1'), isTrue);
   });
 
-  test('a whole run sets every alarm again, as after a reboot', () async {
+  test('a whole run sets again only the alarms the system lost, as after a force stop or a reboot', () async {
     await scheduler.reschedule();
     alarms.log.clear();
+    await scheduler.reschedule(whole: true);
+    expect(alarms.log, isEmpty, reason: 'nothing was lost, so a launch costs no alarm calls');
+    alarms.gone.add(ReminderScheduler.idFor('lesson:2026-11-09:2'));
+    await scheduler.reschedule(whole: true);
+    expect(alarms.log, ['schedule lesson:2026-11-09:2']);
+    alarms
+      ..gone.addAll(alarms.scheduled.keys)
+      ..log.clear();
     await scheduler.reschedule(whole: true);
     expect(alarms.log, hasLength(3));
     expect(alarms.log.every((line) => line.startsWith('schedule')), isTrue);
@@ -149,13 +167,23 @@ void main() {
     expect(alarms.log, ['schedule lesson:2026-11-10:1']);
   });
 
-  test('an alarm about to go off is left alone by a plan made seconds before', () async {
+  test('a whole run cancels planned alarms that no record knows of, as another run may leave them', () async {
     await scheduler.reschedule();
-    now = DateTime(2026, 11, 9, 7, 49, 45);
-    alarms.log.clear();
+    final stray = ReminderScheduler.idFor('lesson:2026-11-01:1');
+    alarms
+      ..strays.addAll([stray, 9999])
+      ..log.clear();
     await scheduler.reschedule();
-    expect(alarms.log, isEmpty);
-    expect(await scheduler.covers('lesson:2026-11-09:1'), isTrue);
+    expect(alarms.log, isEmpty, reason: 'only a whole run looks for strays');
+    await scheduler.reschedule(whole: true);
+    expect(alarms.log, ['cancel $stray'], reason: 'ids below the reminder range belong to other notices');
+  });
+
+  test('a failed step reports failure, so a background run is retried', () async {
+    alarms.failing = 'lesson:2026-11-09:2';
+    expect(await scheduler.reschedule(), isFalse);
+    alarms.failing = null;
+    expect(await scheduler.reschedule(), isTrue);
   });
 
   test('the page copy of a reminder is judged by the plan that follows a change', () async {
@@ -177,6 +205,38 @@ void main() {
     await brief.reschedule();
     brief.markChanged();
     expect(await brief.covers('lesson:2026-11-09:1'), isTrue);
+  });
+
+  test('two runs that share one record, as the app and a background task do, leave no alarm the record does not know', () async {
+    final older = List.of(plan);
+    plan = [_reminder('lesson:2026-11-09:2', DateTime(2026, 11, 9, 9, 40)), _reminder('event:loc-a:2026-11-09', DateTime(2026, 11, 9, 14, 45))];
+    final gate = Completer<void>();
+    final background = ReminderScheduler(
+      alarms: alarms,
+      clock: () => now,
+      source: (_) async {
+        await gate.future;
+        return older;
+      },
+    );
+    final slow = background.reschedule();
+    await scheduler.reschedule();
+    gate.complete();
+    await slow;
+    final record = jsonDecode((await SharedPreferences.getInstance()).getString(ReminderScheduler.registryKey)!) as Map;
+    final recorded = {for (final entry in (record['items'] as Map).values) (entry as List).first as int};
+    expect(alarms.scheduled.keys.toSet().difference(recorded), isEmpty, reason: 'the later run saw the record change and planned again');
+    await scheduler.reschedule(whole: true);
+    expect({for (final entry in alarms.scheduled.values) entry.$1.key}, {'lesson:2026-11-09:2', 'event:loc-a:2026-11-09'});
+  });
+
+  test('an alarm about to go off is left alone by a plan made seconds before', () async {
+    await scheduler.reschedule();
+    now = DateTime(2026, 11, 9, 7, 49, 45);
+    alarms.log.clear();
+    await scheduler.reschedule();
+    expect(alarms.log, isEmpty);
+    expect(await scheduler.covers('lesson:2026-11-09:1'), isTrue);
   });
 
   test('an alarm is exact only where the system allows it', () async {

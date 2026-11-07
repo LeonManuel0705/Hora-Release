@@ -85,8 +85,7 @@ void callbackDispatcher() {
           break;
         case kReminderPlanTask:
         case kReminderPlanPeriodic:
-          await ReminderScheduler.instance.reschedule(whole: true);
-          break;
+          return await ReminderScheduler.instance.reschedule(whole: true);
       }
       return true;
     } catch (e) {
