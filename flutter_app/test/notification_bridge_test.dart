@@ -4,6 +4,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:app/services/android_device.dart';
 import 'package:app/services/notification_service.dart';
 import 'package:app/web_ui/mobile_shell.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,5 +96,19 @@ void main() {
       expect(mobileStartScript(ios: false, insets: '', permission: state), contains('var permission = "$state";'));
     }
     expect(mobileStartScript(ios: true, insets: '', permission: 'default'), isNot(contains('createObjectURL')));
+  });
+
+  test('a download from the page is decoded both ways and only kinds the app writes are kept', () {
+    expect(downloadBytes({'data': base64Encode(utf8.encode('{"a":1}'))}), utf8.encode('{"a":1}'));
+    expect(downloadBytes({'url': 'data:text/plain,Hallo%20du'}), utf8.encode('Hallo du'));
+    expect(downloadBytes({'url': 'data:application/json;base64,${base64Encode(utf8.encode('[]'))}'}), utf8.encode('[]'));
+    expect(downloadBytes({'data': '***'}), isNull);
+    expect(downloadBytes(const {}), isNull);
+    expect(downloadTooLarge({'data': 'AAAA'}), isFalse);
+    expect(AndroidDevice.fileFor('sicherung-2026-11-07.json'), ('sicherung-2026-11-07.json', 'application/json'));
+    expect(AndroidDevice.fileFor('../../plan.ics'), ('plan.ics', 'text/calendar'));
+    expect(AndroidDevice.fileFor('app.apk'), isNull);
+    expect(const SavedFile('saved', 'a (1).json', folder: 'Download').toJson(), {'state': 'saved', 'name': 'a (1).json', 'folder': 'Download'});
+    expect(const SavedFile('failed', 'x.json', reason: 'too-large').toJson(), {'state': 'failed', 'name': 'x.json', 'folder': null, 'reason': 'too-large'});
   });
 }

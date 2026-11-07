@@ -34,8 +34,11 @@ class MainActivity: FlutterActivity() {
     private val ASSISTANT_MODEL_CHANNEL = "app/assistant_model"
     private val DEVICE_CHANNEL = "app/device"
     private val LOCATION_REQUEST = 4711
+    private val SAVE_REQUEST = 4712
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var locationResult: MethodChannel.Result? = null
+    private var saveResult: MethodChannel.Result? = null
+    private var saveBytes: ByteArray? = null
     private var previousInterruptionFilter: Int = NotificationManager.INTERRUPTION_FILTER_ALL
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -98,7 +101,7 @@ class MainActivity: FlutterActivity() {
                     val name = call.argument<String>("name")
                     val type = call.argument<String>("type")
                     val bytes = call.argument<ByteArray>("bytes")
-                    result.success(if (name == null || type == null || bytes == null) null else saveDownload(name, type, bytes))
+                    if (name == null || type == null || bytes == null) result.success(mapOf("state" to "failed")) else saveDownload(name, type, bytes, result)
                 }
                 "canInstall" -> result.success(canInstallPackages())
                 "allowInstall" -> result.success(openInstallSettings())
@@ -160,7 +163,9 @@ class MainActivity: FlutterActivity() {
         requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), LOCATION_REQUEST)
     }
 
-    private fun saveDownload(name: String, type: String, bytes: ByteArray): Map<String, Any>? {
+    // Android 10 and later save into Downloads without asking. Older ones need a storage
+    // permission for that, so the system's own "save as" picks the place there.
+    private fun saveDownload(name: String, type: String, bytes: ByteArray, result: MethodChannel.Result) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
@@ -168,30 +173,58 @@ class MainActivity: FlutterActivity() {
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
-            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
-            return try {
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            if (uri == null) {
+                result.success(mapOf("state" to "failed", "name" to name))
+                return
+            }
+            try {
                 contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: throw IOException("no stream")
                 contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-                mapOf("name" to (displayName(uri) ?: name), "folder" to Environment.DIRECTORY_DOWNLOADS)
+                result.success(mapOf("state" to "saved", "name" to (displayName(uri) ?: name), "folder" to Environment.DIRECTORY_DOWNLOADS))
             } catch (e: Exception) {
                 contentResolver.delete(uri, null, null)
-                null
+                result.success(mapOf("state" to "failed", "name" to name))
             }
+            return
         }
-        return try {
-            val folder = File(cacheDir, "shared").apply { mkdirs() }
-            val file = File(folder, name)
-            file.writeBytes(bytes)
-            val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
-            val send = Intent(Intent.ACTION_SEND)
-                .setType(type)
-                .putExtra(Intent.EXTRA_STREAM, uri)
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            startActivity(Intent.createChooser(send, null))
-            mapOf("name" to name, "shared" to true)
+        if (saveResult != null) {
+            result.success(mapOf("state" to "failed", "name" to name))
+            return
+        }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType(type)
+            .putExtra(Intent.EXTRA_TITLE, name)
+        saveResult = result
+        saveBytes = bytes
+        try {
+            startActivityForResult(intent, SAVE_REQUEST)
         } catch (e: Exception) {
-            null
+            saveResult = null
+            saveBytes = null
+            result.success(mapOf("state" to "failed", "name" to name))
         }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != SAVE_REQUEST) return
+        val waiting = saveResult ?: return
+        val bytes = saveBytes
+        saveResult = null
+        saveBytes = null
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null || bytes == null) {
+            waiting.success(mapOf("state" to "cancelled"))
+            return
+        }
+        val written = try {
+            contentResolver.openOutputStream(uri)?.use { it.write(bytes) } != null
+        } catch (e: Exception) {
+            false
+        }
+        waiting.success(if (written) mapOf("state" to "saved", "name" to (displayName(uri) ?: "")) else mapOf("state" to "failed"))
     }
 
     private fun displayName(uri: Uri): String? =

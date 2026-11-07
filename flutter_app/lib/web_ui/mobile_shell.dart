@@ -68,7 +68,9 @@ String mobileStartScript({required bool ios, required String insets, required St
 
 // The WebView saves no downloads, and blob: addresses are out of reach of fetch under the
 // page's CSP, so the page's blobs are kept by address and handed over when a link saves one.
+// The page learns what became of the file from an "app:download" event.
 const _downloadScript = '''
+  var limit = ${Downloads.maxBytes};
   var blobs = new Map();
   var create = URL.createObjectURL;
   var revoke = URL.revokeObjectURL;
@@ -81,13 +83,29 @@ const _downloadScript = '''
     blobs.delete(url);
     return revoke.call(URL, url);
   };
+  function tell(detail) {
+    window.dispatchEvent(new CustomEvent("app:download", { detail: detail }));
+  }
+  function failed(name, reason) {
+    tell({ state: "failed", name: name, folder: null, reason: reason || null });
+  }
+  function hand(message) {
+    bridge("saveFile", message).then(function (result) {
+      if (result && result.state) tell(result);
+      else failed(message.name);
+    }, function () { failed(message.name); });
+  }
   function save(name, blob) {
+    if (blob.size > limit) {
+      failed(name, "too-large");
+      return;
+    }
     var reader = new FileReader();
     reader.onload = function () {
       var text = String(reader.result || "");
-      bridge("saveFile", { name: name, data: text.slice(text.indexOf(",") + 1) });
+      hand({ name: name, data: text.slice(text.indexOf(",") + 1) });
     };
-    reader.onerror = function () { bridge("saveFile", { name: name }); };
+    reader.onerror = function () { failed(name); };
     reader.readAsDataURL(blob);
   }
   document.addEventListener("click", function (event) {
@@ -100,9 +118,33 @@ const _downloadScript = '''
       save(name, blobs.get(href));
     } else if (href.indexOf("data:") === 0) {
       event.preventDefault();
-      bridge("saveFile", { name: name, url: href });
+      if (href.length > limit * 4 / 3 + 4096) failed(name, "too-large");
+      else hand({ name: name, url: href });
     }
   }, true);''';
+
+const _downloadText = (Downloads.maxBytes + 2) ~/ 3 * 4;
+
+/// The bytes the page hands over for a download, or null when they are missing, broken or larger
+/// than a download may be.
+Uint8List? downloadBytes(Map<Object?, Object?> value) {
+  final data = value['data'], address = value['url'];
+  try {
+    if (data is String) return data.length <= _downloadText ? base64Decode(data) : null;
+    if (address is String && address.length <= _downloadText + 4096) {
+      final bytes = UriData.parse(address).contentAsBytes();
+      return bytes.length <= Downloads.maxBytes ? bytes : null;
+    }
+  } on FormatException {
+    return null;
+  }
+  return null;
+}
+
+bool downloadTooLarge(Map<Object?, Object?> value) {
+  final data = value['data'], address = value['url'];
+  return (data is String && data.length > _downloadText) || (address is String && address.length > _downloadText + 4096);
+}
 
 class MobileShell extends StatefulWidget {
   const MobileShell({super.key});
@@ -224,29 +266,11 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     );
   }
 
-  Future<Map<String, Object?>?> _saveFile(Map<Object?, Object?> value) async {
-    Uint8List? bytes;
-    final data = value['data'], address = value['url'];
-    try {
-      if (data is String && data.length <= (Downloads.maxBytes + 2) ~/ 3 * 4) {
-        bytes = base64Decode(data);
-      } else if (address is String) {
-        bytes = UriData.parse(address).contentAsBytes();
-      }
-    } on FormatException {
-      bytes = null;
-    }
-    final saved = bytes == null ? null : await AndroidDevice.saveDownload('${value['name'] ?? ''}', bytes);
-    if (saved == null) {
-      if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
-          content: Text('Die Datei ließ sich nicht speichern.'),
-          behavior: SnackBarBehavior.floating,
-        ));
-      }
-      return null;
-    }
-    return {'name': saved.name, 'folder': saved.folder};
+  Future<Map<String, Object?>> _saveFile(Map<Object?, Object?> value) async {
+    final name = '${value['name'] ?? ''}';
+    final bytes = downloadBytes(value);
+    if (bytes == null) return SavedFile('failed', name, reason: downloadTooLarge(value) ? 'too-large' : null).toJson();
+    return (await AndroidDevice.saveDownload(name, bytes)).toJson();
   }
 
   @override

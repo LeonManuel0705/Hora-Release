@@ -3,5 +3,4 @@
 <!-- SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -->
 <paths>
     <cache-path name="updates" path="updates/" />
-    <cache-path name="shared" path="shared/" />
 </paths>

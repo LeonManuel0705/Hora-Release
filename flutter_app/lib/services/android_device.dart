@@ -6,12 +6,17 @@ import 'package:flutter/services.dart';
 
 import 'downloads.dart';
 
+/// What became of a file the page saved: [state] is 'saved', 'cancelled' or 'failed', [name]
+/// the name it got (Android may add " (1)"), [folder] the folder when Android chose it.
 class SavedFile {
-  const SavedFile({required this.name, this.folder, this.shared = false});
+  const SavedFile(this.state, this.name, {this.folder, this.reason});
 
+  final String state;
   final String name;
   final String? folder;
-  final bool shared;
+  final String? reason;
+
+  Map<String, Object?> toJson() => {'state': state, 'name': name, 'folder': folder, if (reason != null) 'reason': reason};
 }
 
 class AndroidDevice {
@@ -56,13 +61,14 @@ class AndroidDevice {
     return type == null ? null : (name, type);
   }
 
-  static Future<SavedFile?> saveDownload(String offered, Uint8List bytes) async {
+  static Future<SavedFile> saveDownload(String offered, Uint8List bytes) async {
     final file = fileFor(offered);
-    if (file == null || bytes.length > Downloads.maxBytes) return null;
-    final saved = await _call<Map<Object?, Object?>>('saveDownload', {'name': file.$1, 'type': file.$2, 'bytes': bytes});
-    final name = saved?['name'];
-    if (name is! String) return null;
-    return SavedFile(name: name, folder: saved?['folder'] as String?, shared: saved?['shared'] == true);
+    if (file == null) return SavedFile('failed', Downloads.safeName(offered), reason: 'type');
+    if (bytes.length > Downloads.maxBytes) return SavedFile('failed', file.$1, reason: 'too-large');
+    final answer = await _call<Map<Object?, Object?>>('saveDownload', {'name': file.$1, 'type': file.$2, 'bytes': bytes});
+    final state = answer?['state'], name = answer?['name'], folder = answer?['folder'];
+    if (state != 'saved' && state != 'cancelled') return SavedFile('failed', file.$1);
+    return SavedFile(state as String, name is String && name.isNotEmpty ? name : file.$1, folder: folder is String ? folder : null);
   }
 
   static Future<bool> canInstall() async => await _call<bool>('canInstall') ?? false;
