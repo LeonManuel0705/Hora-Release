@@ -35,7 +35,7 @@ def _weekday_to_db_day(weekday):
     if weekday >= 5:
         return None
     return weekday + 1
-OLLAMA_BASE = 'http://localhost:11434'
+OLLAMA_BASE = 'http://127.0.0.1:11434'
 
 # Ollama model blob paths (auto-detected)
 OLLAMA_BLOBS = Path.home() / '.ollama' / 'models' / 'blobs'
@@ -315,9 +315,16 @@ def set_claude_api_key(key):
 
 # ---- Backend Detection ----
 
-def check_ollama_status():
+# Windows takes about two seconds to refuse a connection, even on this machine, while a running Ollama accepts at once.
+OLLAMA_PROBE_TIMEOUT = (0.15, 2)
+OLLAMA_STATUS_TTL = 15
+_ollama_status = {'at': None, 'value': None}
+_ollama_lock = threading.Lock()
+
+
+def _probe_ollama():
     try:
-        resp = http_requests.get(f'{OLLAMA_BASE}/api/tags', timeout=2)
+        resp = http_requests.get(f'{OLLAMA_BASE}/api/tags', timeout=OLLAMA_PROBE_TIMEOUT)
         if resp.ok:
             data = resp.json()
             models = data.get('models', [])
@@ -325,6 +332,18 @@ def check_ollama_status():
     except Exception:
         pass
     return {'available': False, 'models': []}
+
+
+def check_ollama_status():
+    """Whether Ollama runs here and which models it has, asked at most every few seconds: every page that needs it would wait otherwise."""
+    with _ollama_lock:
+        at, value = _ollama_status['at'], _ollama_status['value']
+    if at is not None and time.monotonic() - at < OLLAMA_STATUS_TTL:
+        return {'available': value['available'], 'models': list(value['models'])}
+    value = _probe_ollama()
+    with _ollama_lock:
+        _ollama_status.update(at=time.monotonic(), value=value)
+    return {'available': value['available'], 'models': list(value['models'])}
 
 
 def get_ollama_models():
