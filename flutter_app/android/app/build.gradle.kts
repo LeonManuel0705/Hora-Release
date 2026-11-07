@@ -74,4 +74,7 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    // ReminderReceiver enqueues the workmanager plugin's worker. The library is in the app
+    // already, this makes it visible to its own code. The version matches the plugin's.
+    implementation("androidx.work:work-runtime:2.9.0")
 }

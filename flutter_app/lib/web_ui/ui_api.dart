@@ -149,8 +149,11 @@ class UiApi {
     return UiReply.ok();
   }
 
+  static const _reminderKeys = {'app-settings', 'app-timetable-edits', 'app-block-times', 'app-ab-swap', 'app-subjects'};
+
   Future<void> _mirror(String key, Object? value) async {
     final prefs = await SharedPreferences.getInstance();
+    if (_reminderKeys.contains(key)) _changed('reminders');
     if (key == 'app-ab-weeks') {
       await prefs.setBool('ab_weeks_enabled', value != false);
       _changed('school');

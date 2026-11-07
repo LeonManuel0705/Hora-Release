@@ -370,6 +370,7 @@ class IServProvider extends ChangeNotifier {
         id: n.id.hashCode,
         title: n.title,
         body: n.message ?? 'Neue IServ-Benachrichtigung',
+        kind: NotificationKind.iserv,
       );
     }
   }

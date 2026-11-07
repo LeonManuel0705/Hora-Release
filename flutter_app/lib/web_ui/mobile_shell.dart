@@ -3,6 +3,7 @@
 
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -14,11 +15,53 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart' show buildClassicHome;
 import '../services/notification_service.dart';
+import '../services/reminder_scheduler.dart';
 import '../services/update_service.dart';
 import '../theme.dart';
 import 'ui_server.dart';
 import 'ui_shell.dart';
 import 'ui_weather.dart';
+
+String mobileStartScript({required bool ios, required String insets, required String permission}) => '''
+(function () {
+  var root = document.documentElement;
+  root.dataset.shell = "${ios ? 'ios' : 'android'}";
+  $insets
+  var permission = ${jsonEncode(permission)};
+  function bridge(name, value) {
+    if (!window.flutter_inappwebview || !window.flutter_inappwebview.callHandler) return Promise.resolve(null);
+    return window.flutter_inappwebview.callHandler(name, value);
+  }
+  function Reminder(title, options) {
+    var given = options || {};
+    bridge("notify", { title: String(title || ""), body: given.body ? String(given.body) : "", tag: given.tag ? String(given.tag) : "", silent: given.silent === true });
+  }
+  Object.defineProperty(Reminder, "permission", { get: function () { return permission; } });
+  Reminder.requestPermission = function (callback) {
+    return bridge("notifyPermission", true).then(function (value) {
+      permission = value || permission;
+      if (typeof callback === "function") callback(permission);
+      return permission;
+    });
+  };
+  window.Notification = Reminder;
+  window.addEventListener("app:notify-permission", function (event) {
+    if (event.detail) permission = String(event.detail);
+  });
+  function send() {
+    try {
+      if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+        window.flutter_inappwebview.callHandler("theme", root.dataset.theme || "light");
+      }
+    } catch (error) {}
+  }
+  var modern = !!(window.CSS && CSS.supports("color", "light-dark(#000, #fff)") && CSS.supports("selector(:has(a))") && "popover" in HTMLElement.prototype);
+  function check() { bridge("support", modern); }
+  new MutationObserver(send).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  window.addEventListener("flutterInAppWebViewPlatformReady", function () { send(); check(); });
+  document.addEventListener("DOMContentLoaded", function () { send(); check(); });
+})();
+''';
 
 class MobileShell extends StatefulWidget {
   const MobileShell({super.key});
@@ -79,41 +122,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
         'document.documentElement.style.setProperty("--safe-right","0px");';
   }
 
-  String get _startScript => '''
-(function () {
-  var root = document.documentElement;
-  root.dataset.shell = "${Platform.isIOS ? 'ios' : 'android'}";
-  ${_insetScript(_insets, _keyboard)}
-  var permission = "${NotificationService().permissionGranted ? 'granted' : 'default'}";
-  function bridge(name, value) {
-    if (!window.flutter_inappwebview || !window.flutter_inappwebview.callHandler) return Promise.resolve(null);
-    return window.flutter_inappwebview.callHandler(name, value);
-  }
-  function Reminder(title, options) {
-    bridge("notify", { title: String(title || ""), body: options && options.body ? String(options.body) : "" });
-  }
-  Object.defineProperty(Reminder, "permission", { get: function () { return permission; } });
-  Reminder.requestPermission = function () {
-    return bridge("notifyPermission", true).then(function (value) {
-      permission = value || permission;
-      return permission;
-    });
-  };
-  window.Notification = Reminder;
-  function send() {
-    try {
-      if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-        window.flutter_inappwebview.callHandler("theme", root.dataset.theme || "light");
-      }
-    } catch (error) {}
-  }
-  var modern = !!(window.CSS && CSS.supports("color", "light-dark(#000, #fff)") && CSS.supports("selector(:has(a))") && "popover" in HTMLElement.prototype);
-  function check() { bridge("support", modern); }
-  new MutationObserver(send).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
-  window.addEventListener("flutterInAppWebViewPlatformReady", function () { send(); check(); });
-  document.addEventListener("DOMContentLoaded", function () { send(); check(); });
-})();
-''';
+  String get _startScript => mobileStartScript(ios: Platform.isIOS, insets: _insetScript(_insets, _keyboard), permission: NotificationService().permission);
 
   UnmodifiableListView<UserScript> get _scripts => UnmodifiableListView([
         UserScript(source: _startScript, injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START),
@@ -127,10 +136,50 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     final controller = _controller;
     if (controller == null) return;
     try {
-      await controller.removeAllUserScripts();
-      await controller.addUserScripts(userScripts: _scripts.toList());
+      await _renewScripts(controller);
       await controller.evaluateJavascript(source: _insetScript(insets, keyboard));
     } catch (_) {}
+  }
+
+  Future<void> _renewScripts(InAppWebViewController controller) async {
+    await controller.removeAllUserScripts();
+    await controller.addUserScripts(userScripts: _scripts.toList());
+  }
+
+  Future<void> _permissionChanged(String state) async {
+    final controller = _controller;
+    if (controller != null) {
+      try {
+        await _renewScripts(controller);
+        await controller.evaluateJavascript(source: 'window.dispatchEvent(new CustomEvent("app:notify-permission", { detail: ${jsonEncode(state)} }));');
+      } catch (_) {}
+    }
+    await ReminderScheduler.instance.reschedule();
+  }
+
+  Future<String> _askPermission() async {
+    final service = NotificationService();
+    await service.initialize();
+    final before = await service.refreshPermission();
+    if (before != 'default') return before;
+    await service.requestPermissions();
+    final after = service.permission;
+    if (after != before) unawaited(_permissionChanged(after));
+    return after;
+  }
+
+  Future<bool> _notify(Map<Object?, Object?> value) async {
+    final title = '${value['title'] ?? ''}'.trim();
+    if (title.isEmpty) return false;
+    final tag = '${value['tag'] ?? ''}';
+    if (tag.isNotEmpty && Platform.isAndroid && await ReminderScheduler.instance.covers(tag)) return true;
+    return NotificationService().showNotification(
+      id: tag.isEmpty ? DateTime.now().millisecondsSinceEpoch & 0x7fffffff : ReminderScheduler.idFor(tag),
+      title: title,
+      body: '${value['body'] ?? ''}',
+      kind: NotificationKind.reminders,
+      silent: value['silent'] == true,
+    );
   }
 
   @override
@@ -173,6 +222,13 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     final port = _server.port;
     final alive = await _server.ensureAlive();
     unawaited(UiWeather.instance.refresh());
+    final service = NotificationService();
+    final known = service.permission;
+    if (await service.refreshPermission() != known) {
+      unawaited(_permissionChanged(service.permission));
+    } else if (Platform.isAndroid) {
+      unawaited(ReminderScheduler.instance.reschedule());
+    }
     final controller = _controller;
     if (controller == null || !mounted) return;
     if (!alive && _server.port != port) {
@@ -247,6 +303,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     _setupRunning = true;
     await welcomeOrHolidays();
     if (!mounted) return;
+    if (Platform.isAndroid) unawaited(ReminderScheduler.instance.reschedule());
     unawaited(_checkForUpdates());
   }
 
@@ -331,28 +388,10 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
                     ),
                     onWebViewCreated: (controller) {
                       _controller = controller;
-                      controller.addJavaScriptHandler(
-                        handlerName: 'notifyPermission',
-                        callback: (args) async {
-                          final service = NotificationService();
-                          if (!service.isInitialized) await service.initialize();
-                          if (service.permissionGranted) return 'granted';
-                          final granted = await service.requestPermissions();
-                          return granted ? 'granted' : 'denied';
-                        },
-                      );
+                      controller.addJavaScriptHandler(handlerName: 'notifyPermission', callback: (args) => _askPermission());
                       controller.addJavaScriptHandler(
                         handlerName: 'notify',
-                        callback: (args) async {
-                          final value = args.isNotEmpty && args.first is Map ? args.first as Map : const {};
-                          final title = '${value['title'] ?? ''}'.trim();
-                          if (title.isEmpty) return false;
-                          return NotificationService().showNotification(
-                            id: DateTime.now().millisecondsSinceEpoch & 0x7fffffff,
-                            title: title,
-                            body: '${value['body'] ?? ''}',
-                          );
-                        },
+                        callback: (args) => _notify(args.isNotEmpty && args.first is Map ? args.first as Map : const {}),
                       );
                       controller.addJavaScriptHandler(
                         handlerName: 'support',

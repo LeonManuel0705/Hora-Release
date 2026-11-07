@@ -20,6 +20,7 @@ import '../screens/review_screen.dart';
 import '../screens/training_screen.dart';
 import '../services/holiday_service.dart';
 import '../services/iserv_plan.dart';
+import '../services/reminder_scheduler.dart';
 import 'ui_api.dart';
 
 class UiNativePage {
@@ -189,6 +190,7 @@ mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost {
       if (areas.contains('tasks')) unawaited(provider.loadTasks());
       if (areas.contains('events')) unawaited(provider.loadEvents());
       if (areas.contains('school')) unawaited(provider.loadLessons());
+      if (!kIsWeb) unawaited(ReminderScheduler.instance.reschedule());
     });
   }
 }
