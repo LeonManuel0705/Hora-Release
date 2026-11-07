@@ -14,6 +14,7 @@ import copy
 import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -846,8 +847,9 @@ def view(item):
     }
     if last and last > day:
         result['endDate'] = last
+    color = str(item.get('color') or item.get('calendar_color') or '')
     result.update(
-        color=str(item.get('color') or item.get('calendar_color') or ''),
+        color=color if re.fullmatch(r'#[0-9a-fA-F]{6}', color) else '',
         calendarName=str(item.get('calendar') or ''),
         htmlLink=str(item.get('html_link') or ''),
         meetLink=str(item.get('meet_link') or ''),

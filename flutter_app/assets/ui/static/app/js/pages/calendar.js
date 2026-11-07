@@ -104,7 +104,7 @@ const holidaysOn = (iso) => holidays.filter((item) => covers(item, iso));
 const lessonsOn = (date) => (holidaysOn(isoDate(date)).length ? [] : lessonsFor(date));
 const visibleEvents = () => state.shown.filter((item) => !state.loading || !item.synced);
 const eventsAt = (iso) => visibleEvents().filter((item) => covers(item, iso));
-const colorOf = (item) => (item.synced && item.color ? item.color : kindVar(item.kind));
+const colorOf = (item) => (item.synced && /^#[0-9a-f]{6}$/i.test(item.color || "") ? item.color : kindVar(item.kind));
 const editable = (item) => !item.synced || item.editable === true;
 const spanDays = (item) => (item.endDate && item.endDate > item.date ? dayDiff(parseDate(item.date), item.endDate) : 0);
 const overnight = (item) => !!item.start && spanDays(item) > 0;
@@ -376,7 +376,7 @@ function chipHtml(entry, isos) {
   const when = item.start ? timeText(item) : "ganztägig";
   const tip = state.narrow ? "" : ` data-tip="${esc(`<b>${esc(item.title)}</b><br>${esc(when)}${item.place ? `, ${esc(item.place)}` : ""}`)}"`;
   const lead = item.start && entry.from === item.date ? `<span class="ev-time">${hm(item.start)}</span>` : "";
-  return `<button type="button" class="cw-chip is-event${past}${selected}" style="grid-column:${column};--k:${colorOf(item)}" data-id="${esc(item.id)}" data-key="chip:${esc(item.id)}" data-flip="chip:${esc(item.id)}"${tip} ${order} aria-label="${esc(`${item.title}, ${when}${item.place ? `, ${item.place}` : ""}`)}">${lead}<span class="cw-chip-text" data-title-of="${esc(item.series || item.id)}">${esc(item.title)}</span></button>`;
+  return `<button type="button" class="cw-chip is-event${past}${selected}" style="grid-column:${column};--k:${esc(colorOf(item))}" data-id="${esc(item.id)}" data-key="chip:${esc(item.id)}" data-flip="chip:${esc(item.id)}"${tip} ${order} aria-label="${esc(`${item.title}, ${when}${item.place ? `, ${item.place}` : ""}`)}">${lead}<span class="cw-chip-text" data-title-of="${esc(item.series || item.id)}">${esc(item.title)}</span></button>`;
 }
 
 function allDayEntries(isos) {
@@ -408,7 +408,7 @@ function dayHead(date) {
 function dotsFor(iso, limit) {
   const dots = [
     ...dueAt(iso).map((item) => `<i class="cal-dot${item.date < todayIso() || isAssessment(item) ? " is-urgent" : ""}" style="--k:${hueVar(item.subject)}"></i>`),
-    ...eventsAt(iso).sort((a, b) => (a.start || "").localeCompare(b.start || "")).map((item) => `<i class="cal-dot is-event" style="--k:${colorOf(item)}"></i>`),
+    ...eventsAt(iso).sort((a, b) => (a.start || "").localeCompare(b.start || "")).map((item) => `<i class="cal-dot is-event" style="--k:${esc(colorOf(item))}"></i>`),
   ];
   return dots.slice(0, limit).join("");
 }
@@ -437,7 +437,7 @@ function eventCard(entry, pos, len) {
   const part = head ? "" : `:${iso}`;
   const movable = editable(item) && !state.loading;
   const classes = ["ev", isPast(item) ? "is-past" : "", fit, entry.indent ? "is-stacked" : "", head ? "" : "is-continued", tail ? "" : "is-continuing", state.selected === item.id ? "is-selected" : ""].filter(Boolean).join(" ");
-  return `<button type="button" class="${classes}" data-id="${esc(item.id)}" data-key="ev:${esc(item.id)}${part}" data-flip="ev:${esc(item.id)}${part}" data-order="${iso}|1|${hhmm(s)}"${movable ? " data-movable" : ""} style="--top:${pos(s)};--len:${len(s, e)};--lane:${entry.lane};--lanes:${entry.lanes};--indent:${entry.indent};--k:${colorOf(item)}"${tip} aria-label="${esc(label)}">
+  return `<button type="button" class="${classes}" data-id="${esc(item.id)}" data-key="ev:${esc(item.id)}${part}" data-flip="ev:${esc(item.id)}${part}" data-order="${iso}|1|${hhmm(s)}"${movable ? " data-movable" : ""} style="--top:${pos(s)};--len:${len(s, e)};--lane:${entry.lane};--lanes:${entry.lanes};--indent:${entry.indent};--k:${esc(colorOf(item))}"${tip} aria-label="${esc(label)}">
     <span class="ev-title" data-title-of="${esc(item.series || item.id)}">${esc(item.title)}</span><span class="ev-time">${detail}</span>${place}${movable && head && tail && !state.narrow ? `<span class="ev-grip" data-grip aria-hidden="true"></span>` : ""}
   </button>`;
 }
@@ -602,7 +602,7 @@ function monthItemHtml({ type, item }, iso, { wrap = false, focusable = false } 
   const bar = !item.start || longTimed(item);
   const clock = item.start && !longTimed(item) ? (item.date === iso ? hm(item.start) : item.end ? `bis ${hm(item.end)}` : "") : "";
   const tip = `<b>${esc(item.title)}</b><br>${esc(timeText(item))}${item.place ? `, ${esc(item.place)}` : ""}`;
-  return `<button type="button" class="cm-item is-event${bar ? " is-bar" : ""}${wrapped}${isPast(item) ? " is-past" : ""}${state.selected === item.id ? " is-selected" : ""}" data-item="${esc(item.id)}"${tab} data-flip="cm:${esc(item.id)}:${iso}" data-tip="${esc(tip)}" style="--k:${colorOf(item)}" aria-label="${esc(`${item.title}, ${timeText(item)}`)}"><span class="cm-line">${bar ? "" : '<i class="cal-dot"></i>'}${clock ? `<span class="cm-time">${clock}</span> ` : ""}<span class="cm-text" data-title-of="${esc(item.series || item.id)}">${esc(item.title)}</span></span></button>`;
+  return `<button type="button" class="cm-item is-event${bar ? " is-bar" : ""}${wrapped}${isPast(item) ? " is-past" : ""}${state.selected === item.id ? " is-selected" : ""}" data-item="${esc(item.id)}"${tab} data-flip="cm:${esc(item.id)}:${iso}" data-tip="${esc(tip)}" style="--k:${esc(colorOf(item))}" aria-label="${esc(`${item.title}, ${timeText(item)}`)}"><span class="cm-line">${bar ? "" : '<i class="cal-dot"></i>'}${clock ? `<span class="cm-time">${clock}</span> ` : ""}<span class="cm-text" data-title-of="${esc(item.series || item.id)}">${esc(item.title)}</span></span></button>`;
 }
 
 function monthLabel(date, iso, items) {
@@ -732,10 +732,10 @@ function listRow({ type, item }, iso) {
       <span class="cl-main"><span class="cl-title">${isAssessment(item) ? icon(dueIcon(item)) : ""}<span class="cl-text">${esc(item.kind)}: ${esc(item.title)}</span></span><span class="cl-meta">${meta}</span></span>${icon("chevron-right", "chev-end")}
     </button></li>`;
   }
-  const meta = `<i class="cal-dot" style="--k:${colorOf(item)}"></i>${[sourceLabel(item), item.recurrence ? ruleText(item.recurrence) : "", item.place].filter(Boolean).map(esc).join(", ")}`;
+  const meta = `<i class="cal-dot" style="--k:${esc(colorOf(item))}"></i>${[sourceLabel(item), item.recurrence ? ruleText(item.recurrence) : "", item.place].filter(Boolean).map(esc).join(", ")}`;
   const later = item.start && !longTimed(item) && item.date !== iso;
   const times = !item.start || longTimed(item) ? `<small>${item.start ? esc(timeText(item)) : "ganztägig"}</small>` : later ? `<small>bis</small><b>${hm(item.end)}</b>` : `<b>${hm(item.start)}</b>${item.end ? `<small>${hm(item.end)}</small>` : ""}`;
-  return `<li><button type="button" class="cl-row is-event${isPast(item) ? " is-past" : ""}${selected}" ${base.replaceAll(`row:${esc(item.id)}"`, `row:${esc(item.id)}:${iso}"`)} style="--k:${colorOf(item)}">
+  return `<li><button type="button" class="cl-row is-event${isPast(item) ? " is-past" : ""}${selected}" ${base.replaceAll(`row:${esc(item.id)}"`, `row:${esc(item.id)}:${iso}"`)} style="--k:${esc(colorOf(item))}">
     <span class="cl-time">${times}</span>
     <span class="cl-main"><span class="cl-title" data-title-of="${esc(item.series || item.id)}">${esc(item.title)}</span><span class="cl-meta">${meta}</span></span>${icon("chevron-right", "chev-end")}
   </button></li>`;
@@ -772,7 +772,7 @@ function agendaItem({ type, item }, iso) {
     return `<li><button type="button" class="cal-agenda-item is-due${isAssessment(item) ? " is-test" : ""}${selected}" data-id="${esc(item.id)}" data-key="ag:${esc(item.id)}"><span class="cal-agenda-time">${block ? hm(block.start) : icon(dueIcon(item))}</span><span class="cal-agenda-main"><span class="cal-agenda-title">${esc(item.kind)} ${esc(subjectName(item.subject))}</span><span class="cal-agenda-meta">${esc(item.title)}</span></span></button></li>`;
   }
   const time = !item.start || longTimed(item) ? "ganztägig" : item.date === iso ? hm(item.start) : `bis ${hm(item.end)}`;
-  return `<li><button type="button" class="cal-agenda-item${isPast(item) ? " is-past" : ""}${selected}" data-id="${esc(item.id)}" data-key="ag:${esc(item.id)}" style="--k:${colorOf(item)}"><span class="cal-agenda-time">${time}</span><span class="cal-agenda-main"><span class="cal-agenda-title"><i class="cal-dot"></i><span data-title-of="${esc(item.series || item.id)}">${esc(item.title)}</span></span>${item.place ? `<span class="cal-agenda-meta">${esc(item.place)}</span>` : ""}</span></button></li>`;
+  return `<li><button type="button" class="cal-agenda-item${isPast(item) ? " is-past" : ""}${selected}" data-id="${esc(item.id)}" data-key="ag:${esc(item.id)}" style="--k:${esc(colorOf(item))}"><span class="cal-agenda-time">${time}</span><span class="cal-agenda-main"><span class="cal-agenda-title"><i class="cal-dot"></i><span data-title-of="${esc(item.series || item.id)}">${esc(item.title)}</span></span>${item.place ? `<span class="cal-agenda-meta">${esc(item.place)}</span>` : ""}</span></button></li>`;
 }
 
 function nextTest() {
@@ -890,7 +890,7 @@ function linksHtml(item) {
   return links.length ? `<div class="cal-links">${links.join("")}</div>` : "";
 }
 
-const calendarLine = (item) => (item.calendarName ? `<span class="cal-calendar"><i class="cal-dot" style="--k:${colorOf(item)}"></i>${esc(item.calendarName)}</span>` : "");
+const calendarLine = (item) => (item.calendarName ? `<span class="cal-calendar"><i class="cal-dot" style="--k:${esc(colorOf(item))}"></i>${esc(item.calendarName)}</span>` : "");
 
 function repeatHtml(item) {
   const rule = normalizeRecurrence(item.recurrence);
@@ -930,7 +930,7 @@ function panelEdit(item) {
   const draft = !!item.draft;
   const mark = own ? KINDS[item.kind].icon : "calendar-days";
   const series = own && (!item.series || state.scope === "all");
-  return `${panelHead("is-event", mark, item.title, { editable: true, deletable: !draft, draft, style: ` style="--k:${colorOf(item)}"` })}
+  return `${panelHead("is-event", mark, item.title, { editable: true, deletable: !draft, draft, style: ` style="--k:${esc(colorOf(item))}"` })}
     ${scopeHtml(item)}${confirmHtml(item)}
     <div class="panel-fields">
       <div class="field">
@@ -972,7 +972,7 @@ function panelRead(item) {
     item.notes ? ["Beschreibung", `<span class="cal-notes-text">${linked(plainText(item.notes))}</span>`] : null,
     item.reminderMinutes != null ? ["Erinnerung", esc(reminderText(item.reminderMinutes))] : null,
   ];
-  return `${panelHead("is-event", "calendar-days", item.title, { style: ` style="--k:${colorOf(item)}"` })}
+  return `${panelHead("is-event", "calendar-days", item.title, { style: ` style="--k:${esc(colorOf(item))}"` })}
     ${factsHtml(facts)}${guestsHtml(item)}${linksHtml(item)}
     <p class="panel-source">${icon("calendar-days")}${item.source === "IServ" ? "Aus IServ" : `Aus ${esc(item.source || "einem verbundenen Kalender")}${item.inSeries ? ", gehört zu einer Reihe" : ""}`}</p>`;
 }

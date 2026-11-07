@@ -182,3 +182,10 @@ def test_the_last_day_of_a_series_counts_only_days_that_exist():
     assert ui_data.series_last_day({'date': '2026-11-13', 'endDate': '2026-11-14', 'recurrence': {'freq': 'weekly', 'until': '2026-12-31'}}) == '2027-01-01'
     assert ui_data.series_last_day({'date': '2025-09-30', 'recurrence': {'freq': 'weekly'}}) is None
     assert ui_data.series_last_day({'date': '2025-09-30', 'endDate': '2025-10-02'}) == '2025-10-02'
+
+
+def test_a_colour_that_is_no_plain_hex_value_is_left_out():
+    base = {'id': 'x', 'calendar_id': 'cal', 'start_date': day(1), 'start_time': '10:00', 'end_date': day(1), 'end_time': '11:00', 'all_day': False}
+    for bad in ('red', '#fff', '#12345g', '#123456;background:url(x)', '"><b>x</b>'):
+        assert calendar_cache.view({**base, 'color': bad})['color'] == ''
+    assert calendar_cache.view({**base, 'color': '#33B679'})['color'] == '#33B679'

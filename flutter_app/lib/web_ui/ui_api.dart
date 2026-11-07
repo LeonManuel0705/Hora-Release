@@ -530,7 +530,7 @@ class UiApi {
         'notes': text(row['description'], 2000),
         'source': 'dem Google-Kalender',
         'synced': true,
-        'color': text(row['color']).isNotEmpty ? text(row['color']) : text(calendar?['color']),
+        'color': [text(row['color']), text(calendar?['color'])].firstWhere((color) => RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(color), orElse: () => ''),
         'calendarName': text(calendar?['name']),
       };
       if (last != null && last.compareTo(day) > 0) view['endDate'] = last;
