@@ -129,12 +129,13 @@ mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost, UiIse
   @override
   Future<void> disconnectIserv() => context.read<IServProvider>().disconnect();
 
-  /// The homework answer comes from its own fetch, which tells why nothing came. Messages and dates follow as before.
+  /// The homework answer comes from its own fetch, which tells why nothing came. Messages and dates follow as before,
+  /// also at a school without the homework module. Without an account, a login or a connection they would fail anyway.
   @override
   Future<String?> syncIserv() async {
     final provider = context.read<IServProvider>();
     final cause = await IServService().refreshExercises();
-    if (cause == null) await provider.syncData();
+    if (!const {'setup', 'login', 'offline'}.contains(cause)) await provider.syncData();
     return cause;
   }
 
