@@ -11,6 +11,7 @@ import '../brand.dart';
 import '../build_info.dart';
 import '../providers/app_provider.dart';
 import '../services/holiday_service.dart';
+import '../services/iserv_service.dart' show IServService;
 import 'ui_db.dart';
 import 'ui_transit.dart';
 import 'ui_weather.dart';
@@ -710,7 +711,8 @@ class UiData {
     final stamps = <String>[];
     if (connected) {
       parts['plan'] = await _newest('vertretungsplan_cache', 'fetched_at');
-      parts['homework'] = await _newest('iserv_exercises', 'cached_at');
+      final homework = [await _newest('iserv_exercises', 'cached_at'), minuteOf(prefs.getString(IServService.homeworkSyncedKey))].nonNulls.toList()..sort();
+      parts['homework'] = homework.isEmpty ? null : homework.last;
       stamps.addAll([
         ...parts.values.nonNulls,
         ...[await _newest('iserv_events', 'cached_at'), await _newest('iserv_notifications', 'cached_at')].nonNulls,

@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/iserv.dart';
 import 'database_service.dart';
@@ -211,6 +212,9 @@ class IServService {
 
   Future<void> disconnect() async {
     _dio = null;
+    try {
+      await (await SharedPreferences.getInstance()).remove(homeworkSyncedKey);
+    } catch (_) {}
     _cookieJar = null;
     _session = null;
     _signInCause = null;
@@ -521,12 +525,22 @@ class IServService {
       }
 
       await _cacheExercises(exercises);
+      await _noteHomeworkSynced();
 
       return exercises;
     } catch (e) {
 
       return getCachedExercises();
     }
+  }
+
+  /// When IServ last gave its homework list. An empty list leaves no row to tell the time by, so it is kept here.
+  static const homeworkSyncedKey = 'iserv_homework_synced';
+
+  Future<void> _noteHomeworkSynced() async {
+    try {
+      await (await SharedPreferences.getInstance()).setString(homeworkSyncedKey, DateTime.now().toIso8601String());
+    } catch (_) {}
   }
 
   static final _loginField = RegExp(r'''name=["']_(?:username|password)["']''');
@@ -561,6 +575,7 @@ class IServService {
         batch.insert('iserv_exercises', exercise.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
       }
       await batch.commit(noResult: true);
+      await _noteHomeworkSynced();
       return null;
     }
     return _signInCause ?? 'login';

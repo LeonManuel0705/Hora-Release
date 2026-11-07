@@ -3,6 +3,7 @@
 
 import 'dart:io';
 
+import 'package:app/services/iserv_service.dart';
 import 'package:app/web_ui/ui_api.dart';
 import 'package:app/web_ui/ui_data.dart';
 import 'package:app/web_ui/ui_db.dart';
@@ -88,6 +89,7 @@ void main() {
     for (final table in const ['iserv_credentials', 'iserv_exercises', 'iserv_events', 'iserv_notifications', 'vertretungsplan_cache']) {
       await db.delete(table);
     }
+    await (await SharedPreferences.getInstance()).remove(IServService.homeworkSyncedKey);
     if (account) {
       await db.insert('iserv_credentials', {'id': 1, 'username': 'ben.k', 'iserv_url': 'https://iserv.schule.de', 'credential_key': 'k', 'created_at': DateTime.now().toIso8601String()});
     }
@@ -122,6 +124,16 @@ void main() {
     expect(shown['iserv'], isTrue);
     expect(shown['synced'], {'iserv': '2026-11-06T09:15', 'google': null});
     expect(shown['iservParts'], {'plan': '2026-11-06T07:36', 'mail': null, 'homework': null});
+  });
+
+  test('an empty homework list from IServ still counts for the stand, which the newest copy can pass', () async {
+    final db = await clean(account: true);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(IServService.homeworkSyncedKey, '2026-11-06T08:05:31.000');
+    expect((await status(db))['iservParts'], {'plan': null, 'mail': null, 'homework': '2026-11-06T08:05'});
+    expect((await status(db))['synced'], {'iserv': '2026-11-06T08:05', 'google': null});
+    await db.insert('iserv_exercises', {'id': '41', 'title': 'Analysis Blatt 3', 'status': 'open', 'cached_at': '2026-11-06T09:40:00.000'});
+    expect(((await status(db))['iservParts'] as Map)['homework'], '2026-11-06T09:40');
   });
 
   test('fetching the homework now asks the phone host and lists what came', () async {
