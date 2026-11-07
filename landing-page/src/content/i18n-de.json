@@ -23,7 +23,15 @@
     "download": "{{BRAND_NAME}} laden",
     "about": "Über {{BRAND_NAME}}",
     "terms": "Nutzungsbedingungen · {{BRAND_NAME}}",
-    "privacy_policy": "Datenschutzerklärung · {{BRAND_NAME}}"
+    "privacy_policy": "Datenschutzerklärung · {{BRAND_NAME}}",
+    "desc": {
+      "features": "Was {{BRAND_NAME}} am Computer, auf Android und als Web-App auf dem iPhone kann, mit einer Tabelle für jede Funktion und jedes Gerät.",
+      "privacy": "Welche Verbindungen {{BRAND_NAME}} ins Netz aufbaut und wofür. Deine Daten bleiben auf deinem Gerät, einen {{BRAND_NAME}}-Server gibt es nicht.",
+      "download": "{{BRAND_NAME}} kostenlos für Mac, Windows, Linux und Android laden oder als Web-App auf dem iPhone öffnen, mit der Anleitung für jedes Gerät.",
+      "about": "{{BRAND_NAME}} ist ein Schülerprojekt aus Brandenburg. Warum es die App gibt und was du mit ihr machen darfst.",
+      "terms": "Die Nutzungsbedingungen von {{BRAND_NAME}}.",
+      "privacy_policy": "Die Datenschutzerklärung von {{BRAND_NAME}}."
+    }
   },
   "home_features": {
     "devices_all": "Computer, Android, iPhone",
@@ -74,11 +82,11 @@
         "icon": "building",
         "hue": "iris",
         "title": "IServ",
-        "text": "Melde dich einmal mit deinem IServ-Konto an. Nachrichten und Termine kommen dann von selbst, auf Android auch deine Aufgaben.",
+        "text": "Melde dich einmal mit deinem IServ-Konto an. Deine Aufgaben und den Vertretungsplan holt {{BRAND_NAME}} dann von selbst, am Computer auch deine IServ-Mails. Auf Android kommen Termine dazu, neue Nachrichten melden sich als Mitteilung.",
         "facts": [
-          "Nachrichten und Termine",
-          "Aufgaben auf Android",
-          "IServ-Mail am Computer"
+          "Aufgaben aus IServ",
+          "IServ-Mail am Computer",
+          "Termine auf Android"
         ],
         "devices": "desk_android"
       },
@@ -100,10 +108,10 @@
         "icon": "sun",
         "hue": "lake",
         "title": "Kalender",
-        "text": "Eigene Termine, Termine aus IServ und die Ferien und Feiertage aller 16 Bundesländer, ohne dass du sie abtippst.",
+        "text": "Eigene Termine und die Ferien und Feiertage aller 16 Bundesländer, ohne dass du sie abtippst. Auf Android kommen die Termine aus IServ dazu.",
         "facts": [
           "Ferien für 16 Bundesländer",
-          "IServ-Termine",
+          "IServ-Termine auf Android",
           "Eigene Termine"
         ],
         "devices": "all"
@@ -128,10 +136,20 @@
     "done_close": "Schließen",
     "luna_label": "Luna antippen, dann winkt sie"
   },
+  "install": {
+    "title": "{{BRAND_NAME}} für {platform}",
+    "get": "Jetzt laden",
+    "after": "Nach dem Laden",
+    "done": "Fertig",
+    "web_title": "{{BRAND_NAME}} auf dem {device}",
+    "web_lead": "Erinnerungen zeigt die Web-App nur, wenn sie auf dem Home-Bildschirm liegt.",
+    "choice_title": "{{BRAND_NAME}} für Android oder Linux",
+    "choice_lead": "Dein Browser meldet Linux. Das kann auch ein Android-Tablet in der Desktop-Ansicht sein."
+  },
   "platforms": {
     "macos": {
       "name": "macOS",
-      "note": "Braucht Python 3 (z. B. über die Xcode-Befehlszeilentools) und beim ersten Start Internet."
+      "note": "Auf Macs mit Apple Chip ohne Python. Intel-Macs brauchen Python 3 (z. B. über die Xcode-Befehlszeilentools) und beim ersten Start Internet."
     },
     "windows": {
       "name": "Windows",
@@ -162,6 +180,7 @@
     ],
     "macos_terminal": "Oder im Terminal einfügen, das Skript installiert die App nach /Applications:",
     "windows": [
+      "Warnt der Browser, dass die Datei selten heruntergeladen wird, „Beibehalten“ wählen.",
       "Die heruntergeladene Datei starten.",
       "Warnt Windows SmartScreen, auf „Weitere Informationen“ und „Trotzdem ausführen“ klicken.",
       "{{BRAND_NAME}} installiert sich ohne Adminrechte und startet danach von selbst."
@@ -175,8 +194,9 @@
       "{{BRAND_NAME}} meldet sich, sobald es ein Update gibt."
     ],
     "ios": [
-      "Den Link in Safari öffnen.",
-      "Teilen antippen, dann „Zum Home-Bildschirm“."
+      "Web-App in Safari öffnen.",
+      "Dort Teilen {share} antippen, dann „Zum Home-Bildschirm“.",
+      "{{BRAND_NAME}} ab jetzt über das neue Symbol starten und erst dort einrichten. Was du im Safari-Tab einträgst, kommt dort nicht mit."
     ],
     "web": [
       "Link öffnen, {{BRAND_NAME}} läuft direkt im Browser.",
@@ -239,7 +259,7 @@
             "note": "werden automatisch eingetragen",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           }
         ]
       },
@@ -256,14 +276,14 @@
           {
             "name": "Nachrichten und Termine",
             "note": "",
-            "d": "yes",
+            "d": "no",
             "a": "yes",
             "i": "no"
           },
           {
             "name": "Aufgaben aus IServ",
             "note": "",
-            "d": "no",
+            "d": "yes",
             "a": "yes",
             "i": "no"
           },
@@ -315,8 +335,8 @@
             "i": "yes"
           },
           {
-            "name": "E-Mail für IServ, Gmail und Outlook",
-            "note": "per IMAP, lesen, schreiben, antworten",
+            "name": "E-Mail für IServ, Gmail und andere IMAP-Postfächer",
+            "note": "lesen, schreiben, antworten. Outlook.com nimmt seit 2024 keine Anmeldung mit Passwort mehr an",
             "d": "yes",
             "a": "no",
             "i": "no"
@@ -335,38 +355,38 @@
         "rows": [
           {
             "name": "Verbindungen mit Echtzeit-Verspätungen und Gleis",
-            "note": "Android: Berlin und Brandenburg. Computer: deutschlandweit",
+            "note": "deutschlandweit über Transitous, Ticketpreise für Berlin und Brandenburg",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Abfahrtstafel für deine Haltestelle",
             "note": "",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Schulweg und Heimweg speichern",
             "note": "",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Eigene Tickets hinterlegen",
             "note": "",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Wetter",
             "note": "Daten von Open-Meteo",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           }
         ]
       },
@@ -403,9 +423,9 @@
           },
           {
             "name": "Benachrichtigungen",
-            "note": "Computer: Stunden und Fristen, solange {{BRAND_NAME}} offen ist. Android: IServ-Nachrichten und Updates. iPhone: vom Home-Bildschirm aus, solange {{BRAND_NAME}} offen ist",
+            "note": "Computer: Stunden und Fristen, solange {{BRAND_NAME}} offen ist. Android: auch bei geschlossener App, dazu neue IServ-Nachrichten. iPhone: vom Home-Bildschirm aus, solange {{BRAND_NAME}} offen ist",
             "d": "partial",
-            "a": "partial",
+            "a": "yes",
             "i": "partial"
           }
         ]
@@ -477,7 +497,7 @@
       }
     ],
     "flow_title": "Was ins Netz geht",
-    "flow_lede": "Jede Verbindung gehört zu einer Funktion. Benutzt du die Funktion nicht, geht auch nichts raus.",
+    "flow_lede": "Die meisten Verbindungen gehören zu einer Funktion, die du nutzt. Einige baut {{BRAND_NAME}} von selbst auf, zum Beispiel für die Frage nach Updates.",
     "flow": [
       {
         "icon": "building",
@@ -489,8 +509,8 @@
       {
         "icon": "bus",
         "to": "Fahrplan-Dienste",
-        "what": "Haltestellen, Adressen und Uhrzeit deiner Suche, mit gespeichertem Zuhause oder Schulort auch deren Lage. Geht an Transitous, für Ticketpreise in Berlin und Brandenburg an transport.rest, in den älteren Ansichten ebenfalls an transport.rest und für Preise an die Deutsche Bahn",
-        "when": "beim Öffnen des Fahrplans und beim Suchen",
+        "what": "Haltestellen, Adressen und Uhrzeit deiner Suche, mit gespeichertem Zuhause oder Schulort auch deren Lage, mit „In der Nähe“ dein Standort. Geht an Transitous, für Ticketpreise in Berlin und Brandenburg an transport.rest, in den älteren Ansichten ebenfalls an transport.rest und für Preise an die Deutsche Bahn",
+        "when": "beim Öffnen des Fahrplans, beim Suchen und rund ums Schulende von selbst, wenn Schule und Zuhause gespeichert sind",
         "tone": "ok"
       },
       {
@@ -539,7 +559,7 @@
         "icon": "terminal",
         "to": "PyPI",
         "what": "der Abruf der Python-Pakete, mit denen die App läuft",
-        "when": "Mac, beim ersten Start und nach Updates",
+        "when": "Intel-Mac, beim ersten Start und nach Updates",
         "tone": "ok"
       },
       {
@@ -550,17 +570,17 @@
         "tone": "ok"
       },
       {
-        "icon": "languages",
-        "to": "Google Fonts",
-        "what": "eine Schriftdatei, die der Browser von Googles Schriftserver lädt",
-        "when": "nur in der Web-App, beim Öffnen",
-        "tone": "warn"
-      },
-      {
         "icon": "globe",
         "to": "Die verlinkten Seiten",
         "what": "ein Abruf der Seite, um ihr Logo neben dem Lesezeichen zu zeigen",
         "when": "wenn du deine Lesezeichen öffnest",
+        "tone": "ok"
+      },
+      {
+        "icon": "download",
+        "to": "Diese Website oder GitHub",
+        "what": "der Abruf der neuen Version der App",
+        "when": "Android, wenn du „Aktualisieren“ antippst",
         "tone": "ok"
       },
       {
@@ -579,7 +599,7 @@
       }
     ],
     "lock_title": "Was verschlüsselt ist",
-    "lock_text": "Zugangsdaten für IServ und Mail speichert {{BRAND_NAME}} verschlüsselt. Am Computer mit Fernet und einem Schlüssel aus 600.000 PBKDF2-Runden, auf Android im verschlüsselten Speicher des Systems. Stundenplan, Aufgaben und Noten liegen unverschlüsselt, aber nur auf deinem Gerät.",
+    "lock_text": "Zugangsdaten für IServ und Mail speichert {{BRAND_NAME}} verschlüsselt, am Computer mit Fernet und einem Schlüssel aus 600.000 PBKDF2-Runden, auf Android im verschlüsselten Speicher des Systems. Am Computer verschlüsselt {{BRAND_NAME}} so auch Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Termine, Notizen, Mail-Entwürfe, gespeicherte Orte und den Verlauf mit Luna. Unverschlüsselt liegen dort der Stundenplan mit Fächern, Lehrkräften, Räumen und Zeiten, die Aufgabenliste, Training, Pomodoro-Statistik, Rückblicke, Lesezeichen, Tickets, der zwischengespeicherte Vertretungsplan und die Einstellungen mit Geburtstag und Wetterort, auf Android und in der Web-App alles außer den Zugangsdaten. Das alles bleibt auf deinem Gerät.",
     "lock_number": "600.000",
     "lock_number_label": "PBKDF2-Runden für deine Zugangsdaten am Computer",
     "no_title": "Was es nicht gibt",
@@ -607,6 +627,14 @@
         "a": "Nein. {{BRAND_NAME}} ist für dich kostenlos, und der Quellcode liegt offen auf GitHub. Bezahlte Funktionen und Abos gibt es nicht."
       },
       {
+        "q": "Muss ich meinen Stundenplan abtippen?",
+        "a": "Ja, einmal. Aus IServ oder WebUntis kann {{BRAND_NAME}} ihn nicht holen. Die Einrichtung in der App führt dich in ein paar Minuten durch, und hat jemand aus deinem Kurs den Plan schon eingetragen, kann er ihn dir schicken. Dann änderst du nur, was bei dir anders ist."
+      },
+      {
+        "q": "Ich habe schon IServ und WebUntis. Was bringt mir {{BRAND_NAME}}?",
+        "a": "IServ und WebUntis kennen jeweils nur ihren Teil. {{BRAND_NAME}} zeigt dir auf einem Bildschirm, welche Stunde als Nächstes kommt und in welchem Raum, und was bis zum nächsten Test noch zu tun ist. Ausfälle aus WebUntis kennt {{BRAND_NAME}} nicht, die siehst du weiter dort."
+      },
+      {
         "q": "Wie bekomme ich Updates?",
         "a": "Auf Android, dem Mac, unter Windows und Linux meldet sich {{BRAND_NAME}}, sobald es eine neue Version gibt. Die lädst du dann hier."
       },
@@ -616,7 +644,7 @@
       },
       {
         "q": "Kann ich meine Daten auf ein neues Gerät mitnehmen?",
-        "a": "Noch nicht. Es gibt keine Cloud und bisher keinen Export, deine Daten bleiben auf dem Gerät, auf dem du sie eingibst."
+        "a": "Ja, mit einer Sicherung. In den Einstellungen unter Daten sicherst du Stundenplan und Fächer, Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Aufgaben, Termine, Notizen, Orte und Einstellungen in einer Datei und liest sie auf dem neuen Gerät wieder ein. Training, Lesezeichen und die Anmeldungen bei IServ und Mail richtest du dort neu ein. Eine Cloud, die deine Geräte von selbst abgleicht, gibt es nicht."
       },
       {
         "q": "Gehört {{BRAND_NAME}} zu IServ?",
@@ -662,7 +690,8 @@
     "contact_button": "Mail schreiben",
     "code_button": "Code auf GitHub",
     "eyebrow": "Über {{BRAND_NAME}}",
-    "shot_alt": "{{BRAND_NAME}} auf dem Mac: die Übersicht um 7:12 Uhr mit Chemie in Raum B206."
+    "shot_alt": "{{BRAND_NAME}} auf dem Mac: die Übersicht um 7:12 Uhr mit Chemie in Raum B206.",
+    "shot_alt_phone": "{{BRAND_NAME}} auf dem iPhone: die Übersicht um 7:12 Uhr mit Chemie in Raum B206."
   },
   "legal": {
     "toc": "Inhalt",
@@ -681,21 +710,21 @@
   "terms": {
     "nav_title": "Nutzungsbedingungen",
     "hero_title": "Nutzungsbedingungen",
-    "hero_date": "Stand: 26. Februar 2026",
+    "hero_date": "Stand: 7. November 2026",
     "s1_title": "§ 1 Geltungsbereich",
-    "s1_p1": "Diese Nutzungsbedingungen gelten für die Nutzung der mobilen Anwendung „{{BRAND_NAME}}“ (nachfolgend „App“) sowie der zugehörigen Website {{BRAND_WEBSITE_HOST}} (nachfolgend „Website“), bereitgestellt von Leon Manuel Töpper (nachfolgend „Anbieter“).",
+    "s1_p1": "Diese Nutzungsbedingungen gelten für die Nutzung der Anwendung „{{BRAND_NAME}}“ für Computer (macOS, Windows, Linux) und Android sowie als Web-App (zusammen nachfolgend „App“) und der zugehörigen Website {{BRAND_WEBSITE_HOST}} (nachfolgend „Website“), bereitgestellt von Leon Manuel Töpper (nachfolgend „Anbieter“).",
     "s1_p2": "Mit der Installation und Nutzung der App erklärst du dich mit diesen Nutzungsbedingungen einverstanden. Wenn du mit diesen Bedingungen nicht einverstanden bist, nutze die App bitte nicht.",
     "s2_title": "§ 2 Leistungsbeschreibung",
-    "s2_p1": "{{BRAND_NAME}} ist eine kostenlose Produktivitäts-App für Schüler, Studenten und Berufstätige. Die App ermöglicht unter anderem die Verwaltung von Stundenplänen, Noten, Aufgaben, Gewohnheiten, Trainingsplänen und ÖPNV-Routen.",
-    "s2_p2": "Die App funktioniert offline-first: Alle Daten werden ausschließlich lokal auf deinem Gerät gespeichert. Es werden kein Benutzerkonto und keine Internetverbindung für die Kernfunktionen benötigt.",
+    "s2_p1": "{{BRAND_NAME}} ist eine kostenlose App für den Schulalltag. Die App ermöglicht unter anderem die Verwaltung von Stundenplänen, Noten, Aufgaben, Terminen, Trainingsplänen und ÖPNV-Routen.",
+    "s2_p2": "Die App funktioniert offline-first: Alle Daten werden ausschließlich lokal auf deinem Gerät gespeichert. Es wird kein Benutzerkonto benötigt, und die Apps für Computer und Android brauchen nach der Einrichtung keine Internetverbindung für die Kernfunktionen.",
     "s2_p3": "Der Anbieter behält sich das Recht vor, den Funktionsumfang der App jederzeit zu ändern, zu erweitern oder einzuschränken.",
     "s3_title": "§ 3 Nutzungsrechte",
-    "s3_p1": "Der Anbieter gewährt dir ein nicht-exklusives, nicht übertragbares, widerrufliches Recht zur Nutzung der App für persönliche, nicht-kommerzielle Zwecke.",
-    "s3_p2": "Es ist untersagt, die App zu dekompilieren, zurückzuentwickeln, zu modifizieren oder für kommerzielle Zwecke zu verwenden, sofern nicht ausdrücklich gesetzlich erlaubt.",
+    "s3_p1": "Der Quellcode der App steht unter der PolyForm Noncommercial License 1.0.0. Danach darfst du die App für jeden nicht-kommerziellen Zweck nutzen, verändern und weitergeben, auch als Schule oder andere Bildungseinrichtung.",
+    "s3_p2": "Eine kommerzielle Nutzung ist nur mit einer gesonderten Lizenz des Anbieters erlaubt. Im Übrigen gelten die vollständigen Lizenzbedingungen, die mit dem Quellcode veröffentlicht sind.",
     "s4_title": "§ 4 Geistiges Eigentum",
     "s4_p1": "Alle Rechte an der App, einschließlich Design, Code, Grafiken und Texte, liegen beim Anbieter. Die Marke „{{BRAND_NAME}}“ sowie das zugehörige Logo sind Eigentum des Anbieters.",
     "s5_title": "§ 5 Haftungsausschluss",
-    "s5_p1": "Die App wird ohne jegliche ausdrückliche oder stillschweigende Gewährleistung bereitgestellt. Der Anbieter übernimmt keinerlei Gewähr für die Richtigkeit, Vollständigkeit, Aktualität oder Zuverlässigkeit der in der App angezeigten Daten. Dies gilt insbesondere für ÖPNV-Fahrplandaten, Preisinformationen und sonstige Drittanbieterdaten (z. B. von VBB oder Deutsche Bahn), auf die der Anbieter keinen Einfluss hat.",
+    "s5_p1": "Die App wird ohne jegliche ausdrückliche oder stillschweigende Gewährleistung bereitgestellt. Der Anbieter übernimmt keinerlei Gewähr für die Richtigkeit, Vollständigkeit, Aktualität oder Zuverlässigkeit der in der App angezeigten Daten. Dies gilt insbesondere für ÖPNV-Fahrplandaten, Preisinformationen und sonstige Drittanbieterdaten (z. B. von Transitous oder Open-Meteo), auf die der Anbieter keinen Einfluss hat.",
     "s5_p2": "Der Anbieter haftet nicht für Schäden jeglicher Art, die aus der Nutzung oder Unmöglichkeit der Nutzung der App entstehen (einschließlich, aber nicht beschränkt auf direkte, indirekte, zufällige oder Folgeschäden, entgangenen Gewinn oder Datenverlust). Hiervon unberührt bleibt die Haftung für Schäden aus der Verletzung des Lebens, des Körpers oder der Gesundheit sowie die Haftung für Vorsatz und grobe Fahrlässigkeit gemäß den zwingenden gesetzlichen Vorschriften.",
     "s5_p3": "Der Anbieter übernimmt keine Garantie für die ununterbrochene, fehlerfreie oder sichere Verfügbarkeit der App. Die Nutzung erfolgt auf eigenes Risiko des Nutzers.",
     "s5_p4": "Da alle Daten ausschließlich lokal auf dem Gerät des Nutzers gespeichert werden, liegt die alleinige Verantwortung für die Sicherung und Wiederherstellung dieser Daten beim Nutzer. Der Anbieter haftet nicht für Datenverlust, gleich aus welchem Grund.",
@@ -713,21 +742,35 @@
   "privacy_policy": {
     "nav_title": "Datenschutzerklärung",
     "hero_title": "Datenschutzerklärung",
-    "hero_date": "Stand: 26. Februar 2026",
+    "hero_date": "Stand: 7. November 2026",
     "s1_title": "§ 1 Verantwortlicher",
     "s1_p1": "Verantwortlicher im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:",
     "s1_name": "Leon Manuel Töpper",
     "s1_email_label": "E-Mail:",
     "s2_title": "§ 2 Grundsatz",
-    "s2_p1": "{{BRAND_NAME}} wurde nach dem Prinzip „Local-First“ entwickelt. Das bedeutet: Alle Daten, die du in der App eingibst, werden ausschließlich lokal auf deinem Endgerät gespeichert. Es findet keine Übertragung an Server des Anbieters oder Dritter statt.",
-    "s2_p2": "Wir erheben, speichern oder verarbeiten keine personenbezogenen Daten über die App, es sei denn, du nutzt Funktionen, die eine Internetverbindung erfordern (z. B. ÖPNV-Echtzeitdaten).",
+    "s2_p1": "{{BRAND_NAME}} wurde nach dem Prinzip „Local-First“ entwickelt. Das bedeutet: Alle Daten, die du in der App eingibst, werden ausschließlich lokal auf deinem Endgerät gespeichert und nicht an Server des Anbieters übertragen. Dienste Dritter erhalten sie nur, wenn du eine Funktion nutzt, die sie braucht, etwa den Fahrplan oder das Wetter. Einige Anfragen stellt die App außerdem von selbst, zum Beispiel die Frage nach Updates. Welche Dienste das sind, steht in § 3.",
+    "s2_p2": "Wir erheben, speichern oder verarbeiten keine personenbezogenen Daten über die App, es sei denn, du nutzt Funktionen, die eine Internetverbindung erfordern (z. B. ÖPNV-Echtzeitdaten), oder die App stellt von selbst eine der in § 3 d) genannten Anfragen.",
     "s3_title": "§ 3 Datenverarbeitung in der App",
     "s3_sub1_title": "a) Lokal gespeicherte Daten",
-    "s3_sub1_p1": "Sämtliche von dir eingegebenen Daten (Stundenpläne, Noten, Aufgaben, Trainingsdaten, Notizen etc.) werden ausschließlich auf deinem Gerät in einer verschlüsselten lokalen Datenbank gespeichert. Der Anbieter hat zu keinem Zeitpunkt Zugriff auf diese Daten.",
+    "s3_sub1_p1": "Sämtliche von dir eingegebenen Daten (Stundenpläne, Noten, Aufgaben, Trainingsdaten, Notizen etc.) werden ausschließlich auf deinem Gerät gespeichert. Zugangsdaten, etwa für IServ und E-Mail, speichert die App verschlüsselt. In den Apps für Computer gilt das auch für Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Termine, Notizen, Mail-Entwürfe, gespeicherte Orte und den Verlauf des Assistenten. Unverschlüsselt in einer lokalen Datenbank liegen dort der Stundenplan mit Fächern, Lehrkräften, Räumen und Zeiten, die Aufgabenliste, Trainingsdaten, Pomodoro-Statistik, Rückblicke, Lesezeichen, Tickets und die Einstellungen, zu denen auch Geburtstag und Wetterort gehören. Auch der zwischengespeicherte Vertretungsplan liegt dort unverschlüsselt. Auf Android und in der Web-App liegen alle Daten außer den Zugangsdaten unverschlüsselt. Der Anbieter hat zu keinem Zeitpunkt Zugriff auf diese Daten.",
     "s3_sub2_title": "b) ÖPNV-Echtzeitdaten",
-    "s3_sub2_p1": "Wenn du die Echtzeit-Fahrplanfunktion nutzt, werden Anfragen an die öffentlichen Schnittstellen von VBB (Verkehrsverbund Berlin-Brandenburg) und Deutsche Bahn gesendet. Dabei werden ausschließlich die von dir eingegebenen Haltestellennamen oder Routeninformationen übermittelt. Persönliche Daten, Geräte-IDs oder Standortdaten werden nicht übermittelt.",
+    "s3_sub2_p1": "Wenn du die Fahrplanfunktion nutzt, sendet die App Anfragen an Transitous (api.transitous.org), für Ticketpreise in Berlin und Brandenburg an transport.rest (v6.vbb.transport.rest). Übermittelt werden die Haltestellen, Adressen und Uhrzeiten deiner Suche. Hast du dein Zuhause oder deine Schule als Ort gespeichert, geht für Verbindungen von dort oder dorthin auch deren Lage mit, und mit „In der Nähe“ dein aktueller Standort, wenn du ihn freigibst. In den älteren Ansichten der Computer-App gehen Anfragen außerdem an transport.rest und für Preise an die Deutsche Bahn. Geräte-IDs werden nicht übermittelt.",
+    "s3_sub2_p2": "Hast du deine Schule und dein Zuhause als Ort gespeichert, fragt die App außerdem von selbst bei Transitous die nächsten Verbindungen von der Schule nach Hause ab, wenn du zwischen 90 Minuten vor dem Ende deiner letzten Stunde und zwei Stunden danach eine Seite der App öffnest. Dabei geht die Lage beider Orte mit.",
     "s3_sub3_title": "c) Keine Telemetrie",
     "s3_sub3_p1": "{{BRAND_NAME}} enthält keine Analytics, kein Tracking, keine Crash-Reporter und keine Telemetrie. Es werden keinerlei Nutzungsstatistiken erhoben.",
+    "s3_sub4_title": "d) Weitere Dienste",
+    "s3_sub4_p1": "Die folgenden Dienste erreicht die App, wenn du die jeweilige Funktion nutzt. Die mit „von selbst“ gekennzeichneten Anfragen stellt sie ohne dein Zutun. Wie bei jeder Verbindung sieht der Dienst dabei deine IP-Adresse.",
+    "s3_list1": "IServ deiner Schule: dein Benutzername und Passwort zum Anmelden, danach die Abfragen für Mails, Vertretungsplan, Aufgaben, Termine und Nachrichten (nicht in der Web-App)",
+    "s3_list2": "Dein E-Mail-Anbieter: Zugangsdaten und Mails, direkt per IMAP und SMTP (Apps für Computer)",
+    "s3_list3": "Open-Meteo: der Ort, für den du das Wetter sehen willst, oder die Lage deines Zuhauses",
+    "s3_list4": "Ferien- und Feiertagsdienste (feiertage-api.de, schulferien-api.de, ferien-api.de, date.nager.at): dein Bundesland",
+    "s3_list5": "Wikipedia: der Begriff, nach dem du den Assistenten fragst",
+    "s3_list6": "Anthropic: deine Frage an den Assistenten und die Daten aus der App, die er zum Antworten braucht, nur wenn du einen eigenen Claude-Schlüssel einträgst (Apps für Computer)",
+    "s3_list7": "Hugging Face und GitHub: der Abruf des Sprachmodells für den Assistenten",
+    "s3_list8": "PyPI: der Abruf der Python-Pakete beim ersten Start der Mac-App auf Intel-Macs und nach Updates",
+    "s3_list9": "Diese Website: die Frage nach der neuesten Version, beim Start und danach alle zwei Stunden (von selbst, Apps für Computer und Android)",
+    "s3_list11": "Die Websites deiner Lesezeichen: ein Abruf der Seite, um ihr Logo neben dem Lesezeichen zu zeigen",
+    "s3_list12": "Diese Website oder GitHub: der Abruf der neuen Version der App, wenn du in der App „Aktualisieren“ antippst (Android)",
     "s4_title": "§ 4 Datenverarbeitung auf der Website",
     "s4_p1": "Beim Besuch unserer Website werden durch den Hosting-Anbieter automatisch technische Zugriffsdaten erfasst (sog. Server-Logfiles). Diese können umfassen:",
     "s4_list1": "IP-Adresse (anonymisiert)",
@@ -736,7 +779,7 @@
     "s4_list4": "Browsertyp und Betriebssystem",
     "s4_p2": "Diese Daten werden ausschließlich zur Sicherstellung des Betriebs und zur Abwehr von Missbrauch erhoben (Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, berechtigtes Interesse) und nach kurzer Zeit automatisch gelöscht. Eine Zuordnung zu einzelnen Personen findet nicht statt.",
     "s5_title": "§ 5 Cookies",
-    "s5_p1": "Die Website verwendet keine Tracking-Cookies und keine Analyse-Tools. Es werden ausschließlich technisch notwendige Cookies eingesetzt, sofern diese für die Funktionalität der Website erforderlich sind (z. B. Spracheinstellung).",
+    "s5_p1": "Die Website verwendet keine Cookies und keine Analyse-Tools. Deine Spracheinstellung speichert sie nur im Speicher deines Browsers (localStorage).",
     "s6_title": "§ 6 Deine Rechte",
     "s6_p1": "Da wir keine personenbezogenen Daten über die App erheben, gibt es in der Regel nichts, worüber wir Auskunft erteilen könnten. Solltest du dennoch Fragen haben, stehen dir gemäß DSGVO folgende Rechte zu:",
     "s6_list1": "Recht auf Auskunft (Art. 15 DSGVO)",
@@ -755,14 +798,17 @@
     "intro": "Das neue",
     "title": "{{BRAND_NAME}} 0.5",
     "lede": "Morgens die erste Stunde mit Raum, nachmittags die Hausaufgaben aus IServ.¹",
+    "lede_plain": "Morgens die erste Stunde mit Raum, abends alles, was morgen fällig ist.",
     "cta": "Kostenlos laden",
     "cta_web": "Web-App öffnen",
     "cta_generic": "{{BRAND_NAME}} laden",
     "cta_note": "Für {platform}, {size} MB. Auch für {others}.",
-    "cta_note_web": "Auf dem iPhone läuft {{BRAND_NAME}} als Web-App. Auch für Mac, Windows, Linux und Android.",
+    "cta_note_web": "Auf dem {device} läuft {{BRAND_NAME}} als Web-App. Auch für {others}.",
     "cta_note_generic": "Für Mac, Windows, Linux, Android und iPhone.",
+    "cta_note_choice": "Für {first} oder {second}. Auch für {others}.",
     "more": "Schultag ansehen",
     "hero_alt": "Die Übersicht von {{BRAND_NAME}} um 7:12 Uhr: Gleich Chemie in Raum B206, darunter die Aufgaben für heute und die nächsten Abgaben.",
+    "hero_alt_phone": "Die Übersicht von {{BRAND_NAME}} auf dem iPhone um 7:12 Uhr: Gleich Chemie in Raum B206, darunter die Aufgaben für heute.",
     "statement": "Bevor du morgens losgehst, weiß {{BRAND_NAME}} schon, in welchem Raum du sitzt und ob dein Bus pünktlich kommt.",
     "show_title": "Von der ersten Stunde bis zum Bus nach Hause",
     "steps": [
@@ -784,22 +830,25 @@
         "id": "plan",
         "label": "Stundenplan",
         "title": "A-Woche, B-Woche, Vertretungen",
-        "text": "Dein Stundenplan mit euren Blockzeiten. Den Vertretungsplan holt {{BRAND_NAME}} jeden Morgen aus IServ.",
-        "alt": "Der Stundenplan der A-Woche mit Fächern und Räumen, daneben der Vertretungsplan."
+        "text": "Dein Stundenplan mit euren Blockzeiten. Den Vertretungsplan holt {{BRAND_NAME}} jeden Morgen aus IServ.¹",
+        "alt": "Der Stundenplan der A-Woche mit Fächern und Räumen, daneben der Vertretungsplan.",
+        "alt_phone": "Der Stundenplan der A-Woche mit Fächern und Räumen, darunter der Vertretungsplan."
       },
       {
         "id": "bus",
         "label": "Fahrplan",
         "title": "Die 612 kommt in 6 Minuten",
         "text": "Live-Abfahrten an deiner Haltestelle, mit Verspätungen. Nexus kannte auf Android nur Berlin und Brandenburg, {{BRAND_NAME}} kennt ganz Deutschland.",
-        "alt": "Der Fahrplan: Schulweg mit Bus 612 um 7:18 und die nächsten Abfahrten an der Haltestelle."
+        "alt": "Der Fahrplan: Schulweg mit Bus 612 um 7:18 und die nächsten Abfahrten an der Haltestelle.",
+        "alt_phone": "Der Fahrplan: Schulweg mit Bus 612 um 7:18 und Heimweg mit Bus 612 um 7:15."
       },
       {
         "id": "noten",
         "label": "Noten",
         "title": "Für eine 12 fehlt dir noch eine 13",
         "text": "{{BRAND_NAME}} rechnet deinen Schnitt und sagt dir, welche Note du für dein Ziel brauchst. Leistungskurse zählen doppelt.",
-        "alt": "Die Noten: 11,3 Punkte im Schnitt und der Notenrechner mit dem Ergebnis 13 Punkte."
+        "alt": "Die Noten: 11,3 Punkte im Schnitt und der Notenrechner mit dem Ergebnis 13 Punkte.",
+        "alt_phone": "Der Notenrechner: Für einen Schnitt von 12,0 in Biologie LK brauchst du mindestens 13 Punkte."
       }
     ],
     "tile_luna_label": "Luna antippen, dann winkt sie",
@@ -1009,6 +1058,7 @@
     "free_text": "Von dir bekomme ich nichts, kein Geld und keine Daten. Ich baue {{BRAND_NAME}} aus Spaß und aus Überzeugung: Eine App für die Schule gehört nicht hinter eine Paywall, und deine Daten gehören weder Werbefirmen noch sonst jemandem. Sie gehören dir. Deshalb liegen sie nur auf deinem Gerät, und nicht einmal ich komme an sie heran.",
     "free_label": "Preis: 0 Euro",
     "footnote_iserv": "¹ IServ gibt es in den Apps für Mac, Windows, Linux und Android. Auf dem iPhone läuft {{BRAND_NAME}} als Web-App, dort geht IServ nicht.",
+    "footnote_iserv_web": "¹ IServ gibt es nur in den Apps für Mac, Windows, Linux und Android. In der Web-App auf deinem {device} geht IServ nicht, Hausaufgaben trägst du dort selbst ein.",
     "footnote_agent": "² Das Sprachmodell für den Assistenten lädt {{BRAND_NAME}} erst, wenn du ihn zum ersten Mal öffnest, etwa 3 GB."
   }
 }

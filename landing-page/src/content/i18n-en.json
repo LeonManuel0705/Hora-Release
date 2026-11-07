@@ -23,7 +23,15 @@
     "download": "Get {{BRAND_NAME}}",
     "about": "About {{BRAND_NAME}}",
     "terms": "Terms of Service · {{BRAND_NAME}}",
-    "privacy_policy": "Privacy Policy · {{BRAND_NAME}}"
+    "privacy_policy": "Privacy Policy · {{BRAND_NAME}}",
+    "desc": {
+      "features": "What {{BRAND_NAME}} does on the computer, on Android and as a web app on iPhone, with a table for every feature and device.",
+      "privacy": "Which connections {{BRAND_NAME}} makes and why. Your data stays on your device, and there is no {{BRAND_NAME}} server.",
+      "download": "Download {{BRAND_NAME}} for free for Mac, Windows, Linux and Android, or open it as a web app on iPhone, with instructions for every device.",
+      "about": "{{BRAND_NAME}} is a student project from Brandenburg. Why the app exists and what you may do with it.",
+      "terms": "The Terms of Service of {{BRAND_NAME}}.",
+      "privacy_policy": "The Privacy Policy of {{BRAND_NAME}}."
+    }
   },
   "home_features": {
     "devices_all": "Computer, Android, iPhone",
@@ -74,11 +82,11 @@
         "icon": "building",
         "hue": "iris",
         "title": "IServ",
-        "text": "Sign in once with your IServ account. Messages and events then arrive on their own, and on Android your assignments too.",
+        "text": "Sign in once with your IServ account. {{BRAND_NAME}} then fetches your assignments and the substitution plan on its own, and on the computer your IServ mail too. On Android, events come in as well, and new messages show up as notifications.",
         "facts": [
-          "Messages and events",
-          "Assignments on Android",
-          "IServ mail on the computer"
+          "Assignments from IServ",
+          "IServ mail on the computer",
+          "Events on Android"
         ],
         "devices": "desk_android"
       },
@@ -100,10 +108,10 @@
         "icon": "sun",
         "hue": "lake",
         "title": "Calendar",
-        "text": "Your own events, events from IServ and the school holidays and public holidays of all 16 German states, without typing them in.",
+        "text": "Your own events and the school holidays and public holidays of all 16 German states, without typing them in. On Android, events from IServ come in too.",
         "facts": [
           "Holidays for 16 states",
-          "IServ events",
+          "IServ events on Android",
           "Your own events"
         ],
         "devices": "all"
@@ -128,10 +136,20 @@
     "done_close": "Close",
     "luna_label": "Tap Luna and she waves"
   },
+  "install": {
+    "title": "{{BRAND_NAME}} for {platform}",
+    "get": "Download now",
+    "after": "After the download",
+    "done": "Done",
+    "web_title": "{{BRAND_NAME}} on {device}",
+    "web_lead": "The web app only shows reminders once it is on your Home Screen.",
+    "choice_title": "{{BRAND_NAME}} for Android or Linux",
+    "choice_lead": "Your browser reports Linux. That can also be an Android tablet in desktop view."
+  },
   "platforms": {
     "macos": {
       "name": "macOS",
-      "note": "Needs Python 3 (for example via the Xcode command line tools) and internet on first launch."
+      "note": "No Python needed on Macs with Apple silicon. Intel Macs need Python 3 (for example via the Xcode command line tools) and internet on first launch."
     },
     "windows": {
       "name": "Windows",
@@ -162,6 +180,7 @@
     ],
     "macos_terminal": "Or paste this into Terminal, the script installs the app into /Applications:",
     "windows": [
+      "If your browser warns that the file is rarely downloaded, choose “Keep”.",
       "Run the downloaded file.",
       "If Windows SmartScreen warns you, click “More info” and “Run anyway”.",
       "{{BRAND_NAME}} installs without admin rights and opens by itself."
@@ -175,8 +194,9 @@
       "{{BRAND_NAME}} tells you when an update is ready."
     ],
     "ios": [
-      "Open the link in Safari.",
-      "Tap Share, then “Add to Home Screen”."
+      "Open the web app in Safari.",
+      "There, tap Share {share}, then “Add to Home Screen”.",
+      "From now on, start {{BRAND_NAME}} from the new icon and set it up there. What you enter in the Safari tab doesn't carry over."
     ],
     "web": [
       "Open the link and {{BRAND_NAME}} runs right in your browser.",
@@ -239,7 +259,7 @@
             "note": "added automatically",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           }
         ]
       },
@@ -256,14 +276,14 @@
           {
             "name": "Messages and events",
             "note": "",
-            "d": "yes",
+            "d": "no",
             "a": "yes",
             "i": "no"
           },
           {
             "name": "Assignments from IServ",
             "note": "",
-            "d": "no",
+            "d": "yes",
             "a": "yes",
             "i": "no"
           },
@@ -315,8 +335,8 @@
             "i": "yes"
           },
           {
-            "name": "Email for IServ, Gmail and Outlook",
-            "note": "via IMAP: read, write, reply",
+            "name": "Email for IServ, Gmail and other IMAP mailboxes",
+            "note": "read, write, reply. Since 2024, Outlook.com no longer accepts sign-in with a password",
             "d": "yes",
             "a": "no",
             "i": "no"
@@ -335,38 +355,38 @@
         "rows": [
           {
             "name": "Connections with live delays and platforms",
-            "note": "Android: Berlin and Brandenburg. Computer: all of Germany",
+            "note": "all of Germany via Transitous, ticket prices for Berlin and Brandenburg",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Departure board for your stop",
             "note": "",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Save your way to school and home",
             "note": "",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Store your own tickets",
             "note": "",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Weather",
             "note": "data from Open-Meteo",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           }
         ]
       },
@@ -403,9 +423,9 @@
           },
           {
             "name": "Notifications",
-            "note": "Computer: lessons and deadlines while {{BRAND_NAME}} is open. Android: IServ messages and updates. iPhone: from the Home Screen while {{BRAND_NAME}} is open",
+            "note": "Computer: lessons and deadlines while {{BRAND_NAME}} is open. Android: even while the app is closed, plus new IServ messages. iPhone: from the Home Screen while {{BRAND_NAME}} is open",
             "d": "partial",
-            "a": "partial",
+            "a": "yes",
             "i": "partial"
           }
         ]
@@ -477,7 +497,7 @@
       }
     ],
     "flow_title": "What goes online",
-    "flow_lede": "Every connection belongs to a feature. If you don't use the feature, nothing goes out.",
+    "flow_lede": "Most connections belong to a feature you use. {{BRAND_NAME}} opens a few by itself, for example to check for updates.",
     "flow": [
       {
         "icon": "building",
@@ -489,8 +509,8 @@
       {
         "icon": "bus",
         "to": "Transit services",
-        "what": "stops, addresses and time of your search, with a saved home or school also where they are. Goes to Transitous, for ticket prices in Berlin and Brandenburg to transport.rest, in the older views also to transport.rest and, for fares, to Deutsche Bahn",
-        "when": "when you open the timetable and when searching",
+        "what": "stops, addresses and time of your search, with a saved home or school also where they are, with “In der Nähe” (nearby) your location. Goes to Transitous, for ticket prices in Berlin and Brandenburg to transport.rest, in the older views also to transport.rest and, for fares, to Deutsche Bahn",
+        "when": "when you open the timetable, when searching, and by itself around the end of school if your school and home are saved",
         "tone": "ok"
       },
       {
@@ -539,7 +559,7 @@
         "icon": "terminal",
         "to": "PyPI",
         "what": "the download of the Python packages the app runs on",
-        "when": "Mac, on first start and after updates",
+        "when": "Intel Mac, on first start and after updates",
         "tone": "ok"
       },
       {
@@ -550,17 +570,17 @@
         "tone": "ok"
       },
       {
-        "icon": "languages",
-        "to": "Google Fonts",
-        "what": "one font file the browser loads from Google's font server",
-        "when": "only in the web app, on opening",
-        "tone": "warn"
-      },
-      {
         "icon": "globe",
         "to": "The linked sites",
         "what": "a request to the page, to show its logo next to the bookmark",
         "when": "when you open your bookmarks",
+        "tone": "ok"
+      },
+      {
+        "icon": "download",
+        "to": "This website or GitHub",
+        "what": "the download of the new version of the app",
+        "when": "Android, when you tap “Aktualisieren” (update)",
         "tone": "ok"
       },
       {
@@ -579,7 +599,7 @@
       }
     ],
     "lock_title": "What is encrypted",
-    "lock_text": "{{BRAND_NAME}} stores your IServ and mail login details encrypted. On the computer with Fernet and a key from 600,000 PBKDF2 rounds, on Android in the system's encrypted storage. Timetable, tasks and grades are not encrypted, but they only exist on your device.",
+    "lock_text": "{{BRAND_NAME}} stores your IServ and mail login details encrypted, on the computer with Fernet and a key from 600,000 PBKDF2 rounds, on Android in the system's encrypted storage. On the computer, {{BRAND_NAME}} encrypts grades, homework, tests, exams, presentations, events, notes, mail drafts, saved places and your history with Luna the same way. Not encrypted there are the timetable with subjects, teachers, rooms and times, the task list, training, Pomodoro statistics, reviews, bookmarks, tickets, the cached substitution plan and the settings with your birthday and weather location, and on Android and in the web app everything except the login details. All of it stays on your device.",
     "lock_number": "600,000",
     "lock_number_label": "PBKDF2 rounds for your login details on the computer",
     "no_title": "What doesn't exist",
@@ -607,6 +627,14 @@
         "a": "No. {{BRAND_NAME}} is free for you, and its source code is public on GitHub. There are no paid features or subscriptions."
       },
       {
+        "q": "Do I have to type in my timetable?",
+        "a": "Yes, once. {{BRAND_NAME}} can't fetch it from IServ or WebUntis. The setup in the app walks you through it in a few minutes, and if someone in your course has already entered the plan, they can send it to you. Then you only change what's different for you."
+      },
+      {
+        "q": "I already have IServ and WebUntis. What does {{BRAND_NAME}} add?",
+        "a": "IServ and WebUntis each know only their own part. {{BRAND_NAME}} shows you on one screen which lesson is next and in which room, and what's left to do before your next test. {{BRAND_NAME}} doesn't know about cancellations in WebUntis, you still see those there."
+      },
+      {
         "q": "How do I get updates?",
         "a": "On Android, the Mac, Windows and Linux, {{BRAND_NAME}} tells you when a new version is out. You download it here."
       },
@@ -616,7 +644,7 @@
       },
       {
         "q": "Can I move my data to a new device?",
-        "a": "Not yet. There is no cloud and no export so far, your data stays on the device you enter it on."
+        "a": "Yes, with a backup. In the settings under Daten (data), you save your timetable and subjects, grades, homework, tests, exams, presentations, tasks, events, notes, places and settings to a file and read it in on the new device. You set up training, bookmarks and your IServ and mail logins there again. There is no cloud that keeps your devices in sync by itself."
       },
       {
         "q": "Is {{BRAND_NAME}} part of IServ?",
@@ -662,7 +690,8 @@
     "contact_button": "Write an email",
     "code_button": "Code on GitHub",
     "eyebrow": "About {{BRAND_NAME}}",
-    "shot_alt": "{{BRAND_NAME}} on a Mac (German): the overview at 7:12 with chemistry in room B206."
+    "shot_alt": "{{BRAND_NAME}} on a Mac (German): the overview at 7:12 with chemistry in room B206.",
+    "shot_alt_phone": "{{BRAND_NAME}} on iPhone (German): the overview at 7:12 with chemistry in room B206."
   },
   "legal": {
     "toc": "Contents",
@@ -681,21 +710,21 @@
   "terms": {
     "nav_title": "Terms of Service",
     "hero_title": "Terms of Service",
-    "hero_date": "Effective: February 26, 2026",
+    "hero_date": "Effective: November 7, 2026",
     "s1_title": "§ 1 Scope",
-    "s1_p1": "These Terms of Service apply to the use of the mobile application \"{{BRAND_NAME}}\" (hereinafter \"App\") and the associated website {{BRAND_WEBSITE_HOST}} (hereinafter \"Website\"), provided by Leon Manuel Töpper (hereinafter \"Provider\").",
+    "s1_p1": "These Terms of Service apply to the use of the application \"{{BRAND_NAME}}\" for computers (macOS, Windows, Linux) and Android and as a web app (together hereinafter \"App\") and the associated website {{BRAND_WEBSITE_HOST}} (hereinafter \"Website\"), provided by Leon Manuel Töpper (hereinafter \"Provider\").",
     "s1_p2": "By installing and using the App, you agree to these Terms of Service. If you do not agree with these terms, please do not use the App.",
     "s2_title": "§ 2 Description of Service",
-    "s2_p1": "{{BRAND_NAME}} is a free productivity app for students and professionals. The App enables, among other things, the management of timetables, grades, tasks, habits, training plans, and public transit routes.",
-    "s2_p2": "The App operates offline-first: All data is stored exclusively on your device. No user account or internet connection is required for core functionality.",
+    "s2_p1": "{{BRAND_NAME}} is a free app for school. The App enables, among other things, the management of timetables, grades, tasks, events, training plans, and public transit routes.",
+    "s2_p2": "The App operates offline-first: All data is stored exclusively on your device. No user account is required, and the apps for computers and Android need no internet connection for core functionality after setup.",
     "s2_p3": "The Provider reserves the right to change, expand, or limit the functionality of the App at any time.",
     "s3_title": "§ 3 Usage Rights",
-    "s3_p1": "The Provider grants you a non-exclusive, non-transferable, revocable right to use the App for personal, non-commercial purposes.",
-    "s3_p2": "It is prohibited to decompile, reverse-engineer, modify, or use the App for commercial purposes, unless expressly permitted by law.",
+    "s3_p1": "The source code of the App is licensed under the PolyForm Noncommercial License 1.0.0. Under it, you may use, modify and share the App for any noncommercial purpose, including as a school or other educational institution.",
+    "s3_p2": "Commercial use requires a separate licence from the Provider. In all other respects, the full licence terms published with the source code apply.",
     "s4_title": "§ 4 Intellectual Property",
     "s4_p1": "All rights to the App, including design, code, graphics, and text, belong to the Provider. The trademark \"{{BRAND_NAME}}\" and the associated logo are the property of the Provider.",
     "s5_title": "§ 5 Disclaimer of Liability",
-    "s5_p1": "The App is provided without any express or implied warranties of any kind. The Provider makes no warranties regarding the accuracy, completeness, timeliness, or reliability of any data displayed in the App. This applies in particular to public transit schedules, pricing information, and other third-party data (e.g., from VBB or Deutsche Bahn) over which the Provider has no control.",
+    "s5_p1": "The App is provided without any express or implied warranties of any kind. The Provider makes no warranties regarding the accuracy, completeness, timeliness, or reliability of any data displayed in the App. This applies in particular to public transit schedules, pricing information, and other third-party data (e.g., from Transitous or Open-Meteo) over which the Provider has no control.",
     "s5_p2": "The Provider shall not be liable for any damages of any kind arising from the use or inability to use the App (including but not limited to direct, indirect, incidental, or consequential damages, loss of profits, or loss of data). This does not affect liability for damages resulting from injury to life, body, or health, or liability for intent and gross negligence under mandatory statutory provisions.",
     "s5_p3": "The Provider makes no guarantee of uninterrupted, error-free, or secure availability of the App. Use of the App is at the user's own risk.",
     "s5_p4": "Since all data is stored exclusively on the user's device, the user bears sole responsibility for backing up and restoring their data. The Provider is not liable for data loss, regardless of the cause.",
@@ -713,21 +742,35 @@
   "privacy_policy": {
     "nav_title": "Privacy Policy",
     "hero_title": "Privacy Policy",
-    "hero_date": "Effective: February 26, 2026",
+    "hero_date": "Effective: November 7, 2026",
     "s1_title": "§ 1 Data Controller",
     "s1_p1": "The data controller within the meaning of the General Data Protection Regulation (GDPR) is:",
     "s1_name": "Leon Manuel Töpper",
     "s1_email_label": "Email:",
     "s2_title": "§ 2 Principle",
-    "s2_p1": "{{BRAND_NAME}} was built on a \"Local-First\" principle. This means: All data you enter in the App is stored exclusively on your device. No data is transmitted to servers of the Provider or third parties.",
-    "s2_p2": "We do not collect, store, or process any personal data through the App, unless you use features that require an internet connection (e.g., real-time public transit data).",
+    "s2_p1": "{{BRAND_NAME}} was built on a \"Local-First\" principle. This means: All data you enter in the App is stored exclusively on your device and is not transmitted to servers of the Provider. Third-party services receive it only when you use a feature that needs them, such as transit or weather. The App also makes some requests by itself, for example to check for updates. Section 3 lists these services.",
+    "s2_p2": "We do not collect, store, or process any personal data through the App, unless you use features that require an internet connection (e.g., real-time public transit data) or the App makes one of the requests listed in Section 3 d) by itself.",
     "s3_title": "§ 3 Data Processing in the App",
     "s3_sub1_title": "a) Locally Stored Data",
-    "s3_sub1_p1": "All data you enter (timetables, grades, tasks, training data, notes, etc.) is stored exclusively on your device in an encrypted local database. The Provider has no access to this data at any time.",
+    "s3_sub1_p1": "All data you enter (timetables, grades, tasks, training data, notes, etc.) is stored exclusively on your device. The App stores login details, for example for IServ and email, in encrypted form. In the apps for computers, this also applies to grades, homework, tests, exams, presentations, events, notes, mail drafts, saved places and the assistant's history. Stored unencrypted in a local database there are the timetable with subjects, teachers, rooms and times, the task list, training data, Pomodoro statistics, reviews, bookmarks, tickets and the settings, which include your birthday and weather location. The cached substitution plan is also stored there unencrypted. On Android and in the web app, all data except the login details is stored unencrypted. The Provider has no access to this data at any time.",
     "s3_sub2_title": "b) Real-Time Transit Data",
-    "s3_sub2_p1": "When you use the real-time transit feature, requests are sent to the public APIs of VBB (Verkehrsverbund Berlin-Brandenburg) and Deutsche Bahn. Only the stop names or route information you enter are transmitted. No personal data, device IDs, or location data are transmitted.",
+    "s3_sub2_p1": "When you use the transit feature, the App sends requests to Transitous (api.transitous.org) and, for ticket prices in Berlin and Brandenburg, to transport.rest (v6.vbb.transport.rest). These requests contain the stops, addresses and times of your search. If you have saved your home or your school as a place, connections from or to there also include its location, and “In der Nähe” (nearby) includes your current location if you allow it. In the older views of the computer app, requests also go to transport.rest and, for fares, to Deutsche Bahn. No device IDs are transmitted.",
+    "s3_sub2_p2": "If you have saved your school and your home as places, the App also asks Transitous by itself for the next connections from school to home when you open a page of the App between 90 minutes before your last lesson ends and two hours after. This includes the location of both places.",
     "s3_sub3_title": "c) No Telemetry",
     "s3_sub3_p1": "{{BRAND_NAME}} contains no analytics, no tracking, no crash reporters, and no telemetry. No usage statistics are collected whatsoever.",
+    "s3_sub4_title": "d) Other Services",
+    "s3_sub4_p1": "The App contacts the following services when you use the feature in question. It makes the requests marked “by itself” without any action on your part. As with any connection, the service sees your IP address.",
+    "s3_list1": "Your school's IServ: your username and password to sign in, then the requests for mail, substitution plan, assignments, events and messages (not in the web app)",
+    "s3_list2": "Your email provider: login details and mail, directly via IMAP and SMTP (apps for computers)",
+    "s3_list3": "Open-Meteo: the place you want the weather for, or the location of your home",
+    "s3_list4": "Holiday services (feiertage-api.de, schulferien-api.de, ferien-api.de, date.nager.at): your federal state",
+    "s3_list5": "Wikipedia: the term you ask the assistant about",
+    "s3_list6": "Anthropic: your question to the assistant and the data from the App it needs to answer, only if you enter your own Claude key (apps for computers)",
+    "s3_list7": "Hugging Face and GitHub: the download of the assistant's language model",
+    "s3_list8": "PyPI: the download of the Python packages on the Mac app's first start on Intel Macs and after updates",
+    "s3_list9": "This website: the request for the latest version, at start and then every two hours (by itself, apps for computers and Android)",
+    "s3_list11": "The websites of your bookmarks: a request to the page, to show its logo next to the bookmark",
+    "s3_list12": "This website or GitHub: the download of the new version of the App when you tap “Aktualisieren” (update) in the App (Android)",
     "s4_title": "§ 4 Data Processing on the Website",
     "s4_p1": "When visiting our Website, the hosting provider automatically collects technical access data (server log files). These may include:",
     "s4_list1": "IP address (anonymized)",
@@ -736,7 +779,7 @@
     "s4_list4": "Browser type and operating system",
     "s4_p2": "This data is collected solely to ensure operation and prevent misuse (legal basis: Art. 6(1)(f) GDPR, legitimate interest) and is automatically deleted after a short period. No identification of individual persons takes place.",
     "s5_title": "§ 5 Cookies",
-    "s5_p1": "The Website does not use tracking cookies or analytics tools. Only technically necessary cookies are used, if required for website functionality (e.g., language preference).",
+    "s5_p1": "The Website uses no cookies and no analytics tools. It stores your language preference only in your browser's storage (localStorage).",
     "s6_title": "§ 6 Your Rights",
     "s6_p1": "Since we do not collect personal data through the App, there is generally nothing we could provide information about. Should you have questions nonetheless, you are entitled to the following rights under GDPR:",
     "s6_list1": "Right of access (Art. 15 GDPR)",
@@ -755,14 +798,17 @@
     "intro": "Introducing",
     "title": "{{BRAND_NAME}} 0.5",
     "lede": "Your first lesson and its room in the morning, your IServ homework in the afternoon.¹",
+    "lede_plain": "Your first lesson and its room in the morning, everything due tomorrow in the evening.",
     "cta": "Download free",
     "cta_web": "Open web app",
     "cta_generic": "Get {{BRAND_NAME}}",
     "cta_note": "For {platform}, {size} MB. Also for {others}.",
-    "cta_note_web": "On iPhone, {{BRAND_NAME}} runs as a web app. Also for Mac, Windows, Linux and Android.",
+    "cta_note_web": "On {device}, {{BRAND_NAME}} runs as a web app. Also for {others}.",
     "cta_note_generic": "For Mac, Windows, Linux, Android and iPhone.",
+    "cta_note_choice": "For {first} or {second}. Also for {others}.",
     "more": "See a school day",
     "hero_alt": "{{BRAND_NAME}} at 7:12 in the morning (German): chemistry in room B206 next, with today's tasks and upcoming deadlines below.",
+    "hero_alt_phone": "{{BRAND_NAME}} on iPhone at 7:12 in the morning (German): chemistry in room B206 next, with today's tasks below.",
     "statement": "Before you leave home, {{BRAND_NAME}} already knows which room you are in and whether your bus is on time.",
     "show_title": "From first period to the bus home",
     "steps": [
@@ -784,22 +830,25 @@
         "id": "plan",
         "label": "Timetable",
         "title": "A week, B week, substitutions",
-        "text": "Your timetable with your school's periods. {{BRAND_NAME}} fetches the substitution plan from IServ every morning.",
-        "alt": "The A-week timetable (German) with subjects and rooms, next to it the substitution plan."
+        "text": "Your timetable with your school's periods. {{BRAND_NAME}} fetches the substitution plan from IServ every morning.¹",
+        "alt": "The A-week timetable (German) with subjects and rooms, next to it the substitution plan.",
+        "alt_phone": "The A-week timetable (German) with subjects and rooms, below it the substitution plan."
       },
       {
         "id": "bus",
         "label": "Transit",
         "title": "The 612 arrives in 6 minutes",
         "text": "Live departures at your stop, including delays. On Android, Nexus only knew Berlin and Brandenburg, {{BRAND_NAME}} knows all of Germany.",
-        "alt": "The transit page (German): the way to school with bus 612 at 7:18 and the next departures."
+        "alt": "The transit page (German): the way to school with bus 612 at 7:18 and the next departures.",
+        "alt_phone": "The transit page (German): the way to school with bus 612 at 7:18 and the way home with bus 612 at 7:15."
       },
       {
         "id": "noten",
         "label": "Grades",
         "title": "A 12 is one 13 away",
         "text": "{{BRAND_NAME}} works out your average and tells you which grade you need for your goal. Advanced courses count double.",
-        "alt": "The grades (German): 11.3 points on average and the grade calculator showing 13 points."
+        "alt": "The grades (German): 11.3 points on average and the grade calculator showing 13 points.",
+        "alt_phone": "The grade calculator (German): for an average of 12.0 in Biology you need at least 13 points."
       }
     ],
     "tile_luna_label": "Tap Luna and she waves",
@@ -1009,6 +1058,7 @@
     "free_text": "I get nothing from you, no money and no data. I build {{BRAND_NAME}} for fun and out of conviction: a school app does not belong behind a paywall, and your data belongs neither to advertisers nor to anyone else. It belongs to you. That is why it stays on your device, and not even I can get to it.",
     "free_label": "Price: 0 euros",
     "footnote_iserv": "¹ IServ works in the apps for Mac, Windows, Linux and Android. On iPhone, {{BRAND_NAME}} runs as a web app, where IServ is not available.",
+    "footnote_iserv_web": "¹ IServ is only available in the apps for Mac, Windows, Linux and Android. The web app on your {device} has no IServ, so you add homework yourself.",
     "footnote_agent": "² {{BRAND_NAME}} downloads the assistant's language model only when you first open it, about 3 GB."
   }
 }

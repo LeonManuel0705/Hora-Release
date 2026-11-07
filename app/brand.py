@@ -2,6 +2,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 NAME = "Hora"
-REPOSITORY = "https://github.com/LeonManuel0705/Hora"
+REPOSITORY = "https://github.com/LeonManuel0705/Hora-Release"
 WEBSITE = "https://hora-app.netlify.app"
 PREVIOUS_NAMES = ("Nexus",)

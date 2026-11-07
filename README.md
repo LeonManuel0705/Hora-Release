@@ -36,7 +36,7 @@ The interface is German. The product name lives in one place, see [brand/README.
 
 ## Download
 
-The current version is 0.5.2, a closed beta released on 7 October 2026. Get it from the [download page](https://hora-app.netlify.app/download) or from [GitHub Releases](https://github.com/LeonManuel0705/Hora/releases).
+The current version is 0.5.2, a closed beta released on 7 October 2026. Get it from the [download page](https://hora-app.netlify.app/download) or from [GitHub Releases](https://github.com/LeonManuel0705/Hora-Release/releases).
 
 | Platform | What you get |
 |:---|:---|

@@ -74,6 +74,7 @@ function page(ns, other) {
 export const terms = {
   theme: "light",
   title: () => t("meta.terms"),
+  description: () => t("meta.desc.terms"),
   render: () => page("terms", { href: "/datenschutz", key: "legal.other_privacy" }),
   mount: (root) => reveals(root),
 };
@@ -81,6 +82,7 @@ export const terms = {
 export const privacyPolicy = {
   theme: "light",
   title: () => t("meta.privacy_policy"),
+  description: () => t("meta.desc.privacy_policy"),
   render: () => page("privacy_policy", { href: "/nutzungsbedingungen", key: "legal.other_terms" }),
   mount: (root) => reveals(root),
 };

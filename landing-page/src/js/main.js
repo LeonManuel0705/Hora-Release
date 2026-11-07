@@ -24,6 +24,8 @@ const header = document.getElementById("site-header");
 const footer = document.getElementById("site-footer");
 const menu = document.getElementById("mobile-menu");
 const menuButton = document.querySelector("[data-menu-open]");
+const description = document.querySelector('meta[name="description"]');
+const homeDescription = description?.content || "";
 let cleanup = () => {};
 let currentPath = null;
 
@@ -59,6 +61,7 @@ function renderPage(path, { hash = "", focus = false } = {}) {
   footer.innerHTML = footerHTML();
   fillVersion(footer);
   document.title = page.title ? page.title() : brandName;
+  if (description) description.content = page.description ? page.description() : homeDescription;
   markNav(path);
   cleanup = page.mount ? page.mount(app) || (() => {}) : () => {};
   currentPath = path;

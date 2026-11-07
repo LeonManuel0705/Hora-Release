@@ -1,9 +1,9 @@
 import { brandName, escapeHtml, getLang, raw, t } from "../lib/i18n.js";
 import { reducedMotion } from "../lib/motion.js";
-import { detectPlatform, megabytes, PLATFORMS } from "../lib/platform.js";
+import { detectPlatform, deviceName, ISERV_HOMEWORK, megabytes, PLATFORMS } from "../lib/platform.js";
 import { clamp, onScroll, revealOnce, wordReveal } from "../lib/scroll.js";
 import { luna } from "../lib/luna.js";
-import { macHTML, showScreen } from "../components/device.js";
+import { iphoneHTML, macHTML, showScreen } from "../components/device.js";
 import { mountDownloads, platformMark } from "../components/downloads.js";
 import { cta, SHORT } from "../components/cta.js";
 import { galleryHTML, mountGallery } from "../components/gallery.js";
@@ -16,15 +16,17 @@ const keepHyphens = (text) => escapeHtml(text).replace(/(\S+-\S+)/g, '<span clas
 const words = (text) => escapeHtml(text).split(/\s+/).map((word) => `<span class="w">${word}</span>`).join(" ");
 
 function hero() {
-  const { button, note } = cta();
+  const { id, choices, button, note } = cta();
+  const ids = choices?.length ? choices : [id];
+  const lede = ids.every((one) => ISERV_HOMEWORK.has(one)) ? t("start.lede") : t("start.lede_plain");
   return `<section class="ap-hero" aria-labelledby="ap-hero-title">
     <div class="ap-hero-copy" data-hero-copy>
       <h1 class="ap-hero-head" id="ap-hero-title"><span class="ap-hero-name">${escapeHtml(t("start.intro"))}</span><span class="ap-hero-title">${escapeHtml(t("start.title"))}</span></h1>
-      <p class="ap-hero-lede">${escapeHtml(t("start.lede"))}</p>
+      <p class="ap-hero-lede">${escapeHtml(lede)}</p>
       <div class="ap-hero-cta">${button}<a class="ap-link" href="#tag">${escapeHtml(t("start.more"))}${CHEVRON}</a></div>
       <p class="ap-hero-note">${escapeHtml(note)}</p>
     </div>
-    <div class="ap-hero-device" data-hero-device>${macHTML([{ id: "heute", alt: t("start.hero_alt") }], { eager: true })}</div>
+    <div class="ap-hero-device" data-hero-device>${macHTML([{ id: "heute", alt: t("start.hero_alt") }], { eager: true, phone: "phone-heute", phoneAlt: t("start.hero_alt_phone") })}</div>
   </section>`;
 }
 
@@ -40,7 +42,7 @@ function showcase() {
       <p class="ap-step-label">${escapeHtml(step.label)}</p>
       <h3 class="ap-step-title">${keepHyphens(step.title)}</h3>
       <p class="ap-step-text">${escapeHtml(step.text)}</p>
-      <img class="ap-step-shot" src="/screens/${step.id}.webp" width="2880" height="1800" alt="" loading="lazy" decoding="async">
+      <div class="ap-step-phone">${iphoneHTML(`/screens/phone-${step.id}.webp`, step.alt_phone || step.alt, { only: "phone" })}</div>
     </li>`).join("");
   return `<section class="ap-show" id="tag" aria-labelledby="ap-show-title">
     <h2 class="ap-h2 ap-show-title ap-reveal" id="ap-show-title">${escapeHtml(t("start.show_title"))}</h2>
@@ -115,7 +117,7 @@ function getHora() {
     const p = PLATFORMS[id];
     const pwa = p.kind === "pwa";
     const meta = pwa ? t("start.cta_web") : `${megabytes(p.bytes)} MB`;
-    const attrs = pwa ? `href="${p.href}"` : `href="${p.href}" download data-download="${id}"`;
+    const attrs = pwa ? `href="${p.href}" data-install="${id}"` : `href="${p.href}" download data-install="${id}"`;
     return `<li><a class="ap-platform${id === mine ? " is-yours" : ""}" ${attrs}>
       <span class="ap-platform-mark">${platformMark(id, 30)}</span>
       <span class="ap-platform-name">${escapeHtml(SHORT[id])}</span>
@@ -129,7 +131,7 @@ function getHora() {
     <ul class="ap-platforms ap-reveal">${platforms}</ul>
     <div class="ap-get-cta ap-reveal">${button}<a class="ap-link" href="/download">${escapeHtml(t("start.get_all"))}${CHEVRON}</a></div>
     <p class="ap-fine">${escapeHtml(t("start.fine"))}</p>
-    <p class="ap-fine ap-footnote">${escapeHtml(t("start.footnote_iserv"))}</p>
+    <p class="ap-fine ap-footnote">${escapeHtml(PLATFORMS[mine]?.kind === "pwa" ? t("start.footnote_iserv_web", { device: deviceName(mine) }) : t("start.footnote_iserv"))}</p>
     <p class="ap-fine ap-footnote">${escapeHtml(t("start.footnote_agent"))}</p>
     <p class="ap-fine ap-footnote">${escapeHtml(t("start.footnote"))}</p>
   </section>`;
@@ -153,7 +155,7 @@ function mountShowcase(root) {
   const steps = [...root.querySelectorAll(".ap-step")];
   const device = root.querySelector("[data-show-device]");
   if (!steps.length || !device) return () => {};
-  for (const img of device.querySelectorAll(".mac-shot")) img.loading = "eager";
+  if (matchMedia("(min-width: 735px)").matches) for (const img of device.querySelectorAll(".mac-shot")) img.loading = "eager";
   const activate = (step) => {
     for (const other of steps) other.classList.toggle("is-active", other === step);
     showScreen(device, step.dataset.step);

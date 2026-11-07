@@ -1,9 +1,9 @@
 import { brandHost, escapeHtml, raw, t } from "../lib/i18n.js";
 import { icon } from "../lib/icons.js";
-import { detectPlatform, megabytes, ORDER, PLATFORMS } from "../lib/platform.js";
+import { detectPlatform, megabytes, ORDER, platformChoices, PLATFORMS } from "../lib/platform.js";
 import { revealOnce } from "../lib/scroll.js";
 import { cta } from "../components/cta.js";
-import { mountDownloads, platformMark } from "../components/downloads.js";
+import { mountDownloads, platformMark, stepText } from "../components/downloads.js";
 import { pageHeroHTML } from "../components/page.js";
 
 function tile(id, mine) {
@@ -25,17 +25,19 @@ function tile(id, mine) {
     <p class="ap-dl-meta">${pwa ? escapeHtml(t("start.cta_web")) : `${escapeHtml(p.file)}, ${megabytes(p.bytes)} MB`}</p>
     <div class="ap-dl-action">${action}</div>
     ${p.alt ? `<p class="ap-dl-meta">${escapeHtml(t(`platforms.${id}.alt`))} <a href="${p.alt.href}" download>${escapeHtml(p.alt.file)}, ${megabytes(p.alt.bytes)}&nbsp;MB</a></p>` : ""}
-    <ol class="ap-dl-steps">${steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol>
+    <ol class="ap-dl-steps">${steps.map((step) => `<li>${stepText(step)}</li>`).join("")}</ol>
     ${id === "macos" ? `<div class="ap-cmd"><p>${escapeHtml(t("steps.macos_terminal"))}</p><div class="ap-cmd-row"><code>${escapeHtml(command)}</code><button type="button" class="ap-copy" data-copy="${escapeHtml(command)}">${icon("copy", { size: 15 })}<span>${escapeHtml(t("steps.copy"))}</span></button></div></div>` : ""}
   </article>`;
 }
 
 export default {
   title: () => t("meta.download"),
+  description: () => t("meta.desc.download"),
   render: () => {
     const mine = detectPlatform();
-    const ids = [...ORDER];
-    if (mine) ids.sort((a, b) => (a === mine ? -1 : b === mine ? 1 : 0));
+    const first = platformChoices();
+    const rank = (id) => (first.includes(id) ? first.indexOf(id) : first.length);
+    const ids = [...ORDER].sort((a, b) => rank(a) - rank(b));
     const faq = raw("download_page.faq") || [];
     const { button, note } = cta();
     const extra = `<div class="ap-hero-cta ap-reveal">${button}</div>

@@ -58,12 +58,13 @@ function matrix() {
 
 export default {
   title: () => t("meta.features"),
+  description: () => t("meta.desc.features"),
   render: () => {
     const areas = raw("home_features.areas") || [];
     const items = raw("features_page.new_items") || [];
     return `<div class="ap ap-sub-page">
       ${pageHeroHTML({ eyebrow: t("features_page.eyebrow"), title: t("features_page.hero_title"), lede: t("features_page.hero_lede") })}
-      <div class="ap-page-device ap-reveal">${macHTML([{ id: "plan", alt: t("features_page.hero_alt") }], { eager: true })}</div>
+      <div class="ap-page-device ap-reveal">${macHTML([{ id: "plan", alt: t("features_page.hero_alt") }], { eager: true, phone: "phone-plan" })}</div>
       <section class="ap-features" aria-label="${escapeHtml(t("features_page.eyebrow"))}">${areas.map(feature).join("")}</section>
       <section class="ap-matrix" aria-labelledby="matrix-title">
         <h2 class="ap-h2 ap-reveal" id="matrix-title">${escapeHtml(t("features_page.matrix_title"))}</h2>

@@ -31,6 +31,11 @@ export default defineConfig(({ mode }) => {
             dest: 'content',
             transform: applyBrand,
           },
+          {
+            src: 'seo/*',
+            dest: '.',
+            transform: applyBrand,
+          },
         ],
       }),
       mode === 'development' && buildErrorOverlayPlugin(),

@@ -5,12 +5,13 @@ import { CHEVRON, pageHeroHTML } from "../components/page.js";
 
 export default {
   title: () => t("meta.about"),
+  description: () => t("meta.desc.about"),
   render: () => {
     const story = raw("about_page.story") || [];
     const open = raw("about_page.open") || [];
     return `<div class="ap ap-sub-page">
       ${pageHeroHTML({ eyebrow: t("about_page.eyebrow"), title: t("about_page.title"), lede: t("about_page.lede") })}
-      <div class="ap-page-device ap-reveal">${macHTML([{ id: "heute", alt: t("about_page.shot_alt") }], { eager: true })}</div>
+      <div class="ap-page-device ap-reveal">${macHTML([{ id: "heute", alt: t("about_page.shot_alt") }], { eager: true, phone: "phone-heute", phoneAlt: t("about_page.shot_alt_phone") })}</div>
       <section class="ap-sec ap-story" aria-labelledby="story-title">
         <h2 class="ap-h2 ap-reveal" id="story-title">${escapeHtml(t("about_page.story_title"))}</h2>
         <div class="ap-story-text">${story.map((paragraph) => `<p class="ap-reveal">${escapeHtml(paragraph)}</p>`).join("")}</div>
