@@ -70,7 +70,7 @@ def test_it_is_off_until_switched_on_and_costs_nothing_then(school, client):
 def test_switching_on_makes_one_calendar_and_fills_the_weeks_ahead(school, client):
     calendar = switch_on(client)
     assert school.count('calendars.insert') == 1
-    assert school.listed[calendar]['summary'] == f'{brand.NAME} Schule'
+    assert school.calendars[calendar]['summary'] == f'{brand.NAME} Schule'
     expected = [(monday, 'Mathe LK' if week == 'A' else 'Deutsch', 'R121' if week == 'A' else 'R204') for monday, week in mondays()]
     assert entries(school, calendar) == expected
     stored = {event['summary']: event for event in school.live(calendar)}
@@ -178,14 +178,14 @@ def test_turning_off_keeps_the_calendar_in_google_or_deletes_it(school, client):
     kept = client.delete('/api/ui/google/school', json={'keep': True}).get_json()
     assert kept['calendar'] == calendar and kept['school']['on'] is False
     assert google_school.background_round() is False
-    assert calendar in school.listed and len(school.live(calendar)) == len(mondays())
+    assert calendar in school.calendars and len(school.live(calendar)) == len(mondays())
     assert google_school.managed() == set()
     calendar = switch_on(client)
     assert school.count('calendars.insert') == 1, 'switched on again, the kept calendar is used'
     client.delete('/api/ui/google/school', json={'keep': False})
     assert google_school.managed() == {calendar}
     assert google_school.background_round() is True
-    assert calendar not in school.listed and google_school.managed() == set()
+    assert calendar not in school.calendars and google_school.managed() == set()
 
 
 def test_a_delete_that_cannot_reach_google_waits_for_the_next_round(school, client):
@@ -193,11 +193,11 @@ def test_a_delete_that_cannot_reach_google_waits_for_the_next_round(school, clie
     client.delete('/api/ui/google/school', json={'keep': False})
     school.offline = True
     google_school.background_round()
-    assert google_school._read()['remove'] == calendar and calendar in school.listed
+    assert google_school._read()['remove'] == calendar and calendar in school.calendars
     school.offline = False
     google_school._change(lambda state: state.update(pause_until=0))
     google_school.background_round()
-    assert calendar not in school.listed
+    assert calendar not in school.calendars
 
 
 def test_going_too_fast_pauses_and_finishes_later_in_batches(school, client, monkeypatch):

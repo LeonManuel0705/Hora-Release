@@ -33,6 +33,17 @@ class _Call:
         return self._run(self)
 
 
+class _Calendars(dict):
+    """The calendars of the account: tests read and change them like a dict, the code calls them like the API."""
+
+    def __init__(self, api, entries):
+        super().__init__(entries)
+        self._api = api
+
+    def __call__(self):
+        return self._api()
+
+
 class _Batch:
     """Runs its requests one after the other and hands each answer to the callback, like the real batch does. Without
     network the whole batch fails, a refusal of a single request reaches only its callback."""
@@ -69,7 +80,7 @@ class FakeGoogle:
 
     def __init__(self, primary='me@example.org'):
         self.primary = primary
-        self.listed = {primary: {'id': primary, 'summary': 'Privat', 'primary': True, 'backgroundColor': '#4285f4', 'accessRole': 'owner'}}
+        self.calendars = _Calendars(self._calendars_api, {primary: {'id': primary, 'summary': 'Privat', 'primary': True, 'backgroundColor': '#4285f4', 'accessRole': 'owner'}})
         self.store = {primary: {}}
         self.calls = []
         self.offline = False
@@ -96,7 +107,7 @@ class FakeGoogle:
 
     def _writable(self, calendar):
         key = self._calendar(calendar)
-        if self.listed.get(key, {}).get('accessRole', 'owner') not in ('owner', 'writer'):
+        if self.calendars.get(key, {}).get('accessRole', 'owner') not in ('owner', 'writer'):
             raise FakeHttpError(403, 'requiredAccessLevel')
         if self.write_budget is not None:
             if self.write_budget <= 0:
@@ -118,11 +129,11 @@ class FakeGoogle:
         return event
 
     def add_calendar(self, key, name, role='owner', color='#0b8043'):
-        self.listed[key] = {'id': key, 'summary': name, 'primary': False, 'backgroundColor': color, 'accessRole': role}
+        self.calendars[key] = {'id': key, 'summary': name, 'primary': False, 'backgroundColor': color, 'accessRole': role}
         self.store[key] = {}
 
     def remove_calendar(self, key):
-        del self.listed[key]
+        del self.calendars[key]
         del self.store[key]
 
     def put(self, calendar, title, day, start=None, end=None, key=None, age=0, **extra):
@@ -187,35 +198,35 @@ class FakeGoogle:
         def listing(pageToken=None):
             def run(call):
                 self._guard('calendarList.list')
-                return {'items': [dict(item) for item in self.listed.values()]}
+                return {'items': [dict(item) for item in self.calendars.values()]}
             return _Call(run)
 
         def get(calendarId):
             def run(call):
                 self._guard('calendarList.get', calendar=calendarId)
                 key = self.primary if calendarId == 'primary' else calendarId
-                if key not in self.listed:
+                if key not in self.calendars:
                     raise FakeHttpError(404)
-                return dict(self.listed[key])
+                return dict(self.calendars[key])
             return _Call(run)
         return SimpleNamespace(list=listing, get=get)
 
-    def calendars(self):
+    def _calendars_api(self):
         def insert(body):
             def run(call):
                 self._guard('calendars.insert', body=body)
                 key = f'c{next(self._ids)}@group.calendar.google.com'
                 self.add_calendar(key, body['summary'], role='owner', color='#9fe1e7')
-                self.listed[key].update(description=body.get('description', ''), timeZone=body.get('timeZone', ''))
+                self.calendars[key].update(description=body.get('description', ''), timeZone=body.get('timeZone', ''))
                 return {'id': key, 'summary': body['summary']}
             return _Call(run)
 
         def delete(calendarId):
             def run(call):
                 self._guard('calendars.delete', calendar=calendarId)
-                if calendarId not in self.listed or calendarId == self.primary:
+                if calendarId not in self.calendars or calendarId == self.primary:
                     raise FakeHttpError(404)
-                if self.listed[calendarId].get('accessRole') != 'owner':
+                if self.calendars[calendarId].get('accessRole') != 'owner':
                     raise FakeHttpError(403, 'forbidden')
                 self.remove_calendar(calendarId)
                 return ''
