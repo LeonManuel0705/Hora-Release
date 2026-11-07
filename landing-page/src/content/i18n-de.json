@@ -423,9 +423,9 @@
           },
           {
             "name": "Benachrichtigungen",
-            "note": "Computer: Stunden und Fristen, solange {{BRAND_NAME}} offen ist. Android: IServ-Nachrichten und Updates. iPhone: vom Home-Bildschirm aus, solange {{BRAND_NAME}} offen ist",
+            "note": "Computer: Stunden und Fristen, solange {{BRAND_NAME}} offen ist. Android: auch bei geschlossener App, dazu neue IServ-Nachrichten. iPhone: vom Home-Bildschirm aus, solange {{BRAND_NAME}} offen ist",
             "d": "partial",
-            "a": "partial",
+            "a": "yes",
             "i": "partial"
           }
         ]

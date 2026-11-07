@@ -423,9 +423,9 @@
           },
           {
             "name": "Notifications",
-            "note": "Computer: lessons and deadlines while {{BRAND_NAME}} is open. Android: IServ messages and updates. iPhone: from the Home Screen while {{BRAND_NAME}} is open",
+            "note": "Computer: lessons and deadlines while {{BRAND_NAME}} is open. Android: even while the app is closed, plus new IServ messages. iPhone: from the Home Screen while {{BRAND_NAME}} is open",
             "d": "partial",
-            "a": "partial",
+            "a": "yes",
             "i": "partial"
           }
         ]
