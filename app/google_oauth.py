@@ -35,17 +35,41 @@ TOKENS_FILE = Path(DATA_DIR) / "google_tokens.json"
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:5050/api/email/google/oauth-callback')
+HTTP_TIMEOUT = 20
 
-SCOPES = [
-    'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/gmail.send',
-    'https://www.googleapis.com/auth/gmail.modify',
-    'https://www.googleapis.com/auth/calendar'
-]
-GMAIL_READ_SCOPE = SCOPES[0]
-CALENDAR_SCOPE = SCOPES[3]
+CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar'
+CALENDAR_READ_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
+EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
+EVENTS_READ_SCOPE = 'https://www.googleapis.com/auth/calendar.events.readonly'
+CALENDAR_LIST_SCOPE = 'https://www.googleapis.com/auth/calendar.calendarlist.readonly'
+APP_CALENDARS_SCOPE = 'https://www.googleapis.com/auth/calendar.app.created'
+CALENDARS_SCOPE = 'https://www.googleapis.com/auth/calendar.calendars'
+GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
+GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send'
+GMAIL_MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify'
 
-# Google lets people untick single permissions; oauthlib would reject that smaller grant.
+# What a connection asks for, per part of the app. Gmail and the own school calendar are asked for only when switched on.
+FEATURES = {
+    'calendar': (EVENTS_SCOPE, CALENDAR_LIST_SCOPE),
+    'gmail': (GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE, GMAIL_MODIFY_SCOPE),
+    'school': (APP_CALENDARS_SCOPE,),
+}
+# Any one of these sets of granted scopes is enough for the named use.
+_ENOUGH = {
+    'calendar': ({CALENDAR_SCOPE}, {CALENDAR_READ_SCOPE}, {EVENTS_SCOPE, CALENDAR_LIST_SCOPE}, {EVENTS_READ_SCOPE, CALENDAR_LIST_SCOPE}),
+    'write': ({CALENDAR_SCOPE}, {EVENTS_SCOPE}),
+    'gmail': ({GMAIL_READ_SCOPE}, {GMAIL_MODIFY_SCOPE}),
+    'school': ({CALENDAR_SCOPE}, {APP_CALENDARS_SCOPE}, {CALENDARS_SCOPE}),
+}
+# Accounts connected before the parts were asked for one by one were granted all of this at once, without a note of it.
+LEGACY_SCOPES = (GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE, GMAIL_MODIFY_SCOPE, CALENDAR_SCOPE)
+REFUSED = {
+    'calendar': 'Google hat den Kalender nicht freigegeben. Setz bei der Anmeldung die Haken beim Kalender',
+    'gmail': 'Google hat Gmail nicht freigegeben. Setz bei der Anmeldung die Haken bei Gmail',
+    'school': 'Google hat den Kalender für den Stundenplan nicht freigegeben. Setz bei der Anmeldung den Haken dafür',
+}
+
+# Google lets people untick single permissions and adds earlier grants to the answer; oauthlib would reject either.
 os.environ.setdefault('OAUTHLIB_RELAX_TOKEN_SCOPE', '1')
 
 def is_google_oauth_configured() -> bool:
@@ -60,25 +84,61 @@ def get_oauth_status() -> Dict:
         return {
             "configured": False,
             "authenticated": False,
-            "error": "Google API libraries not installed"
+            "error": "Die Google-Bibliotheken fehlen"
         }
 
-    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        if not CREDENTIALS_FILE.exists():
-            return {
-                "configured": False,
-                "authenticated": False,
-                "message": "Google OAuth not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env file."
-            }
+    if not is_google_oauth_configured():
+        return {
+            "configured": False,
+            "authenticated": False,
+            "message": "Google ist in dieser Installation nicht eingerichtet"
+        }
 
     tokens = load_tokens()
-    authenticated = bool(tokens)
 
     return {
         "configured": True,
-        "authenticated": authenticated,
-        "accounts": list(tokens.keys()) if tokens else []
+        "authenticated": bool(tokens),
+        "accounts": list(tokens.keys()),
+        "gmail": accounts_for('gmail', tokens),
+        "calendar": calendar_account(tokens),
     }
+
+
+def scopes_of(entry) -> List[str]:
+    """What one stored account was granted."""
+    scopes = entry.get('scopes') if isinstance(entry, dict) else None
+    return list(scopes) if scopes else list(LEGACY_SCOPES)
+
+
+def covers(scopes, use: str) -> bool:
+    granted = set(scopes or ())
+    return any(needed <= granted for needed in _ENOUGH[use])
+
+
+def accounts_for(use: str, tokens: Dict = None) -> List[str]:
+    tokens = load_tokens() if tokens is None else tokens
+    return [email for email, entry in tokens.items() if covers(scopes_of(entry), use)]
+
+
+def calendar_account(tokens: Dict = None) -> Optional[str]:
+    """The account the calendar uses: the first one that may read it."""
+    found = accounts_for('calendar', tokens)
+    return found[0] if found else None
+
+
+def can(use: str, email: str = None) -> bool:
+    tokens = load_tokens()
+    email = email if email in tokens else calendar_account(tokens)
+    return bool(email) and covers(scopes_of(tokens[email]), use)
+
+
+def connected_accounts() -> List[Dict]:
+    tokens = load_tokens()
+    return [
+        {"email": email, "provider": "gmail_oauth", "gmail": covers(scopes_of(entry), 'gmail'), "calendar": covers(scopes_of(entry), 'calendar')}
+        for email, entry in tokens.items()
+    ]
 
 def load_tokens() -> Dict:
 
@@ -103,6 +163,12 @@ def _expiry_of(token_data: Dict) -> Optional[datetime]:
         return None
 
 
+def refused_for_good(error) -> bool:
+    """True when Google turned the stored sign-in down for good, so asking again changes nothing."""
+    reason = str(error).lower()
+    return any(word in reason for word in ('invalid_grant', 'revoked', 'invalid_client', 'unauthorized_client'))
+
+
 def _change_account(email: str, change) -> None:
     """Rewrites one stored account as it is now, so accounts added or removed in the meantime stay as they are."""
     tokens = load_tokens()
@@ -114,8 +180,13 @@ def _change_account(email: str, change) -> None:
 def login_expired(email: str = None) -> bool:
     """True when Google no longer accepts the stored sign-in and the account has to be connected again."""
     tokens = load_tokens()
-    data = tokens.get(email) if email in tokens else next(iter(tokens.values()), None)
+    email = email if email in tokens else calendar_account(tokens) or next(iter(tokens), None)
+    data = tokens.get(email)
     return isinstance(data, dict) and bool(data.get('expired'))
+
+
+def mark_expired(email: str) -> None:
+    _change_account(email, lambda entry: {**entry, 'expired': True})
 
 
 def get_credentials(email: str) -> Optional[Credentials]:
@@ -133,7 +204,7 @@ def get_credentials(email: str) -> Optional[Credentials]:
         token_uri='https://oauth2.googleapis.com/token',
         client_id=GOOGLE_CLIENT_ID or token_data.get('client_id'),
         client_secret=GOOGLE_CLIENT_SECRET or token_data.get('client_secret'),
-        scopes=token_data.get('scopes') or SCOPES,
+        scopes=scopes_of(token_data),
         expiry=expiry,
     )
 
@@ -141,9 +212,8 @@ def get_credentials(email: str) -> Optional[Credentials]:
         try:
             creds.refresh(Request())
         except Exception as e:
-            reason = str(e).lower()
-            if any(word in reason for word in ('invalid_grant', 'revoked', 'invalid_client', 'unauthorized_client')):
-                _change_account(email, lambda entry: {**entry, 'expired': True})
+            if refused_for_good(e):
+                mark_expired(email)
             return None
         _change_account(email, lambda entry: {
             **entry,
@@ -187,67 +257,105 @@ def _get_oauth_client_config() -> Dict:
 
     return None
 
-def start_oauth_flow() -> Dict:
+def features_of(names) -> List[str]:
+    """The parts of the app a sign-in is for, in a fixed order. Unknown names make the whole request invalid."""
+    wanted = [names] if isinstance(names, str) else list(names or ['calendar'])
+    if not wanted or any(name not in FEATURES for name in wanted):
+        return []
+    return [name for name in FEATURES if name in wanted]
+
+
+def _requested(features) -> List[str]:
+    return sorted({scope for name in features for scope in FEATURES[name]})
+
+
+def start_oauth_flow(features=('calendar',)) -> Dict:
+    """Asks Google only for what the named parts need. What was granted before stays granted, and a sign-in that
+    still works is extended without asking for the whole consent again: Google gives a new refresh token only with it."""
 
     if not GOOGLE_API_AVAILABLE:
         return {"success": False, "error": "Die Google-Bibliotheken fehlen"}
+
+    features = features_of(features)
+    if not features:
+        return {"success": False, "error": "Unbekannte Freigabe"}
 
     client_config = _get_oauth_client_config()
     if not client_config:
         return {"success": False, "error": "Google ist in dieser Installation nicht eingerichtet"}
 
+    tokens = load_tokens()
+    account = calendar_account(tokens) or next(iter(tokens), None)
+    entry = tokens.get(account) or {}
+    working = bool(entry.get('refresh_token')) and not entry.get('expired')
+    if working and all(covers(scopes_of(entry), name) for name in features):
+        return {"success": True, "granted": True, "email": account, "features": features}
+
+    params = {'access_type': 'offline', 'include_granted_scopes': 'true'}
+    if account:
+        params['login_hint'] = account
+    if not working:
+        params['prompt'] = 'consent'
+
     try:
         flow = Flow.from_client_config(
             client_config,
-            scopes=SCOPES,
+            scopes=_requested(features),
             redirect_uri=GOOGLE_REDIRECT_URI
         )
 
-        auth_url, state = flow.authorization_url(
-            access_type='offline',
-            prompt='consent'
-        )
+        auth_url, state = flow.authorization_url(**params)
 
         return {
             "success": True,
             "auth_url": auth_url,
             "state": state,
-            "message": "Open this URL in your browser and authorize access"
+            "features": features,
+            "message": "Melde dich im Browser bei Google an"
         }
     except Exception as e:
         logging.error(f"Google OAuth flow error: {e}")
         return {"success": False, "error": "Die Anmeldung ließ sich nicht vorbereiten"}
 
-def complete_oauth_flow(auth_code: str) -> Dict:
+def complete_oauth_flow(auth_code: str, features=('calendar',)) -> Dict:
 
     if not GOOGLE_API_AVAILABLE:
         return {"success": False, "error": "Die Google-Bibliotheken fehlen"}
+
+    features = features_of(features)
+    if not features:
+        return {"success": False, "error": "Unbekannte Freigabe"}
 
     client_config = _get_oauth_client_config()
     if not client_config:
         return {"success": False, "error": "Google ist in dieser Installation nicht eingerichtet"}
 
     try:
+        requested = _requested(features)
         flow = Flow.from_client_config(
             client_config,
-            scopes=SCOPES,
+            scopes=requested,
             redirect_uri=GOOGLE_REDIRECT_URI
         )
 
         flow.fetch_token(code=auth_code, timeout=30)
         creds = flow.credentials
-        granted = set(creds.granted_scopes or SCOPES)
-        if CALENDAR_SCOPE not in granted:
-            return {"success": False, "error": "Google hat den Kalender nicht freigegeben. Setz bei der Anmeldung den Haken beim Kalender"}
+        reported = set(creds.granted_scopes or ())
+        refused = next((name for name in features if not covers(reported or requested, name)), None)
+        if refused:
+            return {"success": False, "error": REFUSED[refused]}
 
-        email = _account_email(creds, granted)
+        email = _account_email(creds, reported or set(requested))
         if not email:
             return {"success": False, "error": "Google hat keine E-Mail-Adresse geschickt"}
 
         tokens = load_tokens()
+        previous = tokens.get(email) if isinstance(tokens.get(email), dict) else {}
+        kept = previous if previous.get('refresh_token') and not previous.get('expired') else {}
+        granted = reported or set(requested) | set(scopes_of(kept) if kept else ())
         tokens[email] = {
             'token': creds.token,
-            'refresh_token': creds.refresh_token,
+            'refresh_token': creds.refresh_token or kept.get('refresh_token'),
             'token_uri': creds.token_uri,
             'client_id': creds.client_id,
             'client_secret': creds.client_secret,
@@ -259,7 +367,8 @@ def complete_oauth_flow(auth_code: str) -> Dict:
         return {
             "success": True,
             "email": email,
-            "message": f"Successfully connected {email}"
+            "features": features,
+            "message": f"{email} ist verbunden"
         }
 
     except Exception as e:
@@ -268,14 +377,14 @@ def complete_oauth_flow(auth_code: str) -> Dict:
 
 def _account_email(creds, granted) -> str:
 
-    if GMAIL_READ_SCOPE in granted:
+    if covers(granted, 'gmail'):
         try:
             profile = build('gmail', 'v1', credentials=creds).users().getProfile(userId='me').execute()
             if profile.get('emailAddress'):
                 return profile['emailAddress']
         except Exception as e:
             logging.warning(f"Gmail profile unavailable, asking the calendar instead: {e}")
-    primary = build('calendar', 'v3', credentials=creds).calendars().get(calendarId='primary').execute()
+    primary = build('calendar', 'v3', credentials=creds).calendarList().get(calendarId='primary').execute()
     return primary.get('id', '')
 
 def remove_google_account(email: str) -> bool:
@@ -290,15 +399,15 @@ def remove_google_account(email: str) -> bool:
     return False
 
 def get_google_accounts() -> List[Dict]:
+    """The accounts whose Gmail the app may read. An account connected for the calendar alone is no mailbox."""
 
-    tokens = load_tokens()
-    return [{"email": email, "provider": "gmail_oauth"} for email in tokens.keys()]
+    return [{"email": email, "provider": "gmail_oauth"} for email in accounts_for('gmail')]
 
 def fetch_gmail_messages(email: str, max_results: int = 20) -> Dict:
 
     creds = get_credentials(email)
     if not creds:
-        return {"success": False, "error": "Not authenticated. Please sign in again."}
+        return {"success": False, "error": "Nicht bei Google angemeldet. Verbinde Google in den Einstellungen neu"}
 
     try:
         service = build('gmail', 'v1', credentials=creds)
@@ -355,13 +464,13 @@ def fetch_gmail_messages(email: str, max_results: int = 20) -> Dict:
 
     except Exception as e:
         logging.error(f"Gmail fetch error: {e}")
-        return {"success": False, "error": "Failed to fetch emails"}
+        return {"success": False, "error": "Die Mails ließen sich nicht laden"}
 
 def get_gmail_message_detail(email: str, msg_id: str) -> Dict:
 
     creds = get_credentials(email)
     if not creds:
-        return {"success": False, "error": "Not authenticated"}
+        return {"success": False, "error": "Nicht bei Google angemeldet"}
 
     try:
         service = build('gmail', 'v1', credentials=creds)
@@ -431,14 +540,14 @@ def get_gmail_message_detail(email: str, msg_id: str) -> Dict:
     except Exception as e:
         logging.error(f"Gmail message detail error: {e}")
         if getattr(getattr(e, 'resp', None), 'status', None) == 404:
-            return {"success": False, "error": "Not found", "gone": True}
-        return {"success": False, "error": "Failed to fetch email details"}
+            return {"success": False, "error": "Die Mail gibt es nicht mehr", "gone": True}
+        return {"success": False, "error": "Die Mail ließ sich nicht laden"}
 
 def send_gmail(from_email: str, to_email: str, subject: str, body: str) -> Dict:
 
     creds = get_credentials(from_email)
     if not creds:
-        return {"success": False, "error": "Not authenticated"}
+        return {"success": False, "error": "Nicht bei Google angemeldet"}
 
     try:
         service = build('gmail', 'v1', credentials=creds)
@@ -458,21 +567,24 @@ def send_gmail(from_email: str, to_email: str, subject: str, body: str) -> Dict:
             body={'raw': raw}
         ).execute()
 
-        return {"success": True, "message": "Email sent successfully"}
+        return {"success": True, "message": "Mail gesendet"}
 
     except Exception as e:
         logging.error(f"Gmail send error: {e}")
-        return {"success": False, "error": "Failed to send email"}
+        return {"success": False, "error": "Die Mail ließ sich nicht senden"}
 
 def calendar_service(account_email: str = None):
+    """The calendar of the account it belongs to. A request gives up after HTTP_TIMEOUT, so a dead network never holds a sync for minutes."""
     tokens = load_tokens()
-    if not tokens:
+    email = account_email if account_email in tokens else calendar_account(tokens)
+    if not email:
         return None, None
-    email = account_email if account_email in tokens else list(tokens.keys())[0]
     creds = get_credentials(email)
     if not creds:
         return None, email
-    return build('calendar', 'v3', credentials=creds), email
+    import httplib2
+    from google_auth_httplib2 import AuthorizedHttp
+    return build('calendar', 'v3', http=AuthorizedHttp(creds, http=httplib2.Http(timeout=HTTP_TIMEOUT)), cache_discovery=False), email
 
 
 def _local_day_and_time(value: str):
@@ -543,14 +655,14 @@ def fetch_google_calendar_events(days_ahead: int = 30, account_email: str = None
         return {
             "success": False,
             "error": "not_authenticated",
-            "message": "No Google account connected. Add one in the Email section.",
+            "message": "Kein Google-Konto verbunden",
             "events": []
         }
 
     if account_email and account_email in tokens:
         email = account_email
     else:
-        email = list(tokens.keys())[0]
+        email = calendar_account(tokens) or next(iter(tokens))
 
     creds = get_credentials(email)
 
@@ -558,7 +670,7 @@ def fetch_google_calendar_events(days_ahead: int = 30, account_email: str = None
         return {
             "success": False,
             "error": "auth_expired",
-            "message": "Google authentication expired. Please sign in again.",
+            "message": "Die Anmeldung bei Google ist abgelaufen. Verbinde Google in den Einstellungen neu",
             "events": []
         }
 
@@ -602,14 +714,14 @@ def fetch_google_calendar_events(days_ahead: int = 30, account_email: str = None
             return {
                 "success": False,
                 "error": "scope_needed",
-                "message": "Calendar access not granted. Please sign out and sign in again to grant calendar permission.",
+                "message": "Google hat den Kalender nicht freigegeben. Trenne Google und verbinde es neu",
                 "events": []
             }
         logging.error(f"Google Calendar error: {error_msg}")
         return {
             "success": False,
             "error": "api_error",
-            "message": "Failed to fetch calendar events",
+            "message": "Die Termine ließen sich nicht laden",
             "events": []
         }
 
@@ -618,16 +730,16 @@ def get_google_calendars(account_email: str = None) -> Dict:
     tokens = load_tokens()
 
     if not tokens:
-        return {"success": False, "error": "No Google account connected", "calendars": []}
+        return {"success": False, "error": "Kein Google-Konto verbunden", "calendars": []}
 
     if account_email and account_email in tokens:
         email = account_email
     else:
-        email = list(tokens.keys())[0]
+        email = calendar_account(tokens) or next(iter(tokens))
 
     creds = get_credentials(email)
     if not creds:
-        return {"success": False, "error": "Not authenticated", "calendars": []}
+        return {"success": False, "error": "Nicht bei Google angemeldet", "calendars": []}
 
     try:
         service = build('calendar', 'v3', credentials=creds)
@@ -648,7 +760,7 @@ def get_google_calendars(account_email: str = None) -> Dict:
 
     except Exception as e:
         logging.error(f"Google calendars error: {e}")
-        return {"success": False, "error": "Google API error", "calendars": []}
+        return {"success": False, "error": "Google hat nicht geantwortet", "calendars": []}
 
 def create_google_calendar_event(
     title: str,
@@ -665,16 +777,16 @@ def create_google_calendar_event(
     tokens = load_tokens()
 
     if not tokens:
-        return {"success": False, "error": "No Google account connected"}
+        return {"success": False, "error": "Kein Google-Konto verbunden"}
 
     if account_email and account_email in tokens:
         email = account_email
     else:
-        email = list(tokens.keys())[0]
+        email = calendar_account(tokens) or next(iter(tokens))
 
     creds = get_credentials(email)
     if not creds:
-        return {"success": False, "error": "Not authenticated"}
+        return {"success": False, "error": "Nicht bei Google angemeldet"}
 
     try:
         service = build('calendar', 'v3', credentials=creds)
@@ -709,12 +821,12 @@ def create_google_calendar_event(
             "success": True,
             "event_id": created_event.get('id'),
             "html_link": created_event.get('htmlLink'),
-            "message": "Event created successfully"
+            "message": "Termin angelegt"
         }
 
     except Exception as e:
         logging.error(f"Google calendar create event error: {e}")
-        return {"success": False, "error": "Failed to create calendar event"}
+        return {"success": False, "error": "Der Termin ließ sich nicht anlegen"}
 
 def update_google_calendar_event(
     event_id: str,
@@ -732,16 +844,16 @@ def update_google_calendar_event(
     tokens = load_tokens()
 
     if not tokens:
-        return {"success": False, "error": "No Google account connected"}
+        return {"success": False, "error": "Kein Google-Konto verbunden"}
 
     if account_email and account_email in tokens:
         email = account_email
     else:
-        email = list(tokens.keys())[0]
+        email = calendar_account(tokens) or next(iter(tokens))
 
     creds = get_credentials(email)
     if not creds:
-        return {"success": False, "error": "Not authenticated"}
+        return {"success": False, "error": "Nicht bei Google angemeldet"}
 
     try:
         service = build('calendar', 'v3', credentials=creds)
@@ -781,12 +893,12 @@ def update_google_calendar_event(
         return {
             "success": True,
             "event_id": updated_event.get('id'),
-            "message": "Event updated successfully"
+            "message": "Termin geändert"
         }
 
     except Exception as e:
         logging.error(f"Google calendar update event error: {e}")
-        return {"success": False, "error": "Failed to update calendar event"}
+        return {"success": False, "error": "Der Termin ließ sich nicht ändern"}
 
 def delete_google_calendar_event(
     event_id: str,
@@ -798,16 +910,16 @@ def delete_google_calendar_event(
     tokens = load_tokens()
 
     if not tokens:
-        return {"success": False, "error": "No Google account connected"}
+        return {"success": False, "error": "Kein Google-Konto verbunden"}
 
     if account_email and account_email in tokens:
         email = account_email
     else:
-        email = list(tokens.keys())[0]
+        email = calendar_account(tokens) or next(iter(tokens))
 
     creds = get_credentials(email)
     if not creds:
-        return {"success": False, "error": "Not authenticated"}
+        return {"success": False, "error": "Nicht bei Google angemeldet"}
 
     try:
         service = build('calendar', 'v3', credentials=creds)
@@ -827,13 +939,13 @@ def delete_google_calendar_event(
 
     except Exception as e:
         logging.error(f"Google calendar delete event error: {e}")
-        return {"success": False, "error": "Failed to delete calendar event"}
+        return {"success": False, "error": "Der Termin ließ sich nicht löschen"}
 
 def delete_gmail_message(email: str, msg_id: str, permanent: bool = False) -> Dict:
 
     creds = get_credentials(email)
     if not creds:
-        return {"success": False, "error": "Not authenticated"}
+        return {"success": False, "error": "Nicht bei Google angemeldet"}
 
     try:
         service = build('gmail', 'v1', credentials=creds)
@@ -851,8 +963,8 @@ def delete_gmail_message(email: str, msg_id: str, permanent: bool = False) -> Di
                 id=msg_id
             ).execute()
 
-        return {"success": True, "message": "Email deleted successfully"}
+        return {"success": True, "message": "Mail gelöscht"}
 
     except Exception as e:
         logging.error(f"Gmail delete error: {e}")
-        return {"success": False, "error": "Failed to delete email"}
+        return {"success": False, "error": "Die Mail ließ sich nicht löschen"}

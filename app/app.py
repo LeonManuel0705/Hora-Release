@@ -459,7 +459,8 @@ def hub_privacy():
 
 @app.route('/hub/klassisch/email')
 def hub_email():
-    return render_template('hub/email.html', active_tab='email')
+    from .google_oauth import is_google_oauth_configured
+    return render_template('hub/email.html', active_tab='email', google_configured=is_google_oauth_configured())
 
 @app.route('/hub/bookmarks')
 def hub_bookmarks():
@@ -2257,7 +2258,7 @@ _google_states = {}
 _google_states_lock = threading.Lock()
 
 
-def _remember_google_state(state):
+def _remember_google_state(state, features=('calendar',)):
     now = time.monotonic()
     with _google_states_lock:
         for known, entry in list(_google_states.items()):
@@ -2265,7 +2266,13 @@ def _remember_google_state(state):
                 del _google_states[known]
         while len(_google_states) >= GOOGLE_STATE_LIMIT:
             del _google_states[next(iter(_google_states))]
-        _google_states[state] = {'expires': now + GOOGLE_STATE_TTL, 'result': None}
+        _google_states[state] = {'expires': now + GOOGLE_STATE_TTL, 'result': None, 'features': list(features)}
+
+
+def _google_features(state):
+    with _google_states_lock:
+        entry = _google_states.get(state) or {}
+        return entry.get('features') or ['calendar']
 
 
 def _google_entry(state):
@@ -2310,9 +2317,11 @@ def _google_page(title, body, ok=False, script=''):
 def start_google_auth():
 
     from .google_oauth import start_oauth_flow
-    result = start_oauth_flow()
-    if result.get('success'):
-        _remember_google_state(result['state'])
+    data = request.get_json(silent=True)
+    features = data.get('features') if isinstance(data, dict) else None
+    result = start_oauth_flow(features or ['calendar'])
+    if result.get('success') and result.get('state'):
+        _remember_google_state(result['state'], result.get('features') or ['calendar'])
     return jsonify(result)
 
 @app.route('/api/email/google/callback', methods=['POST'])
@@ -2321,11 +2330,11 @@ def complete_google_auth():
     from .google_oauth import complete_oauth_flow
     data = request.get_json()
     if not data or not data.get('code'):
-        return jsonify({'success': False, 'error': 'Authorization code required'}), 400
+        return jsonify({'success': False, 'error': 'Der Anmeldecode fehlt'}), 400
     state = _claim_google_state(data.get('state', ''))
     if not state:
-        return jsonify({'success': False, 'error': 'Invalid state parameter'}), 403
-    result = complete_oauth_flow(data['code'])
+        return jsonify({'success': False, 'error': 'Diese Anmeldung gehört zu keiner offenen Anfrage'}), 403
+    result = complete_oauth_flow(data['code'], _google_features(state))
     _finish_google_state(state, bool(result.get('success')), result.get('email', ''), result.get('error', ''))
     return jsonify(result)
 
@@ -2365,7 +2374,7 @@ def google_oauth_redirect_callback():
     <p>Google hat keinen Anmeldecode geschickt.</p>
     <p>Schließ dieses Fenster und versuch es noch einmal.</p>''')
 
-    result = complete_oauth_flow(code)
+    result = complete_oauth_flow(code, _google_features(state))
     _finish_google_state(state, bool(result.get('success')), result.get('email', ''), result.get('error', ''))
 
     if result.get('success'):
@@ -2374,7 +2383,7 @@ def google_oauth_redirect_callback():
         opener = f"if (window.opener) window.opener.postMessage({{ type: 'google-oauth-success', email: '{js_email}' }}, window.location.origin);"
         return _google_page('Google ist verbunden', f'''
     <p>Angemeldet als <strong>{safe_email}</strong>.</p>
-    <p>Du kannst dieses Fenster schließen, {name} zeigt deine Kalender gleich an.</p>''', ok=True, script=opener)
+    <p>Du kannst dieses Fenster schließen und zu {name} zurückgehen.</p>''', ok=True, script=opener)
 
     return _google_page('Verbindung fehlgeschlagen', f'''
     <p>{html_mod.escape(result.get('error', 'Unbekannter Fehler'))}</p>
@@ -2383,9 +2392,8 @@ def google_oauth_redirect_callback():
 @app.route('/api/email/google/accounts', methods=['GET'])
 def list_google_accounts():
 
-    from .google_oauth import get_google_accounts
-    accounts = get_google_accounts()
-    return jsonify({'accounts': accounts})
+    from .google_oauth import connected_accounts
+    return jsonify({'accounts': connected_accounts()})
 
 @app.route('/api/email/google/remove/<path:email>', methods=['DELETE'])
 def remove_google_account_route(email):

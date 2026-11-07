@@ -58,7 +58,7 @@ def _google():
 
 def connected():
     try:
-        return bool(_google().load_tokens())
+        return bool(_google().calendar_account())
     except Exception:
         return False
 
@@ -703,7 +703,7 @@ def waits_elsewhere(item):
     if not account or not item.get('google_dirty'):
         return False
     try:
-        return account != next(iter(_google().load_tokens()), None)
+        return account != _google().calendar_account()
     except Exception:
         return False
 
