@@ -63,8 +63,8 @@ const ORDERS = [["title", "day", "clock"], ["day", "clock", "title"], ["title", 
 
 const bareShort = (words) => /^(?:Mo|Di|Mi|Do|Fr|Sa|So)\.?$/.test(words);
 
-/* What a sentence means: a written short day in front of a name stays text unless a clock stands before it, a short
-   day in lower case only counts behind "am". */
+/* What a sentence means: a written short day in front of a name stays text unless a clock stands before it, or it
+   opens the sentence with a dot or with a time somewhere in it. A short day in lower case only counts behind "am". */
 function meaning(parts, order) {
   const sequence = order.map((kind) => [kind, parts[kind]]).filter(([, words]) => words);
   const index = sequence.findIndex(([kind]) => kind === "day");
@@ -72,7 +72,8 @@ function meaning(parts, order) {
   if (index >= 0 && bareShort(dayWords)) {
     const next = sequence[index + 1];
     const previous = sequence[index - 1];
-    if (next && next[0] === "title" && !(previous && previous[0] === "clock")) day = null;
+    const opening = index === 0 && (dayWords.endsWith(".") || !!parts.clock);
+    if (next && next[0] === "title" && !(previous && previous[0] === "clock") && !opening) day = null;
   }
   if (dayWords === "do") day = null;
   const title = sequence.filter(([kind]) => kind === "title" || (kind === "day" && !day)).map(([, words]) => words).join(" ");
@@ -115,24 +116,60 @@ const tests = {
     assert.ok(count > 4000, `only ${count} sentences`);
     assert.equal(wrong.length, 0, `${wrong.length} of ${count} read wrongly, the first: ${wrong.slice(0, 8).join("; ")}`);
   },
-  "every weekday reads in its short and long form, and the So that opens a sentence stays text"() {
+  "every weekday reads in its short and long form wherever it stands"() {
     on(MONDAY);
     const days = [["Mo", "Montag", "2026-10-12"], ["Di", "Dienstag", "2026-10-06"], ["Mi", "Mittwoch", "2026-10-07"], ["Do", "Donnerstag", "2026-10-08"], ["Fr", "Freitag", "2026-10-09"], ["Sa", "Samstag", "2026-10-10"], ["So", "Sonntag", "2026-10-11"]];
     for (const [short, long, date] of days) {
       for (const form of [short, `${short}.`, long, `am ${short}`, `am ${long}`]) {
         assert.deepEqual(read(`Treffen ${form} 18 Uhr`), { title: "Treffen", date, start: "18:00", end: "19:00" }, form);
         assert.deepEqual(read(`Treffen 18 Uhr ${form}`), { title: "Treffen", date, start: "18:00", end: "19:00" }, form);
-        const opening = short === "So" && form === "So";
-        assert.deepEqual(read(`${form} 18 Uhr Treffen`), { title: "Treffen", date: opening ? MONDAY : date, start: "18:00", end: "19:00" }, form);
+        assert.deepEqual(read(`${form} 18 Uhr Treffen`), { title: "Treffen", date, start: "18:00", end: "19:00" }, form);
       }
     }
+  },
+  "a short day that opens a sentence counts with a dot, a time or a time of day, and never before a comma"() {
+    on(MONDAY);
+    const cases = [
+      ["Do Zahnarzt 15:30–16:15", "Zahnarzt", "2026-10-08", "15:30", "16:15"], ["Do. Zahnarzt 15:30", "Zahnarzt", "2026-10-08", "15:30", "16:30"],
+      ["Mo Training 18 Uhr", "Training", "2026-10-12", "18:00", "19:00"], ["Do. Zahnarzt", "Zahnarzt", "2026-10-08", null, null],
+      ["Sa nachmittags Fußball", "Fußball", "2026-10-10", null, null], ["Mi Training abends", "Training abends", "2026-10-07", null, null],
+      ["So 15 Uhr Kaffee", "Kaffee", "2026-10-11", "15:00", "16:00"], ["So gegen 15 Uhr Kaffee", "Kaffee", "2026-10-11", "15:00", "16:00"],
+      ["Mo bis Fr Praktikum", "Praktikum", "2026-10-12", null, null], ["Mi Amor anrufen um 15 Uhr", "Amor anrufen", "2026-10-07", "15:00", "16:00"],
+      ["Do Zahnarzt", "Do Zahnarzt", MONDAY, null, null], ["So ein Tag", "So ein Tag", MONDAY, null, null],
+      ["So, noch Mathe lernen 15 Uhr", "So, noch Mathe lernen", MONDAY, "15:00", "16:00"], ["Do, Zahnarzt 15 Uhr", "Do, Zahnarzt", MONDAY, "15:00", "16:00"],
+      ["So viel lernen 15 Uhr", "So viel lernen", MONDAY, "15:00", "16:00"], ["So früh wie möglich anrufen", "So früh wie möglich anrufen", MONDAY, null, null],
+      ["Fr Müller anrufen 15 Uhr", "Fr Müller anrufen", MONDAY, "15:00", "16:00"],
+    ];
+    for (const [text, title, date, start, end] of cases) assert.deepEqual(read(text), { title, date, start, end }, text);
+  },
+  "a short day before a time of day keeps it, and the time of day moves the hour"() {
+    on(MONDAY);
+    const cases = [
+      ["Kino Do Abend", "Kino", "2026-10-08", null, null], ["Kino Do Abend 8 Uhr", "Kino", "2026-10-08", "20:00", "21:00"],
+      ["Do Abend 7 bis 9 Uhr Kino", "Kino", "2026-10-08", "19:00", "21:00"], ["Zahnarzt Freitag Nachmittag um 3", "Zahnarzt", "2026-10-09", "15:00", "16:00"],
+      ["Kino heute Abend 8 Uhr", "Kino", MONDAY, "20:00", "21:00"], ["Joggen morgen früh 7 Uhr", "Joggen", "2026-10-06", "07:00", "08:00"],
+      ["Kino Fr Abend 20 Uhr", "Kino", "2026-10-09", "20:00", "21:00"],
+    ];
+    for (const [text, title, date, start, end] of cases) assert.deepEqual(read(text), { title, date, start, end }, text);
+  },
+  "days after mit, in a list, or after Frau and Herr name no day, and Mo bis Fr is a stretch"() {
+    on(MONDAY);
+    const cases = [
+      ["Treffen mit Mo um 19 Uhr", "Treffen mit Mo", MONDAY, "19:00", "20:00"], ["Pizza mit Sa", "Pizza mit Sa", MONDAY, null, null],
+      ["Gym Mo, Mi, Fr 7 Uhr", "Gym Mo, Mi, Fr", MONDAY, "07:00", "08:00"], ["Training Mo und Mi 18 Uhr", "Training Mo und Mi", MONDAY, "18:00", "19:00"],
+      ["Training Montag und Mittwoch 18 Uhr", "Training Montag und Mittwoch", MONDAY, "18:00", "19:00"], ["Lauftreff Di oder Do 18 Uhr", "Lauftreff Di oder Do", MONDAY, "18:00", "19:00"],
+      ["Frau Freitag anrufen 15 Uhr", "Frau Freitag anrufen", MONDAY, "15:00", "16:00"], ["Herr Montag kommt 15 Uhr", "Herr Montag kommt", MONDAY, "15:00", "16:00"],
+      ["Mo bis Fr Praktikum", "Praktikum", "2026-10-12", null, null], ["Praktikum Mo bis Fr", "Praktikum", "2026-10-12", null, null],
+      ["Praktikum Mo bis Freitag 8 Uhr", "Praktikum", "2026-10-12", "08:00", "09:00"], ["Treffen Freitag und so", "Treffen und so", "2026-10-09", null, null],
+    ];
+    for (const [text, title, date, start, end] of cases) assert.deepEqual(read(text), { title, date, start, end }, text);
   },
   "names, adverbs and content keep their words and get no day"() {
     on(MONDAY);
     const cases = [
       ["Gespräch mit Fr. Müller 15 Uhr", "Gespräch mit Fr. Müller"], ["Termin bei Frau Freitag 15 Uhr", "Termin bei Frau Freitag"],
-      ["Treffen mit Di Maria um 15 Uhr", "Treffen mit Di Maria"], ["Mi Amor anrufen um 15 Uhr", "Mi Amor anrufen"],
-      ["Lady Di Doku schauen 15 Uhr", "Lady Di Doku schauen"], ["So gegen 15 Uhr Kaffee", "So Kaffee"], ["So 15 Uhr Kaffee", "Kaffee"], ["So viel lernen 15 Uhr", "So viel lernen"],
+      ["Treffen mit Di Maria um 15 Uhr", "Treffen mit Di Maria"], ["Anruf bei Mi Amor 15 Uhr", "Anruf bei Mi Amor"],
+      ["Lady Di Doku schauen 15 Uhr", "Lady Di Doku schauen"], ["So viel lernen 15 Uhr", "So viel lernen"],
       ["Stoff von Freitag nachholen 15 Uhr", "Stoff von Freitag nachholen"], ["Jeden Montag Training 15 Uhr", "Jeden Montag Training"],
       ["Montagmorgen Sportzeug 15 Uhr", "Montagmorgen Sportzeug"], ["Rufe den Montag-Kurs an 15 Uhr", "Rufe den Montag-Kurs an"],
       ["Mo-Fr Praktikum 15 Uhr", "Mo-Fr Praktikum"], ["Praktikum Mo - Fr 15 Uhr", "Praktikum Mo - Fr"],

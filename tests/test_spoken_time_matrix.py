@@ -160,7 +160,8 @@ SHORT_ORDERS = [('title', 'day', 'clock'), ('day', 'clock', 'title'), ('title', 
 
 def short_sentences():
     """The table the quick fields are held to as well (tests/js/quick_entry_check.mjs): a written short day in front of a
-    name stays text unless a clock stands before it, one in lower case only counts behind "am"."""
+    name stays text unless a clock stands before it, or it opens the sentence with a dot or with a time somewhere in it.
+    One in lower case only counts behind "am"."""
     for title, (day_words, day), (clock_words, clock) in product(SHORT_TITLES, SHORT_DAYS, SHORT_CLOCKS):
         for order in SHORT_ORDERS:
             parts = {'title': title, 'day': day_words, 'clock': clock_words}
@@ -169,7 +170,8 @@ def short_sentences():
             meant = day
             following = sequence[index + 1][0] if index + 1 < len(sequence) else None
             preceding = sequence[index - 1][0] if index else None
-            if day_words in ('Do', 'Do.') and following == 'title' and preceding != 'clock':
+            opening = index == 0 and (day_words == 'Do.' or bool(clock_words))
+            if day_words in ('Do', 'Do.') and following == 'title' and preceding != 'clock' and not opening:
                 meant = None
             rest = ' '.join(words for kind, words in sequence if kind == 'title' or (kind == 'day' and not meant))
             yield ' '.join(words for _, words in sequence), rest, meant, clock

@@ -522,13 +522,27 @@ function subjectAliases() {
 
 const DAY_NAMES = ["sonntag", "montag", "dienstag", "mittwoch", "donnerstag", "freitag", "samstag"];
 const DAY_SHORT = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+const DAY_ANY = `(?:${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})`;
 const MONTH_WORDS = "januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember";
+const PARTS = "abends?|nachmittags?|vormittags?|mittags?|morgens?|nachts?|früh";
+// "früh" and "morgen" are left out here: "So früh wie möglich" and "So, morgen ..." name no day.
+const DAYTIME = "abends?|nachmittags?|vormittags?|mittags?|morgens|nachts?";
 const DAY_WORD = new RegExp(`(?<![\\p{L}\\p{N}.\\-–/])(${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})(?![\\p{L}\\p{N}\\-])`, "giu");
 const DAY_LEADS = /(?<![\p{L}\p{N}])((?:(?:am|bis|zum|ab|für|den|nächsten|kommenden|diesen|übernächsten|spätestens)\s+)+)$/iu;
-// What makes a day part of the content ("Stoff von Freitag", "jeden Montag") or a surname ("Frau Freitag").
+// After these words a day belongs to the content ("Stoff von Freitag", "jeden Montag") or is a name ("Frau Freitag").
 const DAY_NOT_AFTER = /(?<![\p{L}\p{N}])(?:von|vom|seit|über|letzte[nmrs]?|vergangene[nmrs]?|jeden|jedem|herr|frau|hr\.|fr\.|dr\.|prof\.)\s*$/iu;
-const DAY_RANGE = new RegExp(`^\\s+bis\\s+(?:(?:zum|einschließlich)\\s+)?(?:${DAY_NAMES.join("|")})(?![\\p{L}])`, "iu");
+const DAY_RANGE = new RegExp(`^\\s+bis\\s+(?:(?:zum|einschließlich)\\s+)?${DAY_ANY}(?![\\p{L}])`, "iu");
 const DAY_LIST = /^\s*[-–/]\s*(?:mo|di|mi|do|fr|sa|so)(?![\p{L}])/iu;
+// Days in a list ("Mo, Mi und Fr") name a rhythm, not one day.
+const LIST_AFTER = new RegExp(`^\\.?\\s*(?:,|&|und|oder)\\s*(${DAY_ANY})(?![\\p{L}])`, "iu");
+const LIST_BEFORE = new RegExp(`(?<![\\p{L}])(${DAY_ANY})\\.?\\s*(?:,|&|und|oder)\\s*$`, "iu");
+const WITH_BEFORE = /(?<![\p{L}])mit\s+$/iu;
+const PART_AFTER = new RegExp(`^\\s+(${PARTS})(?![\\p{L}])`, "iu");
+const DAYTIME_AFTER = new RegExp(`^\\s+(?:${DAYTIME})(?![\\p{L}])`, "iu");
+const ANY_DAYTIME = new RegExp(`(?<![\\p{L}])(?:${DAYTIME})(?![\\p{L}])`, "iu");
+const ANY_CLOCK = /(?<![\p{N}.:])(?:(?:[01]?\d|2[0-3]):[0-5]\d|(?:[01]?\d|2[0-3])(?:\.[0-5]\d)?\s*uhr(?![\p{L}]))|(?<![\p{L}])(?:um|ab|gegen)\s+(?:[01]?\d|2[0-3])(?![\p{N}])/iu;
+// A sentence may open with the word "so" ("So viel lernen", "So ein Tag"), never with "so um 8".
+const SO_WORD = /^\s+(?!(?:um|ab|gegen)(?![\p{L}]))\p{Ll}/u;
 const WEEK_BEFORE = /(?<![\p{L}\p{N}])((?:in\s+)?(?:der\s+)?(nächste[nr]?|kommende[nr]?|übernächste[nr]?|diese[nr]?)\s+woche\s+(?:am\s+)?)$/iu;
 const WEEK_AFTER = /^\s+(?:(?:in\s+)?der\s+)?(nächste[nr]?|kommende[nr]?|übernächste[nr]?)\s+woche(?![\p{L}])/iu;
 const WEEKS_AHEAD = /^\s+in\s+(\S+)\s+wochen?(?![\p{L}])/iu;
@@ -536,7 +550,7 @@ const WEEK_COUNTS = { einer: 1, 1: 1, zwei: 2, 2: 2, drei: 3, 3: 3, vier: 4, 4: 
 // Behind a day, a date that was not understood: the day alone would be the wrong one.
 const DATE_AFTER = new RegExp(`^\\s*[,(–-]?\\s*(?:de[nmr]\\s+)?\\d{1,2}\\.\\s?(?:\\d{1,2}\\.|(?:${MONTH_WORDS})(?![\\p{L}]))`, "iu");
 const CLOCK_BEFORE = /(?:\d|uhr|früh|morgens|vormittags|mittags|nachmittags|abends|nachts)\s*[,.]?\s*$/iu;
-const MORNING_AFTER = /^\s+(?:morgen|morgens|früh|vormittags?)(?![\p{L}])/iu;
+const RELATIVE = new RegExp(`(?<![\\p{L}\\p{N}])((?:(?:bis|für|am|ab)\\s+)?)(übermorgen|morgen|heute)(?:\\s+(${PARTS}))?(?![\\p{L}\\p{N}])`, "giu");
 const NOT_TOMORROW_AFTER = new RegExp(`(?<![\\p{L}\\p{N}])(?:am|jeden|jedem|guten|gestern|heute|frühen|nächsten|das|der|den|dem|diesen|diesem|einen|einem|${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")}\\.?)\\s+$`, "iu");
 
 const DAY_BEFORE_DATE = new RegExp(`(?<![\\p{L}\\p{N}])(?:(?:bis|am|zum|ab)\\s+)?(${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})\\.?\\s*,?\\s*(?:de[nm]\\s+)?$`, "iu");
@@ -544,10 +558,27 @@ const DAY_AFTER_DATE = new RegExp(`^\\s*(?:\\(\\s*(?:${DAY_NAMES.join("|")})\\s*
 const weekShift = (word) => (/^über/i.test(word) ? 2 : /^diese/i.test(word) ? 0 : 1);
 const nextOf = (base, dow) => (dow - base.getDay() + 7) % 7 || 7;
 
-/* The weekday the text names as the day of the entry: { date, start, end } or null. A short name counts only as
-   written ("Do", not "do") unless a word like "am" stands before it, never in front of a name ("Fr. Müller",
-   "Di Maria") and not as the "So" a sentence starts with. A deadline ("bis Freitag") wins over a plain day, which wins
-   over one something is meant for ("für Montag"). When unsure, the text stays as it is. */
+const isDay = (word) => word.length > 2 || DAY_SHORT.includes(word);
+
+function listed(before, after) {
+  const next = after.match(LIST_AFTER);
+  const previous = before.match(LIST_BEFORE);
+  return (next && isDay(next[1])) || (previous && isDay(previous[1]));
+}
+
+/* A wrong day is worse than none, so a short name without "am" or "bis" counts only where nothing else can be meant:
+   as written ("Do"), not after "mit", not in front of a name ("Fr. Müller"), and at the start of a sentence only with
+   a dot, a time or a time of day and without a comma behind it ("So, ..." and "So ein Tag" stay text). The assistant
+   reads them by the same rules (spoken_time.py, _short_day). */
+function shortDay(word, text, before, after, dotted, range) {
+  if (word !== `${word[0].toUpperCase()}${word[1].toLowerCase()}` || WITH_BEFORE.test(before)) return false;
+  if (DAYTIME_AFTER.test(after)) return true;
+  const named = /^\s*[,.]?\s*\p{Lu}/u.test(after);
+  if (before.trim()) return !named || (word !== "Fr" && CLOCK_BEFORE.test(before));
+  if (/^\s*,/.test(after) || (named && word === "Fr") || (word === "So" && !dotted && SO_WORD.test(after))) return false;
+  return dotted || !!range || ANY_CLOCK.test(text) || ANY_DAYTIME.test(text);
+}
+
 function weekdayOf(text, base) {
   const found = [];
   let covered = -1;
@@ -555,8 +586,9 @@ function weekdayOf(text, base) {
     if (match.index < covered) continue;
     const word = match[1];
     const short = word.length === 2;
+    const dotted = short && text[match.index + 2] === ".";
     let start = match.index;
-    let end = start + word.length + (short && text[start + 2] === "." ? 1 : 0);
+    let end = start + word.length + (dotted ? 1 : 0);
     const before = text.slice(0, start);
     const after = text.slice(end);
     const lead = before.match(DAY_LEADS);
@@ -564,12 +596,8 @@ function weekdayOf(text, base) {
     const content = before.slice(0, lead ? lead.index : start).match(DAY_NOT_AFTER);
     const range = leadWords.includes("für") || (content && (leadWords.length || !/^von\s*$/i.test(content[0]))) ? null : after.match(DAY_RANGE);
     if (content && !range) continue;
-    if (DAY_LIST.test(after) || /[-–/]\s*$/.test(before) || DATE_AFTER.test(after)) continue;
-    if (short && !leadWords.some((item) => ["am", "bis", "zum", "ab", "spätestens"].includes(item))) {
-      if (word !== `${word[0].toUpperCase()}${word[1].toLowerCase()}`) continue;
-      if (/^\s*[,.]?\s*\p{Lu}/u.test(after) && (word === "Fr" || !CLOCK_BEFORE.test(before))) continue;
-      if (word === "So" && !before.trim() && text[start + 2] !== ".") continue;
-    }
+    if (DAY_LIST.test(after) || /[-–/]\s*$/.test(before) || DATE_AFTER.test(after) || listed(before, after)) continue;
+    if (short && !leadWords.some((item) => ["am", "bis", "zum", "ab", "spätestens"].includes(item)) && !shortDay(word, text, before, after, dotted, range)) continue;
     const dow = short ? DAY_SHORT.indexOf(`${word[0].toUpperCase()}${word[1].toLowerCase()}`) : DAY_NAMES.indexOf(word.toLowerCase());
     if (content) start = content.index;
     else if (lead) start = lead.index;
@@ -594,10 +622,10 @@ function weekdayOf(text, base) {
       end += range[0].length;
       covered = end;
     }
-    const morning = text.slice(end).match(MORNING_AFTER);
-    if (morning) end += morning[0].length;
+    const part = text.slice(end).match(PART_AFTER);
+    if (part) end += part[0].length;
     const rank = range ? 2 : leadWords.includes("bis") || leadWords.includes("spätestens") ? 0 : leadWords.includes("für") ? 3 : 2;
-    found.push({ date, start, end, rank });
+    found.push({ date, start, end, rank, part: part ? part[1].toLowerCase() : null });
   }
   return found.sort((a, b) => a.rank - b.rank || a.start - b.start)[0] || null;
 }
@@ -617,12 +645,12 @@ export function parseNote(text) {
   const base = startOfDay(now());
   let date = null;
   let phrase = null;
-  const relative = [...clean.matchAll(/(?<![\p{L}\p{N}])(?:(?:bis|für|am|ab)\s+)?(übermorgen|morgen|heute)(?![\p{L}\p{N}])/giu)]
-    .find((match) => match[1].toLowerCase() !== "morgen" || !NOT_TOMORROW_AFTER.test(clean.slice(0, match.index + match[0].length - match[1].length)));
+  const relative = [...clean.matchAll(RELATIVE)].find((match) => match[2].toLowerCase() !== "morgen" || !NOT_TOMORROW_AFTER.test(clean.slice(0, match.index + match[1].length)));
   if (relative) {
-    const word = relative[1].toLowerCase();
+    const word = relative[2].toLowerCase();
     date = addDays(base, word === "übermorgen" ? 2 : word === "morgen" ? 1 : 0);
     phrase = relative[0];
+    if (relative[3]) result.part = relative[3].toLowerCase();
   }
   const inDaysMatch = clean.match(/\b(?:bis\s+)?in\s+(\d{1,2})\s+tag(?:en)?\b/i);
   if (!date && inDaysMatch) {
@@ -662,6 +690,7 @@ export function parseNote(text) {
     if (weekday) {
       date = weekday.date;
       phrase = clean.slice(weekday.start, weekday.end);
+      if (weekday.part) result.part = weekday.part;
     }
   }
   const nextWeek = clean.match(/\b(?:bis\s+)?nächste(?:n)?\s+woche\b/i);
@@ -701,8 +730,7 @@ function effective() {
 
 const WORDLY = /[\p{L}\p{N}]/u;
 
-/* Where the words of a find stand in the text: their first place that is not inside a longer word, so "Do" is never
-   cut out of "Dosenpfand". */
+// The first place that is not inside a longer word, so "Do" is never cut out of "Dosenpfand".
 export function phraseAt(text, phrase) {
   const low = text.toLowerCase();
   const wanted = phrase.toLowerCase();

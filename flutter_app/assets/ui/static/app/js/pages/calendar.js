@@ -1322,18 +1322,28 @@ function cut(text, phrase) {
   return index < 0 ? text : `${text.slice(0, index)} ${text.slice(index + phrase.length)}`;
 }
 
-function parseTime(text) {
+// The time of day the date came with ("Do Abend 8 Uhr") moves the hour as in the assistant (spoken_time.py, _later).
+function later(hour, part) {
+  const value = Number(hour);
+  if (!part) return value;
+  if (/^(?:nachmittag|abend)/.test(part) && value >= 1 && value < 12) return value + 12;
+  if (part.startsWith("nacht")) return value === 12 ? 0 : value >= 9 && value < 12 ? value + 12 : value;
+  if (part.startsWith("mittag") && value >= 1 && value <= 4) return value + 12;
+  return value;
+}
+
+function parseTime(text, part = null) {
   const clean = text.replace(PAGE_NOISE, (match) => " ".repeat(match.length));
   const range = clean.match(TIME_RANGE);
   if (range && (range[2] || range[4] || /uhr|von/i.test(range[0]))) {
-    const start = `${pad(range[1])}:${range[2] || "00"}`;
-    const end = `${pad(range[3])}:${range[4] || "00"}`;
+    const start = `${pad(later(range[1], part))}:${range[2] || "00"}`;
+    const end = `${pad(later(range[3], part))}:${range[4] || "00"}`;
     if (toMin(end) > toMin(start)) return { start, end, phrase: text.substr(range.index, range[0].length) };
   }
   for (const pattern of TIME_SINGLE) {
     const match = clean.match(pattern);
     if (match) {
-      const start = `${pad(match[1])}:${match[2] || "00"}`;
+      const start = `${pad(later(match[1], part))}:${match[2] || "00"}`;
       return { start, end: null, phrase: text.substr(match.index, match[0].length) };
     }
   }
@@ -1347,7 +1357,7 @@ function defaultDay() {
 export function parseEntry(text) {
   const info = parseNote(text);
   const date = info.date || null;
-  const time = parseTime(cut(text, info.phrases.date));
+  const time = parseTime(cut(text, info.phrases.date), info.part);
   let start = time?.start || null;
   let end = time?.end || null;
   if (!start && info.block) {
