@@ -27,6 +27,14 @@ class _School {
   String password = 'geheim';
   String? handoff;
   String wanted = '/iserv/';
+  String session = 'yes';
+  String signedIn = 'yes';
+  int hops = 0;
+  bool loop = false;
+  String? codePath;
+  String codeForm = '<form method="post"><input type="hidden" name="_token" value="t2">'
+      '<input name="_auth_code" autocomplete="one-time-code" inputmode="numeric"><button>Bestätigen</button></form>';
+  String? sso;
   String show = '<img src="/iserv/assets/infodisplay/img/infodisplay.svg">'
       '<img src="/iserv/infodisplay/pdf/17/1/0?1&amp;x=2"><img src="/iserv/infodisplay/pdf/17/2/0"><img src="/iserv/infodisplay/pdf/17/3/0">';
 
@@ -37,7 +45,12 @@ class _School {
   String get _form => '<form method="post"><input type="hidden" name="_token" value="t1">'
       '<input name="_username"><input type="password" name="_password"></form>';
 
-  bool _has(HttpRequest request, String name) => request.cookies.any((cookie) => cookie.name == name && cookie.value == 'yes');
+  bool _has(HttpRequest request, String name, [String value = 'yes']) => request.cookies.any((cookie) => cookie.name == name && cookie.value == value);
+
+  void forget() {
+    session = 'app-${requested.length}';
+    signedIn = 'auth-${requested.length}';
+  }
 
   void _html(HttpRequest request, String body, [int status = 200]) {
     request.response
@@ -55,32 +68,51 @@ class _School {
   Future<void> _answer(HttpRequest request) async {
     final path = request.uri.path;
     requested.add('${request.method} $path');
-    if (path == '/iserv/auth/login' && request.method == 'POST') {
+    if (sso != null && path == '/iserv/auth/login') {
+      _redirect(request, sso!);
+    } else if (path == '/iserv/auth/login' && request.method == 'POST') {
       final fields = Uri.splitQueryString(await utf8.decoder.bind(request).join());
       if (fields['_username'] == 'lea' && fields['_password'] == password && fields['_token'] == 't1') {
-        request.response.cookies.add(Cookie('IServAuthSession', 'yes')..path = '/iserv/auth');
+        request.response.cookies.add(Cookie('IServAuthSession', codePath == null ? signedIn : 'partial')..path = '/iserv/auth');
         _redirect(request, '/iserv/auth/home');
       } else {
-        _html(request, '<p>Anmeldung fehlgeschlagen</p>$_form');
+        _html(request, '<p>Anmeldung fehlgeschlagen!</p>$_form');
       }
     } else if (path == '/iserv/auth/login') {
       _html(request, _form);
+    } else if (codePath != null && _has(request, 'IServAuthSession', 'partial') && path.startsWith('/iserv/auth/')) {
+      if (path == codePath) {
+        _html(request, codeForm);
+      } else {
+        _redirect(request, codePath!);
+      }
     } else if (path.startsWith('/iserv/auth/')) {
-      if (!_has(request, 'IServAuthSession')) {
+      final hop = path.startsWith('/iserv/auth/hop/') ? int.parse(path.substring(16)) : 0;
+      if (!_has(request, 'IServAuthSession', signedIn)) {
         _redirect(request, '/iserv/auth/login');
+      } else if (loop && path == '/iserv/auth/auth') {
+        _redirect(request, '$origin/iserv/auth/hop/1');
+      } else if (loop) {
+        _redirect(request, '/iserv/auth/auth?state=abc');
+      } else if (hop < hops && (path == '/iserv/auth/auth' || hop > 0)) {
+        _redirect(request, hop.isEven ? '/iserv/auth/hop/${hop + 1}' : '$origin/iserv/auth/hop/${hop + 1}');
       } else {
         final target = handoff ?? '0;url=$origin/iserv/app/authentication/redirect?state=abc&code=xyz';
         _html(request, '<html><head><meta http-equiv="refresh" content="${const HtmlEscape(HtmlEscapeMode.attribute).convert(target)}"></head>'
             '<body>Sie werden weitergeleitet.</body></html>');
       }
     } else if (path == '/iserv/app/authentication/redirect') {
-      request.response.cookies.add(Cookie('IServSession', 'yes')..path = '/');
+      request.response.cookies.add(Cookie('IServSession', session)..path = '/');
       _redirect(request, wanted);
-    } else if (!_has(request, 'IServSession')) {
+    } else if (!_has(request, 'IServSession', session)) {
       wanted = request.uri.toString();
       _redirect(request, '/iserv/auth/auth?state=abc');
     } else if (path == '/iserv/') {
       _html(request, '<h1>Start</h1>');
+    } else if (path == '/iserv/exercise/api/exercises') {
+      request.response
+        ..headers.set('Content-Type', 'application/json')
+        ..write(jsonEncode({'data': [{'id': 7, 'title': 'Gedichtanalyse', 'endDate': '2026-11-12T23:59:00+01:00'}]}));
     } else if (path == '/iserv/infodisplay/show/3') {
       _html(request, show);
     } else if (path == '/iserv/infodisplay/pdf/17/1/0' || path == '/iserv/infodisplay/pdf/17/2/0') {
@@ -224,5 +256,121 @@ void main() {
     expect(planContentType([...utf8.encode('RIFF'), 0, 0, 0, 0, ...utf8.encode('WEBPVP8 ')]), 'image/webp');
     expect(planContentType(utf8.encode('<svg onload="alert(1)">')), isNull);
     expect(planContentType(utf8.encode('<!doctype html>')), isNull);
+  });
+
+  test('a wrong password with the right user name is refused, not taken for a sign-in', () async {
+    expect(await _session(school.origin).signIn('lea', 'Geheim'), IServSignIn.refused);
+    expect(await _session(school.origin).signIn('ben', 'geheim'), IServSignIn.refused);
+    expect(school.requested.where((line) => line == 'GET /iserv/infodisplay/show/3'), isEmpty);
+  });
+
+  test('a chain of redirects inside the school is followed, relative and absolute alike', () async {
+    school.hops = 3;
+    expect(await _session(school.origin).signIn('lea', 'geheim'), IServSignIn.entered);
+    expect(school.requested, containsAllInOrder(['GET /iserv/auth/hop/1', 'GET /iserv/auth/hop/2', 'GET /iserv/auth/hop/3', 'GET /iserv/']));
+  });
+
+  test('a chain longer than the cap and a loop both end as an unfinished sign-in', () async {
+    school.hops = 12;
+    expect(await _session(school.origin).signIn('lea', 'geheim'), IServSignIn.stuck);
+    school
+      ..hops = 0
+      ..loop = true;
+    expect(await _session(school.origin).signIn('lea', 'geheim'), IServSignIn.stuck);
+  });
+
+  test('a second step with a one-time code is named as such, wherever IServ asks for it', () async {
+    for (final (path, form) in [
+      ('/iserv/auth/login/2fa', school.codeForm),
+      ('/iserv/auth/2fa', '<form method="post"><label for="code">Code</label><input id="code" name="code" type="text"></form>'),
+      ('/iserv/auth/verify', '<form method="post"><input name="_totp" type="number"></form>'),
+    ]) {
+      school
+        ..codePath = path
+        ..codeForm = form;
+      expect(await _session(school.origin).signIn('lea', 'geheim'), IServSignIn.twoFactor, reason: path);
+      expect(await _session(school.origin).signIn('lea', 'falsch'), IServSignIn.refused, reason: path);
+    }
+  });
+
+  test('a school that signs in through another service is named as such, and that service is never asked', () async {
+    final other = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var visits = 0;
+    other.listen((request) {
+      visits++;
+      request.response.close();
+    });
+    addTearDown(() => other.close(force: true));
+    school.sso = 'http://localhost:${other.port}/saml/login?SAMLRequest=abc';
+    expect(await _session(school.origin).signIn('lea', 'geheim'), IServSignIn.external);
+    school.sso = 'https://idp.bildung.example/oidc/authorize?client_id=iserv';
+    expect(await _session(school.origin).signIn('lea', 'geheim'), IServSignIn.external);
+    expect(visits, 0);
+    expect(school.requested.where((line) => line.startsWith('POST')), isEmpty, reason: 'the password never goes out');
+  });
+
+  test('an expired session is noticed in an API answer and signed in again once', () async {
+    var session = _session(school.origin);
+    expect(await session.signIn('lea', 'geheim'), IServSignIn.entered);
+    final fresh = await session.api('/iserv/exercise/api/exercises');
+    expect(((fresh!.data as Map)['data'] as List).single['title'], 'Gedichtanalyse');
+
+    school.forget();
+    expect(await session.api('/iserv/exercise/api/exercises'), isNull);
+
+    var renewals = 0;
+    Future<bool> renew(IServSession expired) async {
+      renewals++;
+      expect(identical(expired, session), isTrue);
+      session = _session(school.origin);
+      return await session.signIn('lea', 'geheim') == IServSignIn.entered;
+    }
+
+    final again = await iservApi(() => session, renew, '/iserv/exercise/api/exercises');
+    expect(again?.statusCode, 200);
+    expect(renewals, 1);
+    expect(await iservApi(() => session, renew, '/iserv/exercise/api/exercises'), isNotNull);
+    expect(renewals, 1, reason: 'a live session is not signed in again');
+  });
+
+  test('when signing in again fails, the API gives nothing instead of the sign-in page', () async {
+    final session = _session(school.origin);
+    await session.signIn('lea', 'geheim');
+    school
+      ..forget()
+      ..password = 'neues-passwort';
+    Future<bool> renew(IServSession expired) async => await _session(school.origin).signIn('lea', 'geheim') == IServSignIn.entered;
+    expect(await iservApi(() => session, renew, '/iserv/exercise/api/exercises'), isNull);
+    expect(await iservApi(() => null, renew, '/iserv/exercise/api/exercises'), isNull);
+  });
+
+  test('the plan after an expired session counts as expired, and a new sign-in finds it again', () async {
+    final session = _session(school.origin);
+    await session.signIn('lea', 'geheim');
+    expect((await fetchIServPlan(session)).state, IServPlanState.found);
+    school.forget();
+    expect((await fetchIServPlan(session)).state, IServPlanState.expired);
+    final renewed = _session(school.origin);
+    await renewed.signIn('lea', 'geheim');
+    expect((await fetchIServPlan(renewed)).state, IServPlanState.found);
+  });
+
+  test('an answer counts as expired when IServ sends its sign-in instead of data', () {
+    Response<Object?> answer(int status, {String? location, String type = 'application/json', Object? data}) => Response(
+          requestOptions: RequestOptions(path: '/iserv/exercise/api/exercises'),
+          statusCode: status,
+          data: data,
+          headers: Headers.fromMap({
+            Headers.contentTypeHeader: [type],
+            if (location != null) 'location': [location],
+          }),
+        );
+    expect(IServSession.expired(answer(302, location: '/iserv/auth/auth?state=abc')), isTrue);
+    expect(IServSession.expired(answer(302, location: 'https://iserv.schule.de/iserv/auth/login')), isTrue);
+    expect(IServSession.expired(answer(401)), isTrue);
+    expect(IServSession.expired(answer(200, type: 'text/html; charset=UTF-8', data: '<form><input name="_username"></form>')), isTrue);
+    expect(IServSession.expired(answer(200, data: {'data': []})), isFalse);
+    expect(IServSession.expired(answer(404, data: {'error': 'Nicht gefunden'})), isFalse);
+    expect(IServSession.expired(answer(302, location: '/iserv/exercise/show/7')), isFalse);
   });
 }
