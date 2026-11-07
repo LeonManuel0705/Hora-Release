@@ -17,7 +17,7 @@
     "menu": "Menü"
   },
   "meta": {
-    "home": "{{BRAND_NAME}}: Weiß, wo du hinmusst.",
+    "home": "{{BRAND_NAME}}: Weiß, wo du hinmusst",
     "features": "Funktionen · {{BRAND_NAME}}",
     "privacy": "Datenschutz-Prinzip · {{BRAND_NAME}}",
     "download": "{{BRAND_NAME}} laden",
@@ -431,17 +431,17 @@
     "cta": "{{BRAND_NAME}} 0.5 laden",
     "matrix_title": "Welche Funktion auf welchem Gerät",
     "eyebrow": "Funktionen",
-    "hero_title": "Was {{BRAND_NAME}} kann.",
+    "hero_title": "Was {{BRAND_NAME}} kann",
     "hero_lede": "Auf dem Computer, auf Android und als Web-App auf dem iPhone. Nicht jede Funktion läuft überall, die Tabelle unten zeigt ehrlich, was wo geht.",
     "hero_alt": "Die Schulseite von {{BRAND_NAME}} mit dem Stundenplan der A-Woche und dem Vertretungsplan.",
     "heads": {
-      "stundenplan": "Der nächste Raum steht schon da.",
-      "noten": "Dein Schnitt, auf die Kommastelle.",
-      "aufgaben": "Jeder Test mit Countdown.",
-      "iserv": "Einmal anmelden, der Rest kommt von selbst.",
-      "fahrplan": "Verspätungen, bevor du losgehst.",
-      "kalender": "Ferien, die du nicht abtippen musst.",
-      "luna": "Frag einfach Luna."
+      "stundenplan": "Der nächste Raum steht schon da",
+      "noten": "Dein Schnitt, auf die Kommastelle",
+      "aufgaben": "Jeder Test mit Countdown",
+      "iserv": "Einmal anmelden, der Rest kommt von selbst",
+      "fahrplan": "Verspätungen, bevor du losgehst",
+      "kalender": "Ferien, die du nicht abtippen musst",
+      "luna": "Frag einfach Luna"
     },
     "shots": {
       "stundenplan": "Der Stundenplan der A-Woche mit Fächern, Räumen und Blockzeiten.",
@@ -452,7 +452,7 @@
       "kalender": "Die Kalenderwoche mit Stundenplan, Terminen und dem Projekttag.",
       "luna": "Luna, die Assistentin in {{BRAND_NAME}}."
     },
-    "cta_title": "Hol dir {{BRAND_NAME}}.",
+    "cta_title": "Hol dir {{BRAND_NAME}}",
     "cta_text": "Kostenlos für Mac, Windows, Linux und Android."
   },
   "privacy_page": {
@@ -628,13 +628,13 @@
       }
     ],
     "eyebrow": "Download",
-    "hero_title": "Hol dir {{BRAND_NAME}}.",
+    "hero_title": "Hol dir {{BRAND_NAME}}",
     "yours": "Dein Gerät",
     "get": "Laden",
     "open": "Öffnen"
   },
   "about_page": {
-    "title": "Ein Schülerprojekt aus Brandenburg.",
+    "title": "Ein Schülerprojekt aus Brandenburg",
     "lede": "{{BRAND_NAME}} baut ein Schüler aus Brandenburg, gerade in der Oberstufe. Die App ist für den eigenen Schulalltag entstanden und jetzt für alle da, die etwas Ähnliches suchen.",
     "story_title": "Warum es {{BRAND_NAME}} gibt",
     "story": [
@@ -764,54 +764,54 @@
     "more": "Schultag ansehen",
     "hero_alt": "Die Übersicht von {{BRAND_NAME}} um 7:12 Uhr: Gleich Chemie in Raum B206, darunter die Aufgaben für heute und die nächsten Abgaben.",
     "statement": "Bevor du morgens losgehst, weiß {{BRAND_NAME}} schon, in welchem Raum du sitzt und ob dein Bus pünktlich kommt.",
-    "show_title": "Von der ersten Stunde bis zum Bus nach Hause.",
+    "show_title": "Von der ersten Stunde bis zum Bus nach Hause",
     "steps": [
       {
         "id": "heute",
         "label": "Übersicht",
-        "title": "Gleich Chemie, Raum B206.",
+        "title": "Gleich Chemie, Raum B206",
         "text": "{{BRAND_NAME}} zeigt, was jetzt dran ist und was danach kommt. Mit Raum, Lehrkraft und Uhrzeit.",
         "alt": "Die Übersicht: gleich Chemie in Raum B206, danach Deutsch LK."
       },
       {
         "id": "aufgaben",
         "label": "Aufgaben",
-        "title": "Hausaufgaben direkt aus IServ.¹",
+        "title": "Hausaufgaben direkt aus IServ¹",
         "text": "Mit Fach und Abgabetag. Was überfällig ist, steht ganz oben, eigene Aufgaben schreibst du einfach dazu.",
         "alt": "Die Aufgaben: ein überfälliges Protokoll und vier Aufgaben für heute, zwei davon aus IServ."
       },
       {
         "id": "plan",
         "label": "Stundenplan",
-        "title": "A-Woche, B-Woche, Vertretungen.",
+        "title": "A-Woche, B-Woche, Vertretungen",
         "text": "Dein Stundenplan mit euren Blockzeiten. Den Vertretungsplan holt {{BRAND_NAME}} jeden Morgen aus IServ.",
         "alt": "Der Stundenplan der A-Woche mit Fächern und Räumen, daneben der Vertretungsplan."
       },
       {
         "id": "bus",
         "label": "Fahrplan",
-        "title": "Die 612 kommt in 6 Minuten.",
+        "title": "Die 612 kommt in 6 Minuten",
         "text": "Live-Abfahrten an deiner Haltestelle, mit Verspätungen. Nexus kannte auf Android nur Berlin und Brandenburg, {{BRAND_NAME}} kennt ganz Deutschland.",
         "alt": "Der Fahrplan: Schulweg mit Bus 612 um 7:18 und die nächsten Abfahrten an der Haltestelle."
       },
       {
         "id": "noten",
         "label": "Noten",
-        "title": "Für eine 12 fehlt dir noch eine 13.",
+        "title": "Für eine 12 fehlt dir noch eine 13",
         "text": "{{BRAND_NAME}} rechnet deinen Schnitt und sagt dir, welche Note du für dein Ziel brauchst. Leistungskurse zählen doppelt.",
         "alt": "Die Noten: 11,3 Punkte im Schnitt und der Notenrechner mit dem Ergebnis 13 Punkte."
       }
     ],
     "tile_luna_label": "Luna antippen, dann winkt sie",
-    "privacy_title": "Deine Noten gehen nur dich was an.",
+    "privacy_title": "Deine Noten gehen nur dich was an",
     "privacy_text": "Deine Daten bleiben auf deinem Gerät, weil es keinen {{BRAND_NAME}}-Server gibt. Was mit ihnen passiert, kannst du im Quellcode nachlesen, Zeile für Zeile.",
     "privacy_link": "Mehr zum Datenschutz",
-    "get_title": "Hol dir {{BRAND_NAME}}.",
+    "get_title": "Hol dir {{BRAND_NAME}}",
     "get_text": "Kostenlos für Mac, Windows, Linux und Android. Aufs iPhone kommt {{BRAND_NAME}} als Web-App.",
     "get_all": "Alle Downloads und Anleitungen",
     "fine": "Version 0.5 gibt es für alle Plattformen. Alle Daten in den Bildern sind ausgedacht.",
     "footnote": "³ Gilt für den Mac: 24,0 MB in Version 0.5 statt 39,4 MB beim letzten Mac-Download (Nexus 0.3.0).",
-    "high_title": "Was sonst noch drin ist.",
+    "high_title": "Was sonst noch drin ist",
     "high_label": "Weitere Funktionen",
     "high_prev": "Vorherige Karte",
     "high_next": "Nächste Karte",
@@ -819,47 +819,47 @@
     "cards": [
       {
         "id": "theme",
-        "lead": "Aufgeräumter als Nexus.",
+        "lead": "Aufgeräumter als Nexus",
         "text": "Vorne stehen nur noch 6 Bereiche statt 15, der Rest liegt unter Mehr."
       },
       {
         "id": "weather",
-        "lead": "Mit Wetter für den Heimweg.",
+        "lead": "Mit Wetter für den Heimweg",
         "text": "Ob es regnet, steht direkt bei Bus und Terminen, am Computer und auf Android."
       },
       {
         "id": "tour",
-        "lead": "Luna zeigt dir alles.",
+        "lead": "Luna zeigt dir alles",
         "text": "Nexus hatte keine Tour. Luna führt dich in 12 Schritten durch {{BRAND_NAME}}."
       },
       {
         "id": "security",
-        "lead": "Noch sicherer als Nexus.",
+        "lead": "Noch sicherer als Nexus",
         "text": "Über 30 Korrekturen nach mehreren Sicherheitsprüfungen."
       },
       {
         "id": "size",
-        "lead": "39 % kleiner.³",
+        "lead": "39 % kleiner³",
         "text": "Lädt schneller herunter, startet schlanker und bietet weniger Angriffsfläche."
       },
       {
         "id": "luna",
-        "lead": "Luna trägt ein, löscht aber nie.",
+        "lead": "Luna trägt ein, löscht aber nie",
         "text": "Sie legt nur Aufgaben an. Löschen oder abhaken kann sie nicht, auch wenn es in einer Mail steht."
       },
       {
         "id": "move",
-        "lead": "Alles aus Nexus kommt mit.",
+        "lead": "Alles aus Nexus kommt mit",
         "text": "Aufgaben, Termine, Noten und Zugänge übernimmt {{BRAND_NAME}} beim ersten Start. Du tippst nichts neu ein."
       },
       {
         "id": "phone",
-        "lead": "Auch aufs iPhone.",
+        "lead": "Auch aufs iPhone",
         "text": "Als Web-App, direkt aus Safari. Mit Übersicht, Aufgaben und Stundenplan."
       },
       {
         "id": "holidays",
-        "lead": "Die Ferien sind schon drin.",
+        "lead": "Die Ferien sind schon drin",
         "text": "Ferien und Feiertage aller 16 Bundesländer trägt {{BRAND_NAME}} selbst in deinen Kalender ein."
       }
     ],
@@ -947,7 +947,7 @@
     },
     "lock_label": "Ein Schloss schließt sich.",
     "agent_eyebrow": "Luna",
-    "agent_title": "Frag einfach Luna.",
+    "agent_title": "Frag einfach Luna",
     "agent_text": "Luna ist die Assistentin in {{BRAND_NAME}} und kennt deinen Stundenplan, deine Aufgaben und deine Noten. Sie trägt Hausaufgaben für dich ein und plant vor einer Klausur mit dir, was du wann lernst. Standardmäßig arbeitet sie komplett auf deinem Gerät.²",
     "agent_name": "Luna",
     "agent_role": "Deine Assistentin",
@@ -965,7 +965,7 @@
       },
       {
         "from": "me",
-        "text": "Trag Mathe S. 38 bis Montag ein."
+        "text": "Trag Mathe S. 38 bis Montag ein"
       },
       {
         "from": "luna",
@@ -981,7 +981,7 @@
         "text": "Ja, bis Dienstag sind es fünf Tage. Heute noch die Aufgaben auf S. 58, morgen Vierfeldertafeln, am Wochenende Baumdiagramme."
       }
     ],
-    "day_title": "Und den ganzen Tag dabei.",
+    "day_title": "Und den ganzen Tag dabei",
     "day": [
       {
         "time": "7:12",
@@ -1005,7 +1005,7 @@
       }
     ],
     "free_lesson": "In der Schule lernt man: Wenn eine App nichts kostet, bist du das Produkt.",
-    "free_title": "Bei {{BRAND_NAME}} nicht.",
+    "free_title": "Bei {{BRAND_NAME}} nicht",
     "free_text": "Von dir bekomme ich nichts, kein Geld und keine Daten. Ich baue {{BRAND_NAME}} aus Spaß und aus Überzeugung: Eine App für die Schule gehört nicht hinter eine Paywall, und deine Daten gehören weder Werbefirmen noch sonst jemandem. Sie gehören dir. Deshalb liegen sie nur auf deinem Gerät, und nicht einmal ich komme an sie heran.",
     "free_label": "Preis: 0 Euro",
     "footnote_iserv": "¹ IServ gibt es in den Apps für Mac, Windows, Linux und Android. Auf dem iPhone läuft {{BRAND_NAME}} als Web-App, dort geht IServ nicht.",
