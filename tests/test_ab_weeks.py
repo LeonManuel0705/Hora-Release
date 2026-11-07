@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -50,11 +51,38 @@ def test_the_phone_counts_from_the_same_monday():
 
 
 def test_the_page_counts_the_weeks_like_the_desktop_under_node():
+    result = node_check('week_check.mjs')
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def node_check(name):
     node = shutil.which('node')
     if not node:
         pytest.skip('node is not installed')
     major = int(re.match(r'v(\d+)', subprocess.run([node, '--version'], capture_output=True, text=True).stdout).group(1))
     if major < 18:
         pytest.skip('node is too old')
-    result = subprocess.run([node, str(ROOT / 'tests' / 'js' / 'week_check.mjs')], capture_output=True, text=True, timeout=120)
+    # The summer time weeks of the grid only catch a wrong count on a German clock.
+    env = {**os.environ, 'TZ': 'Europe/Berlin'}
+    return subprocess.run([node, str(ROOT / 'tests' / 'js' / name)], capture_output=True, text=True, timeout=120, env=env)
+
+
+def test_the_classic_pages_count_the_weeks_like_the_desktop_under_node():
+    result = node_check('classic_week_check.mjs')
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_the_classic_pages_learn_whether_a_and_b_are_swapped(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, 'DATABASE_PATH', str(tmp_path / 'hub.db'))
+    db.init_db()
+    from app import app as app_module
+    from app.app import app
+
+    app.config['TESTING'] = True
+    with app.test_client() as client:
+        client.get(f'/hub?token={app_module.API_TOKEN}')
+        assert client.get('/api/hub/school/timetable/settings').get_json()['ab_swap'] is False
+        assert client.put('/api/ui/store/app-ab-swap', json=True).status_code == 200
+        assert client.get('/api/hub/school/timetable/settings').get_json()['ab_swap'] is True
+        assert client.put('/api/ui/store/app-ab-swap', json=False).status_code == 200
+        assert client.get('/api/hub/school/timetable/settings').get_json()['ab_swap'] is False

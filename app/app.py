@@ -1304,9 +1304,11 @@ def get_timetable_settings():
 
     user_id = request.args.get('user_id')
     settings = db.get_timetable_settings(user_id=user_id)
+    # "A und B tauschen" of the new pages lives in their store. The classic pages count with it too.
+    swapped = db.get_ui_store().get('app-ab-swap') is True
     if settings:
-        return jsonify({'success': True, 'settings': settings})
-    return jsonify({'success': True, 'settings': None, 'setup_required': True})
+        return jsonify({'success': True, 'settings': settings, 'ab_swap': swapped})
+    return jsonify({'success': True, 'settings': None, 'setup_required': True, 'ab_swap': swapped})
 
 @app.route('/api/hub/school/timetable/settings', methods=['POST'])
 def save_timetable_settings():
