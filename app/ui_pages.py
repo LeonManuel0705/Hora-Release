@@ -462,6 +462,8 @@ def create_event():
 
 @bp.route('/api/ui/events/<ref>', methods=['PATCH', 'DELETE'])
 def change_event(ref):
+    if str(ref).startswith('g-'):
+        return _change_google_event(ref)
     if not str(ref).startswith('loc-'):
         return _error('Nur eigene Termine lassen sich hier ändern', 404)
     event_id = ref[4:]
@@ -498,6 +500,26 @@ def change_event(ref):
     if payload is None:
         return jsonify({'success': True})
     return jsonify({'success': True, 'event': ui_data.event_view(found)})
+
+
+def _change_google_event(ref):
+    """A Google event in a calendar the account may write to. The change goes to Google first and counts only once Google took it."""
+    payload = None
+    if request.method == 'PATCH':
+        payload = _payload()
+        if payload is None:
+            return _error('JSON erwartet')
+    try:
+        if payload is None:
+            calendar_cache.delete_remote(ref)
+            return jsonify({'success': True})
+        notes = payload.get('notes') if isinstance(payload.get('notes'), str) else None
+        event = calendar_cache.edit_remote(ref, lambda item: _event_payload(payload, item, creating=False), notes=notes)
+    except calendar_cache.Refusal as refusal:
+        return jsonify({'success': False, 'error': str(refusal), 'message': str(refusal)}), refusal.status
+    except ValueError as error:
+        return jsonify({'success': False, 'error': str(error), 'message': str(error)}), 400
+    return jsonify({'success': True, 'event': event})
 
 
 # The page lets a new note have a title of 300 and a text of 5000 characters. The older interface set no limit, and
@@ -651,6 +673,65 @@ def synced_events():
     except Exception:
         events = None
     return jsonify({'success': True, 'events': events or [], 'source': 'mac' if events is not None else None})
+
+
+@bp.route('/api/ui/google/nudge', methods=['POST'])
+def google_nudge():
+    """A page came to the front. The background check follows soon, the answer does not wait for it."""
+    if calendar_cache.connected():
+        calendar_cache.nudge()
+    return jsonify({'success': True, **calendar_cache.page_state()})
+
+
+@bp.route('/api/ui/google/events')
+def google_events():
+    """The events as a page gets them when it is built, for a page that stays open while the copy changes."""
+    today = pinned_day() or date.today()
+    return jsonify({'success': True, 'events': ui_data.events(today), **calendar_cache.page_state()})
+
+
+@bp.route('/api/ui/google/account')
+def google_account():
+    """What Settings shows about Google, read again after a sign-in, since Google may have granted less than was asked."""
+    return jsonify({'success': True, 'account': ui_data.google_account()})
+
+
+@bp.route('/api/ui/google/school', methods=['GET', 'POST', 'DELETE'])
+def google_school_calendar():
+    """The switch for the school week in Google. Off asks the page first whether the calendar stays in Google."""
+    from . import google_oauth, google_school
+    if request.method == 'GET':
+        return jsonify({'success': True, 'school': google_school.view()})
+    if request.method == 'DELETE':
+        payload = _payload() or {}
+        calendar = google_school.turn_off(keep=payload.get('keep') is not False)
+        return jsonify({'success': True, 'calendar': calendar, 'school': google_school.view()})
+    account = google_oauth.calendar_account() if calendar_cache.connected() else None
+    if not account or google_oauth.login_expired(account):
+        return _error('Verbinde zuerst Google.', 409)
+    if not google_oauth.can('school', account):
+        return jsonify({'success': False, 'needs': 'school', 'error': 'Google muss erst erlauben, dass ein eigener Kalender angelegt wird.'}), 403
+    google_school.turn_on(account)
+    return jsonify({'success': True, 'school': google_school.view()})
+
+
+SCHOOL_SOURCES = ('/api/ui/deadlines', '/api/hub/school/', '/api/hub/bundesland', '/api/hub/holidays')
+SCHOOL_KEYS = {'app-timetable-edits', 'app-block-times', 'app-ab-swap', 'app-ab-weeks', 'app-subjects', 'app-teachers', 'app-rooms'}
+
+
+@bp.after_app_request
+def school_entries_follow(response):
+    """A saved change to the plan, the tests or the holidays reaches the school calendar in Google shortly after."""
+    path = request.path
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and response.status_code < 400 and (
+        path.startswith(SCHOOL_SOURCES) or path.removeprefix('/api/ui/store/') in SCHOOL_KEYS
+    ):
+        try:
+            from . import google_school
+            google_school.changed()
+        except Exception:
+            pass
+    return response
 
 
 PLAN_PROBLEMS = {

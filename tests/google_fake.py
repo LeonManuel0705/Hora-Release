@@ -33,20 +33,54 @@ class _Call:
         return self._run(self)
 
 
+class _Calendars(dict):
+    """The calendars of the account: tests read and change them like a dict, the code calls them like the API."""
+
+    def __init__(self, api, entries):
+        super().__init__(entries)
+        self._api = api
+
+    def __call__(self):
+        return self._api()
+
+
+class _Batch:
+    """Runs its requests one after the other and hands each answer to the callback, like the real batch does. Without
+    network the whole batch fails, a refusal of a single request reaches only its callback."""
+
+    def __init__(self, google, callback):
+        self._google = google
+        self._callback = callback
+        self._items = []
+
+    def add(self, request, callback=None, request_id=None):
+        self._items.append((request_id or str(len(self._items) + 1), request, callback or self._callback))
+
+    def execute(self):
+        self._google._guard('batch', size=len(self._items))
+        for request_id, request, callback in self._items:
+            try:
+                answer, error = request.execute(), None
+            except FakeHttpError as failure:
+                answer, error = None, failure
+            callback(request_id, answer, error)
+
+
 class FakeGoogle:
     """Stands in for the Calendar API as far as the sync uses it.
 
     Like the real service it merges a patch into the stored event at every
     depth, refuses an event that has both a day and a time, only takes ids made
-    of a-v and 0-9, answers 409 for an id that is taken and 412 for a patch
-    whose If-Match no longer fits, keeps deleted events as cancelled ones and
-    only lists them when asked to. With quiet_patch it takes a patch of a
-    deleted event without complaint and stamps it, the worst the real one may do.
+    of a-v and 0-9, answers 409 for an id that is taken and 412 for a patch or a
+    delete whose If-Match no longer fits, keeps deleted events as cancelled ones
+    and only lists them when asked to, and refuses writes to a calendar the
+    account may only read. With quiet_patch it takes a patch of a deleted event
+    without complaint and stamps it, the worst the real one may do.
     """
 
     def __init__(self, primary='me@example.org'):
         self.primary = primary
-        self.calendars = {primary: {'id': primary, 'summary': 'Privat', 'primary': True, 'backgroundColor': '#4285f4'}}
+        self.calendars = _Calendars(self._calendars_api, {primary: {'id': primary, 'summary': 'Privat', 'primary': True, 'backgroundColor': '#4285f4', 'accessRole': 'owner'}})
         self.store = {primary: {}}
         self.calls = []
         self.offline = False
@@ -54,6 +88,7 @@ class FakeGoogle:
         self.lost_answers = set()
         self.hooks = {}
         self.quiet_patch = False
+        self.write_budget = None
         self._ids = itertools.count(1)
         self._last = datetime.now(timezone.utc)
 
@@ -70,6 +105,16 @@ class FakeGoogle:
             raise FakeHttpError(404)
         return key
 
+    def _writable(self, calendar):
+        key = self._calendar(calendar)
+        if self.calendars.get(key, {}).get('accessRole', 'owner') not in ('owner', 'writer'):
+            raise FakeHttpError(403, 'requiredAccessLevel')
+        if self.write_budget is not None:
+            if self.write_budget <= 0:
+                raise FakeHttpError(403, 'rateLimitExceeded')
+            self.write_budget -= 1
+        return self.store[key]
+
     def _readable(self, calendar):
         if calendar in self.broken:
             status = self.broken[calendar]
@@ -83,8 +128,8 @@ class FakeGoogle:
         event.update(updated=stamp, etag=f'"{stamp}"')
         return event
 
-    def add_calendar(self, key, name):
-        self.calendars[key] = {'id': key, 'summary': name, 'primary': False, 'backgroundColor': '#0b8043'}
+    def add_calendar(self, key, name, role='owner', color='#0b8043'):
+        self.calendars[key] = {'id': key, 'summary': name, 'primary': False, 'backgroundColor': color, 'accessRole': role}
         self.store[key] = {}
 
     def remove_calendar(self, key):
@@ -146,13 +191,47 @@ class FakeGoogle:
                 raise FakeHttpError(400)
         return result
 
+    def new_batch_http_request(self, callback=None):
+        return _Batch(self, callback)
+
     def calendarList(self):
         def listing(pageToken=None):
             def run(call):
                 self._guard('calendarList.list')
-                return {'items': list(self.calendars.values())}
+                return {'items': [dict(item) for item in self.calendars.values()]}
             return _Call(run)
-        return SimpleNamespace(list=listing)
+
+        def get(calendarId):
+            def run(call):
+                self._guard('calendarList.get', calendar=calendarId)
+                key = self.primary if calendarId == 'primary' else calendarId
+                if key not in self.calendars:
+                    raise FakeHttpError(404)
+                return dict(self.calendars[key])
+            return _Call(run)
+        return SimpleNamespace(list=listing, get=get)
+
+    def _calendars_api(self):
+        def insert(body):
+            def run(call):
+                self._guard('calendars.insert', body=body)
+                key = f'c{next(self._ids)}@group.calendar.google.com'
+                self.add_calendar(key, body['summary'], role='owner', color='#9fe1e7')
+                self.calendars[key].update(description=body.get('description', ''), timeZone=body.get('timeZone', ''))
+                return {'id': key, 'summary': body['summary']}
+            return _Call(run)
+
+        def delete(calendarId):
+            def run(call):
+                self._guard('calendars.delete', calendar=calendarId)
+                if calendarId not in self.calendars or calendarId == self.primary:
+                    raise FakeHttpError(404)
+                if self.calendars[calendarId].get('accessRole') != 'owner':
+                    raise FakeHttpError(403, 'forbidden')
+                self.remove_calendar(calendarId)
+                return ''
+            return _Call(run)
+        return SimpleNamespace(insert=insert, delete=delete)
 
     def events(self):
         def first_day(event):
@@ -194,7 +273,7 @@ class FakeGoogle:
         def insert(calendarId, body):
             def run(call):
                 self._guard('events.insert', calendar=calendarId, body=body)
-                bucket = self.store[self._calendar(calendarId)]
+                bucket = self._writable(calendarId)
                 key = body.get('id') or f'ev{next(self._ids)}'
                 if 'id' in body and not re.fullmatch(r'[a-v0-9]{5,1024}', key):
                     raise FakeHttpError(400)
@@ -209,7 +288,7 @@ class FakeGoogle:
         def patch(calendarId, eventId, body):
             def run(call):
                 self._guard('events.patch', calendar=calendarId, event=eventId, body=body)
-                bucket = self.store[self._calendar(calendarId)]
+                bucket = self._writable(calendarId)
                 if eventId not in bucket:
                     raise FakeHttpError(404)
                 if call.headers.get('If-Match') not in (None, bucket[eventId].get('etag')):
@@ -225,11 +304,13 @@ class FakeGoogle:
         def delete(calendarId, eventId):
             def run(call):
                 self._guard('events.delete', calendar=calendarId, event=eventId)
-                bucket = self.store[self._calendar(calendarId)]
+                bucket = self._writable(calendarId)
                 if eventId not in bucket:
                     raise FakeHttpError(404)
                 if bucket[eventId]['status'] == 'cancelled':
                     raise FakeHttpError(410)
+                if call.headers.get('If-Match') not in (None, bucket[eventId].get('etag')):
+                    raise FakeHttpError(412)
                 bucket[eventId]['status'] = 'cancelled'
                 self._stamped(bucket[eventId])
                 return ''

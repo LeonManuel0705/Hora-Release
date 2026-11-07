@@ -91,6 +91,15 @@ void main() {
     expect(page['native'], isFalse);
   });
 
+  test('no page offers Google, which this app cannot connect', () async {
+    for (final path in ['/hub', '/hub/calendar', '/hub/settings']) {
+      final data = pageData((await bridge().handle(UiBridgeRequest(method: 'GET', path: path, navigate: true))).body as String);
+      expect((data['status'] as Map)['googleConfigured'], isFalse, reason: path);
+    }
+    final settings = pageData((await bridge().handle(const UiBridgeRequest(method: 'GET', path: '/hub/settings', navigate: true))).body as String);
+    expect(((settings['page'] as Map)['accounts'] as Map)['google'], containsPair('unavailable', true));
+  });
+
   test('native screens open in Flutter and keep the current page', () async {
     opened.clear();
     final assistant = await bridge().handle(const UiBridgeRequest(method: 'GET', path: '/hub/assistant', navigate: true, from: '/hub/tasks'));

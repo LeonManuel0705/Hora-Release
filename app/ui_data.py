@@ -922,11 +922,21 @@ def build(active, store, now):
         'status': {'iserv': iserv['connected'], 'lastSync': f'{now.hour}:{now.minute:02d}'},
         'mailUnread': 0,
     }
+    data['status'].update(google_status())
     if not school['abWeeks']:
         store.setdefault('app-ab-weeks', False)
     if active in PAGE_BUILDERS:
         data['page'] = PAGE_BUILDERS[active](data, school, settings, today, iserv)
     return data
+
+
+def google_status():
+    """What the pages need to know about Google before they ask: whether it can be connected here, and how the copy stands."""
+    from . import calendar_cache
+    try:
+        return {'googleConfigured': calendar_cache.configured(), 'google': calendar_cache.page_state()['google']}
+    except Exception:
+        return {'googleConfigured': False, 'google': None}
 
 
 def page_assistant(data, school, settings, today, iserv):
@@ -955,6 +965,7 @@ def page_calendar(data, school, settings, today, iserv):
         'source': 'google' if google else None,
         'write': google and calendar_cache.write_enabled(),
         'stand': calendar_cache.stand() if google else None,
+        'state': calendar_cache.page_state()['google'] if google else None,
         'window': {'start': first.isoformat(), 'end': last.isoformat()},
     }
     return {'region': dict(STATES).get(code, ''), 'events': [], 'holidays': data['holidays'], 'notes': {}, 'sync': sync}
@@ -1236,8 +1247,15 @@ def keep_used_subjects(value):
     return kept
 
 
+def google_account():
+    from . import calendar_cache
+    try:
+        return calendar_cache.settings_view()
+    except Exception:
+        return {'configured': False, 'connected': False, 'calendars': []}
+
+
 def page_settings(data, school, settings, today, iserv):
-    google = load_dict('google')
     chosen = (chosen_weather_place(settings) or {}).get('city') or ''
     followed = weather_from_home(settings)
     city = chosen or followed or ''
@@ -1255,7 +1273,7 @@ def page_settings(data, school, settings, today, iserv):
         'courses': school['courses'],
         'accounts': {
             'iserv': iserv,
-            'google': {'connected': bool(google), 'calendars': []},
+            'google': google_account(),
         },
         'notifications': copy.deepcopy(NOTIFY_DEFAULTS),
         'subjectUse': subject_use(),

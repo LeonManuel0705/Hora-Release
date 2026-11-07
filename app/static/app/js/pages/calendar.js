@@ -56,7 +56,7 @@ const state = {
   fresh: null,
 };
 
-const sync = { source: extra.sync?.source || null, write: !!extra.sync?.write, window: extra.sync?.window || null, ranges: [], busy: false };
+const sync = { source: extra.sync?.source || null, write: !!extra.sync?.write, window: extra.sync?.window || null, ranges: [], busy: false, state: extra.sync?.state || null, stand: extra.sync?.stand || null };
 const removed = new Set();
 const sourceWord = () => (sync.source === "google" ? "dem Google-Kalender" : "dem verbundenen Kalender");
 
@@ -145,8 +145,17 @@ function schoolLine(date) {
   return cancelled.length ? `${cancelled.map((lesson) => `${lesson.block}.`).join(" und ")} Block entfällt, ${hours}` : hours;
 }
 
+function syncStand() {
+  const when = sync.stand ? new Date(sync.stand) : null;
+  if (!when || Number.isNaN(when.getTime())) return "";
+  const time = `${clock(minutesOf(when))}\u00a0Uhr`;
+  return `, Stand ${isoDate(when) === todayIso() ? time : `${shortDate(when)}, ${time}`}`;
+}
+
 function countLine() {
   if (state.loading) return "Termine werden geladen";
+  if (sync.state === "login") return `Google-Anmeldung abgelaufen${syncStand()}`;
+  if (sync.state === "offline") return `Google nicht erreichbar${syncStand()}`;
   const today = todayIso();
   const monday = mondayOf(now());
   const week = Array.from({ length: 7 }, (_, index) => isoDate(addDays(monday, index)));
@@ -1276,10 +1285,13 @@ async function startSync({ first = false, manual = false } = {}) {
     button.removeAttribute("aria-busy");
     if (payload) {
       changed = applySynced(payload) || changed;
-      if (payload.problem === "login") {
-        toast(esc(payload.message), { icon: "circle-alert", action: { label: "Einstellungen", run: () => location.assign(pageUrl("settings", "/hub/settings#konten")) } });
-      } else if (payload.problem && manual) {
-        toast(esc(payload.message), { icon: "wifi-off" });
+      const before = `${sync.state}|${sync.stand}`;
+      sync.state = payload.source === "google" ? payload.problem || "ok" : null;
+      sync.stand = payload.stand || sync.stand;
+      changed = changed || before !== `${sync.state}|${sync.stand}`;
+      if (payload.problem && (manual || firstHint(payload.problem))) {
+        const settings = { label: "Einstellungen", run: () => location.assign(pageUrl("settings", "/hub/settings#konten")) };
+        toast(esc(payload.message), payload.problem === "login" ? { icon: "circle-alert", action: settings } : { icon: "wifi-off" });
       }
     } else if (!first) {
       toast("Die verbundenen Kalender sind gerade nicht erreichbar.", { icon: "wifi-off" });
@@ -1294,6 +1306,34 @@ async function startSync({ first = false, manual = false } = {}) {
   if (card) exitInPlace(card).then(finish);
   else finish();
 }
+
+function firstHint(problem) {
+  const key = `app-google-hint-${problem}`;
+  try {
+    if (sessionStorage.getItem(key)) return false;
+    sessionStorage.setItem(key, "1");
+  } catch {}
+  return true;
+}
+
+let freshAt = 0;
+let freshWait = null;
+
+function takeFresh() {
+  clearTimeout(freshWait);
+  freshWait = null;
+  const rest = 60000 - (Date.now() - freshAt);
+  if (sync.busy || rest > 0) {
+    freshWait = setTimeout(takeFresh, sync.busy ? 2000 : rest);
+    return;
+  }
+  freshAt = Date.now();
+  startSync({ first: true });
+}
+
+addEventListener("app:google-fresh", () => {
+  if ($("calendarPage")) takeFresh();
+});
 
 function revealSynced() {
   if (!animates()) return;

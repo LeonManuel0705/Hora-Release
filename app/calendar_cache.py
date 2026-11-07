@@ -8,11 +8,15 @@ first sends what changed in the app, then asks Google only for what changed
 since the last check. Once a day the whole window is loaded again, because the
 window moves with the date. Events made in the app keep living in the app and
 carry the id of their Google twin, so the twin is never shown a second time.
+
+While the app runs, a background thread checks every few minutes and soon after
+a page comes to the front, so the copy is fresh before anyone opens the calendar.
 """
 
 import copy
 import json
 import logging
+import re
 import threading
 import time
 import uuid
@@ -31,6 +35,10 @@ OPEN_END = 'horaOpenEnd'
 BACK_DAYS = 62
 AHEAD_DAYS = 93
 CHECK_SECONDS = 60
+PERIOD_SECONDS = 300
+TICK_SECONDS = 30
+RETRY_SECONDS = 60
+REQUEST_WAIT = 15
 FULL_SECONDS = 20 * 3600
 OVERLAP = timedelta(minutes=2)
 SOURCE = 'dem Google-Kalender'
@@ -48,7 +56,8 @@ _store_lock = threading.Lock()
 _memory_lock = threading.Lock()
 _queue_lock = threading.Lock()
 _memory = {'signature': None, 'cache': None}
-_status = {'checked': None, 'problem': None, 'epoch': 0}
+_status = {'checked': None, 'checked_at': None, 'problem': None, 'epoch': 0, 'round': 0, 'misses': 0}
+_worker = {'thread': None, 'stop': threading.Event(), 'wake': threading.Event(), 'nudged': False}
 
 
 def _google():
@@ -56,26 +65,41 @@ def _google():
     return google_oauth
 
 
+def _school():
+    from . import google_school
+    return google_school
+
+
+def _managed():
+    """The calendar the app fills with the school week. The copy leaves it out, the pages show the plan itself."""
+    try:
+        return _school().managed()
+    except Exception:
+        return set()
+
+
 def connected():
     try:
-        return bool(_google().load_tokens())
+        return bool(_google().calendar_account())
     except Exception:
         return False
 
 
-def write_enabled():
+def google_settings():
     settings = db.get_ui_store().get('app-settings')
     google = settings.get('google') if isinstance(settings, dict) else None
-    return not (isinstance(google, dict) and google.get('write') is False)
+    return google if isinstance(google, dict) else {}
+
+
+def write_enabled():
+    return google_settings().get('write') is not False
 
 
 def hidden_calendars():
-    settings = db.get_ui_store().get('app-settings')
-    google = settings.get('google') if isinstance(settings, dict) else None
-    calendars = google.get('calendars') if isinstance(google, dict) else None
-    if not isinstance(calendars, dict):
-        return set()
-    return {key for key, shown in calendars.items() if shown is False}
+    """The calendars the pages leave out: those switched off in the settings and the one the app fills with the school week."""
+    calendars = google_settings().get('calendars')
+    chosen = {key for key, shown in calendars.items() if shown is False} if isinstance(calendars, dict) else set()
+    return chosen | _managed()
 
 
 def window(today=None):
@@ -132,7 +156,7 @@ def forget():
                 pass
         with _memory_lock:
             _memory.update(signature=None, cache=None)
-        _status.update(checked=None, problem=None, epoch=_status['epoch'] + 1)
+        _status.update(checked=None, checked_at=None, problem=None, misses=0, epoch=_status['epoch'] + 1)
 
 
 def _status_of(error):
@@ -186,7 +210,7 @@ def _load_calendar(service, cache, calendar):
     time_min, time_max = _bounds(cache)
     items = google.list_calendar_events(service, calendar['id'], timeMin=time_min, timeMax=time_max, singleEvents=True)
     return {
-        event['id']: google.calendar_event_view(event, calendar)
+        event['id']: _cached_view(event, calendar)
         for event in items if event.get('id') and event.get('status') != 'cancelled'
     }
 
@@ -203,6 +227,8 @@ def _pull_full(service, email, today, previous=None):
         token = page.get('nextPageToken')
         if not token:
             break
+    managed = _managed()
+    calendars = [item for item in calendars if item.get('id') not in managed]
     cache = {
         'version': CACHE_VERSION,
         'account': email,
@@ -212,7 +238,10 @@ def _pull_full(service, email, today, previous=None):
         'full_day': today.isoformat(),
         'synced_at': _stamp(began - OVERLAP),
         'calendars': [
-            {'id': item.get('id'), 'summary': item.get('summary', 'Kalender'), 'backgroundColor': item.get('backgroundColor', '#4285f4'), 'primary': bool(item.get('primary'))}
+            {
+                'id': item.get('id'), 'summary': item.get('summary', 'Kalender'), 'backgroundColor': item.get('backgroundColor', '#4285f4'),
+                'primary': bool(item.get('primary')), 'accessRole': item.get('accessRole') or 'reader',
+            }
             for item in calendars if item.get('id')
         ],
         'events': {},
@@ -245,8 +274,11 @@ def _pull_changes(service, cache):
     cancelled = set()
     seen = {}
     closed = []
+    managed = _managed()
     for calendar in list(cache['calendars']):
         name = calendar['id']
+        if name in managed:
+            continue
         try:
             items = google.list_calendar_events(service, name, updatedMin=cache['synced_at'], showDeleted=True, singleEvents=False)
         except Exception as error:
@@ -269,7 +301,7 @@ def _pull_changes(service, cache):
             if item.get('status') == 'cancelled':
                 changed = bucket.pop(key, None) is not None or changed
                 continue
-            view = google.calendar_event_view(item, calendar)
+            view = _cached_view(item, calendar)
             seen[(name, key)] = view
             if not _in_window(view, cache):
                 changed = bucket.pop(key, None) is not None or changed
@@ -451,10 +483,20 @@ def _send(service, item, target):
     return (remote, calendar, answer) if answer is not None else None
 
 
+def target_calendar(cache, account=None):
+    """Where new events go: the calendar chosen in the settings while the account may still write to it, else the main one.
+    Events already in Google stay in the calendar they were written to."""
+    chosen = google_settings().get('target')
+    for calendar in (cache or {}).get('calendars', []):
+        if chosen and calendar['id'] == chosen and _writable(calendar) and chosen not in _managed():
+            return chosen
+    return _primary(cache) or account or 'primary'
+
+
 def _push(service, cache, account=None):
     if not write_enabled():
         return False
-    target = _primary(cache) or account or 'primary'
+    target = target_calendar(cache, account)
     sent = _push_deletes(service, target)
     for item in ui_data.load_list('calendar'):
         if not item.get('google_dirty') or not ui_data.iso_day(item.get('date')) or not _own_account(account, item):
@@ -583,76 +625,170 @@ def _confirm_missing(service, cache, previous, failed, cancelled, seen):
     cache['present'] = present
 
 
-def sync(full=False, today=None):
+def sync(full=False, today=None, wait=None):
+    """One check. With `wait` a page is asking: it waits that long at most for a check that is already running, and takes
+    that one's result instead of asking Google a second time."""
     if not connected():
         return None
-    today = today or date.today()
-    with _sync_lock:
-        epoch = _status['epoch']
-        try:
-            service, email = _google().calendar_service()
-        except Exception:
-            service, email = None, None
-        if service is None:
-            problem = 'login' if not connected() or _google().login_expired(email) else 'offline'
-            _status.update(checked=time.monotonic(), problem=problem)
-            return problem
-        cache = _load()
-        try:
-            known = cache is not None and cache.get('account') == email
-            stale = (
-                not known or cache.get('partial') or cache.get('full_day') != today.isoformat()
-                or time.time() - float(cache.get('full_at') or 0) > FULL_SECONDS
-            )
-            _push(service, cache if known else None, email)
-            changed, cancelled, seen, failed = False, set(), {}, set()
-            if known:
-                try:
-                    changed, cancelled, seen = _pull_changes(service, cache)
-                except Exception as error:
-                    if not (full or stale or _status_of(error) in (400, 410)):
-                        raise
-                    stale = True
-            if full or stale:
-                previous = cache if known else None
-                cache, failed = _pull_full(service, email, today, previous)
-                changed = True
-                _confirm_missing(service, cache, previous, failed, cancelled, seen)
-            with _store_lock:
-                if _status['epoch'] != epoch:
-                    return None
-                _adopt(cache, cancelled, seen)
-                if changed:
-                    _save(cache)
-                else:
-                    with _memory_lock:
-                        if _memory['cache'] is not None:
-                            _memory['cache']['synced_at'] = cache['synced_at']
-            problem = 'offline' if failed else None
-            _status.update(checked=time.monotonic(), problem=problem)
-            return problem
-        except Exception as error:
-            log.warning('Google calendar sync failed: %s', type(error).__name__)
-            problem = 'login' if type(error).__name__ == 'RefreshError' else 'offline'
-            _status.update(checked=time.monotonic(), problem=problem)
-            return problem
+    before = _status['round']
+    if not _sync_lock.acquire(timeout=-1 if wait is None else wait):
+        return _status['problem']
+    try:
+        if wait is not None and not full and _status['round'] != before:
+            return _status['problem']
+        return _sync(full, today or date.today())
+    finally:
+        _sync_lock.release()
 
 
-def _checked_lately():
-    checked = _status['checked']
-    return checked is not None and time.monotonic() - checked < CHECK_SECONDS
+def _settle(problem):
+    misses = _status['misses'] + 1 if problem == 'offline' else 0
+    _status.update(checked=time.monotonic(), checked_at=time.time(), problem=problem, round=_status['round'] + 1, misses=misses)
+    return problem
+
+
+def _sync(full, today):
+    epoch = _status['epoch']
+    try:
+        service, email = _google().calendar_service()
+    except Exception:
+        service, email = None, None
+    if service is None:
+        return _settle('login' if not connected() or _google().login_expired(email) else 'offline')
+    cache = _load()
+    try:
+        known = cache is not None and cache.get('account') == email
+        stale = (
+            not known or cache.get('partial') or cache.get('full_day') != today.isoformat()
+            or time.time() - float(cache.get('full_at') or 0) > FULL_SECONDS
+            or any('accessRole' not in calendar for calendar in cache.get('calendars', []))
+        )
+        _push(service, cache if known else None, email)
+        changed, cancelled, seen, failed = False, set(), {}, set()
+        if known:
+            try:
+                changed, cancelled, seen = _pull_changes(service, cache)
+            except Exception as error:
+                if not (full or stale or _status_of(error) in (400, 410)):
+                    raise
+                stale = True
+        if full or stale:
+            previous = cache if known else None
+            cache, failed = _pull_full(service, email, today, previous)
+            changed = True
+            _confirm_missing(service, cache, previous, failed, cancelled, seen)
+        with _store_lock:
+            if _status['epoch'] != epoch:
+                return None
+            _adopt(cache, cancelled, seen)
+            if changed:
+                _save(cache)
+            else:
+                with _memory_lock:
+                    if _memory['cache'] is not None:
+                        _memory['cache']['synced_at'] = cache['synced_at']
+        return _settle('offline' if failed else None)
+    except Exception as error:
+        log.warning('Google calendar sync failed: %s', type(error).__name__)
+        if type(error).__name__ != 'RefreshError':
+            return _settle('offline')
+        if email and _google().refused_for_good(error):
+            _google().mark_expired(email)
+        return _settle('login')
+
+
+def _checked_lately(seconds=CHECK_SECONDS):
+    """Both clocks have to agree: the monotonic one stands still while the computer sleeps, the wall clock can be set back."""
+    checked, stamp = _status['checked'], _status['checked_at']
+    if checked is None or stamp is None:
+        return False
+    return time.monotonic() - checked < seconds and 0 <= time.time() - stamp < seconds
 
 
 def refresh(force=False):
     if not connected():
         return None
+    if _google().login_expired():
+        return 'login'
     if not force and _load(shared=True) is not None and _checked_lately():
         return _status['problem']
-    return sync(full=force)
+    return sync(full=force, wait=REQUEST_WAIT)
 
 
 def due():
     return connected() and (_load(shared=True) is None or not _checked_lately())
+
+
+def start_background():
+    """Keeps the copy fresh while the app runs. Only the running app starts it, an import never does, so tests run without it."""
+    thread = _worker['thread']
+    if thread is not None and thread.is_alive():
+        return thread
+    _worker['stop'].clear()
+    thread = threading.Thread(target=_background, name='calendar-sync', daemon=True)
+    _worker['thread'] = thread
+    thread.start()
+    return thread
+
+
+def stop_background(timeout=5):
+    thread, _worker['thread'] = _worker['thread'], None
+    _worker['stop'].set()
+    _worker['wake'].set()
+    if thread is not None and thread is not threading.current_thread():
+        thread.join(timeout)
+
+
+def nudge():
+    """A page came to the front. The next check follows at once, but never sooner than CHECK_SECONDS after the last one."""
+    _worker['nudged'] = True
+    _worker['wake'].set()
+
+
+def wake():
+    _worker['wake'].set()
+
+
+def signed_in():
+    """A new sign-in worked: the expiry the last check saw is over, and the next check follows at once."""
+    if _status['problem'] == 'login':
+        _status.update(problem=None, checked=None, checked_at=None)
+    nudge()
+
+
+def _background():
+    stop, wake = _worker['stop'], _worker['wake']
+    while not stop.is_set():
+        for job in (background_round, _school().background_round):
+            try:
+                job()
+            except Exception as error:
+                log.warning('Background calendar job failed: %s', type(error).__name__)
+        soon = _school().seconds_until_due()
+        wake.wait(TICK_SECONDS if soon is None else min(TICK_SECONDS, max(soon, 0.05)))
+        wake.clear()
+
+
+def _pause():
+    """How long the copy may rest. Without network the next try comes sooner, with a pause that grows up to the period."""
+    if _status['problem'] != 'offline':
+        return PERIOD_SECONDS
+    return min(PERIOD_SECONDS, RETRY_SECONDS * 2 ** max(0, _status['misses'] - 1))
+
+
+def background_round():
+    """One look at the clock, made every TICK_SECONDS. The wall clock decides, because it runs on while the computer sleeps.
+    An expired sign-in is never tried again, it stays expired until the account is connected anew."""
+    nudged, _worker['nudged'] = _worker['nudged'], False
+    if not connected() or _google().login_expired():
+        return False
+    stamp = _status['checked_at']
+    if stamp is not None:
+        rest = min(_pause(), CHECK_SECONDS) if nudged else _pause()
+        if 0 <= time.time() - stamp < rest:
+            return False
+    sync()
+    return True
 
 
 def push_soon():
@@ -703,9 +839,57 @@ def waits_elsewhere(item):
     if not account or not item.get('google_dirty'):
         return False
     try:
-        return account != next(iter(_google().load_tokens()), None)
+        return account != _google().calendar_account()
     except Exception:
         return False
+
+
+def configured():
+    """True where this installation can sign in to Google at all. Released apps bring no OAuth client of their own."""
+    try:
+        return bool(_google().is_google_oauth_configured())
+    except Exception:
+        return False
+
+
+def settings_view():
+    """What Settings shows about Google, read from the copy so the page never waits for Google."""
+    google = _google()
+    tokens = google.load_tokens()
+    account = google.calendar_account(tokens)
+    view = {'configured': configured(), 'connected': bool(account), 'account': account or '', 'calendars': []}
+    if not account:
+        return view
+    scopes = google.scopes_of(tokens[account])
+    cache = _load(shared=True) or {}
+    managed = _managed()
+    view.update(
+        state=page_state()['google'],
+        stand=stand(),
+        gmail=google.covers(scopes, 'gmail'),
+        calendars=[
+            {
+                'id': item['id'], 'name': item.get('summary') or 'Kalender', 'color': item.get('backgroundColor') or '',
+                'primary': bool(item.get('primary')), 'writable': _writable(item),
+            }
+            for item in cache.get('calendars', []) if cache.get('account') == account and item['id'] not in managed
+        ],
+        target=target_calendar(cache if cache.get('account') == account else None, account),
+        school=_school().view(),
+        may_make_calendars=google.covers(scopes, 'school'),
+    )
+    return view
+
+
+def page_state():
+    """How the copy stands, in the words of the pages: no Google, fine, signed out, or out of reach."""
+    if not connected():
+        return {'google': None, 'stand': None}
+    if _google().login_expired() or _status['problem'] == 'login':
+        google = 'login'
+    else:
+        google = 'offline' if _status['problem'] == 'offline' else 'ok'
+    return {'google': google, 'stand': stand()}
 
 
 def stand():
@@ -759,18 +943,238 @@ def events(start, end):
         return []
     hidden = hidden_calendars()
     linked = {item.get('google_id') for item in ui_data.load_list('calendar') if item.get('google_id')}
+    calendars = {calendar['id']: calendar for calendar in cache.get('calendars', [])}
+    open_to_edits = _open_to_edits(cache)
     result = []
     for calendar_id, bucket in cache.get('events', {}).items():
         if calendar_id in hidden:
             continue
+        editable = open_to_edits and _writable(calendars.get(calendar_id))
         for key, item in bucket.items():
             if key in linked:
                 continue
             shown = view(item)
             if shown and (shown.get('endDate') or shown['date']) >= start and shown['date'] <= end:
-                result.append(shown)
+                result.append(_marked(shown, item, editable and item.get('own_copy') is not False))
     result.sort(key=lambda item: (item['date'], item['start'] or ''))
     return result
+
+
+def _writable(calendar):
+    return bool(calendar) and calendar.get('accessRole') in ('owner', 'writer')
+
+
+def _open_to_edits(cache):
+    """Google events can be changed here only while the account of the copy is signed in, may write, and Google answers."""
+    google = _google()
+    try:
+        account = google.calendar_account()
+        return (
+            bool(account) and account == cache.get('account') and google.can('write', account)
+            and not google.login_expired(account) and _status['problem'] is None
+        )
+    except Exception:
+        return False
+
+
+class Refusal(Exception):
+    def __init__(self, message, status=409):
+        super().__init__(message)
+        self.status = status
+
+
+READ_ONLY = 'Diesen Termin kannst du nur lesen, der Kalender ist schreibgeschützt.'
+SIGNED_OUT = 'Die Anmeldung bei Google ist abgelaufen. Verbinde Google in den Einstellungen neu.'
+UNREACHABLE = 'Google ist gerade nicht erreichbar. Die Änderung ist nicht gespeichert.'
+CHANGED_THERE = 'Der Termin wurde gerade in Google geändert. Schau ihn dir noch einmal an.'
+GONE_THERE = 'Den Termin gibt es in Google nicht mehr.'
+DECLINED = 'Google hat diese Änderung nicht angenommen.'
+SLOW_DOWN = 'Google bremst gerade. Versuch es gleich noch einmal.'
+INVITED = 'Diesen Termin kann nur ändern, wer dazu eingeladen hat.'
+KEEP_NOTES = 'Diese Beschreibung ist lang oder formatiert. Ändere sie in Google, damit nichts davon verloren geht.'
+NOTES_SHOWN = 2000
+NOTES_KEPT = 5000
+LIMITS = {'rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded'}
+ACCESS = {'requiredAccessLevel', 'forbiddenForNonOrganizer'}
+FORMATTED = re.compile(r'<[a-z!/]|&#?\w+;', re.I)
+
+
+def _locate(cache, ref):
+    for calendar in cache.get('calendars', []):
+        prefix = f"g-{calendar['id']}-"
+        if str(ref).startswith(prefix):
+            key = str(ref)[len(prefix):]
+            item = (cache.get('events', {}).get(calendar['id']) or {}).get(key)
+            if item:
+                return calendar, key, item
+    return None, None, None
+
+
+def _reachable(ref):
+    """The Google event behind a page id, with a service that may change it. Refuses what cannot be changed right now."""
+    if not connected():
+        raise Refusal('Google ist nicht verbunden.', 409)
+    cache = _load()
+    calendar, key, item = _locate(cache or {}, ref)
+    if not item:
+        raise Refusal('Termin nicht gefunden', 404)
+    google = _google()
+    if google.login_expired():
+        raise Refusal(SIGNED_OUT)
+    if not _writable(calendar) or not google.can('write'):
+        raise Refusal(READ_ONLY, 403)
+    if item.get('own_copy') is False:
+        raise Refusal(INVITED, 403)
+    try:
+        service, email = google.calendar_service()
+    except Exception:
+        service, email = None, None
+    if service is None:
+        if google.login_expired(email):
+            raise Refusal(SIGNED_OUT)
+        raise Refusal(UNREACHABLE, 503)
+    if email != cache.get('account'):
+        raise Refusal(READ_ONLY, 403)
+    return calendar, key, item, service
+
+
+def _plain(text):
+    return re.sub(r'\r\n?', '\n', str(text or '')).strip()
+
+
+def notes_fit(description):
+    """True when a description can be changed here without losing anything: plain text the form takes in full."""
+    description = str(description or '')
+    return len(description) <= NOTES_KEPT and not FORMATTED.search(description)
+
+
+def _kept_notes(before, after, notes):
+    """The description is written back only when the page sent one that differs from Google's, compared before the
+    form's trimming. A description the form cannot take in full, long or formatted, is never replaced from here."""
+    full = before.get('description') or ''
+    shown = full if notes_fit(full) else full[:NOTES_SHOWN]
+    if notes is None or _plain(notes) in (_plain(full), _plain(shown)):
+        after['description'] = full
+    elif not notes_fit(full):
+        raise Refusal(KEEP_NOTES)
+
+
+def _reasons(error):
+    try:
+        return {str(entry.get('reason')) for entry in json.loads(getattr(error, 'content', b'') or b'{}')['error']['errors']}
+    except Exception:
+        return set()
+
+
+def _answer_of(request, calendar, key, service):
+    try:
+        return request.execute()
+    except Exception as error:
+        status = _status_of(error)
+        if status == 412:
+            if _refetch(service, calendar, key):
+                raise Refusal(CHANGED_THERE) from error
+            raise Refusal(GONE_THERE, 404) from error
+        if status in GONE:
+            _keep(calendar['id'], key, None)
+            raise Refusal(GONE_THERE, 404) from error
+        if status == 401 or type(error).__name__ == 'RefreshError':
+            raise Refusal(SIGNED_OUT) from error
+        if status == 429 or (status == 403 and _reasons(error) & LIMITS):
+            raise Refusal(SLOW_DOWN, 503) from error
+        if status == 403:
+            raise Refusal(READ_ONLY if _reasons(error) & ACCESS else DECLINED, 403) from error
+        if status == 400:
+            raise Refusal(DECLINED, 400) from error
+        raise Refusal(UNREACHABLE, 503) from error
+
+
+def edit_remote(ref, change, notes=None):
+    """Writes a change of a Google event straight to Google, onto the very state the copy shows, and keeps the answer in the copy.
+
+    Only what the form changed is sent, so what the page cannot show stays as it is: a time zone, guests, a description
+    the page did not change. `notes` is the description as the page sent it, None when it sent none.
+    """
+    calendar, key, item, service = _reachable(ref)
+    before = _local_fields(item)
+    after = dict(before)
+    change(after)
+    _kept_notes(before, after, notes)
+    old, new = _body(before), _body(after)
+    body = {name: value for name, value in new.items() if value != old.get(name)}
+    if not body:
+        return _shown(item, calendar)
+    request = service.events().patch(calendarId=calendar['id'], eventId=key, body=body)
+    if item.get('etag'):
+        request.headers['If-Match'] = item['etag']
+    fresh = _cached_view(_answer_of(request, calendar, key, service), calendar)
+    _keep(calendar['id'], key, fresh)
+    return _shown(fresh, calendar)
+
+
+def delete_remote(ref):
+    calendar, key, item, service = _reachable(ref)
+    request = service.events().delete(calendarId=calendar['id'], eventId=key)
+    if item.get('etag'):
+        request.headers['If-Match'] = item['etag']
+    try:
+        _answer_of(request, calendar, key, service)
+    except Refusal as refusal:
+        if refusal.status != 404:
+            raise
+    _keep(calendar['id'], key, None)
+
+
+def _shown(item, calendar):
+    return _marked(view(item), item, True)
+
+
+def _marked(shown, item, editable):
+    """A page event with what it may do here. An editable one gets its whole description, so the form never cuts it."""
+    if shown:
+        fits = notes_fit(item.get('description'))
+        shown['editable'] = editable
+        shown['notesLocked'] = not fits
+        if editable and fits:
+            shown['notes'] = str(item.get('description') or '')
+    return shown
+
+
+def _cached_view(event, calendar):
+    """The event as the copy keeps it, with whether this copy may be changed: an invitation from someone else may not,
+    unless the guests were allowed to."""
+    kept = _google().calendar_event_view(event, calendar)
+    organizer = event.get('organizer')
+    kept['own_copy'] = not organizer or organizer.get('self') is True or event.get('guestsCanModify') is True
+    return kept
+
+
+def _refetch(service, calendar, key):
+    """Takes what Google has now into the copy. False when Google no longer has the event."""
+    try:
+        event = _there(service, calendar['id'], key)
+    except Exception:
+        return True
+    fresh = None if event is None or event.get('status') == 'cancelled' else _cached_view(event, calendar)
+    _keep(calendar['id'], key, fresh)
+    return fresh is not None
+
+
+def _keep(calendar_id, key, fresh):
+    """Puts Google's answer into the copy at once. A check that is running then drops its older result."""
+    with _store_lock:
+        cache = _load()
+        if cache is None or calendar_id not in cache.get('events', {}):
+            return
+        bucket = cache['events'][calendar_id]
+        if fresh is None:
+            bucket.pop(key, None)
+        elif _in_window(fresh, cache):
+            bucket[key] = fresh
+        else:
+            bucket.pop(key, None)
+        _status['epoch'] += 1
+        _save(cache)
 
 
 def covers(start, end):
