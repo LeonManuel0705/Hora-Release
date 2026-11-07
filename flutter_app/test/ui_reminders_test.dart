@@ -217,7 +217,7 @@ void main() {
     expect(off.where((item) => item.kind == 'events'), isEmpty);
   });
 
-  test('tasks with a time remind at that time, the others in one morning reminder that keeps the overdue', () {
+  test('tasks with a time remind at that time, the others of the day and those without a date in one morning reminder', () {
     final data = _data(tasks: [
       {'id': 't1', 'title': 'Vokabeln', 'date': '2026-11-09', 'done': false},
       {'id': 't2', 'title': 'Referat üben', 'date': '2026-11-09', 'dueTime': '16:30', 'done': false},
@@ -231,11 +231,13 @@ void main() {
     final plan = _byKey(_plan(data, _store(), sunday, days: 3).where((item) => item.kind == 'tasks').toList());
     expect(plan.keys, containsAll(['tasks:2026-11-09', 'task:t2:2026-11-09', 'tasks:2026-11-10', 'tasks:2026-11-11']));
     expect(_clock(plan['tasks:2026-11-09']!.at), '2026-11-09 07:00');
-    expect(plan['tasks:2026-11-09']!.title, '3 Aufgaben heute fällig');
-    expect(plan['tasks:2026-11-09']!.body, 'Vokabeln, Längst fällig, Ohne Datum');
+    expect(plan['tasks:2026-11-09']!.title, '2 Aufgaben heute fällig');
+    expect(plan['tasks:2026-11-09']!.body, 'Vokabeln, Ohne Datum', reason: 'an overdue task is left out, as reminders.js does');
     expect(_clock(plan['task:t2:2026-11-09']!.at), '2026-11-09 16:30');
     expect(plan['task:t2:2026-11-09']!.body, 'Fällig um 16:30');
-    expect(plan['tasks:2026-11-11']!.title, '5 Aufgaben heute fällig');
+    expect(plan['tasks:2026-11-10']!.title, 'Heute fällig');
+    expect(plan['tasks:2026-11-11']!.title, '2 Aufgaben heute fällig');
+    expect(plan['tasks:2026-11-11']!.body, 'Ohne Datum, Mittwoch');
     expect(plan.keys.where((key) => key.startsWith('task:')), ['task:t2:2026-11-09']);
     final single = _plan(_data(tasks: [
       {'id': 't1', 'title': 'Vokabeln', 'date': '2026-11-09', 'done': false},
@@ -378,6 +380,9 @@ Future<void> _compareWithPage(Map<String, String>? quiet) async {
       {'id': 't1', 'title': 'Vokabeln', 'date': '2026-11-18', 'done': false},
       {'id': 't2', 'title': 'Üben', 'date': '2026-11-18', 'dueTime': '16:30', 'done': false},
       {'id': 't3', 'title': 'Ohne Datum', 'date': null, 'done': false},
+      {'id': 't4', 'title': 'Längst fällig', 'date': '2026-11-06', 'done': false},
+      {'id': 't5', 'title': 'Mitte', 'date': '2026-11-12', 'done': false},
+      {'id': 't6', 'title': 'Erledigt', 'date': '2026-11-12', 'done': true},
     ],
     holidays: [
       {'id': 'h-1', 'title': 'Feiertag', 'date': '2026-11-13', 'endDate': null, 'type': 'feiertag'},

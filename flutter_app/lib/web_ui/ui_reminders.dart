@@ -388,7 +388,7 @@ class _Planner {
       final due = _minuteOf(task['dueTime']);
       if (date == today && due != null) {
         _add('task:${task['id']}:$today', day, _awake(due), _text(task['title']), 'Fällig um ${task['dueTime']}', 'tasks');
-      } else if (date.isEmpty || date.compareTo(today) <= 0) {
+      } else if (date.isEmpty || date == today) {
         summary.add(_text(task['title']));
       }
     }
