@@ -315,13 +315,18 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     unawaited(UiWeather.instance.refresh());
     final service = NotificationService();
     final known = service.permission;
-    if (await service.refreshPermission() != known) {
-      unawaited(_permissionChanged(service.permission));
-    } else if (Platform.isAndroid) {
+    final changed = await service.refreshPermission() != known;
+    if (Platform.isAndroid) {
+      if (changed) ReminderScheduler.instance.markChanged();
       unawaited(ReminderScheduler.instance.reschedule());
     }
     final controller = _controller;
     if (controller == null || !mounted) return;
+    if (changed) {
+      try {
+        await _renewScripts(controller);
+      } catch (_) {}
+    }
     if (!alive && _server.port != port) {
       final current = await controller.getUrl();
       final path = current?.path.startsWith('/hub') == true ? current!.path : '/hub';
@@ -329,7 +334,8 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
       return;
     }
     final long = paused != null && DateTime.now().difference(paused) > const Duration(minutes: 10);
-    if (!alive || long || _pausedDay != _dayKey()) await controller.reload();
+    // A permission changed in the system settings shows in every row of the page, so reload it.
+    if (!alive || long || changed || _pausedDay != _dayKey()) await controller.reload();
   }
 
   SystemUiOverlayStyle get _overlay {
