@@ -67,15 +67,17 @@ rm -rf "$STAGED"
 mv "$APP_PATH" "$STAGED" 2>/dev/null \
     || fail "$INSTALL_DIR ist für dich gesperrt. Melde dich mit einem Admin-Konto an und versuch es noch einmal."
 
-# A copy that keeps running would hold on to the port the new one needs.
-if pgrep -f "^$APP/Contents/" >/dev/null 2>&1; then
+# A copy that keeps running would hold on to the port the new one needs. Only
+# this user's processes are stopped; another account's could not be anyway.
+ME="$(id -u)"
+if pgrep -U "$ME" -f "^$APP/Contents/" >/dev/null 2>&1; then
     echo "  → Hora läuft noch und wird für das Update beendet..."
-    pkill -TERM -f "^$APP/Contents/" || true
+    pkill -TERM -U "$ME" -f "^$APP/Contents/" || true
     for _ in 1 2 3 4 5 6 7 8 9 10; do
-        pgrep -f "^$APP/Contents/" >/dev/null 2>&1 || break
+        pgrep -U "$ME" -f "^$APP/Contents/" >/dev/null 2>&1 || break
         sleep 1
     done
-    if pgrep -f "^$APP/Contents/" >/dev/null 2>&1; then
+    if pgrep -U "$ME" -f "^$APP/Contents/" >/dev/null 2>&1; then
         fail "Hora lässt sich nicht beenden. Beende es selbst mit ⌘Q und starte das Skript noch einmal."
     fi
 fi
