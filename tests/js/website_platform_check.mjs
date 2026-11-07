@@ -100,7 +100,7 @@ const tests = {
     assert.match(cta().button, /href="\/download"/);
   },
   "only platforms that fetch homework from iserv get the iserv line"() {
-    assert.deepEqual([...ISERV_HOMEWORK], ["android"]);
+    assert.deepEqual([...ISERV_HOMEWORK].sort(), ["android", "linux", "macos", "windows"]);
     for (const lang of [de, en]) {
       assert.match(lang.start.lede, /IServ/);
       assert.doesNotMatch(lang.start.lede_plain, /IServ|¹/);

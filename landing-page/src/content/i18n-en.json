@@ -82,11 +82,11 @@
         "icon": "building",
         "hue": "iris",
         "title": "IServ",
-        "text": "Sign in once with your IServ account. On the computer and on Android, {{BRAND_NAME}} then fetches the substitution plan, and on the computer your IServ mail too. On Android, assignments and events arrive on their own, and new messages show up as notifications.",
+        "text": "Sign in once with your IServ account. {{BRAND_NAME}} then fetches your assignments and the substitution plan on its own, and on the computer your IServ mail too. On Android, events come in as well, and new messages show up as notifications.",
         "facts": [
+          "Assignments from IServ",
           "IServ mail on the computer",
-          "Assignments and events on Android",
-          "Substitution plan"
+          "Events on Android"
         ],
         "devices": "desk_android"
       },
@@ -283,7 +283,7 @@
           {
             "name": "Assignments from IServ",
             "note": "",
-            "d": "no",
+            "d": "yes",
             "a": "yes",
             "i": "no"
           },
@@ -1056,7 +1056,7 @@
     "free_title": "Not with {{BRAND_NAME}}.",
     "free_text": "I get nothing from you, no money and no data. I build {{BRAND_NAME}} for fun and out of conviction: a school app does not belong behind a paywall, and your data belongs neither to advertisers nor to anyone else. It belongs to you. That is why it stays on your device, and not even I can get to it.",
     "free_label": "Price: 0 euros",
-    "footnote_iserv": "¹ {{BRAND_NAME}} fetches homework and events from IServ in the Android app. On the computer, IServ gives you your mail and the substitution plan. On iPhone, {{BRAND_NAME}} runs as a web app, where IServ is not available.",
+    "footnote_iserv": "¹ IServ works in the apps for Mac, Windows, Linux and Android. On iPhone, {{BRAND_NAME}} runs as a web app, where IServ is not available.",
     "footnote_iserv_web": "¹ IServ is only available in the apps for Mac, Windows, Linux and Android. The web app on your {device} has no IServ, so you add homework yourself.",
     "footnote_agent": "² {{BRAND_NAME}} downloads the assistant's language model only when you first open it, about 3 GB."
   }

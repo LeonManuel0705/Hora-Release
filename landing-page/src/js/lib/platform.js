@@ -22,8 +22,8 @@ export const PLATFORMS = {
 
 export const ORDER = ["macos", "windows", "linux", "android", "ios", "web"];
 
-// Where the app fetches homework from IServ today. Add the desktop ids once the desktop backend does it too.
-export const ISERV_HOMEWORK = new Set(["android"]);
+// Where the app fetches homework from IServ. The web app on iPhone, iPad and Chromebook has no IServ.
+export const ISERV_HOMEWORK = new Set(["macos", "windows", "linux", "android"]);
 
 const ipad = () => /iPad/.test(navigator.userAgent || "") || (/Mac/.test(navigator.userAgentData?.platform || navigator.platform || "") && navigator.maxTouchPoints > 1);
 

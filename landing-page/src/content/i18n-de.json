@@ -82,11 +82,11 @@
         "icon": "building",
         "hue": "iris",
         "title": "IServ",
-        "text": "Melde dich einmal mit deinem IServ-Konto an. Am Computer und auf Android holt {{BRAND_NAME}} dann den Vertretungsplan, am Computer auch deine IServ-Mails. Auf Android kommen Aufgaben und Termine von selbst, neue Nachrichten melden sich als Mitteilung.",
+        "text": "Melde dich einmal mit deinem IServ-Konto an. Deine Aufgaben und den Vertretungsplan holt {{BRAND_NAME}} dann von selbst, am Computer auch deine IServ-Mails. Auf Android kommen Termine dazu, neue Nachrichten melden sich als Mitteilung.",
         "facts": [
+          "Aufgaben aus IServ",
           "IServ-Mail am Computer",
-          "Aufgaben und Termine auf Android",
-          "Vertretungsplan"
+          "Termine auf Android"
         ],
         "devices": "desk_android"
       },
@@ -283,7 +283,7 @@
           {
             "name": "Aufgaben aus IServ",
             "note": "",
-            "d": "no",
+            "d": "yes",
             "a": "yes",
             "i": "no"
           },
@@ -1056,7 +1056,7 @@
     "free_title": "Bei {{BRAND_NAME}} nicht.",
     "free_text": "Von dir bekomme ich nichts, kein Geld und keine Daten. Ich baue {{BRAND_NAME}} aus Spaß und aus Überzeugung: Eine App für die Schule gehört nicht hinter eine Paywall, und deine Daten gehören weder Werbefirmen noch sonst jemandem. Sie gehören dir. Deshalb liegen sie nur auf deinem Gerät, und nicht einmal ich komme an sie heran.",
     "free_label": "Preis: 0 Euro",
-    "footnote_iserv": "¹ Hausaufgaben und Termine aus IServ holt {{BRAND_NAME}} in der App für Android. Am Computer kommen aus IServ deine Mails und der Vertretungsplan. Auf dem iPhone läuft {{BRAND_NAME}} als Web-App, dort geht IServ nicht.",
+    "footnote_iserv": "¹ IServ gibt es in den Apps für Mac, Windows, Linux und Android. Auf dem iPhone läuft {{BRAND_NAME}} als Web-App, dort geht IServ nicht.",
     "footnote_iserv_web": "¹ IServ gibt es nur in den Apps für Mac, Windows, Linux und Android. In der Web-App auf deinem {device} geht IServ nicht, Hausaufgaben trägst du dort selbst ein.",
     "footnote_agent": "² Das Sprachmodell für den Assistenten lädt {{BRAND_NAME}} erst, wenn du ihn zum ersten Mal öffnest, etwa 3 GB."
   }
