@@ -812,6 +812,7 @@ function baseCommands() {
     { group: "Aktionen", label: "Wetter und Heimweg", icon: "cloud", run: () => openWeather(document.querySelector("[data-open-weather]")) },
     { group: "Aktionen", label: theme === "dark" ? "Helle Darstellung" : "Dunkle Darstellung", icon: theme === "dark" ? "sun" : "moon", run: () => setTheme(theme === "dark" ? "light" : "dark") },
     { group: "Aktionen", label: "Tastaturkürzel", icon: "keyboard", hint: single ? "?" : "", run: () => $("shortcuts").showModal() },
+    { group: "Aktionen", label: "Rückmeldung geben", icon: "send", keywords: "Fehler melden Feedback Kontakt", run: () => window.dispatchEvent(new CustomEvent("app:feedback")) },
   ];
   Object.entries(pageNames).forEach(([key, label]) => {
     if (key === "home") return;

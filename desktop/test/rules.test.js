@@ -4,7 +4,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const brand = require('../brand.json');
-const { browserLoginUrl, isHubOrigin, isHubUrl, isNewerVersion, trustedUpdateUrl } = require('../src/rules');
+const { browserLoginUrl, isHubOrigin, isHubUrl, isMailDraft, isNewerVersion, trustedUpdateUrl } = require('../src/rules');
 
 const hub = 'http://127.0.0.1:5050';
 const site = new URL(brand.website);
@@ -71,4 +71,12 @@ test('the browser opens the local hub only with a well-formed one-time login cod
   assert.equal(browserLoginUrl(`${hub}/hub`, undefined), null);
   assert.equal(browserLoginUrl('https://example.com/hub', code), null);
   assert.equal(browserLoginUrl('http://localhost:5050/hub', code), null);
+});
+
+test('the page may only hand over a mail draft to one address, nothing else', () => {
+  assert.equal(isMailDraft('mailto:someone@example.org?subject=R%C3%BCckmeldung&body=Version%3A%200.5.2'), true);
+  assert.equal(isMailDraft('mailto:someone@example.org'), true);
+  for (const value of ['https://example.org/', 'http://127.0.0.1:5050/hub', 'file:///etc/passwd', 'javascript:alert(1)', 'mailto:', 'mailto:a@b.org,c@d.org', 'mailto:a@b.org,c', 'mailto:%E0%A4%A', 'mailto:not an address', 'tel:+4930', null, 42, `mailto:a@b.org?body=${'x'.repeat(9000)}`]) {
+    assert.equal(isMailDraft(value), false, String(value).slice(0, 40));
+  }
 });

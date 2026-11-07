@@ -107,6 +107,7 @@ function prepareHub() {
   contextBridge.exposeInMainWorld('hubShell', {
     nativeNotifications: true,
     openInBrowser: () => ipcRenderer.invoke('hub:open-in-browser'),
+    openMail: (url) => ipcRenderer.invoke('hub:open-mail', String(url || '')),
   });
   watchTheme();
   answerQuickNote();

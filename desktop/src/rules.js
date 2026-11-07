@@ -51,4 +51,15 @@ function browserLoginUrl(hubUrl, code) {
   return url.href;
 }
 
-module.exports = { browserLoginUrl, isHubOrigin, isHubUrl, isNewerVersion, parseUrl, trustedUpdateUrl };
+function isMailDraft(value) {
+  if (typeof value !== 'string' || value.length > 8000) return false;
+  const url = parseUrl(value);
+  if (!url || url.protocol !== 'mailto:') return false;
+  try {
+    return /^[^\s@/?#,;]+@[^\s@/?#,;]+$/.test(decodeURIComponent(url.pathname));
+  } catch {
+    return false;
+  }
+}
+
+module.exports = { browserLoginUrl, isHubOrigin, isHubUrl, isMailDraft, isNewerVersion, parseUrl, trustedUpdateUrl };

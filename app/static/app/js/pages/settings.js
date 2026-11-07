@@ -5,6 +5,7 @@ import {
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
 import { toast, setTheme, syncTime } from "../shell.js";
 import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary } from "../backup.js";
+import { platformName } from "../feedback.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -3242,21 +3243,11 @@ function bindAbout() {
   });
 }
 
-function systemName() {
-  const agent = navigator.userAgent;
-  if (/iPhone|iPad/.test(agent)) return "iOS";
-  if (/Android/.test(agent)) return "Android";
-  if (/Mac/.test(agent)) return "macOS";
-  if (/Windows/.test(agent)) return "Windows";
-  if (/Linux/.test(agent)) return "Linux";
-  return "Web";
-}
-
 function renderAbout() {
   const card = $("aboutCard");
   const about = page.about || {};
   const version = esc(card.dataset.version || about.version || "").replace(/^(.+?) (\([^)]*\))$/, `<span class="about-part">$1</span> <span class="about-part">$2</span>`);
-  const where = platform.desktop ? `${systemName()}, Desktop-App` : `${systemName()}, im Browser`;
+  const where = platformName();
   const browser = typeof window.hubShell?.openInBrowser === "function"
     ? `<button class="pill" type="button" id="openInBrowser">${icon("arrow-up-right")}Im Browser öffnen</button>`
     : "";
@@ -3272,7 +3263,7 @@ function renderAbout() {
       <div><dt>Daten</dt><dd>Lokal auf diesem Gerät</dd></div>
       <div><dt>Lizenz</dt><dd>${esc(about.license || "PolyForm Noncommercial 1.0.0")}</dd></div>
     </dl>
-    <div class="about-links"><button class="pill" type="button" data-tour-start>${icon("presentation")}Tutorial mit Luna</button>${browser}${links.map(([href, text, glyph]) => `<a class="pill" href="${esc(href)}" target="_blank" rel="noopener">${icon(glyph)}${text}${icon("arrow-up-right", "is-external")}<span class="visually-hidden">, öffnet in einem neuen Tab</span></a>`).join("")}</div>
+    <div class="about-links"><button class="pill" type="button" data-feedback>${icon("send")}Rückmeldung geben</button><button class="pill" type="button" data-tour-start>${icon("presentation")}Tutorial mit Luna</button>${browser}${links.map(([href, text, glyph]) => `<a class="pill" href="${esc(href)}" target="_blank" rel="noopener">${icon(glyph)}${text}${icon("arrow-up-right", "is-external")}<span class="visually-hidden">, öffnet in einem neuen Tab</span></a>`).join("")}</div>
     <p class="about-note">${BRAND} steht unter der PolyForm Noncommercial License 1.0.0. Du darfst es kostenlos nutzen, ändern und weitergeben, aber nicht damit Geld verdienen. Den vollständigen Quellcode dieser Version findest du über den Link.</p>`;
 }
 

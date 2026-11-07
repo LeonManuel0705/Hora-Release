@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
 import { data, esc, icon, luna, HUES } from "../core.js";
 import { travels, flipKeyed, enterInPlace, exitInPlace } from "../motion.js";
 import { toast, registerSearch, placeNear, clampSheet } from "../shell.js";

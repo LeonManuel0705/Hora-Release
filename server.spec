@@ -14,6 +14,7 @@ datas = [
     ('app/templates', 'app/templates'),
     ('app/static', 'app/static'),
     ('app/curriculum', 'app/curriculum'),
+    ('flutter_app/lib/build_info.dart', 'flutter_app/lib'),
 ]
 binaries = []
 if sys.platform == 'win32':
