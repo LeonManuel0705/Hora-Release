@@ -273,6 +273,12 @@ class UiData {
 
   int get classLevel => knownClassLevel ?? 10;
 
+  // The term grades are filed under now, or an empty one while the class is unknown, so no class is guessed.
+  String get currentSemester {
+    final level = knownClassLevel;
+    return level == null ? '' : semesterFor(today, level);
+  }
+
   // The welcome asks for the graduation year. Counted as in Brandenburg, where the Abitur comes after class 12.
   static int levelForGraduation(int year, DateTime today) {
     final started = today.month >= 8 ? today.year : today.year - 1;
@@ -685,7 +691,7 @@ class UiData {
   }
 
   Future<Map<String, Object?>> pageSchool(School setup) async {
-    final semester = semesterFor(today, classLevel);
+    final semester = currentSemester;
     final grades = <Map<String, Object?>>[];
     final history = <String, Map<String, List<int>>>{};
     for (final row in await db.query('grades', orderBy: 'date ASC')) {
@@ -810,7 +816,7 @@ class UiData {
         'town': city,
         'state': stateCode(prefs.getString('user_bundesland')),
         'grade': knownClassLevel,
-        'semester': semesterFor(today, classLevel),
+        'semester': currentSemester,
         'birthday': isoDay(prefs.getString('user_birthday')) ?? '',
       },
       'states': [for (final (code, name) in uiStates) {'code': code, 'name': name}],

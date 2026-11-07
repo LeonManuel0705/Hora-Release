@@ -73,8 +73,31 @@ def test_an_explicit_class_ten_is_kept(client):
 def test_a_class_set_in_the_older_screens_is_known():
     assert ui_data.known_grade({"class_level": 11}, {}) == 11
     assert ui_data.known_grade({"class_level": 10}, {}) is None
+    assert ui_data.known_grade({"class_level": 10, "grade_system": "points"}, {}) is None
+    assert ui_data.known_grade({"class_level": 10, "grade_system": "marks"}, {}) == 10
     assert ui_data.known_grade({}, {"app-settings": {"school": {"grade": True}}}) is None
     assert ui_data.known_grade({"class_level": 12}, {"app-settings": {"school": {"grade": 9}}}) == 9
+
+
+def test_class_ten_saved_in_the_older_class_screen_counts(client):
+    assert client.post("/api/hub/school/class-level", json={"class_level": 10}).status_code == 200
+    assert page_data(client)["user"]["grade"] == 10
+    assert page_data(client, "/hub/school")["page"]["semester"] in ("10/1", "10/2")
+
+
+def test_grades_name_no_term_while_the_class_is_unknown(client):
+    own = {"custom": True, "name": "Geografie", "short": "Geo", "hue": "moss", "type": "GK", "teacher": "", "room": ""}
+    client.put("/api/ui/store/app-subjects", json={"items": {"geo-own": own}, "removed": []})
+    page = page_data(client, "/hub/school")["page"]
+    assert page["semester"] == ""
+    assert page_data(client, "/hub/settings")["page"]["school"]["semester"] == ""
+    made = client.post("/api/ui/grades", json={"subject": "geo-own", "points": 11, "type": "test", "semester": page["semester"]}).get_json()["grade"]
+    assert made["semester"] == ""
+    assert [item["id"] for item in page_data(client, "/hub/school")["page"]["grades"]] == [made["id"]]
+    client.put("/api/ui/store/app-settings", json={"school": {"grade": 12}})
+    page = page_data(client, "/hub/school")["page"]
+    assert page["semester"] in ("Q3", "Q4")
+    assert [(item["id"], item["semester"]) for item in page["grades"]] == [(made["id"], page["semester"])]
 
 
 def test_the_bundesland_is_reported_once_chosen(client):

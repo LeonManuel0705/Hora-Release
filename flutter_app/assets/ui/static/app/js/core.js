@@ -478,7 +478,11 @@ export const abWeeks = () => {
 export const abAnswered = () => typeof storage.get(LOCAL_KEYS.abWeeks) === "boolean";
 export const abSettled = () => abAnswered() || storedPlan;
 export const hasPlan = () => anyLesson(abWeeks() ? data?.timetable : { A: data?.timetable?.A });
-export const gradeScale = () => ((storage.get(LOCAL_KEYS.prefs)?.school?.grade ?? 12) >= 11 ? "points" : "grades");
+export const gradeScale = () => {
+  const saved = storage.get(LOCAL_KEYS.prefs)?.school?.grade;
+  const grade = Number.isInteger(saved) ? saved : Number.isInteger(data?.user?.grade) ? data.user.grade : 12;
+  return grade >= 11 ? "points" : "grades";
+};
 
 // A school with single periods calls them Stunden, one with double periods Blöcke. The words fit into the sentences around them.
 export function periodWords(blocks = data?.blocks) {

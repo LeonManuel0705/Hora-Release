@@ -879,14 +879,23 @@ def iserv_account():
 def known_grade(settings, store):
     """The class the student said they are in, or None while nobody asked.
 
-    The database column starts at 10 for every new row, so a 10 there only counts when the settings saved it too.
+    Every new row starts at class 10 with points. Saving a class, here or in the older class screen, sets marks for a
+    class up to 10, so a 10 only counts together with marks.
     """
     saved = store.get('app-settings') if isinstance(store.get('app-settings'), dict) else {}
     grade = (saved.get('school') if isinstance(saved.get('school'), dict) else {}).get('grade')
     if isinstance(grade, int) and not isinstance(grade, bool) and grade in GRADES:
         return grade
-    level = (settings or {}).get('class_level')
-    return level if isinstance(level, int) and level in GRADES and level != 10 else None
+    settings = settings or {}
+    level = settings.get('class_level')
+    if not isinstance(level, int) or isinstance(level, bool) or level not in GRADES:
+        return None
+    return level if level != 10 or settings.get('grade_system') == 'marks' else None
+
+
+def current_semester(today, grade):
+    """The term grades are filed under now, or an empty one while the class is unknown, so no class is guessed."""
+    return semester_for(today, grade) if grade else ''
 
 
 def build(active, store, now):
@@ -969,7 +978,7 @@ def grade_view(item, subjects, semester, today):
 
 
 def page_school(data, school, settings, today, iserv):
-    semester = semester_for(today, settings.get('class_level'))
+    semester = current_semester(today, data['user']['grade'])
     grades = []
     history = {}
     for item in load_list('grades'):
@@ -1197,7 +1206,7 @@ def page_settings(data, school, settings, today, iserv):
             'town': city or '',
             'state': settings.get('bundesland') or '',
             'grade': data['user']['grade'],
-            'semester': semester_for(today, settings.get('class_level')),
+            'semester': current_semester(today, data['user']['grade']),
             'birthday': iso_day(settings.get('birthday')) or '',
         },
         'states': [{'code': code, 'name': name} for code, name in STATES],

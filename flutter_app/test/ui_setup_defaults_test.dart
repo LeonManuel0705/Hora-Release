@@ -73,6 +73,14 @@ void main() {
     final data = await build({});
     expect((data['user'] as Map)['grade'], isNull);
     expect(((data['page'] as Map)['school'] as Map)['grade'], isNull);
+    expect(((data['page'] as Map)['school'] as Map)['semester'], '');
+  });
+
+  test('the school page names a term only once the class is known', () async {
+    final unknown = await build({}, page: 'school');
+    expect((unknown['page'] as Map)['semester'], '');
+    final known = await build({'graduation_year': 2027}, page: 'school');
+    expect((known['page'] as Map)['semester'], 'Q3');
   });
 
   test('the forecast passes the weather code on', () async {

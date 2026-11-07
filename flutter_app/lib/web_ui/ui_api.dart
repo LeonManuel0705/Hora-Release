@@ -362,7 +362,7 @@ class UiApi {
       if (points is! int || points < 0 || points > 15) return UiReply.error('Punkte fehlen');
       final kind = uiGradeWords.containsKey(payload['type']) ? payload['type'] as String : 'sonstiges';
       final marks = data.classLevel <= 10;
-      final semester = text(payload['semester'], 12).isEmpty ? semesterFor(data.today, data.classLevel) : text(payload['semester'], 12);
+      final semester = text(payload['semester'], 12).isEmpty ? data.currentSemester : text(payload['semester'], 12);
       final day = isoDay(payload['date']) ?? data.todayIso;
       final id = _uuid.v4();
       final now = DateTime.now().toIso8601String();

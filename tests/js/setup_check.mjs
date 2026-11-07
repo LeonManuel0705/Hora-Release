@@ -125,6 +125,12 @@ const tests = {
     const older = await coreWith({ weather: { code: 3, hours: [{ h: 15, temp: 7, rain: 80 }] } });
     assert.equal(older.currentSky(15).kind, "cloudy");
   },
+  async "the grade scale follows the class the page knows before the setup saved one"() {
+    assert.equal((await coreWith({ user: { state: "", grade: 9, iserv: "" } })).gradeScale(), "grades");
+    assert.equal((await coreWith({ user: { state: "", grade: 12, iserv: "" } })).gradeScale(), "points");
+    assert.equal((await coreWith({ user: { state: "", grade: 12, iserv: "" } }, { "app-settings": { school: { grade: 8 } } })).gradeScale(), "grades");
+    assert.equal((await coreWith({})).gradeScale(), "points");
+  },
   "reminders start on for someone new and the choice is stored"() {
     reminders.adoptDefault();
     assert.equal(core.storage.get("app-settings")?.notify?.enabled, true);
