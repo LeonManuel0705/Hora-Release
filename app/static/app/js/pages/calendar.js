@@ -637,6 +637,7 @@ function renderMonth() {
   const weeks = Math.ceil((dayDiff(start, isoDate(span.end)) + 1) / 7);
   const month = span.start.getMonth();
   const lines = Math.max(2, Math.floor((state.monthRow - 34) / 21));
+  const room = document.documentElement.classList.contains("is-touch") ? Math.max(0, Math.floor((state.monthRow - 34 - 46) / 21)) : lines - 1;
   let rows = "";
   for (let week = 0; week < weeks; week += 1) {
     let cells = "";
@@ -654,8 +655,8 @@ function renderMonth() {
         body = dayButton(`<span class="cm-num" aria-hidden="true">${date.getDate()}</span><span class="cm-body" aria-hidden="true"><span class="cm-dots">${dotsFor(iso, 3)}</span></span>`);
       } else {
         const crowded = items.length > lines;
-        const listed = crowded ? items.slice(0, lines - 1) : items;
-        let spare = lines - listed.length - (crowded ? 1 : 0);
+        const listed = crowded ? items.slice(0, room) : items;
+        let spare = (crowded ? room : lines) - listed.length;
         const html = listed.map((entry) => {
           const long = entry.type === "event" && entry.item.title.length > 12 && spare > 0;
           if (long) spare -= 1;
@@ -1250,6 +1251,7 @@ function setView(view) {
 function focusDay(iso, { keyboard = false } = {}) {
   const span = period();
   const direction = iso < isoDate(span.start) ? -1 : iso > isoDate(span.end) ? 1 : 0;
+  const opening = DRAWER.matches && !state.dayOpen;
   state.focus = iso;
   state.picked = true;
   state.dayOpen = DRAWER.matches;
@@ -1261,6 +1263,8 @@ function focusDay(iso, { keyboard = false } = {}) {
   render({ slide: direction, fade: !direction && state.narrow && state.view === "woche" });
   if (keyboard) document.querySelector(`#calView [data-key="day:${iso}"]`)?.focus({ preventScroll: true });
   if (direction) announce();
+  const live = $("liveStatus");
+  if (opening && live) live.textContent = `${direction ? `${live.textContent}. ` : ""}Tagesübersicht für ${longDate(parseDate(iso))} geöffnet. Mit Escape schließt du sie.`;
 }
 
 function onDayKeys(event) {

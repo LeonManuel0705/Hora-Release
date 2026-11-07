@@ -559,7 +559,8 @@
 .is-touch .cal-panel :is(.field-control, .cal-time, .cal-select, .cal-count) { min-height: 44px; font-size: 16px; }
 .is-touch .cal-panel :is(.pill, .cal-route, .cal-date-pill) { min-height: 44px; }
 .is-touch .cal-panel .panel-tools .icon-button, .is-touch .cal-overview-close { width: 44px; height: 44px; }
-.is-touch .cm-more { min-height: 32px; padding-inline: 8px; }
+.is-touch .cm-more { display: inline-flex; align-items: center; min-height: 44px; padding-inline: 8px; }
+.is-touch .cal-scope .segmented button, .is-touch .cal-confirm .btn { height: 44px; }
 .is-touch :is(.cal-panel, .cal-nav) .date-proxy { font-size: 16px; }
 
 :root[data-motion="minimal"] .cal-loading { animation: none; }
