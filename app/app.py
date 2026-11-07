@@ -498,10 +498,10 @@ def iserv_ping():
     return '', 503
 
 
-# Reading the saved login means deriving a key, so the classic pages only learn whether one is there at all.
+# Loading the IServ module decrypts the saved login and signs in, so the classic pages only look whether a login is kept.
 def iserv_linked():
-    from .iserv_service import CREDENTIALS_FILE, get_iserv_service
-    return bool(get_iserv_service().connected) or CREDENTIALS_FILE.exists()
+    service = getattr(sys.modules.get(f'{__package__}.iserv_service'), 'iserv_service', None)
+    return bool(getattr(service, 'connected', False)) or (DATA_DIR / 'iserv_credentials.json').exists()
 
 
 app.jinja_env.globals['iserv_linked'] = iserv_linked
