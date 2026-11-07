@@ -1,7 +1,7 @@
 import {
   data, flags, esc, icon, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, abWeeks, isoWeek, subject, hueVar, glue, lessonsFor, activeLessons, nextSchoolDay, relativeDay, inDays, duration, shortDate,
-  longDate, eventsOn, nextDeparture, weatherAt, rainFrom, hourIcon, hasWeather, currentSky, skyCode, storage, changesFor, ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, nextRepeatDate, followLinks, homeworkDate,
+  longDate, eventsOn, nextDeparture, weatherAt, rainFrom, hourIcon, hasWeather, currentSky, skyCode, periodWords, storage, changesFor, ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, nextRepeatDate, followLinks, homeworkDate,
   holidayOn, hasPlan, NO_TEACHER, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "./core.js";
 import { animates, travels, rich, level, flipKeyed, exitInPlace, enterInPlace, setDigits, pop, crossfade, swapText, breath, chalkCheck, bezier, token, ms } from "./motion.js";
 import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
@@ -16,9 +16,8 @@ const WRITTEN_DAYS = 14;
 const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const clamp = (value, low = 0, high = 1) => Math.min(high, Math.max(low, value));
 const widow = (text) => text.replace(/ (\S{1,12})$/, "\u00a0$1");
-// A school with single periods calls them Stunden, one with double periods Blöcke.
-const PERIOD = data.blocks?.length && data.blocks.every((block) => toMin(block.end) - toMin(block.start) <= 60) ? ["Stunde", "Stunden", "der"] : ["Block", "Blöcke", "dem"];
-const nth = (n) => `${n}. ${PERIOD[0]}`;
+const PERIOD = periodWords();
+const nth = (n) => `${n}. ${PERIOD.one}`;
 
 const state = {
   tasks: flags.empty ? [] : [...data.tasks, ...(data.taskPool || []).filter((task) => !task.done && task.date && !task.someday)].map((task) => ({ ...task })),
@@ -97,7 +96,7 @@ function changeLine(day) {
   const lines = [];
   if (cancelled.length) {
     const end = day.active.length ? day.active[day.active.length - 1].end : null;
-    lines.push(`${cancelled.map((lesson) => `${lesson.block}.`).join(" und ")} ${PERIOD[0]} entfällt${end ? `, Schluss um ${hm(end)}` : ""}`);
+    lines.push(`${cancelled.map((lesson) => `${lesson.block}.`).join(" und ")} ${PERIOD.one} entfällt${end ? `, Schluss um ${hm(end)}` : ""}`);
   }
   moved.forEach((lesson) => lines.push(`${nth(lesson.block)} heute in ${lesson.room} statt ${lesson.movedFrom}`));
   if (!lines.length) return "";
@@ -352,10 +351,10 @@ function renderTrack(day) {
   }
   const byBlock = new Map(model.lessons.map((lesson) => [lesson.block, lesson]));
   const signature = `${model.mode}|${isoDate(model.date)}|${model.lessons.map((lesson) => `${lesson.block}${lesson.subject}${lesson.cancelled ? "x" : ""}${lesson.room}`).join()}`;
-  track.setAttribute("aria-label", model.mode === "preview" ? `${PERIOD[1]} am ${longDate(model.date)}` : `${PERIOD[1]} heute`);
+  track.setAttribute("aria-label", model.mode === "preview" ? `${PERIOD.many} am ${longDate(model.date)}` : `${PERIOD.many} heute`);
   if (track.dataset.signature !== signature) {
     track.dataset.signature = signature;
-    const caption = model.mode === "preview" ? `<span class="track-caption" aria-hidden="true">${PERIOD[1]} ${esc(relativeDay(model.offset, model.date))}</span>` : "";
+    const caption = model.mode === "preview" ? `<span class="track-caption" aria-hidden="true">${PERIOD.many} ${esc(relativeDay(model.offset, model.date))}</span>` : "";
     track.innerHTML = data.blocks.map((block) => {
       const start = toMin(block.start);
       const left = ((start - DAY_START) / SPAN) * 100;
@@ -764,7 +763,7 @@ function renderWeek(day) {
       return lesson && !lesson.cancelled ? `<i style="--hue:${hueVar(lesson.subject)}"></i>` : `<i class="is-free"></i>`;
     }).join("");
     const line = active.length
-      ? `${active.length} ${active.length === 1 ? PERIOD[0] : PERIOD[1]}, ${active[0].startMin === DAY_START ? "" : `${hm(active[0].start)} `}bis ${hm(active[active.length - 1].end)}`
+      ? `${active.length} ${active.length === 1 ? PERIOD.one : PERIOD.many}, ${active[0].startMin === DAY_START ? "" : `${hm(active[0].start)} `}bis ${hm(active[active.length - 1].end)}`
       : holiday ? holiday.title : planned ? "Unterrichtsfrei" : "";
     const overdueHere = state.deadlines.filter((item) => item.date === iso && isOverdue(item, today));
     const markers = [];
@@ -1125,7 +1124,7 @@ function restoreTask(id, kind, before = null, someday = false) {
 }
 
 function createTask({ title, subjectKey, date, block, minutes = 20, notes = "" }) {
-  const task = { id: `new-${Date.now()}`, title, subject: subjectKey, anchor: block ? `vor ${PERIOD[2]} ${nth(block)}` : "", minutes, notes, done: false };
+  const task = { id: `new-${Date.now()}`, title, subject: subjectKey, anchor: block ? `vor ${PERIOD.dative} ${nth(block)}` : "", minutes, notes, done: false };
   if (date && date > todayIso()) task.date = date;
   if (block) task.block = block;
   state.tasks.push(task);

@@ -480,6 +480,14 @@ export const abSettled = () => abAnswered() || storedPlan;
 export const hasPlan = () => anyLesson(abWeeks() ? data?.timetable : { A: data?.timetable?.A });
 export const gradeScale = () => ((storage.get(LOCAL_KEYS.prefs)?.school?.grade ?? 12) >= 11 ? "points" : "grades");
 
+// A school with single periods calls them Stunden, one with double periods Blöcke. The words fit into the sentences around them.
+export function periodWords(blocks = data?.blocks) {
+  const single = !!blocks?.length && blocks.every((block) => toMin(block.end) - toMin(block.start) <= 60);
+  return single
+    ? { one: "Stunde", many: "Stunden", dative: "der", inside: "In der", it: "Sie", which: "die", none: "keine" }
+    : { one: "Block", many: "Blöcke", dative: "dem", inside: "Im", it: "Er", which: "der", none: "kein" };
+}
+
 export const HUES = ["rose", "ochre", "olive", "moss", "jade", "teal", "lake", "slate", "iris", "orchid", "brick", "plum"];
 export const COURSE_TYPES = ["LK", "GK", "SK"];
 export const NO_TEACHER = "ohne Lehrkraft";

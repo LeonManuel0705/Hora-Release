@@ -146,6 +146,13 @@ const tests = {
     assert.deepEqual(day.map((block) => `${block.start}-${block.end}`), ["08:00-08:45", "08:50-09:35", "09:55-10:40", "10:45-11:30", "11:50-12:35", "12:40-13:25", "13:45-14:30", "14:35-15:20"]);
     assert.equal(plan.templateOf(day), 45);
   },
+  "single periods are called Stunden and double periods Blöcke"() {
+    const single = core.periodWords(plan.blockTimes({ length: 45, start: "08:00", count: 8, small: 5, big: 20 }));
+    assert.deepEqual([single.one, single.many, single.inside, single.it], ["Stunde", "Stunden", "In der", "Sie"]);
+    const double = core.periodWords(plan.blockTimes(plan.TEMPLATES[90]));
+    assert.deepEqual([double.one, double.many, double.inside, double.it], ["Block", "Blöcke", "Im", "Er"]);
+    assert.equal(core.periodWords([]).one, "Block");
+  },
   "double periods start like the default plan"() {
     const day = plan.blockTimes(plan.TEMPLATES[90]);
     assert.deepEqual(day.map((block) => `${block.start}-${block.end}`), ["08:00-09:30", "09:50-11:20", "11:30-13:00", "13:30-15:00"]);

@@ -3,7 +3,7 @@
 
 import {
   data, esc, icon, luna, now, storage, LOCAL_KEYS, HUES, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, abSettled,
-  activeSubjectKeys, subject, hueVar, slug, teacherId, teacherLabel, weekType, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, isoWeek, hm, addDays, startOfDay, BRAND,
+  activeSubjectKeys, subject, hueVar, slug, teacherId, teacherLabel, periodWords, weekType, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, isoWeek, hm, addDays, startOfDay, BRAND,
 } from "./core.js";
 import { animates, travels, token } from "./motion.js";
 import { askPermission, readPrefs, switchRemindersOn } from "./reminders.js";
@@ -43,7 +43,6 @@ function readObject(key) {
 }
 
 const sortedBlocks = () => [...data.blocks].sort((a, b) => a.n - b.n);
-const single = (blocks) => blocks.every((block) => plan.minutesOfClock(block.end) - plan.minutesOfClock(block.start) <= 60);
 const usedBlocks = () => Math.max(0, ...["A", "B"].flatMap((week) => DAYS.flatMap((dow) => (data.timetable[week]?.[String(dow)] || []).map((entry) => entry.block))));
 const DEFAULT_TIMES = plan.blockTimes(plan.TEMPLATES[90]);
 const sameTimes = (one, other) => one.length === other.length && one.every((block, index) => block.start === other[index].start && block.end === other[index].end);
@@ -291,7 +290,8 @@ function timelineHtml(blocks) {
 
 function timesNote(blocks) {
   if (!blocks.length) return "";
-  const what = single(blocks) ? plural(blocks.length, "Stunde", "Stunden") : plural(blocks.length, "Block", "Blöcke");
+  const words = periodWords(blocks);
+  const what = plural(blocks.length, words.one, words.many);
   return `${what} von ${hm(blocks[0].start)} bis ${hm(blocks.at(-1).end)}. Einzelne Zeiten änderst du später unter Einstellungen, Stundenraster.`;
 }
 
@@ -337,8 +337,9 @@ const VIEWS = {
     html() {
       const keep = ownTimes() || usedBlocks() > 0;
       const stored = sortedBlocks();
+      const words = periodWords(stored);
       const cards = [
-        keep ? radio("times", "keep", model.times === "keep", `${motif(stored.length)}<b>So wie jetzt</b><small>${single(stored) ? plural(stored.length, "Stunde", "Stunden") : plural(stored.length, "Block", "Blöcke")}, ${hm(stored[0].start)} bis ${hm(stored.at(-1).end)}</small>`, "is-card") : "",
+        keep ? radio("times", "keep", model.times === "keep", `${motif(stored.length)}<b>So wie jetzt</b><small>${plural(stored.length, words.one, words.many)}, ${hm(stored[0].start)} bis ${hm(stored.at(-1).end)}</small>`, "is-card") : "",
         radio("times", "45", model.times === "45", `${motif(8)}<b>45 Minuten</b><small>Einzelstunden</small>`, "is-card"),
         radio("times", "90", model.times === "90", `${motif(4)}<b>90 Minuten</b><small>Doppelstunden</small>`, "is-card is-double"),
       ].join("");
@@ -542,7 +543,7 @@ const weekCount = (week) => plan.countLessons(data.timetable, [week]);
 
 function cellHtml(dow, block, row, col) {
   const entry = entryAt(model.week, dow, block.n);
-  const when = `${WEEKDAYS[dow]}, ${block.n}. ${single(sortedBlocks()) ? "Stunde" : "Block"}, ${hm(block.start)}`;
+  const when = `${WEEKDAYS[dow]}, ${block.n}. ${periodWords().one}, ${hm(block.start)}`;
   const focus = model.cursor.row === row && model.cursor.col === col ? 0 : -1;
   const attrs = `type="button" data-cell="${dow}:${block.n}" data-row="${row}" data-col="${col}" tabindex="${focus}"`;
   if (!entry) return `<td><button class="setup-cell is-free" ${attrs} aria-label="${esc(when)}: frei">${icon("plus")}</button></td>`;
