@@ -394,17 +394,20 @@ async function shareView() {
     return;
   }
   let link = "";
+  let tooLong = false;
   try {
     const payload = await encodePlan(model);
     if (website() && sameValue(await decodePlan(payload), model)) link = linkOf(website(), payload);
-  } catch {}
+  } catch (error) {
+    tooLong = error instanceof PlanError && error.reason === "long";
+  }
   if (ticket !== flow) return;
   const qr = link ? await qrMarkup(link) : "";
   if (ticket !== flow) return;
   const send = !!link && typeof navigator.share === "function" && !platform.desktop && !phoneApp();
   const code = qr
     ? `<figure class="share-qr">${qr}<figcaption>Mit der Handykamera scannen</figcaption></figure>`
-    : `<p class="share-note">${icon("info")}<span>${link ? "Für einen QR-Code ist dieser Plan zu groß. Schick den Link oder die Datei." : "Einen Link kann dieses Gerät gerade nicht bauen. Die Datei geht trotzdem."}</span></p>`;
+    : `<p class="share-note">${icon("info")}<span>${link ? "Für einen QR-Code ist dieser Plan zu groß. Schick den Link oder die Datei." : tooLong ? "Für einen Link ist dieser Plan zu groß. Die Datei geht trotzdem." : "Einen Link kann dieses Gerät gerade nicht bauen. Die Datei geht trotzdem."}</span></p>`;
   const actions = [send ? button("shareSend", "share-2", "Teilen", true) : "", link ? button("shareCopy", "link", "Link kopieren", !send) : "", phoneApp() && link ? "" : button("shareFile", "download", "Als Datei sichern", !link)];
   show("Stundenplan teilen", `${code}<p class="share-summary">${esc(planLine(model))}. Der Link enthält nur den Stundenplan.</p><div class="share-actions">${actions.join("")}</div><p class="share-status" id="shareStatus" role="status"></p>`, (body) => {
     body.querySelector("#shareSend")?.addEventListener("click", async () => {

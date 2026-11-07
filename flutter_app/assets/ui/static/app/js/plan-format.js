@@ -10,7 +10,7 @@ const HUES = ["rose", "ochre", "olive", "moss", "jade", "teal", "lake", "slate",
 const TYPES = ["GK", "LK", "SK"];
 const TITLES = ["", "Frau", "Herr"];
 const DAYS = [1, 2, 3, 4, 5];
-const LIMIT = { subjects: 40, teachers: 60, blocks: 16, name: 32, short: 4, room: 12, teacher: 40, json: 65536 };
+const LIMIT = { subjects: 40, teachers: 60, blocks: 16, name: 32, short: 4, room: 12, teacher: 40, json: 65536, payload: 8192 };
 const KEYS = { subjects: "app-subjects", teachers: "app-teachers", rooms: "app-rooms", blocks: "app-block-times", lessons: "app-timetable-edits", weeks: "app-ab-weeks" };
 
 export class PlanError extends Error {
@@ -206,11 +206,14 @@ export async function encodePlan(model) {
   envelope[0] = FORMAT;
   new DataView(envelope.buffer).setUint32(1, crc32(json));
   envelope.set(packed, 5);
-  return toBase64Url(envelope);
+  const payload = toBase64Url(envelope);
+  if (payload.length > LIMIT.payload) fail("long");
+  return payload;
 }
 
 export async function decodePlan(payload) {
   if (typeof DecompressionStream !== "function") fail("unsupported");
+  if (typeof payload !== "string" || payload.length > LIMIT.payload) fail();
   const envelope = fromBase64Url(payload);
   if (envelope.length < 6) fail();
   if (envelope[0] > FORMAT) fail("newer");

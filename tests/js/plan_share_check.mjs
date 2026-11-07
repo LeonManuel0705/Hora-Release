@@ -345,6 +345,20 @@ const tests = {
     assert.equal(merged.filled, 2);
     assert.deepEqual(describePlan(planOf(twice)), { subjects: 2, lessons: 2, lessonsB: 2, weeks: true, blocks: 2 });
   },
+  async "an overlong code is refused before it is unpacked, and no such link is made"() {
+    assert.equal(await reason(() => decodePlan("A".repeat(8193))), "damaged");
+    let seed = 7;
+    const noise = (length) => Array.from({ length }, () => String.fromCharCode(0x4e00 + (Math.floor((seed = (seed * 1103515245 + 12345) % 2147483648) / 65536) % 4096))).join("");
+    const big = {
+      subjects: Array.from({ length: 40 }, (_, index) => ({ name: noise(32), short: noise(4), type: "GK", hue: "slate", teacher: index, room: noise(12) })),
+      teachers: Array.from({ length: 60 }, () => ({ title: "Frau", name: noise(40) })),
+      blocks: Array.from({ length: 16 }, (_, index) => ({ start: `${String(7 + Math.floor(index / 2)).padStart(2, "0")}:${index % 2 ? "30" : "00"}`, end: `${String(7 + Math.floor(index / 2)).padStart(2, "0")}:${index % 2 ? "55" : "25"}` })),
+      weeks: true,
+      reference: "2026-01-12",
+      lessons: ["A", "B"].flatMap((week) => [1, 2, 3, 4, 5].flatMap((day) => Array.from({ length: 16 }, (_, index) => ({ week, day, block: index + 1, subject: (day * 16 + index) % 40, room: noise(12), teacher: (day * 7 + index) % 60 })))),
+    };
+    assert.equal(await reason(() => encodePlan(unpackPlan(packPlan(big)))), "long");
+  },
   "undo puts every plan key back exactly as it was"() {
     const initial = { "app-subjects": { items: { m: { hue: "jade" } }, removed: [] }, "app-ab-weeks": false, "app-timetable-edits": { "A:1:1": null } };
     const map = new Map(Object.entries(clone(initial)));
