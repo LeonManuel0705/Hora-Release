@@ -541,12 +541,15 @@ def deadlines(school, today, iserv_homework=None):
             return
         result.append(view)
 
+    own = set()
     for prefix, (name, _) in DEADLINE_KINDS.items():
         for item in load_list(name):
-            keep(deadline_view(prefix, item, school, today), prefix == 'hw')
+            view = deadline_view(prefix, item, school, today)
+            if view and prefix == 'hw':
+                own.add((view['title'].casefold(), view['date']))
+            keep(view, prefix == 'hw')
     if iserv_homework:
-        # Homework taken over from IServ by hand in the older interface is there already as one's own.
-        own = {(view['title'].casefold(), view['date']) for view in result if view['kind'] == 'Hausaufgabe'}
+        # Homework taken over from IServ by hand in the older interface is there already as one's own, listed or ticked off.
         for item in iserv_homework['items']:
             if f"{ISERV_PREFIX}{item['id']}" in iserv_homework['hidden']:
                 continue

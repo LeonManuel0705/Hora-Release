@@ -48,7 +48,7 @@ class FakeIserv:
 
 
 def forget():
-    for name in ('iserv', 'sync', 'iserv_homework', 'mail_archive'):
+    for name in ('iserv', 'sync', 'iserv_homework', 'mail_archive', 'homework'):
         path = ui_data._path(name)
         if path.exists():
             path.unlink()
@@ -150,6 +150,21 @@ def test_homework_from_iserv_is_listed_read_only_and_only_once(client, monkeypat
     mine = next(item for item in listed if item['title'] == 'Analysis Blatt 3')
     assert (mine['origin'], mine['date'], mine['detail'], mine['status']) == ('iserv', soon, 'Mathematik', 'offen')
     assert page_data(client, '/hub')['status']['iservParts']['homework'] == datetime.now().isoformat(timespec='minutes')
+
+
+def test_homework_taken_over_by_hand_and_ticked_off_keeps_its_iserv_copy_away(client):
+    connect()
+    past = (date.today() - timedelta(days=3)).isoformat()
+    soon = (date.today() + timedelta(days=2)).isoformat()
+    ui_data.modify_list('homework', lambda items: items.extend([
+        {'id': 'own1', 'title': 'Mathe S. 40 Nr. 3', 'due_date': past, 'completed': True},
+        {'id': 'own2', 'title': 'Diercke S. 24', 'due_date': soon, 'completed': True},
+    ]))
+    ui_data.change_iserv_homework(ui_data.iserv_key(), lambda state: state.update(items=[
+        homework('7', 'Mathe S. 40 Nr. 3', past), homework('8', 'Diercke S. 24', soon, course='Geografie'),
+    ]))
+    listed = [(item['id'], item['status']) for item in page_data(client, '/hub/tasks')['deadlines'] if item['kind'] == 'Hausaufgabe']
+    assert listed == [('hw-own2', 'abgegeben')]
 
 
 def test_homework_from_iserv_can_be_ticked_hidden_and_brought_back_without_touching_iserv(client, monkeypatch):
