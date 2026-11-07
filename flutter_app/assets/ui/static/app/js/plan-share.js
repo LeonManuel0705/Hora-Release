@@ -46,6 +46,8 @@ const framed = (() => {
   }
 })();
 const phoneApp = () => ["android", "ios"].includes(root.dataset.shell);
+// The phone app's WebView does not save downloads yet, so the plan file is only offered elsewhere.
+const canSaveFile = () => !phoneApp();
 const inWebApp = () => root.dataset.shell === "web" || (framed && !window.hubShell && !root.dataset.shell);
 const appleDevice = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform || ""));
 const touch = () => root.classList.contains("is-touch") || platform.touch;
@@ -408,7 +410,7 @@ async function shareView() {
   const code = qr
     ? `<figure class="share-qr">${qr}<figcaption>Mit der Handykamera scannen</figcaption></figure>`
     : `<p class="share-note">${icon("info")}<span>${link ? "Für einen QR-Code ist dieser Plan zu groß. Schick den Link oder die Datei." : tooLong ? "Für einen Link ist dieser Plan zu groß. Die Datei geht trotzdem." : "Einen Link kann dieses Gerät gerade nicht bauen. Die Datei geht trotzdem."}</span></p>`;
-  const actions = [send ? button("shareSend", "share-2", "Teilen", true) : "", link ? button("shareCopy", "link", "Link kopieren", !send) : "", phoneApp() && link ? "" : button("shareFile", "download", "Als Datei sichern", !link)];
+  const actions = [send ? button("shareSend", "share-2", "Teilen", true) : "", link ? button("shareCopy", "link", "Link kopieren", !send) : "", canSaveFile() ? button("shareFile", "download", "Als Datei sichern", !link) : ""];
   show("Stundenplan teilen", `${code}<p class="share-summary">${esc(planLine(model))}. Der Link enthält nur den Stundenplan.</p><div class="share-actions">${actions.join("")}</div><p class="share-status" id="shareStatus" role="status"></p>`, (body) => {
     body.querySelector("#shareSend")?.addEventListener("click", async () => {
       try {
