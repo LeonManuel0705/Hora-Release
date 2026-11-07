@@ -679,8 +679,9 @@
   align-self: start;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  margin: -4px;
   border-radius: 50%;
   color: var(--ink-soft);
   transition: transform var(--dur-press) var(--ease-out);
