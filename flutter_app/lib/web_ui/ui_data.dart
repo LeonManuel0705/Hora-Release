@@ -3,6 +3,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -11,6 +12,7 @@ import '../build_info.dart';
 import '../providers/app_provider.dart';
 import '../services/holiday_service.dart';
 import 'ui_db.dart';
+import 'ui_transit.dart';
 import 'ui_weather.dart';
 
 const uiHues = <String, String>{
@@ -253,6 +255,80 @@ class School {
       }
     });
     return found;
+  }
+}
+
+const uiNoTransit = <String, Object?>{'line': '', 'mode': '', 'from': '', 'to': '', 'walkMinutes': 0, 'departures': <Object?>[], 'delays': <String, Object?>{}};
+
+/// The next departures from school home, as the desktop gives them: kept here, fetched beside the page from about the last lesson on.
+class UiWayHome {
+  UiWayHome._();
+
+  static final instance = UiWayHome._();
+  static const fresh = Duration(minutes: 3);
+  static const before = Duration(minutes: 90), after = Duration(hours: 2);
+
+  String? _key;
+  DateTime? _at;
+  Map<String, Object?>? _value;
+  Future<void>? _running;
+
+  @visibleForTesting
+  Future<void>? get running => _running;
+
+  @visibleForTesting
+  void forget() {
+    _key = _at = _value = _running = null;
+  }
+
+  static DateTime? _moment(Object? value) => stamp(value);
+
+  /// The first ride of the next connections home, of the line and stop the soonest one takes. Cancelled ones are left out.
+  static Map<String, Object?>? view(List<Object?> journeys, String target) {
+    final rides = <(Map, int)>[];
+    for (final journey in journeys.whereType<Map>()) {
+      final legs = (journey['legs'] as List? ?? const []).whereType<Map>().toList();
+      final index = legs.indexWhere((leg) => leg['category'] != 'fuss' && leg['category'] != 'rad');
+      if (index < 0 || journey['cancelled'] == true) continue;
+      rides.add((legs[index], legs.take(index).fold<int>(0, (sum, leg) => sum + ((leg['minutes'] as num?)?.toInt() ?? 0))));
+    }
+    if (rides.isEmpty) return null;
+    final (first, walk) = rides.first;
+    final departures = <String>[];
+    final delays = <String, Object?>{};
+    for (final (leg, _) in rides) {
+      final from = leg['from'] as Map;
+      if (leg['line'] != first['line'] || from['name'] != (first['from'] as Map)['name']) continue;
+      final planned = _moment(from['planned'] ?? from['time']), actual = _moment(from['time']);
+      if (planned == null) continue;
+      final text = '${planned.hour}:${two(planned.minute)}';
+      if (departures.contains(text)) continue;
+      departures.add(text);
+      final late = actual == null ? 0 : (actual.difference(planned).inSeconds / 60).round();
+      if (late > 0) delays[text] = late;
+    }
+    return {'line': first['line'], 'mode': first['category'], 'from': (first['from'] as Map)['name'], 'to': target, 'walkMinutes': walk, 'departures': departures, 'delays': delays};
+  }
+
+  Map<String, Object?> shown(String key, Future<(Map<String, Object?>, int)> Function() fetch, String target) {
+    final current = _key == key;
+    final value = current ? _value : null;
+    final stale = !current || _at == null || DateTime.now().difference(_at!) >= fresh;
+    if (stale && _running == null) {
+      _running = () async {
+        Map<String, Object?>? found;
+        try {
+          final (body, status) = await fetch();
+          if (status == 200) found = view(body['journeys'] as List? ?? const [], target);
+        } catch (_) {}
+        final kept = _key == key ? _value : null;
+        _key = key;
+        _at = DateTime.now();
+        _value = found ?? kept;
+      }()
+          .whenComplete(() => _running = null);
+    }
+    return value == null ? Map.of(uiNoTransit) : Map.of(value);
   }
 }
 
@@ -671,7 +747,7 @@ class UiData {
       'deadlines': await deadlines(setup),
       'events': await events(),
       'holidays': holidayList,
-      'transit': {'line': '', 'mode': '', 'from': '', 'to': '', 'walkMinutes': 0, 'departures': <Object?>[], 'delays': <String, Object?>{}},
+      'transit': await wayHome(setup, store, holidayList),
       'weather': UiWeather.instance.view(prefs, now),
       'status': await syncStatus(iserv),
       'mailUnread': 0,
@@ -758,6 +834,77 @@ class UiData {
       'lat': lat,
       'lon': lon,
     };
+  }
+
+  /// The block times as the settings changed them, read like the desktop reads them.
+  static List<Map<String, Object?>> blockTimes(List<Map<String, Object?>> base, Object? saved) {
+    final pattern = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$');
+    bool isClock(Object? value) => value is String && pattern.hasMatch(value);
+    bool valid(List<Map<String, Object?>> blocks) {
+      final ordered = [...blocks]..sort((a, b) => (a['n'] as int).compareTo(b['n'] as int));
+      for (var index = 0; index < ordered.length; index++) {
+        final block = ordered[index];
+        if (!isClock(block['start']) || !isClock(block['end']) || '${block['start']}'.compareTo('${block['end']}') >= 0) return false;
+        if (index > 0 && '${ordered[index - 1]['end']}'.compareTo('${block['start']}') > 0) return false;
+      }
+      return true;
+    }
+
+    if (saved is List) {
+      final merged = <Map<String, Object?>>[];
+      for (final block in base) {
+        final own = saved.whereType<Map>().where((item) => item['n'] == block['n']).firstOrNull;
+        merged.add(own != null && isClock(own['start']) && isClock(own['end']) ? {...block, 'start': own['start'], 'end': own['end']} : {...block});
+      }
+      return valid(merged) ? merged : base;
+    }
+    final blocks = saved is Map && saved['v'] == 2 && saved['blocks'] is List ? (saved['blocks'] as List).whereType<Map>().toList() : null;
+    if (blocks == null || blocks.isEmpty || blocks.length > 8 || blocks.any((item) => item['n'] is! int)) return base;
+    final ordered = [...blocks]..sort((a, b) => (a['n'] as int).compareTo(b['n'] as int));
+    final result = [for (var index = 0; index < ordered.length; index++) <String, Object?>{'n': index + 1, 'start': ordered[index]['start'], 'end': ordered[index]['end']}];
+    final numbers = {for (final item in blocks) item['n']};
+    final complete = [for (var number = 1; number <= result.length; number++) numbers.contains(number)].every((found) => found);
+    return complete && valid(result) ? result : base;
+  }
+
+  /// When the last lesson of today ends in the plan as the pages show it, with the changes from the settings.
+  DateTime? schoolEnd(School setup, Map<String, Object?> store, List<Map<String, Object?>> holidayList) {
+    if (today.weekday > 5) return null;
+    if (holidayList.any((item) => '${item['date']}'.compareTo(todayIso) <= 0 && '${item['endDate'] ?? item['date']}'.compareTo(todayIso) >= 0)) return null;
+    final week = setup.weekOf(today);
+    final day = '${today.weekday}';
+    final taken = {for (final lesson in setup.timetable[week]![day]!) lesson['block'] as int};
+    final edits = store['app-timetable-edits'];
+    if (edits is Map) {
+      for (final entry in edits.entries) {
+        final match = RegExp(r'^([AB]):([1-5]):(\d{1,2})$').firstMatch('${entry.key}');
+        if (match == null || match[1] != week || match[2] != day) continue;
+        final value = entry.value;
+        if (value is Map && value['subject'] != null) {
+          taken.add(int.parse(match[3]!));
+        } else if (value == null) {
+          taken.remove(int.parse(match[3]!));
+        }
+      }
+    }
+    final ends = [for (final block in blockTimes(setup.blocks, store['app-block-times'])) if (taken.contains(block['n'])) '${block['end']}']..sort();
+    if (ends.isEmpty) return null;
+    return DateTime(today.year, today.month, today.day, int.parse(ends.last.substring(0, 2)), int.parse(ends.last.substring(3, 5)));
+  }
+
+  Future<Map<String, Object?>> wayHome(School setup, Map<String, Object?> store, List<Map<String, Object?>> holidayList) async {
+    final known = await knownPlaces();
+    final origin = placeView('Schule', known['school']), target = placeView('Zuhause', known['home']);
+    if (origin == null || target == null) return Map.of(uiNoTransit);
+    final end = schoolEnd(setup, store, holidayList);
+    if (end == null || now.isBefore(end.subtract(UiWayHome.before)) || now.isAfter(end.add(UiWayHome.after))) return Map.of(uiNoTransit);
+    final leave = now.isAfter(end) ? now : end;
+    final name = text(target['detail']).isEmpty ? 'Zuhause' : text(target['detail']);
+    return UiWayHome.instance.shown(
+      '${origin['id']}|${target['id']}|${end.toIso8601String()}',
+      () => UiTransit.instance.handle('verbindungen', {'von': '${origin['id']}', 'nach': '${target['id']}', 'zeit': leave.toUtc().toIso8601String(), 'ankunft': '0'}),
+      name,
+    );
   }
 
   Future<Map<String, Map<String, Object?>>> knownPlaces() async {

@@ -1091,7 +1091,7 @@ def build(active, store, now):
         'deadlines': deadlines(school, today, homework),
         'events': events(today),
         'holidays': holidays(today),
-        'transit': {'line': '', 'mode': '', 'from': '', 'to': '', 'walkMinutes': 0, 'departures': [], 'delays': {}},
+        'transit': way_home(settings, store, now),
         'weather': weather(settings, now),
         'status': sync_status(iserv, now),
         'mailUnread': len(mail_unread_ids()),
@@ -1208,6 +1208,65 @@ def known_places():
         return places if isinstance(places, dict) else {}
     except Exception:
         return load_dict('places')
+
+
+NO_TRANSIT = {'line': '', 'mode': '', 'from': '', 'to': '', 'walkMinutes': 0, 'departures': [], 'delays': {}}
+WAY_HOME_FRESH = 180
+WAY_HOME_BEFORE, WAY_HOME_AFTER = timedelta(minutes=90), timedelta(hours=2)
+_way_home = {'key': None, 'at': None, 'value': None, 'running': False}
+_way_home_lock = threading.Lock()
+
+
+def school_end(settings, store, day):
+    """When the last lesson of the day ends in the plan as the pages show it, with the changes from the settings."""
+    lessons = lessons_on(effective_school(settings, store), day)
+    return datetime.combine(day, datetime.strptime(lessons[-1]['end'], '%H:%M').time()) if lessons else None
+
+
+def way_home(settings, store, now):
+    """The next departures from school home, from about the last lesson on. The page gets the copy, a fetch runs beside it."""
+    known = known_places()
+    origin, target = place_view('Schule', known.get('school')), place_view('Zuhause', known.get('home'))
+    if not origin or not target:
+        return copy.deepcopy(NO_TRANSIT)
+    end = school_end(settings, store, now.date())
+    if not end or not end - WAY_HOME_BEFORE <= now <= end + WAY_HOME_AFTER:
+        return copy.deepcopy(NO_TRANSIT)
+    key = (origin['id'], target['id'], end.isoformat())
+    with _way_home_lock:
+        current = _way_home['key'] == key
+        value = copy.deepcopy(_way_home['value']) if current else None
+        fresh = current and _way_home['at'] is not None and time.monotonic() - _way_home['at'] < WAY_HOME_FRESH
+    if not fresh:
+        refresh_way_home_soon(key, origin['id'], target['id'], target['detail'] or 'Zuhause', max(now, end))
+    return value or copy.deepcopy(NO_TRANSIT)
+
+
+def refresh_way_home(key, origin, target, name, leave):
+    from . import transit_service
+    body, status = transit_service.handle('verbindungen', {'von': origin, 'nach': target, 'zeit': leave.astimezone().isoformat(timespec='seconds'), 'ankunft': '0'})
+    value = transit_service.way_home(body.get('journeys') or [], name) if status == 200 else None
+    with _way_home_lock:
+        kept = _way_home['value'] if _way_home['key'] == key else None
+        _way_home.update(key=key, at=time.monotonic(), value=value or kept)
+
+
+def refresh_way_home_soon(key, origin, target, name, leave):
+    with _way_home_lock:
+        if _way_home['running']:
+            return
+        _way_home['running'] = True
+
+    def run():
+        try:
+            refresh_way_home(key, origin, target, name, leave)
+        except Exception:
+            pass
+        finally:
+            with _way_home_lock:
+                _way_home['running'] = False
+
+    threading.Thread(target=run, name='way-home', daemon=True).start()
 
 
 def page_transit(data, school, settings, today, iserv):
