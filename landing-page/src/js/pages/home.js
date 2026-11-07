@@ -3,7 +3,7 @@ import { reducedMotion } from "../lib/motion.js";
 import { detectPlatform, deviceName, ISERV_HOMEWORK, megabytes, PLATFORMS } from "../lib/platform.js";
 import { clamp, onScroll, revealOnce, wordReveal } from "../lib/scroll.js";
 import { luna } from "../lib/luna.js";
-import { macHTML, showScreen } from "../components/device.js";
+import { iphoneHTML, macHTML, showScreen } from "../components/device.js";
 import { mountDownloads, platformMark } from "../components/downloads.js";
 import { cta, SHORT } from "../components/cta.js";
 import { galleryHTML, mountGallery } from "../components/gallery.js";
@@ -25,7 +25,7 @@ function hero() {
       <div class="ap-hero-cta">${button}<a class="ap-link" href="#tag">${escapeHtml(t("start.more"))}${CHEVRON}</a></div>
       <p class="ap-hero-note">${escapeHtml(note)}</p>
     </div>
-    <div class="ap-hero-device" data-hero-device>${macHTML([{ id: "heute", alt: t("start.hero_alt") }], { eager: true })}</div>
+    <div class="ap-hero-device" data-hero-device>${macHTML([{ id: "heute", alt: t("start.hero_alt") }], { eager: true, phone: "phone-heute", phoneAlt: t("start.hero_alt_phone") })}</div>
   </section>`;
 }
 
@@ -41,7 +41,7 @@ function showcase() {
       <p class="ap-step-label">${escapeHtml(step.label)}</p>
       <h3 class="ap-step-title">${keepHyphens(step.title)}</h3>
       <p class="ap-step-text">${escapeHtml(step.text)}</p>
-      <img class="ap-step-shot" src="/screens/${step.id}.webp" width="2880" height="1800" alt="" loading="lazy" decoding="async">
+      <div class="ap-step-phone">${iphoneHTML(`/screens/phone-${step.id}.webp`, step.alt_phone || step.alt, { only: "phone" })}</div>
     </li>`).join("");
   return `<section class="ap-show" id="tag" aria-labelledby="ap-show-title">
     <h2 class="ap-h2 ap-show-title ap-reveal" id="ap-show-title">${escapeHtml(t("start.show_title"))}</h2>
@@ -154,7 +154,7 @@ function mountShowcase(root) {
   const steps = [...root.querySelectorAll(".ap-step")];
   const device = root.querySelector("[data-show-device]");
   if (!steps.length || !device) return () => {};
-  for (const img of device.querySelectorAll(".mac-shot")) img.loading = "eager";
+  if (matchMedia("(min-width: 735px)").matches) for (const img of device.querySelectorAll(".mac-shot")) img.loading = "eager";
   const activate = (step) => {
     for (const other of steps) other.classList.toggle("is-active", other === step);
     showScreen(device, step.dataset.step);

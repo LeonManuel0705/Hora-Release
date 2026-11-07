@@ -684,7 +684,8 @@
     "contact_button": "Mail schreiben",
     "code_button": "Code auf GitHub",
     "eyebrow": "Über {{BRAND_NAME}}",
-    "shot_alt": "{{BRAND_NAME}} auf dem Mac: die Übersicht um 7:12 Uhr mit Chemie in Raum B206."
+    "shot_alt": "{{BRAND_NAME}} auf dem Mac: die Übersicht um 7:12 Uhr mit Chemie in Raum B206.",
+    "shot_alt_phone": "{{BRAND_NAME}} auf dem iPhone: die Übersicht um 7:12 Uhr mit Chemie in Raum B206."
   },
   "legal": {
     "toc": "Inhalt",
@@ -799,6 +800,7 @@
     "cta_note_generic": "Für Mac, Windows, Linux, Android und iPhone.",
     "more": "Schultag ansehen",
     "hero_alt": "Die Übersicht von {{BRAND_NAME}} um 7:12 Uhr: Gleich Chemie in Raum B206, darunter die Aufgaben für heute und die nächsten Abgaben.",
+    "hero_alt_phone": "Die Übersicht von {{BRAND_NAME}} auf dem iPhone um 7:12 Uhr: Gleich Chemie in Raum B206, darunter die Aufgaben für heute.",
     "statement": "Bevor du morgens losgehst, weiß {{BRAND_NAME}} schon, in welchem Raum du sitzt und ob dein Bus pünktlich kommt.",
     "show_title": "Von der ersten Stunde bis zum Bus nach Hause.",
     "steps": [
@@ -821,21 +823,24 @@
         "label": "Stundenplan",
         "title": "A-Woche, B-Woche, Vertretungen.",
         "text": "Dein Stundenplan mit euren Blockzeiten. Den Vertretungsplan holt {{BRAND_NAME}} jeden Morgen aus IServ.¹",
-        "alt": "Der Stundenplan der A-Woche mit Fächern und Räumen, daneben der Vertretungsplan."
+        "alt": "Der Stundenplan der A-Woche mit Fächern und Räumen, daneben der Vertretungsplan.",
+        "alt_phone": "Der Stundenplan der A-Woche mit Fächern und Räumen, darunter der Vertretungsplan."
       },
       {
         "id": "bus",
         "label": "Fahrplan",
         "title": "Die 612 kommt in 6 Minuten.",
         "text": "Live-Abfahrten an deiner Haltestelle, mit Verspätungen. Nexus kannte auf Android nur Berlin und Brandenburg, {{BRAND_NAME}} kennt ganz Deutschland.",
-        "alt": "Der Fahrplan: Schulweg mit Bus 612 um 7:18 und die nächsten Abfahrten an der Haltestelle."
+        "alt": "Der Fahrplan: Schulweg mit Bus 612 um 7:18 und die nächsten Abfahrten an der Haltestelle.",
+        "alt_phone": "Der Fahrplan: Schulweg mit Bus 612 um 7:18 und Heimweg mit Bus 612 um 7:15."
       },
       {
         "id": "noten",
         "label": "Noten",
         "title": "Für eine 12 fehlt dir noch eine 13.",
         "text": "{{BRAND_NAME}} rechnet deinen Schnitt und sagt dir, welche Note du für dein Ziel brauchst. Leistungskurse zählen doppelt.",
-        "alt": "Die Noten: 11,3 Punkte im Schnitt und der Notenrechner mit dem Ergebnis 13 Punkte."
+        "alt": "Die Noten: 11,3 Punkte im Schnitt und der Notenrechner mit dem Ergebnis 13 Punkte.",
+        "alt_phone": "Der Notenrechner: Für einen Schnitt von 12,0 in Biologie LK brauchst du mindestens 13 Punkte."
       }
     ],
     "tile_luna_label": "Luna antippen, dann winkt sie",

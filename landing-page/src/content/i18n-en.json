@@ -684,7 +684,8 @@
     "contact_button": "Write an email",
     "code_button": "Code on GitHub",
     "eyebrow": "About {{BRAND_NAME}}",
-    "shot_alt": "{{BRAND_NAME}} on a Mac (German): the overview at 7:12 with chemistry in room B206."
+    "shot_alt": "{{BRAND_NAME}} on a Mac (German): the overview at 7:12 with chemistry in room B206.",
+    "shot_alt_phone": "{{BRAND_NAME}} on iPhone (German): the overview at 7:12 with chemistry in room B206."
   },
   "legal": {
     "toc": "Contents",
@@ -799,6 +800,7 @@
     "cta_note_generic": "For Mac, Windows, Linux, Android and iPhone.",
     "more": "See a school day",
     "hero_alt": "{{BRAND_NAME}} at 7:12 in the morning (German): chemistry in room B206 next, with today's tasks and upcoming deadlines below.",
+    "hero_alt_phone": "{{BRAND_NAME}} on iPhone at 7:12 in the morning (German): chemistry in room B206 next, with today's tasks below.",
     "statement": "Before you leave home, {{BRAND_NAME}} already knows which room you are in and whether your bus is on time.",
     "show_title": "From first period to the bus home.",
     "steps": [
@@ -821,21 +823,24 @@
         "label": "Timetable",
         "title": "A week, B week, substitutions.",
         "text": "Your timetable with your school's periods. {{BRAND_NAME}} fetches the substitution plan from IServ every morning.¹",
-        "alt": "The A-week timetable (German) with subjects and rooms, next to it the substitution plan."
+        "alt": "The A-week timetable (German) with subjects and rooms, next to it the substitution plan.",
+        "alt_phone": "The A-week timetable (German) with subjects and rooms, below it the substitution plan."
       },
       {
         "id": "bus",
         "label": "Transit",
         "title": "The 612 arrives in 6 minutes.",
         "text": "Live departures at your stop, including delays. On Android, Nexus only knew Berlin and Brandenburg, {{BRAND_NAME}} knows all of Germany.",
-        "alt": "The transit page (German): the way to school with bus 612 at 7:18 and the next departures."
+        "alt": "The transit page (German): the way to school with bus 612 at 7:18 and the next departures.",
+        "alt_phone": "The transit page (German): the way to school with bus 612 at 7:18 and the way home with bus 612 at 7:15."
       },
       {
         "id": "noten",
         "label": "Grades",
         "title": "A 12 is one 13 away.",
         "text": "{{BRAND_NAME}} works out your average and tells you which grade you need for your goal. Advanced courses count double.",
-        "alt": "The grades (German): 11.3 points on average and the grade calculator showing 13 points."
+        "alt": "The grades (German): 11.3 points on average and the grade calculator showing 13 points.",
+        "alt_phone": "The grade calculator (German): for an average of 12.0 in Biology you need at least 13 points."
       }
     ],
     "tile_luna_label": "Tap Luna and she waves",
