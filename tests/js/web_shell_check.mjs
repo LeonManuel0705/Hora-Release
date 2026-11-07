@@ -101,15 +101,16 @@ function browser(address, { popstateOnFragment = true } = {}) {
       const isOrigin = (state) => state?.origin === true;
       const isApp = (state) => state?.flutter === true;
       const path = () => location.hash.slice(1) || "/";
+      const address = () => `${location.pathname}${location.search}${app.route === "/" ? "" : `#${app.route}`}`;
       app.route = path();
       if (!isApp(history.state)) {
         history.replaceState({ origin: true, state: history.state }, "origin", `${location.pathname}${location.search}`);
-        history.pushState({ flutter: true }, "flutter", `${location.pathname}${location.search}#${app.route}`);
+        history.pushState({ flutter: true }, "flutter", address());
       }
       app.booted = true;
       window.addEventListener("popstate", (event) => {
         if (isOrigin(event.state)) {
-          history.pushState({ flutter: true }, "flutter", `${location.pathname}${location.search}#${app.route}`);
+          history.pushState({ flutter: true }, "flutter", address());
           app.messages.push("popRoute");
         } else if (isApp(event.state)) {
           app.messages.push(`pushRoute ${app.route}`);
@@ -144,7 +145,7 @@ const tests = {
     assert.equal(tab.stored.get(KEY), "plan=COLD");
     assert.equal(tab.window.location.hash, "");
     tab.boot();
-    assert.deepEqual(tab.entries(), ['/pwa/ {"origin":true,"state":null}', '/pwa/#/ {"flutter":true}']);
+    assert.deepEqual(tab.entries(), ['/pwa/ {"origin":true,"state":null}', '/pwa/ {"flutter":true}']);
     tab.back();
     assert.deepEqual(tab.app.messages, ["popRoute"]);
   },
