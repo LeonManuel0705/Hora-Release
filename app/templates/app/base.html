@@ -44,7 +44,7 @@
                 }, 1200);
             });
             // A page outside this interface has no opt-in, so the browser would abort the transition there and report it as an error.
-            var ownPages = /^\/hub(?:\/(?:tasks|calendar|school|vbb|email|pomodoro|bookmarks|settings))?\/?$/;
+            var ownPages = /^\/hub(?:\/(?:tasks|calendar|school|vbb|email|pomodoro|bookmarks|settings|assistant))?\/?$/;
             addEventListener("pageswap", function (event) {
                 var transition = event.viewTransition;
                 var entry = event.activation && event.activation.entry;

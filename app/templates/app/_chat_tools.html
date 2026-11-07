@@ -1,0 +1,110 @@
+{# SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 #}
+<dialog class="app-dialog chat-tool" id="mathModal" aria-labelledby="mathTitle">
+    <div class="sheet-head">
+        <h2 class="sheet-title" id="mathTitle">Mathe-Hilfe bis Klasse 12</h2>
+        <button class="icon-button" type="button" data-close aria-label="Schließen"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="tool-pills" role="group" aria-label="Bereich">
+        {% for key, label in [("equation", "Gleichungen"), ("derivative", "Ableitung"), ("integral", "Integral"), ("vector", "Vektoren"), ("matrix", "Matrizen"), ("probability", "Stochastik")] %}
+        <button type="button" class="pill math-cat" data-cat="{{ key }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ label }}</button>
+        {% endfor %}
+    </div>
+    <div class="field">
+        <label class="field-label" for="mathInput">Aufgabe</label>
+        <textarea class="field-control" id="mathInput" rows="3" placeholder="z. B. x² - 5x + 6 = 0 oder f(x) = 3x² + 2x - 1"></textarea>
+    </div>
+    <div class="tool-examples" id="mathExamples">
+        <span class="tool-examples-label">Beispiele</span>
+        <button type="button" class="pill" data-example="2x + 5 = 15">2x + 5 = 15</button>
+        <button type="button" class="pill" data-example="x² - 4x + 3 = 0">x² - 4x + 3 = 0</button>
+        <button type="button" class="pill" data-example="x³ - 6x² + 11x - 6 = 0">Kubische Gl.</button>
+    </div>
+    <div class="dialog-actions"><button class="btn btn-primary" type="button" id="mathSolve">Lösen</button></div>
+    <div class="tool-result" id="mathResult" hidden>
+        <h3 class="dialog-label">Lösung</h3>
+        <div class="tool-output" id="mathSolution" aria-live="polite"></div>
+    </div>
+</dialog>
+
+<dialog class="app-dialog chat-tool" id="essayModal" aria-labelledby="essayTitle">
+    <div class="sheet-head">
+        <h2 class="sheet-title" id="essayTitle">Essay- und Aufsatzhilfe</h2>
+        <button class="icon-button" type="button" data-close aria-label="Schließen"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="field">
+        <label class="field-label" for="essayType">Aufsatzart</label>
+        <select class="field-control" id="essayType">
+            {% for key, label in [("eroerterung", "Erörterung"), ("interpretation", "Interpretation"), ("analyse", "Analyse"), ("charakterisierung", "Charakterisierung"), ("inhaltsangabe", "Inhaltsangabe"), ("bericht", "Bericht"), ("kommentar", "Kommentar")] %}
+            <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="field">
+        <label class="field-label" for="essayTopic">Thema oder Fragestellung</label>
+        <input class="field-control" type="text" id="essayTopic" placeholder="z. B. Sollte das Wahlalter auf 16 gesenkt werden?">
+        <p class="field-error" id="essayError" hidden></p>
+    </div>
+    <div class="field">
+        <label class="field-label" for="essayInfo">Zusätzliche Informationen, freiwillig</label>
+        <textarea class="field-control" id="essayInfo" rows="3" placeholder="Kontext, wichtige Aspekte oder ein Textauszug für die Analyse"></textarea>
+    </div>
+    <div class="tool-pair">
+        <div class="field">
+            <label class="field-label" for="essayLength">Länge</label>
+            <select class="field-control" id="essayLength">
+                <option value="short">Kurz, etwa 300 Wörter</option>
+                <option value="medium" selected>Mittel, etwa 500 Wörter</option>
+                <option value="long">Lang, etwa 800 Wörter</option>
+            </select>
+        </div>
+        <div class="field">
+            <label class="field-label" for="essayLanguage">Sprache</label>
+            <select class="field-control" id="essayLanguage">
+                <option value="de" selected>Deutsch</option>
+                <option value="en">Englisch</option>
+            </select>
+        </div>
+    </div>
+    <div class="dialog-actions"><button class="btn btn-primary" type="button" id="essayGenerate">Essay schreiben</button></div>
+    <div class="tool-result" id="essayResult" hidden>
+        <div class="tool-result-head"><h3 class="dialog-label">Ergebnis</h3><button class="btn btn-quiet" type="button" data-copy="essaySolution"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>Kopieren</button></div>
+        <div class="tool-output" id="essaySolution" aria-live="polite"></div>
+    </div>
+</dialog>
+
+<dialog class="app-dialog chat-tool" id="summaryModal" aria-labelledby="summaryTitle">
+    <div class="sheet-head">
+        <h2 class="sheet-title" id="summaryTitle">Text zusammenfassen</h2>
+        <button class="icon-button" type="button" data-close aria-label="Schließen"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="field">
+        <label class="field-label" for="summaryInput">Text</label>
+        <textarea class="field-control" id="summaryInput" rows="8" placeholder="Füge hier den Text ein, den du zusammenfassen möchtest"></textarea>
+        <p class="field-error" id="summaryError" hidden></p>
+    </div>
+    <div class="tool-pair">
+        <div class="field">
+            <label class="field-label" for="summaryType">Art</label>
+            <select class="field-control" id="summaryType">
+                <option value="kurz">Kurze Zusammenfassung</option>
+                <option value="stichpunkte">Stichpunkte</option>
+                <option value="detailliert">Ausführlich</option>
+                <option value="lernkarten">Lernkarten mit Frage und Antwort</option>
+            </select>
+        </div>
+        <div class="field">
+            <label class="field-label" for="summarySubject">Fach, freiwillig</label>
+            <select class="field-control" id="summarySubject">
+                {% for key, label in [("", "Allgemein"), ("deutsch", "Deutsch"), ("englisch", "Englisch"), ("geschichte", "Geschichte"), ("biologie", "Biologie"), ("physik", "Physik"), ("chemie", "Chemie")] %}
+                <option value="{{ key }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="dialog-actions"><button class="btn btn-primary" type="button" id="summaryGenerate">Zusammenfassen</button></div>
+    <div class="tool-result" id="summaryResult" hidden>
+        <div class="tool-result-head"><h3 class="dialog-label">Zusammenfassung</h3><button class="btn btn-quiet" type="button" data-copy="summarySolution"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>Kopieren</button></div>
+        <div class="tool-output" id="summarySolution" aria-live="polite"></div>
+    </div>
+</dialog>

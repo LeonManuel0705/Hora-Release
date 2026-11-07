@@ -70,8 +70,8 @@ GATED_PAGES = {
 }
 
 
-def render_page(active):
-    template = PAGES[active][1] if active in PAGES else GATED_PAGES[active]
+def render_page(active, template=None):
+    template = template or (PAGES[active][1] if active in PAGES else GATED_PAGES[active])
     g.strict_csp = True
     store = db.get_ui_store()
     day = pinned_day()

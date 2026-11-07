@@ -2727,7 +2727,15 @@ function reloadState() {
   renderAll();
 }
 
-const assistant = { status: null, config: null, busy: false, saving: false };
+const assistant = { status: null, config: null, busy: false, saving: false, basic: storedBasic() };
+
+function storedBasic() {
+  try {
+    return Boolean(JSON.parse(document.getElementById("appStore")?.textContent || "{}")["app-assistant-basic"]);
+  } catch {
+    return false;
+  }
+}
 const AI_SOURCES = [
   ["auto", "Automatisch", "Nimmt das eingebaute Sprachmodell. Fehlt es, kommt Ollama an die Reihe, danach Claude."],
   ["local", "Eingebautes Sprachmodell", "Läuft auf diesem Gerät, auch ohne Internet."],
@@ -2833,9 +2841,13 @@ function renderAssistant() {
     meta.textContent = "Nicht verfügbar";
     rows = [row({ id: "rowAiState", label: "Sprachmodell", desc: "Für dieses Gerät gibt es keine passende Laufzeit." })];
   } else {
-    meta.textContent = "Nicht installiert";
+    meta.textContent = assistant.basic ? "Ohne Sprachmodell" : "Nicht installiert";
     const size = (status.runtime?.download || 0) + (model.download || 0);
-    rows = [row({ id: "rowAiState", label: "Sprachmodell", desc: `Nicht installiert. Ohne Sprachmodell beantwortet der Assistent nur Fragen zu Stundenplan, Schule und Mathe. Download ${gigabytes(size)}.`, control: open("Installieren", true) })];
+    const why = assistant.basic ? "Du nutzt den Assistenten ohne Sprachmodell, deshalb beantwortet er nur Fragen zu Stundenplan, Schule und Mathe." : "Ohne Sprachmodell beantwortet der Assistent nur Fragen zu Stundenplan, Schule und Mathe.";
+    rows = [row({ id: "rowAiState", label: "Sprachmodell", desc: `Nicht installiert. ${why} Download ${gigabytes(size)}.`, control: open("Installieren", true) })];
+    if (assistant.basic) {
+      rows.push(row({ id: "rowAiBasic", label: "Wahl beim Öffnen", desc: "Du hast „Ohne KI öffnen“ gewählt. Der Assistent fragt deshalb nicht mehr nach dem Sprachmodell.", control: `<button class="btn btn-quiet" type="button" id="aiAskAgain"${assistant.busy ? " disabled" : ""}>Wieder fragen</button>` }));
+    }
   }
   keepFocus(card, () => (card.innerHTML = [...rows, ...aiSourceRows()].join("")));
 }
@@ -2879,6 +2891,23 @@ async function removeAssistant(button) {
   await loadAiConfig();
 }
 
+async function askAgain() {
+  assistant.busy = true;
+  renderAssistant();
+  try {
+    const response = await fetch("/api/ui/store/app-assistant-basic", { method: "DELETE", credentials: "same-origin" });
+    if (!response.ok) throw new Error(String(response.status));
+    assistant.basic = false;
+    toast("Beim nächsten Öffnen fragt der Assistent wieder nach dem Sprachmodell.", { icon: "check" });
+  } catch {
+    toast("Das ließ sich gerade nicht speichern. Versuch es gleich noch einmal.", { icon: "circle-alert" });
+  } finally {
+    assistant.busy = false;
+    renderAssistant();
+  }
+  $("rowAiState")?.querySelector("a, button")?.focus({ preventScroll: true });
+}
+
 async function updateRuntime() {
   assistant.busy = true;
   renderAssistant();
@@ -2902,6 +2931,7 @@ function bindAssistant() {
     const button = event.target.closest("#aiRemove");
     if (button && !button.disabled) removeAssistant(button);
     if (event.target.closest("#aiUpdate:not(:disabled)")) updateRuntime();
+    if (event.target.closest("#aiAskAgain:not(:disabled)")) askAgain();
     const keyRemove = event.target.closest("#aiKeyRemove");
     if (keyRemove && confirmTwice("ai-key", keyRemove, "Wirklich entfernen?", "Zum Entfernen noch einmal drücken")) saveAiConfig({ claude_api_key: "" }, "Schlüssel entfernt", "aiKeyInput");
   });

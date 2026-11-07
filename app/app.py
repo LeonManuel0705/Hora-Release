@@ -441,10 +441,8 @@ def _assistant_needs_install():
 
 @app.route('/hub/assistant')
 def hub_assistant():
-    if _assistant_needs_install():
-        from .ui_pages import render_page
-        return render_page('assistant')
-    return render_template('hub/assistant.html', active_tab='assistant')
+    from .ui_pages import render_page
+    return render_page('assistant', None if _assistant_needs_install() else 'app/chat.html')
 
 @app.route('/hub/klassisch/settings')
 def hub_settings():
