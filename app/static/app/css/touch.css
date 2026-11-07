@@ -30,7 +30,7 @@
 .is-touch :is(.done-toggle, .day, .set-nav-item) { min-height: 44px; }
 .is-touch .set-nav-item { height: 44px; }
 .is-touch .today .track { height: 44px; }
-.is-touch :is(input, select).field-control, .is-touch textarea.field-control.is-line { min-height: 44px; }
+.is-touch :is(input, select).field-control, .is-touch textarea.field-control.is-line, .is-touch input.input { min-height: 44px; }
 .is-touch .add-input { height: 44px; }
 
 /* Safari zooms into a field whose text is smaller than 16 px. Fields with larger text keep it. */
