@@ -148,6 +148,23 @@
   </div>
 
   <script>
+    (function () {
+      function catchPlan() {
+        if (!/^#plan=/.test(location.hash)) return false;
+        try { sessionStorage.setItem('app-plan-link', location.hash.slice(1)); } catch (error) {}
+        history.replaceState(history.state, '', location.pathname + location.search);
+        var frame = document.getElementById('hub-frame');
+        if (frame && frame.contentWindow) frame.contentWindow.postMessage({ source: 'shell', type: 'plan-link' }, location.origin);
+        return true;
+      }
+      catchPlan();
+      window.addEventListener('popstate', function (event) {
+        if (catchPlan()) event.stopImmediatePropagation();
+      }, true);
+      window.addEventListener('hashchange', catchPlan);
+    })();
+  </script>
+  <script>
     window.hubHistory = { open: false, skip: 0, close: null };
     window.addEventListener('popstate', function(event) {
       var hub = window.hubHistory;
