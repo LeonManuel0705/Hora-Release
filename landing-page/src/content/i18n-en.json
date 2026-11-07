@@ -162,6 +162,7 @@
     ],
     "macos_terminal": "Or paste this into Terminal, the script installs the app into /Applications:",
     "windows": [
+      "If your browser warns that the file is rarely downloaded, choose “Keep”.",
       "Run the downloaded file.",
       "If Windows SmartScreen warns you, click “More info” and “Run anyway”.",
       "{{BRAND_NAME}} installs without admin rights and opens by itself."
@@ -607,6 +608,14 @@
         "a": "No. {{BRAND_NAME}} is free for you, and its source code is public on GitHub. There are no paid features or subscriptions."
       },
       {
+        "q": "Do I have to type in my timetable?",
+        "a": "Yes, once. {{BRAND_NAME}} can't fetch it from IServ or WebUntis. The setup in the app walks you through it in a few minutes, and if someone in your course has already entered the plan, they can send it to you. Then you only change what's different for you."
+      },
+      {
+        "q": "I already have IServ and WebUntis. What does {{BRAND_NAME}} add?",
+        "a": "IServ and WebUntis each know only their own part. {{BRAND_NAME}} shows you on one screen which lesson is next and in which room, and what's left to do before your next test. {{BRAND_NAME}} doesn't know about cancellations in WebUntis, you still see those there."
+      },
+      {
         "q": "How do I get updates?",
         "a": "On Android, the Mac, Windows and Linux, {{BRAND_NAME}} tells you when a new version is out. You download it here."
       },
@@ -616,7 +625,7 @@
       },
       {
         "q": "Can I move my data to a new device?",
-        "a": "Not yet. There is no cloud and no export so far, your data stays on the device you enter it on."
+        "a": "Yes, with a backup. In the settings under Daten (data), you export everything to a file and import it on the new device. There is no cloud that keeps your devices in sync by itself."
       },
       {
         "q": "Is {{BRAND_NAME}} part of IServ?",

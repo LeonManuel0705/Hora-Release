@@ -162,6 +162,7 @@
     ],
     "macos_terminal": "Oder im Terminal einfügen, das Skript installiert die App nach /Applications:",
     "windows": [
+      "Warnt der Browser, dass die Datei selten heruntergeladen wird, „Beibehalten“ wählen.",
       "Die heruntergeladene Datei starten.",
       "Warnt Windows SmartScreen, auf „Weitere Informationen“ und „Trotzdem ausführen“ klicken.",
       "{{BRAND_NAME}} installiert sich ohne Adminrechte und startet danach von selbst."
@@ -607,6 +608,14 @@
         "a": "Nein. {{BRAND_NAME}} ist für dich kostenlos, und der Quellcode liegt offen auf GitHub. Bezahlte Funktionen und Abos gibt es nicht."
       },
       {
+        "q": "Muss ich meinen Stundenplan abtippen?",
+        "a": "Ja, einmal. Aus IServ oder WebUntis kann {{BRAND_NAME}} ihn nicht holen. Die Einrichtung in der App führt dich in ein paar Minuten durch, und hat jemand aus deinem Kurs den Plan schon eingetragen, kann er ihn dir schicken. Dann änderst du nur, was bei dir anders ist."
+      },
+      {
+        "q": "Ich habe schon IServ und WebUntis. Was bringt mir {{BRAND_NAME}}?",
+        "a": "IServ und WebUntis kennen jeweils nur ihren Teil. {{BRAND_NAME}} zeigt dir auf einem Bildschirm, welche Stunde als Nächstes kommt und in welchem Raum, und was bis zum nächsten Test noch zu tun ist. Ausfälle aus WebUntis kennt {{BRAND_NAME}} nicht, die siehst du weiter dort."
+      },
+      {
         "q": "Wie bekomme ich Updates?",
         "a": "Auf Android, dem Mac, unter Windows und Linux meldet sich {{BRAND_NAME}}, sobald es eine neue Version gibt. Die lädst du dann hier."
       },
@@ -616,7 +625,7 @@
       },
       {
         "q": "Kann ich meine Daten auf ein neues Gerät mitnehmen?",
-        "a": "Noch nicht. Es gibt keine Cloud und bisher keinen Export, deine Daten bleiben auf dem Gerät, auf dem du sie eingibst."
+        "a": "Ja, mit einer Sicherung. In den Einstellungen unter Daten exportierst du alles als Datei und importierst sie auf dem neuen Gerät. Eine Cloud, die deine Geräte von selbst abgleicht, gibt es nicht."
       },
       {
         "q": "Gehört {{BRAND_NAME}} zu IServ?",
