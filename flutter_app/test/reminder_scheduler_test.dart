@@ -363,7 +363,8 @@ void main() {
       final planned = await ReminderScheduler.planFromDevice(DateTime(today.year, today.month, today.day, 0, 1));
       final titles = {for (final item in planned) item.key.split(':').first: item.title};
       expect(titles['deadline'], 'Test: Vokabeltest');
-      expect(titles['tasks'], 'Heute fällig');
+      expect(planned.firstWhere((item) => item.key == 'tasks:$iso').title, 'Heute fällig');
+      expect(titles['tasks'], 'Überfällig', reason: 'left undone, it leads the mornings after');
       expect(titles['event'], 'Chor');
       final chor = planned.firstWhere((item) => item.key.startsWith('event:'));
       expect([chor.at.hour, chor.at.minute], [15, 45]);
