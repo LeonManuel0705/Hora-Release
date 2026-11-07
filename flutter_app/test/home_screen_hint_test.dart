@@ -43,6 +43,24 @@ const mac = HomeScreenDevice(
   standalone: false,
 );
 const homeScreenApp = HomeScreenDevice(agent: 'iPhone', touchPoints: 5, platform: 'iPhone', standalone: true);
+const instagram = HomeScreenDevice(
+  agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 380.0.0.0 (iPhone15,3; iOS 18_5; de_DE)',
+  touchPoints: 5,
+  platform: 'iPhone',
+  standalone: false,
+);
+const googleApp = HomeScreenDevice(
+  agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) GSA/380.0.0 Mobile/15E148 Safari/604.1',
+  touchPoints: 5,
+  platform: 'iPhone',
+  standalone: false,
+);
+const duckDuckGo = HomeScreenDevice(
+  agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1 Ddg/18.5',
+  touchPoints: 5,
+  platform: 'iPhone',
+  standalone: false,
+);
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -83,6 +101,19 @@ void main() {
     expect(iphoneOld.shareStep, 'Tippe unten auf Teilen.');
     expect(ipad.shareStep, 'Tippe oben auf Teilen.');
     expect(chromeOnIphone.shareStep, 'Tippe im Browser auf Teilen.');
+    expect(duckDuckGo.shareStep, 'Tippe im Browser auf Teilen.', reason: 'DuckDuckGo is not Safari');
+    expect(duckDuckGo.subtitle, 'Zwei Schritte im Browser');
+  });
+
+  test('inside Instagram, TikTok or the Google app the first step is to open Safari', () {
+    for (final app in [instagram, googleApp]) {
+      expect(app.insideApp, isTrue);
+      expect(app.shareStep, contains('in Safari'));
+      expect(app.addStep, contains('Zum Home-Bildschirm'));
+      expect(app.subtitle, 'Zwei Schritte in Safari');
+    }
+    expect(iphoneOld.insideApp, isFalse);
+    expect(chromeOnIphone.insideApp, isFalse);
   });
 
   testWidgets('another browser on the iPhone is not called Safari', (tester) async {

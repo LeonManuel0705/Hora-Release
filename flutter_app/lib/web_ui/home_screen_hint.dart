@@ -25,17 +25,27 @@ class HomeScreenDevice {
 
   bool get inBrowserTab => name != null && !standalone;
 
+  static final _apps = RegExp('GSA/|FBAN|FBAV|FB_IAB|Instagram|musical_ly|BytedanceWebview|Snapchat|LinkedInApp|Line/|Pinterest');
+  static final _browsers = RegExp('CriOS|FxiOS|EdgiOS|OPiOS|OPT/|Ddg/|DuckDuckGo|Brave');
+
+  bool get insideApp => !agent.contains('Safari/') || _apps.hasMatch(agent);
+
   int? get safariVersion {
-    if (RegExp('CriOS|FxiOS|EdgiOS|OPiOS').hasMatch(agent)) return null;
+    if (insideApp || _browsers.hasMatch(agent)) return null;
     return int.tryParse(RegExp(r'Version/(\d+)').firstMatch(agent)?.group(1) ?? '');
   }
 
+  String get subtitle => insideApp || safariVersion != null ? 'Zwei Schritte in Safari' : 'Zwei Schritte im Browser';
+
   String get shareStep {
+    if (insideApp) return 'Öffne die Seite in Safari, meist über „…“ oder „In Safari öffnen“.';
     final safari = safariVersion;
     if (safari == null) return 'Tippe im Browser auf Teilen.';
     if (name == 'iPad') return 'Tippe oben auf Teilen.';
     return safari >= 26 ? 'Tippe neben der Adresse auf „…“ und dann auf Teilen.' : 'Tippe unten auf Teilen.';
   }
+
+  String get addStep => insideApp ? 'Tippe dort auf Teilen und dann auf „Zum Home-Bildschirm“.' : 'Wähle „Zum Home-Bildschirm“.';
 }
 
 Future<bool> homeScreenHintDue(HomeScreenDevice device) async {
@@ -133,10 +143,9 @@ class _HomeScreenHintState extends State<HomeScreenHint> with SingleTickerProvid
     final dark = Theme.of(context).brightness == Brightness.dark;
     final soft = dark ? AppPalette.inkSoftDark : AppPalette.inkSoft;
     final device = widget.device.name ?? 'Gerät';
-    final safari = widget.device.safariVersion != null;
     final note = widget.withData
-        ? 'Deine Einträge aus diesem Tab kommen nicht von selbst mit. Sichere sie vorher unter Einstellungen › Daten und lies die Datei in der App wieder ein.'
-        : 'Was du hier im ${safari ? 'Safari' : 'Browser'}-Tab einträgst, kommt nicht mit. Die App auf dem Home-Bildschirm fängt leer an.';
+        ? 'Deine Einträge von hier kommen nicht von selbst mit. Sichere sie vorher unter Einstellungen › Daten und lies die Datei in der App wieder ein.'
+        : 'Was du hier einträgst, kommt nicht mit. Die App auf dem Home-Bildschirm fängt leer an.';
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -186,7 +195,7 @@ class _HomeScreenHintState extends State<HomeScreenHint> with SingleTickerProvid
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            safari ? 'Zwei Schritte in Safari' : 'Zwei Schritte im Browser',
+                            widget.device.subtitle,
                             style: TextStyle(color: AppPalette.chalk.withValues(alpha: .8), fontSize: 15),
                           ),
                         ],
@@ -211,7 +220,7 @@ class _HomeScreenHintState extends State<HomeScreenHint> with SingleTickerProvid
                     const SizedBox(height: 14),
                     _rise(1, _step(dark, 1, Icons.ios_share, widget.device.shareStep)),
                     const SizedBox(height: 8),
-                    _rise(2, _step(dark, 2, Icons.add_box_outlined, 'Wähle „Zum Home-Bildschirm“.')),
+                    _rise(2, _step(dark, 2, Icons.add_box_outlined, widget.device.addStep)),
                     const SizedBox(height: 12),
                     _rise(
                       3,
