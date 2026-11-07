@@ -277,6 +277,9 @@ def test_behind_a_word_that_may_number_something_only_a_near_date_is_a_day(today
     ('Praktikum Mo bis Fr', 'Praktikum', '2026-10-12', None),
     ('Praktikum Mo bis Freitag 8 Uhr', 'Praktikum', '2026-10-12', '08:00'),
     ('Treffen Freitag und so', 'Treffen und so', '2026-10-09', None),
+    ('So bei Oma 15 Uhr', 'bei Oma', '2026-10-11', '15:00'),
+    ('So im Kino 20 Uhr', 'im Kino', '2026-10-11', '20:00'),
+    ('Mo früh Zahnarzt', 'Zahnarzt', '2026-10-12', None),
 ])
 def test_a_short_weekday_counts_where_nothing_else_can_be_meant(text, rest, day, clock):
     assert read(text) == (rest, day, clock)
@@ -306,6 +309,12 @@ def test_a_short_weekday_counts_where_nothing_else_can_be_meant(text, rest, day,
     ('Do, Zahnarzt 15 Uhr', 'Do, Zahnarzt', '15:00'),
     ('So viel lernen 15 Uhr', 'So viel lernen', '15:00'),
     ('So früh wie möglich anrufen', 'So früh wie möglich anrufen', None),
+    ('So lange lernen 15 Uhr', 'So lange lernen', '15:00'),
+    ('Pizza mit Lea und Mo um 19 Uhr', 'Pizza mit Lea und Mo', '19:00'),
+    ('Kino mit Lea & Mo', 'Kino mit Lea & Mo', None),
+    ('Essen mit Lea, Ben und Mo 18 Uhr', 'Essen mit Lea, Ben und Mo', '18:00'),
+    ('Gym Mo Mi Fr 7 Uhr', 'Gym Mo Mi Fr', '07:00'),
+    ('Gym Montag Mittwoch 7 Uhr', 'Gym Montag Mittwoch', '07:00'),
 ])
 def test_a_short_weekday_in_a_name_a_list_or_opening_a_sentence_without_a_time_stays_text(text, rest, clock):
     assert read(text) == (rest, None, clock)

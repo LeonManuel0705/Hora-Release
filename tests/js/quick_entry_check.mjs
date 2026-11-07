@@ -137,6 +137,8 @@ const tests = {
       ["Mo bis Fr Praktikum", "Praktikum", "2026-10-12", null, null], ["Mi Amor anrufen um 15 Uhr", "Amor anrufen", "2026-10-07", "15:00", "16:00"],
       ["Do Zahnarzt", "Do Zahnarzt", MONDAY, null, null], ["So ein Tag", "So ein Tag", MONDAY, null, null],
       ["So, noch Mathe lernen 15 Uhr", "So, noch Mathe lernen", MONDAY, "15:00", "16:00"], ["Do, Zahnarzt 15 Uhr", "Do, Zahnarzt", MONDAY, "15:00", "16:00"],
+      ["So bei Oma 15 Uhr", "bei Oma", "2026-10-11", "15:00", "16:00"], ["So im Kino 20 Uhr", "im Kino", "2026-10-11", "20:00", "21:00"],
+      ["Mo früh Zahnarzt", "Zahnarzt", "2026-10-12", null, null], ["So lange lernen 15 Uhr", "So lange lernen", MONDAY, "15:00", "16:00"],
       ["So viel lernen 15 Uhr", "So viel lernen", MONDAY, "15:00", "16:00"], ["So früh wie möglich anrufen", "So früh wie möglich anrufen", MONDAY, null, null],
       ["Fr Müller anrufen 15 Uhr", "Fr Müller anrufen", MONDAY, "15:00", "16:00"],
     ];
@@ -161,6 +163,9 @@ const tests = {
       ["Frau Freitag anrufen 15 Uhr", "Frau Freitag anrufen", MONDAY, "15:00", "16:00"], ["Herr Montag kommt 15 Uhr", "Herr Montag kommt", MONDAY, "15:00", "16:00"],
       ["Mo bis Fr Praktikum", "Praktikum", "2026-10-12", null, null], ["Praktikum Mo bis Fr", "Praktikum", "2026-10-12", null, null],
       ["Praktikum Mo bis Freitag 8 Uhr", "Praktikum", "2026-10-12", "08:00", "09:00"], ["Treffen Freitag und so", "Treffen und so", "2026-10-09", null, null],
+      ["Pizza mit Lea und Mo um 19 Uhr", "Pizza mit Lea und Mo", MONDAY, "19:00", "20:00"], ["Kino mit Lea & Mo", "Kino mit Lea & Mo", MONDAY, null, null],
+      ["Essen mit Lea, Ben und Mo 18 Uhr", "Essen mit Lea, Ben und Mo", MONDAY, "18:00", "19:00"], ["Gym Mo Mi Fr 7 Uhr", "Gym Mo Mi Fr", MONDAY, "07:00", "08:00"],
+      ["Gym Montag Mittwoch 7 Uhr", "Gym Montag Mittwoch", MONDAY, "07:00", "08:00"],
     ];
     for (const [text, title, date, start, end] of cases) assert.deepEqual(read(text), { title, date, start, end }, text);
   },

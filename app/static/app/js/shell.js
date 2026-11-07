@@ -525,21 +525,21 @@ const DAY_SHORT = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const DAY_ANY = `(?:${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})`;
 const MONTH_WORDS = "januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember";
 const PARTS = "abends?|nachmittags?|vormittags?|mittags?|morgens?|nachts?|früh";
-// "früh" and "morgen" are left out here: "So früh wie möglich" and "So, morgen ..." name no day.
-const DAYTIME = "abends?|nachmittags?|vormittags?|mittags?|morgens|nachts?";
+// "morgen" is left out here: "So, morgen ..." names no day.
+const DAYTIME = "abends?|nachmittags?|vormittags?|mittags?|morgens|nachts?|früh";
 const DAY_WORD = new RegExp(`(?<![\\p{L}\\p{N}.\\-–/])(${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})(?![\\p{L}\\p{N}\\-])`, "giu");
 const DAY_LEADS = /(?<![\p{L}\p{N}])((?:(?:am|bis|zum|ab|für|den|nächsten|kommenden|diesen|übernächsten|spätestens)\s+)+)$/iu;
 const DAY_NOT_AFTER = /(?<![\p{L}\p{N}])(?:von|vom|seit|über|letzte[nmrs]?|vergangene[nmrs]?|jeden|jedem|herr|frau|hr\.|fr\.|dr\.|prof\.)\s*$/iu;
 const DAY_RANGE = new RegExp(`^\\s+bis\\s+(?:(?:zum|einschließlich)\\s+)?${DAY_ANY}(?![\\p{L}])`, "iu");
 const DAY_LIST = /^\s*[-–/]\s*(?:mo|di|mi|do|fr|sa|so)(?![\p{L}])/iu;
-const LIST_AFTER = new RegExp(`^\\.?\\s*(?:,|&|und|oder)\\s*(${DAY_ANY})(?![\\p{L}])`, "iu");
-const LIST_BEFORE = new RegExp(`(?<![\\p{L}])(${DAY_ANY})\\.?\\s*(?:,|&|und|oder)\\s*$`, "iu");
-const WITH_BEFORE = /(?<![\p{L}])mit\s+$/iu;
+const LIST_AFTER = new RegExp(`^\\.?(?:\\s*(?:,|&|und|oder)\\s*|\\s+)(${DAY_ANY})(?![\\p{L}])`, "iu");
+const LIST_BEFORE = new RegExp(`(?<![\\p{L}])(${DAY_ANY})\\.?(?:\\s*(?:,|&|und|oder)\\s*|\\s+)$`, "iu");
+const WITH_BEFORE = /(?<![\p{L}])mit\s+(?:\p{L}[\p{L}.\-]*\s*(?:,|&|und)\s*)*$/iu;
 const PART_AFTER = new RegExp(`^\\s+(${PARTS})(?![\\p{L}])`, "iu");
 const DAYTIME_AFTER = new RegExp(`^\\s+(?:${DAYTIME})(?![\\p{L}])`, "iu");
 const ANY_DAYTIME = new RegExp(`(?<![\\p{L}])(?:${DAYTIME})(?![\\p{L}])`, "iu");
 const ANY_CLOCK = /(?<![\p{N}.:])(?:(?:[01]?\d|2[0-3]):[0-5]\d|(?:[01]?\d|2[0-3])(?:\.[0-5]\d)?\s*uhr(?![\p{L}]))|(?<![\p{L}])(?:um|ab|gegen)\s+(?:[01]?\d|2[0-3])(?![\p{N}])/iu;
-const SO_WORD = /^\s+(?!(?:um|ab|gegen)(?![\p{L}]))\p{Ll}/u;
+const SO_WORD = /^\s+(?:viel|wie|lange|dass|ein|eine|einen|einem|einer|gut|oft|sehr|schnell|spät|bald|früh|weit)(?![\p{L}])/u;
 const WEEK_BEFORE = /(?<![\p{L}\p{N}])((?:in\s+)?(?:der\s+)?(nächste[nr]?|kommende[nr]?|übernächste[nr]?|diese[nr]?)\s+woche\s+(?:am\s+)?)$/iu;
 const WEEK_AFTER = /^\s+(?:(?:in\s+)?der\s+)?(nächste[nr]?|kommende[nr]?|übernächste[nr]?)\s+woche(?![\p{L}])/iu;
 const WEEKS_AHEAD = /^\s+in\s+(\S+)\s+wochen?(?![\p{L}])/iu;
@@ -565,13 +565,15 @@ function listed(before, after) {
 /* A wrong day is worse than none. Days in a list ("Mo, Mi und Fr") name a rhythm, so none of them counts. A short
    name without "am" or "bis" counts only as written ("Do"), not after "mit", not in front of a name ("Fr. Müller"),
    and at the start of a sentence only with a dot, a time or a time of day and without a comma behind it ("So, ..."
-   and "So ein Tag" stay text). The assistant reads days by the same rules (spoken_time.py). */
+   and "So ein Tag", where "So" is the adverb, stay text). The assistant reads days by the same rules (spoken_time.py). */
 function shortDay(word, text, before, after, dotted, range) {
   if (word !== `${word[0].toUpperCase()}${word[1].toLowerCase()}` || WITH_BEFORE.test(before)) return false;
+  const opening = !before.trim();
+  if (opening && word === "So" && !dotted && SO_WORD.test(after)) return false;
   if (DAYTIME_AFTER.test(after)) return true;
   const named = /^\s*[,.]?\s*\p{Lu}/u.test(after);
-  if (before.trim()) return !named || (word !== "Fr" && CLOCK_BEFORE.test(before));
-  if (/^\s*,/.test(after) || (named && word === "Fr") || (word === "So" && !dotted && SO_WORD.test(after))) return false;
+  if (!opening) return !named || (word !== "Fr" && CLOCK_BEFORE.test(before));
+  if (/^\s*,/.test(after) || (named && word === "Fr")) return false;
   return dotted || !!range || ANY_CLOCK.test(text) || ANY_DAYTIME.test(text);
 }
 

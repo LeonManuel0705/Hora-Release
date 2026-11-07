@@ -20,8 +20,8 @@ WEEKDAYS = ('montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag', 'samstag'
 # Days in a list ("Mo, Mi und Fr") name a rhythm, so none of them counts. Short names count as written ("Do", not "do")
 # unless "am" or "bis" stands before them, and only where nothing else can be meant: never after "mit", never in front of
 # a name ("Fr. Müller", "Di Maria") unless a clock time stands before them, and at the start of a sentence only with a
-# dot, a time or a time of day and without a comma behind them ("So, ..." and "So ein Tag" stay text). The quick fields
-# of the app read days by the same rules (shell.js, shortDay).
+# dot, a time or a time of day and without a comma behind them ("So, ..." and "So ein Tag", where "So" is the adverb,
+# stay text). The quick fields of the app read days by the same rules (shell.js, shortDay).
 SHORT_WEEKDAYS = ('Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So')
 MONTHS = {'januar': 1, 'februar': 2, 'märz': 3, 'april': 4, 'mai': 5, 'juni': 6,
           'juli': 7, 'august': 8, 'september': 9, 'oktober': 10, 'november': 11, 'dezember': 12}
@@ -108,20 +108,20 @@ _SHORT_NOT_AFTER = re.compile(r'(?<!\w)(?:herr|frau|hr\.|fr\.|dr\.|prof\.)\s*$|[
 _SHORT_LISTED = re.compile(r'\s*[–/-]\s*(?:mo|di|mi|do|fr|sa|so)(?!\w)', re.IGNORECASE)
 _SHORT_NAMED = re.compile(r'\s*[,.]?\s*[A-ZÄÖÜ]')
 _CLOCK_BEFORE = re.compile(rf'(?:\d|uhr|{_ADVERB})\s*[,.]?\s*$', re.IGNORECASE)
-_SHORT_WITH = re.compile(r'(?<!\w)mit\s+$', re.IGNORECASE)
+_SHORT_WITH = re.compile(r'(?<!\w)mit\s+(?:[^\W\d_][\w.-]*\s*(?:,|&|und)\s*)*$', re.IGNORECASE)
 _DAY_ANY = rf'(?:(?i:{_NAME})|{"|".join(SHORT_WEEKDAYS)})'
 _SHORT_RANGE = re.compile(rf'\s+bis\s+(?:(?:zum|einschließlich)\s+)?(?:{_NAME}|{"|".join(SHORT_WEEKDAYS)})(?!\w)', re.IGNORECASE)
-_LIST_AFTER = re.compile(rf'\.?\s*(?:,|&|(?i:und|oder))\s*{_DAY_ANY}(?!\w)')
-_LIST_BEFORE = re.compile(rf'(?<!\w){_DAY_ANY}\.?\s*(?:,|&|(?i:und|oder))\s*$')
+_LIST_AFTER = re.compile(rf'\.?(?:\s*(?:,|&|(?i:und|oder))\s*|\s+){_DAY_ANY}(?!\w)')
+_LIST_BEFORE = re.compile(rf'(?<!\w){_DAY_ANY}\.?(?:\s*(?:,|&|(?i:und|oder))\s*|\s+)$')
 _TITLE_BEFORE = re.compile(r'(?<!\w)(?:herr|frau|hr\.|fr\.|dr\.|prof\.)\s*$', re.IGNORECASE)
-# "früh" and "morgen" are left out here: "So früh wie möglich" and "So, morgen ..." name no day.
-_DAYTIME = r'(?:vormittags?|mittags?|nachmittags?|abends?|nachts?|morgens)'
+# "morgen" is left out here: "So, morgen ..." names no day.
+_DAYTIME = r'(?:vormittags?|mittags?|nachmittags?|abends?|nachts?|morgens|früh)'
 _DAYTIME_AFTER = re.compile(rf'\s+{_DAYTIME}(?!\w)', re.IGNORECASE)
 _ANY_DAYTIME = re.compile(rf'(?<!\w){_DAYTIME}(?!\w)', re.IGNORECASE)
 _ANY_CLOCK = re.compile(
     r'(?<![\d.:])(?:(?:[01]?\d|2[0-3]):[0-5]\d|(?:[01]?\d|2[0-3])(?:\.[0-5]\d)?\s*uhr(?!\w))|(?<!\w)(?:um|ab|gegen)\s+(?:[01]?\d|2[0-3])(?!\d)',
     re.IGNORECASE)
-_SO_WORD = re.compile(r'\s+(?!(?:um|ab|gegen)(?!\w))[a-zäöüß]')
+_SO_WORD = re.compile(r'\s+(?:viel|wie|lange|dass|ein|eine|einen|einem|einer|gut|oft|sehr|schnell|spät|bald|früh|weit)(?!\w)')
 _NAMED_DAY = (
     rf'(?:(?P<name>{_NAME}|{"|".join(SHORT_WEEKDAYS)})\.?(?:\s*,\s*|\s*[–-]\s+|\s*(?P<open>\()\s*|\s+)(?:de[nmr]\s+)?)?'
 )
@@ -192,12 +192,15 @@ def _short_day(text, match):
         return day
     if word != day or _SHORT_WITH.search(before):
         return None
+    opening = not before.strip()
+    if opening and day == 'So' and not dotted and _SO_WORD.match(after):
+        return None
     if _SHORT_BEFORE_DATE.match(text, match.end()) or _DAYTIME_AFTER.match(after):
         return day
     named = _SHORT_NAMED.match(after)
-    if before.strip():
+    if not opening:
         return None if named and (day == 'Fr' or not _CLOCK_BEFORE.search(before)) else day
-    if after.lstrip().startswith(',') or (named and day == 'Fr') or (day == 'So' and not dotted and _SO_WORD.match(after)):
+    if after.lstrip().startswith(',') or (named and day == 'Fr'):
         return None
     return day if dotted or _SHORT_RANGE.match(after) or _ANY_CLOCK.search(text) or _ANY_DAYTIME.search(text) else None
 
