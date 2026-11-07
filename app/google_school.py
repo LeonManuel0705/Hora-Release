@@ -25,7 +25,10 @@ from .paths import DATA_DIR
 
 STATE_FILE = DATA_DIR / 'google_school.json'
 NAME = f'{brand.NAME} Schule'
-DESCRIPTION = f'Stundenplan und Tests aus {brand.NAME}. {brand.NAME} hält diesen Kalender aktuell, ändere die Einträge deshalb in {brand.NAME}.'
+# The app knows its own calendar by this line, never by the name alone: a calendar of the same name may be someone's own.
+MARKER = f'{brand.NAME}:schule'
+DESCRIPTION = f'Stundenplan und Tests aus {brand.NAME}. {brand.NAME} hält diesen Kalender aktuell, ändere die Einträge deshalb in {brand.NAME}.\n\n{MARKER}'
+REMEMBERED = 'google-school-calendar'
 LESSON_DAYS = 28
 DEADLINE_DAYS = 120
 PERIOD_SECONDS = 300
@@ -46,6 +49,7 @@ log = logging.getLogger(__name__)
 
 _round_lock = threading.Lock()
 _state_lock = threading.Lock()
+_memory_lock = threading.Lock()
 _memory = {'signature': None, 'state': None}
 _due = {'at': None}
 
@@ -67,24 +71,32 @@ def _blank():
     return {'version': 1, 'on': False, 'account': None, 'calendar': None, 'events': {}, 'remove': None, 'epoch': 0}
 
 
-def _read():
+def _signature():
     try:
         stat = STATE_FILE.stat()
     except OSError:
-        return _blank()
-    signature = (stat.st_mtime_ns, stat.st_size)
-    if _memory['signature'] != signature:
-        try:
-            state = decrypt_file(STATE_FILE)
-        except Exception:
-            state = None
-        _memory.update(signature=signature, state=state if isinstance(state, dict) else _blank())
-    return copy.deepcopy(_memory['state'])
+        return None
+    return stat.st_mtime_ns, stat.st_size
+
+
+def _read():
+    with _memory_lock:
+        signature = _signature()
+        if signature is None:
+            return _blank()
+        if _memory['signature'] != signature:
+            try:
+                state = decrypt_file(STATE_FILE)
+            except Exception:
+                state = None
+            _memory.update(signature=signature, state=state if isinstance(state, dict) else _blank())
+        return copy.deepcopy(_memory['state'])
 
 
 def _write(state):
-    encrypt_file(state, STATE_FILE)
-    _memory.update(signature=None, state=None)
+    with _memory_lock:
+        encrypt_file(state, STATE_FILE)
+        _memory.update(signature=_signature(), state=copy.deepcopy(state))
 
 
 def _change(change):
@@ -125,11 +137,17 @@ def view():
     }
 
 
+FRESH = {'problem': None, 'notice': None, 'stand': None, 'misses': 0, 'pause_until': None}
+
+
 def turn_on(account):
+    """Switches the entries on. A calendar that was about to be deleted is taken back instead of made anew."""
     def change(state):
         if state.get('account') != account:
             state.update(_blank(), epoch=state.get('epoch', 0), remove=state.get('remove'))
-        state.update(on=True, account=account, notice=None, problem=None, stand=None, epoch=state.get('epoch', 0) + 1)
+        elif state.get('remove') and not state.get('calendar'):
+            state.update(calendar=state['remove'], remove=None, seen=None)
+        state.update(FRESH, on=True, account=account, epoch=state.get('epoch', 0) + 1)
     _change(change)
     changed(delay=0)
 
@@ -138,7 +156,7 @@ def turn_off(keep):
     """Stops the entries. The calendar stays in Google as an ordinary one, or goes with the next round."""
     def change(state):
         calendar = state.get('calendar')
-        state.update(on=False, calendar=None, events={}, problem=None, notice=None, stand=None, epoch=state.get('epoch', 0) + 1)
+        state.update(FRESH, on=False, calendar=None, events={}, epoch=state.get('epoch', 0) + 1)
         if calendar and not keep:
             state['remove'] = calendar
         return calendar
@@ -158,8 +176,13 @@ def changed(delay=None):
 
 
 def seconds_until_due():
+    """How long the background thread may sleep before the next round is due. A pause after a refusal counts too,
+    otherwise a change made during the pause would wake the thread again and again until the pause ends."""
     due = _due['at']
-    return None if due is None else max(0.0, due - time.monotonic())
+    if due is None:
+        return None
+    pause = (_read().get('pause_until') or 0) - time.time()
+    return max(0.0, due - time.monotonic(), pause)
 
 
 def _color_of(hue):
@@ -358,15 +381,33 @@ def _apply(service, state, ops):
         raise Limited()
 
 
-def _find(service):
-    """The calendar made here before, found by its name. Also gives the time zone of the main calendar for a new one."""
+def _remembered(account):
+    saved = db.get_ui_store().get(REMEMBERED)
+    return saved.get(account) if isinstance(saved, dict) else None
+
+
+def _remember(account, calendar):
+    saved = db.get_ui_store().get(REMEMBERED)
+    saved = dict(saved) if isinstance(saved, dict) else {}
+    if calendar:
+        saved[account] = calendar
+    else:
+        saved.pop(account, None)
+    db.save_ui_value(REMEMBERED, saved)
+
+
+def _find(service, state):
+    """The calendar made here before: the one whose id was kept, or one that carries the marker. A calendar that only has
+    the same name belongs to someone and is never taken. Also gives the time zone of the main calendar for a new one."""
+    known = _remembered(state.get('account'))
     found, zone, token = None, None, None
     while True:
         page = service.calendarList().list(pageToken=token).execute()
         for item in page.get('items', []):
             if item.get('primary'):
                 zone = item.get('timeZone')
-            if not found and item.get('summary') == NAME and item.get('accessRole') == 'owner':
+            ours = item.get('id') == known or MARKER in str(item.get('description') or '')
+            if not found and ours and item.get('accessRole') == 'owner' and item.get('id') != state.get('remove'):
                 found = item.get('id')
         token = page.get('nextPageToken')
         if not token:
@@ -385,9 +426,10 @@ def _ensure(service, state, today):
                 raise
             state['seen'] = today.isoformat()
         return state['calendar']
-    found, zone = _find(service)
+    found, zone = _find(service, state)
     if not found:
         found = service.calendars().insert(body=_without_nulls({'summary': NAME, 'description': DESCRIPTION, 'timeZone': zone})).execute()['id']
+    _remember(state['account'], found)
     state.update(calendar=found, seen=today.isoformat())
     return found
 
@@ -433,8 +475,13 @@ def _run(today):
             try:
                 service.calendars().delete(calendarId=state['remove']).execute()
             except Exception as error:
-                if _status_of(error) not in GONE:
+                if _limited(error):
+                    raise Limited() from error
+                if _status_of(error) not in (*GONE, 403):
                     raise
+                if _status_of(error) == 403:
+                    state['notice'] = 'kept'
+            _remember(account, None)
             state['remove'] = None
         if state.get('on'):
             new = not state.get('calendar')

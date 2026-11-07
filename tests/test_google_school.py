@@ -10,6 +10,7 @@ from app import calendar_cache
 from app import database as db
 from app import google_oauth
 from app import google_school
+from tests.google_fake import FakeHttpError
 from tests.test_calendar_cache import TODAY, client, day, google  # noqa: F401
 
 MONDAY = TODAY - timedelta(days=TODAY.weekday())
@@ -285,3 +286,112 @@ def test_the_school_calendar_stays_out_of_events_loaded_live_beyond_the_copy(sch
     monkeypatch.setattr(google_oauth, 'fetch_google_calendar_events', lambda **kwargs: {'success': True, 'events': loaded})
     payload = client.get(f'/api/ui/events/synced?start={far}&end={far}').get_json()
     assert [event['title'] for event in payload['events']] == ['Konzert']
+
+
+def test_a_change_during_a_pause_lets_the_background_thread_sleep(school, client, monkeypatch):
+    import threading
+    import time
+
+    client.post('/api/ui/google/school')
+    school.offline = True
+    assert google_school.background_round() is True
+    google_school.changed(delay=0)
+    assert google_school.seconds_until_due() > 50
+    rounds = []
+    real = calendar_cache.background_round
+    monkeypatch.setattr(calendar_cache, 'background_round', lambda: rounds.append(1) or real())
+    calendar_cache.start_background()
+    try:
+        time.sleep(1.5)
+    finally:
+        calendar_cache.stop_background()
+    assert len(rounds) <= 2, 'the thread sleeps through the pause instead of waking every few milliseconds'
+    assert google_school._due['at'] is not None, 'the change still counts once the pause is over'
+    assert not [item for item in threading.enumerate() if item.name == 'calendar-sync']
+
+
+def test_a_calendar_that_only_has_the_name_is_never_taken_hidden_or_deleted(school, client):
+    mine = 'mine@group.calendar.google.com'
+    school.add_calendar(mine, f'{brand.NAME} Schule', role='owner')
+    school.put(mine, 'Mein eigener Termin', day(3), '10:00', '11:00')
+    calendar = switch_on(client)
+    assert calendar != mine and school.count('calendars.insert') == 1
+    assert google_school.MARKER in school.calendars[calendar]['description']
+    calendar_cache.sync(full=True)
+    assert 'Mein eigener Termin' in [event['title'] for event in calendar_cache.events(day(-70), day(100))]
+    client.delete('/api/ui/google/school', json={'keep': False})
+    google_school.background_round()
+    assert mine in school.calendars and calendar not in school.calendars
+    assert [event['summary'] for event in school.live(mine)] == ['Mein eigener Termin']
+
+
+def test_without_state_and_kept_id_the_calendar_is_found_by_its_marker(school, client):
+    calendar = switch_on(client)
+    google_school.STATE_FILE.unlink()
+    db.delete_ui_value(google_school.REMEMBERED)
+    assert client.post('/api/ui/google/school').status_code == 200
+    assert google_school.background_round() is True
+    assert google_school._read()['calendar'] == calendar and school.count('calendars.insert') == 1
+
+
+def test_a_delete_google_refuses_keeps_the_calendar_and_says_so_once(school, client):
+    calendar = switch_on(client)
+    school.hooks['calendars.delete'] = lambda details: (_ for _ in ()).throw(FakeHttpError(403, 'forbidden'))
+    client.delete('/api/ui/google/school', json={'keep': False})
+    for _ in range(3):
+        google_school._change(lambda state: state.update(pause_until=0))
+        google_school.background_round()
+    state = google_school._read()
+    assert state['remove'] is None and state['notice'] == 'kept' and school.count('calendars.delete') == 1
+    assert google_school.managed() == set() and calendar in school.calendars
+    school.hooks.clear()
+    assert client.post('/api/ui/google/school').status_code == 200
+    assert google_school.background_round() is True
+    assert google_school._read()['calendar'] == calendar and len(google_school._read()['events']) == len(mondays())
+
+
+def test_switching_on_again_before_the_delete_took_place_takes_the_calendar_back(school, client):
+    calendar = switch_on(client)
+    client.delete('/api/ui/google/school', json={'keep': False})
+    assert client.post('/api/ui/google/school').status_code == 200
+    assert google_school.background_round() is True
+    assert google_school._read()['calendar'] == calendar and google_school._read()['remove'] is None
+    assert school.count('calendars.delete') == 0 and school.count('calendars.insert') == 1
+
+
+def test_switching_off_and_on_starts_without_an_old_pause(school, client):
+    client.post('/api/ui/google/school')
+    school.offline = True
+    for _ in range(4):
+        google_school._change(lambda state: state.update(pause_until=0))
+        google_school.background_round()
+    assert google_school._read()['misses'] == 4
+    school.offline = False
+    client.delete('/api/ui/google/school', json={'keep': True})
+    assert client.post('/api/ui/google/school').status_code == 200
+    assert google_school.background_round() is True
+    state = google_school._read()
+    assert state['problem'] is None and state['misses'] == 0 and not state['pause_until']
+    assert len(state['events']) == len(mondays())
+
+
+def test_a_read_right_after_a_write_never_comes_back_empty(school, client, monkeypatch):
+    import threading
+
+    client.post('/api/ui/google/school')
+    stop = threading.Event()
+
+    def writer():
+        while not stop.is_set():
+            google_school._change(lambda state: state.update(day=None))
+
+    thread = threading.Thread(target=writer)
+    thread.start()
+    try:
+        reads = [google_school._read() for _ in range(300)]
+    finally:
+        stop.set()
+        thread.join(5)
+    assert all(isinstance(state, dict) and state.get('on') is True for state in reads)
+    monkeypatch.setattr(google_school, 'decrypt_file', lambda path: (_ for _ in ()).throw(AssertionError('read again')))
+    assert google_school._read()['on'] is True, 'a write keeps what it wrote, nothing has to be decrypted again'
