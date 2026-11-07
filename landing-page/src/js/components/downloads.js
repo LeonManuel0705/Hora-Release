@@ -80,7 +80,7 @@ function sheetBody(id) {
       ${stepsHTML(raw(`steps.${id}`) || [])}
       <div class="ap-sheet-actions"><a class="ap-btn ap-sheet-primary" href="${p.href}">${escapeHtml(t("start.cta_web"))}</a></div>`;
   }
-  const alt = p.alt ? `<p class="ap-sheet-alt">${escapeHtml(t(`platforms.${id}.alt`))} <a href="${p.alt.href}" download data-sheet-get>${escapeHtml(p.alt.file)}, ${megabytes(p.alt.bytes)}&nbsp;MB</a></p>` : "";
+  const alt = p.alt ? `<p class="ap-sheet-alt">${escapeHtml(t(`platforms.${id}.alt`))} <a href="${p.alt.href}" download>${escapeHtml(p.alt.file)}, ${megabytes(p.alt.bytes)}&nbsp;MB</a></p>` : "";
   return `<h2 class="ap-sheet-title" id="ap-sheet-title" tabindex="-1" autofocus aria-live="polite">${escapeHtml(t("install.title", { platform: t(`platforms.${id}.name`) }))}</h2>
     <p class="ap-sheet-meta"><span class="mono">${escapeHtml(p.file)}</span>, ${megabytes(p.bytes)}&nbsp;MB</p>
     <p class="ap-sheet-req">${escapeHtml(t(`platforms.${id}.note`))}</p>
