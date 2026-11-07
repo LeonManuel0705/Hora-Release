@@ -74,11 +74,11 @@
         "icon": "building",
         "hue": "iris",
         "title": "IServ",
-        "text": "Melde dich einmal mit deinem IServ-Konto an. Nachrichten und Termine kommen dann von selbst, auf Android auch deine Aufgaben.",
+        "text": "Melde dich einmal mit deinem IServ-Konto an. Am Computer liest {{BRAND_NAME}} dann deine IServ-Mails und den Vertretungsplan. Auf Android kommen Aufgaben und Termine von selbst, neue Nachrichten melden sich als Mitteilung.",
         "facts": [
-          "Nachrichten und Termine",
-          "Aufgaben auf Android",
-          "IServ-Mail am Computer"
+          "IServ-Mail am Computer",
+          "Aufgaben und Termine auf Android",
+          "Vertretungsplan"
         ],
         "devices": "desk_android"
       },
@@ -100,10 +100,10 @@
         "icon": "sun",
         "hue": "lake",
         "title": "Kalender",
-        "text": "Eigene Termine, Termine aus IServ und die Ferien und Feiertage aller 16 Bundesländer, ohne dass du sie abtippst.",
+        "text": "Eigene Termine und die Ferien und Feiertage aller 16 Bundesländer, ohne dass du sie abtippst. Auf Android kommen die Termine aus IServ dazu.",
         "facts": [
           "Ferien für 16 Bundesländer",
-          "IServ-Termine",
+          "IServ-Termine auf Android",
           "Eigene Termine"
         ],
         "devices": "all"
@@ -239,7 +239,7 @@
             "note": "werden automatisch eingetragen",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           }
         ]
       },
@@ -256,7 +256,7 @@
           {
             "name": "Nachrichten und Termine",
             "note": "",
-            "d": "yes",
+            "d": "no",
             "a": "yes",
             "i": "no"
           },
@@ -335,38 +335,38 @@
         "rows": [
           {
             "name": "Verbindungen mit Echtzeit-Verspätungen und Gleis",
-            "note": "Android: Berlin und Brandenburg. Computer: deutschlandweit",
+            "note": "deutschlandweit über Transitous, Ticketpreise für Berlin und Brandenburg",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Abfahrtstafel für deine Haltestelle",
             "note": "",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Schulweg und Heimweg speichern",
             "note": "",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Eigene Tickets hinterlegen",
             "note": "",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           },
           {
             "name": "Wetter",
             "note": "Daten von Open-Meteo",
             "d": "yes",
             "a": "yes",
-            "i": "no"
+            "i": "yes"
           }
         ]
       },
@@ -489,7 +489,7 @@
       {
         "icon": "bus",
         "to": "Fahrplan-Dienste",
-        "what": "Haltestellen, Adressen und Uhrzeit deiner Suche, mit gespeichertem Zuhause oder Schulort auch deren Lage. Geht an Transitous, für Ticketpreise in Berlin und Brandenburg an transport.rest, in den älteren Ansichten ebenfalls an transport.rest und für Preise an die Deutsche Bahn",
+        "what": "Haltestellen, Adressen und Uhrzeit deiner Suche, mit gespeichertem Zuhause oder Schulort auch deren Lage, mit „In der Nähe“ dein Standort. Geht an Transitous, für Ticketpreise in Berlin und Brandenburg an transport.rest, in den älteren Ansichten ebenfalls an transport.rest und für Preise an die Deutsche Bahn",
         "when": "beim Öffnen des Fahrplans und beim Suchen",
         "tone": "ok"
       },
@@ -579,7 +579,7 @@
       }
     ],
     "lock_title": "Was verschlüsselt ist",
-    "lock_text": "Zugangsdaten für IServ und Mail speichert {{BRAND_NAME}} verschlüsselt. Am Computer mit Fernet und einem Schlüssel aus 600.000 PBKDF2-Runden, auf Android im verschlüsselten Speicher des Systems. Stundenplan, Aufgaben und Noten liegen unverschlüsselt, aber nur auf deinem Gerät.",
+    "lock_text": "Zugangsdaten für IServ und Mail speichert {{BRAND_NAME}} verschlüsselt, am Computer mit Fernet und einem Schlüssel aus 600.000 PBKDF2-Runden, auf Android im verschlüsselten Speicher des Systems. Am Computer verschlüsselt {{BRAND_NAME}} so auch Noten, Tests, Termine und Notizen. Alles andere liegt unverschlüsselt, aber nur auf deinem Gerät.",
     "lock_number": "600.000",
     "lock_number_label": "PBKDF2-Runden für deine Zugangsdaten am Computer",
     "no_title": "Was es nicht gibt",
