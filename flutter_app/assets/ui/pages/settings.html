@@ -47,11 +47,11 @@
     </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
     <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/static/app/css/tokens.css?v=282cb4a31b">
-    <link rel="stylesheet" href="/static/app/css/app.css?v=282cb4a31b">
-    <link rel="stylesheet" href="/static/css/tour.css?v=282cb4a31b">
-    <link rel="stylesheet" href="/static/app/css/setup.css?v=282cb4a31b">
-    <link rel="stylesheet" href="/static/app/css/pages/settings.css?v=282cb4a31b">
+    <link rel="stylesheet" href="/static/app/css/tokens.css?v=5b8a71a615">
+    <link rel="stylesheet" href="/static/app/css/app.css?v=5b8a71a615">
+    <link rel="stylesheet" href="/static/css/tour.css?v=5b8a71a615">
+    <link rel="stylesheet" href="/static/app/css/setup.css?v=5b8a71a615">
+    <link rel="stylesheet" href="/static/app/css/pages/settings.css?v=5b8a71a615">
     <script nonce="__APP_NONCE__">
         (function () {
             var root = document.documentElement;
@@ -66,7 +66,7 @@
             if (root.dataset.themeMode === "auto") root.dataset.theme = system.matches ? "dark" : "light";
         })();
     </script>
-    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=282cb4a31b"></script>
+    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=5b8a71a615"></script>
 </head>
 <body data-tour-auto="__APP_TOUR__" data-server-behind="0">
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -341,6 +341,11 @@
                 <div class="section-head set-head">
                     <h2 class="section-title" id="planTitle" tabindex="-1">Stundenplan</h2>
                     <p class="section-meta" id="planMeta"></p>
+                    <button class="btn btn-quiet set-head-action" type="button" data-open-setup="settings"><svg class="icon" aria-hidden="true"><use href="#i-table-2"/></svg>Einrichtung</button>
+                </div>
+                <div class="plan-empty" id="planEmpty" hidden>
+                    <p class="plan-empty-text"><b>Noch kein Stundenplan.</b> Am schnellsten geht es mit der Einrichtung: Du tippst deine Fächer an und dann die Stunden ins Raster.</p>
+                    <button class="btn btn-primary" type="button" data-open-setup="settings"><svg class="icon" aria-hidden="true"><use href="#i-table-2"/></svg>Einrichtung starten</button>
                 </div>
                 <div class="plan-board" id="planBoard">
                     <div class="plan-top" id="planTop">
@@ -609,8 +614,8 @@
 <div class="tooltip" id="tooltip" role="tooltip"></div>
 
 <script type="application/json" id="appStore">__APP_STORE__</script>
-<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=282cb4a31b" defer></script>
-<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=282cb4a31b" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=5b8a71a615" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=5b8a71a615" defer></script>
 
 
 <script type="application/json" id="appData">__APP_DATA__</script>

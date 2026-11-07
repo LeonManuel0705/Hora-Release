@@ -168,3 +168,8 @@ def test_the_home_shows_the_weather_and_one_button_for_everything_new(client):
     assert 'id="headWeather"' in home and "data-open-weather" in home
     assert '<use href="#i-plus"/></svg>Neu' in home and "Notiz\n" not in home
     assert 'id="i-cloud-snow"' in home and 'id="i-cloud-lightning"' in home and 'id="i-cloud-fog"' in home
+
+
+def test_the_plan_settings_offer_the_setup(client):
+    settings = client.get("/hub/settings").get_data(as_text=True)
+    assert settings.count('data-open-setup="settings"') == 2
