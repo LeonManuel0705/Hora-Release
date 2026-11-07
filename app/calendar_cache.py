@@ -95,10 +95,10 @@ def write_enabled():
 
 
 def hidden_calendars():
+    """The calendars the pages leave out: those switched off in the settings and the one the app fills with the school week."""
     calendars = google_settings().get('calendars')
-    if not isinstance(calendars, dict):
-        return set()
-    return {key for key, shown in calendars.items() if shown is False}
+    chosen = {key for key, shown in calendars.items() if shown is False} if isinstance(calendars, dict) else set()
+    return chosen | _managed()
 
 
 def window(today=None):
@@ -937,7 +937,6 @@ def events(start, end):
     linked = {item.get('google_id') for item in ui_data.load_list('calendar') if item.get('google_id')}
     calendars = {calendar['id']: calendar for calendar in cache.get('calendars', [])}
     open_to_edits = _open_to_edits(cache)
-    hidden = hidden | _managed()
     result = []
     for calendar_id, bucket in cache.get('events', {}).items():
         if calendar_id in hidden:
@@ -982,6 +981,7 @@ SIGNED_OUT = 'Die Anmeldung bei Google ist abgelaufen. Verbinde Google in den Ei
 UNREACHABLE = 'Google ist gerade nicht erreichbar. Die Änderung ist nicht gespeichert.'
 CHANGED_THERE = 'Der Termin wurde gerade in Google geändert. Schau ihn dir noch einmal an.'
 GONE_THERE = 'Den Termin gibt es in Google nicht mehr.'
+DECLINED = 'Google hat diese Änderung nicht angenommen.'
 NOTES_SHOWN = 2000
 
 
@@ -1043,6 +1043,8 @@ def _answer_of(request, calendar, key, service):
             raise Refusal(GONE_THERE, 404) from error
         if status in (401, 403):
             raise Refusal(READ_ONLY, 403) from error
+        if status == 400:
+            raise Refusal(DECLINED, 400) from error
         if type(error).__name__ == 'RefreshError':
             raise Refusal(SIGNED_OUT) from error
         raise Refusal(UNREACHABLE, 503) from error

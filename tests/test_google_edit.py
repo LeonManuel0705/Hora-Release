@@ -5,7 +5,7 @@ import threading
 
 from app import calendar_cache
 from app import google_oauth
-from tests.google_fake import local_stamp
+from tests.google_fake import FakeHttpError, local_stamp
 from tests.test_calendar_cache import client, day, google, titles  # noqa: F401
 
 
@@ -187,3 +187,25 @@ def test_a_copy_from_before_learns_once_what_each_calendar_allows(google):
     calendar_cache._status['checked'] = None
     calendar_cache.sync()
     assert google.count('calendarList.list') == 0
+
+
+def test_a_calendar_id_with_dashes_is_found_and_a_refusal_carries_its_message(google, client):
+    google.add_calendar('familie-berger@group.calendar.google.com', 'Familie', role='writer')
+    google.add_calendar('familie-berger-alt@group.calendar.google.com', 'Familie alt', role='reader')
+    key = google.put('familie-berger@group.calendar.google.com', 'Lerngruppe', day(2), '17:00', '18:00', key='lerngruppe1')
+    old = google.put('familie-berger-alt@group.calendar.google.com', 'Damals', day(3), '17:00', '18:00', key='lerngruppe2')
+    calendar_cache.sync()
+    reply = client.patch(f'/api/ui/events/g-familie-berger@group.calendar.google.com-{key}', json={'title': 'Lerngruppe Mathe'})
+    assert reply.status_code == 200 and google.store['familie-berger@group.calendar.google.com'][key]['summary'] == 'Lerngruppe Mathe'
+    refused = client.patch(f'/api/ui/events/g-familie-berger-alt@group.calendar.google.com-{old}', json={'title': 'X'})
+    assert refused.status_code == 403
+    assert refused.get_json() == {'success': False, 'error': calendar_cache.READ_ONLY, 'message': calendar_cache.READ_ONLY}
+
+
+def test_a_change_google_declines_is_named_as_such(google, client):
+    key = google.put('primary', 'Gym', day(1), '16:30', '18:00')
+    calendar_cache.sync()
+    google.hooks['events.patch'] = lambda details: (_ for _ in ()).throw(FakeHttpError(400, 'invalid'))
+    reply = client.patch(f'/api/ui/events/g-{google.primary}-{key}', json={'title': 'Gym Rücken'})
+    assert reply.status_code == 400 and reply.get_json()['message'] == calendar_cache.DECLINED
+    assert titles() == ['Gym']

@@ -273,3 +273,15 @@ def test_the_background_thread_fills_the_calendar(school, client, monkeypatch):
         calendar_cache.stop_background()
     assert not thread.is_alive()
     assert len(google_school._read()['events']) == len(mondays())
+
+
+def test_the_school_calendar_stays_out_of_events_loaded_live_beyond_the_copy(school, client, monkeypatch):
+    calendar = switch_on(client)
+    far = (TODAY + timedelta(days=200)).isoformat()
+    loaded = [
+        {'id': 'x1', 'title': 'Mathe LK', 'start_date': far, 'start_time': '08:00', 'end_date': far, 'end_time': '09:30', 'calendar_id': calendar},
+        {'id': 'x2', 'title': 'Konzert', 'start_date': far, 'start_time': '20:00', 'end_date': far, 'end_time': '22:00', 'calendar_id': school.primary},
+    ]
+    monkeypatch.setattr(google_oauth, 'fetch_google_calendar_events', lambda **kwargs: {'success': True, 'events': loaded})
+    payload = client.get(f'/api/ui/events/synced?start={far}&end={far}').get_json()
+    assert [event['title'] for event in payload['events']] == ['Konzert']

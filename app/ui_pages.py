@@ -512,9 +512,9 @@ def _change_google_event(ref):
             return jsonify({'success': True})
         event = calendar_cache.edit_remote(ref, lambda item: _event_payload(payload, item, creating=False))
     except calendar_cache.Refusal as refusal:
-        return _error(str(refusal), refusal.status)
+        return jsonify({'success': False, 'error': str(refusal), 'message': str(refusal)}), refusal.status
     except ValueError as error:
-        return _error(str(error))
+        return jsonify({'success': False, 'error': str(error), 'message': str(error)}), 400
     return jsonify({'success': True, 'event': event})
 
 
