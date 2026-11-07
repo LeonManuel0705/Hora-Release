@@ -638,6 +638,7 @@ class UiData {
     };
     if (!setup.abWeeks) store.putIfAbsent('app-ab-weeks', () => false);
     final page = switch (active) {
+      'tasks' => {'notes': await notes()},
       'calendar' => pageCalendar(holidayList),
       'school' => await pageSchool(setup),
       'vbb' => await pageTransit(),
@@ -762,6 +763,9 @@ class UiData {
     };
   }
 
+  Future<List<Map<String, Object?>>> notes() async =>
+      [for (final row in await db.query('quick_notes', orderBy: 'created_at DESC')) noteView(row)].nonNulls.toList();
+
   Future<Map<String, Object?>> exportRecords() async {
     final setup = await school();
     final semester = semesterFor(today, classLevel);
@@ -782,7 +786,7 @@ class UiData {
       'tasks': [for (final row in await db.query('tasks', orderBy: 'created_at ASC')) taskView(row, setup.known)],
       'deadlines': dated,
       'grades': [for (final row in await db.query('grades', orderBy: 'date ASC')) gradeView(row, setup, semester)].nonNulls.toList(),
-      'notes': [for (final row in await db.query('quick_notes', orderBy: 'created_at DESC')) noteView(row)].nonNulls.toList(),
+      'notes': await notes(),
       'events': [for (final row in await _ownEvents()) eventView(row)].nonNulls.toList(),
       'places': places,
     };

@@ -104,7 +104,7 @@ class UiApi {
         return await _synced(db, request);
       }
       if (path.length >= 2 && path[0] == 'ui' && path[1] == 'events') return await _events(db, request);
-      if (path.length == 2 && path[0] == 'ui' && path[1] == 'notes' && method == 'POST') return await _note(db, request);
+      if (path.length >= 2 && path[0] == 'ui' && path[1] == 'notes') return await _notes(db, request);
       if (path.length == 3 && path[0] == 'ui' && path[1] == 'places') return await _place(db, request, path[2]);
       if (path.length >= 2 && path[0] == 'ui' && path[1] == 'mail') return _mail(request);
       if (path.length == 3 && path[0] == 'ui' && path[1] == 'weather' && path[2] == 'place' && method == 'PUT') {
@@ -544,24 +544,57 @@ class UiApi {
     return UiReply.ok({'events': events});
   }
 
-  Future<UiReply> _note(Database db, UiRequest request) async {
-    final payload = _needPayload(request);
-    final title = text(payload['title'], 300);
-    if (title.isEmpty) return UiReply.error('Titel fehlt');
-    final content = text(payload['details'], 5000);
-    final id = _uuid.v4();
+  // A new note takes 300 and 5000 characters on the page. One from the older screens may be longer and must survive an edit.
+  static const _noteTitle = 1000, _noteText = 100000;
+
+  static int _words(String content) => content.isEmpty ? 0 : content.split(RegExp(r'\s+')).length;
+
+  Future<UiReply> _notes(Database db, UiRequest request) async {
+    final path = request.segments;
     final now = DateTime.now().toIso8601String();
-    await db.insert('quick_notes', {
-      'id': id,
-      'type': payload['type'] == 'idea' ? 'idea' : 'note',
-      'title': title,
-      'content': content,
-      'word_count': content.isEmpty ? 0 : content.split(RegExp(r'\s+')).length,
-      'created_at': now,
-      'updated_at': now,
-    });
+    if (path.length == 2 && request.method == 'POST') {
+      final payload = _needPayload(request);
+      final title = text(payload['title'], _noteTitle);
+      if (title.isEmpty) return UiReply.error('Titel fehlt');
+      final content = text(payload['details'], _noteText);
+      final id = _uuid.v4();
+      await db.insert('quick_notes', {
+        'id': id,
+        'type': payload['type'] == 'idea' ? 'idea' : 'note',
+        'title': title,
+        'content': content,
+        'word_count': _words(content),
+        'created_at': DateTime.tryParse(text(payload['created'], 40))?.toIso8601String() ?? now,
+        'updated_at': now,
+      });
+      _changed('notes');
+      return UiReply.ok({'note': UiData.noteView((await _row(db, 'quick_notes', id))!)});
+    }
+    if (path.length != 3) return UiReply.error('Nicht gefunden', 404);
+    final row = await _row(db, 'quick_notes', path[2]);
+    if (row == null) return UiReply.error('Notiz nicht gefunden', 404);
+    if (request.method == 'DELETE') {
+      await db.delete('quick_notes', where: 'id = ?', whereArgs: [path[2]]);
+      _changed('notes');
+      return UiReply.ok();
+    }
+    if (request.method != 'PATCH') return UiReply.error('Nicht erlaubt', 405);
+    final payload = _needPayload(request);
+    if (payload.containsKey('title') && text(payload['title'], _noteTitle).isEmpty) return UiReply.error('Titel fehlt');
+    final columns = <String, Object?>{'updated_at': now};
+    final shown = UiData.noteView(row);
+    if (text(row['title']).isEmpty && shown != null) {
+      // Such a note shows its first line as the title and the page sends only what changed. Stored apart first, one part cannot swallow the other.
+      columns['title'] = shown['title'];
+      columns['content'] = shown['details'];
+    }
+    if (payload.containsKey('title')) columns['title'] = text(payload['title'], _noteTitle);
+    if (payload.containsKey('details')) columns['content'] = text(payload['details'], _noteText);
+    if (payload['type'] == 'note' || payload['type'] == 'idea') columns['type'] = payload['type'];
+    if (columns['content'] is String) columns['word_count'] = _words(columns['content'] as String);
+    await db.update('quick_notes', columns, where: 'id = ?', whereArgs: [path[2]]);
     _changed('notes');
-    return UiReply.ok({'note': {'id': id}});
+    return UiReply.ok({'note': UiData.noteView((await _row(db, 'quick_notes', path[2]))!)});
   }
 
   Future<UiReply> _place(Database db, UiRequest request, String key) async {
