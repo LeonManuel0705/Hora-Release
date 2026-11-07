@@ -10,6 +10,7 @@ class IServService {
 
   bool get isConnected => false;
   String? get iservUrl => null;
+  String? get signInCause => null;
 
   String get apiLog => '';
   String get discoveryLog => '';
