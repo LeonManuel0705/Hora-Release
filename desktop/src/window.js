@@ -68,7 +68,15 @@ function track(win) {
   win.on('hide', () => save(true));
 }
 
-function createMainWindow() {
+const firstShows = new WeakMap();
+
+function revealWindow(win) {
+  const first = firstShows.get(win);
+  if (first) first();
+  else win.show();
+}
+
+function createMainWindow({ hidden = false } = {}) {
   const { bounds, maximized } = restoredBounds();
   const win = new BrowserWindow({
     ...bounds,
@@ -94,16 +102,17 @@ function createMainWindow() {
   win.on('page-title-updated', (event) => event.preventDefault());
   win.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
   track(win);
-  let shown = false;
   const show = () => {
-    if (shown || win.isDestroyed()) return;
-    shown = true;
+    if (!firstShows.delete(win) || win.isDestroyed()) return;
     if (maximized) win.maximize();
     win.show();
   };
-  win.once('ready-to-show', show);
-  setTimeout(show, 3000);
+  firstShows.set(win, show);
+  if (!hidden) {
+    win.once('ready-to-show', show);
+    setTimeout(show, 3000);
+  }
   return win;
 }
 
-module.exports = { canvasColor, createMainWindow };
+module.exports = { canvasColor, createMainWindow, revealWindow };

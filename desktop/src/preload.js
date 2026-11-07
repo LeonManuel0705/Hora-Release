@@ -107,6 +107,9 @@ function prepareHub() {
   contextBridge.exposeInMainWorld('hubShell', {
     nativeNotifications: true,
     openInBrowser: () => ipcRenderer.invoke('hub:open-in-browser'),
+    startAtLogin: () => ipcRenderer.invoke('hub:login-item'),
+    setStartAtLogin: (on) => ipcRenderer.invoke('hub:login-item', on === true),
+    openLoginItems: () => ipcRenderer.invoke('hub:login-item-settings'),
   });
   watchTheme();
   answerQuickNote();

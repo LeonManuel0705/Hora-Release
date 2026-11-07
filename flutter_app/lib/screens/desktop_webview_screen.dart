@@ -12,6 +12,7 @@ import '../brand.dart';
 import '../services/downloads.dart';
 import '../services/backend_setup.dart';
 import '../services/flask_server_service.dart';
+import '../services/login_item.dart';
 import '../services/notification_service.dart';
 import '../services/update_service.dart';
 import '../theme.dart';
@@ -73,10 +74,16 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
   window.hubShell = Object.freeze({
     nativeNotifications: true,
     openInBrowser: function () { return bridge("openInBrowser", true); },
-    saveFile: saveFile${Platform.isMacOS ? ',\n    showFile: function (path) { return bridge("showFile", String(path || "")); }' : ''}
+    saveFile: saveFile${Platform.isMacOS ? _macShellScript : ''}
   });
 })();
 ''';
+
+  static const _macShellScript = ''',
+    showFile: function (path) { return bridge("showFile", String(path || "")); },
+    startAtLogin: function () { return bridge("loginItem", null); },
+    setStartAtLogin: function (on) { return bridge("loginItem", on === true); },
+    openLoginItems: function () { return bridge("loginItemSettings", true); }''';
 
   late AnimationController _logoController;
   late AnimationController _textController;
@@ -493,6 +500,14 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
             controller.addJavaScriptHandler(
               handlerName: 'showFile',
               callback: (args) => args.isNotEmpty && args.first is String ? Downloads.show(args.first as String) : false,
+            );
+            controller.addJavaScriptHandler(
+              handlerName: 'loginItem',
+              callback: (args) => LoginItem.change(args.isNotEmpty && args.first is bool ? args.first as bool : null),
+            );
+            controller.addJavaScriptHandler(
+              handlerName: 'loginItemSettings',
+              callback: (args) => LoginItem.openSettings(),
             );
 
             if (!await _flask.confirmBackend()) return;

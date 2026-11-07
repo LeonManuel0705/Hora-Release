@@ -1729,6 +1729,69 @@ function bindNotify() {
   });
 }
 
+const launch = { state: null, busy: false };
+
+function launchDesc(state) {
+  if (!state.pending) return `${BRAND} startet nach dem Anmelden von selbst, damit Erinnerungen auch nach einem Neustart kommen.`;
+  return systemName() === "Windows"
+    ? `Windows hat den Autostart für ${BRAND} abgeschaltet. Schalte ihn in den Einstellungen unter Apps › Autostart wieder ein.`
+    : `macOS wartet noch auf deine Erlaubnis. Schalte ${BRAND} in den Systemeinstellungen unter Allgemein › Anmeldeobjekte ein.`;
+}
+
+function renderLaunch() {
+  const state = launch.state;
+  let card = $("launchCard");
+  if (!state?.supported) {
+    card?.remove();
+    return;
+  }
+  if (!card) {
+    card = Object.assign(document.createElement("div"), { className: "set-card", id: "launchCard" });
+    $("notifyKinds").after(card);
+  }
+  const settings = state.pending && typeof window.hubShell?.openLoginItems === "function"
+    ? `<button class="text-button row-action" type="button" id="launchSettings">${icon("settings")}<span>${systemName() === "Windows" ? "Einstellungen" : "Systemeinstellungen"} öffnen</span></button>`
+    : "";
+  keepFocus(card, () => {
+    card.innerHTML = `<div class="set-row" id="rowLaunch"><div class="set-row-text"><p class="set-row-label" id="rowLaunchLabel">Beim Anmelden starten</p><p class="set-row-desc" id="rowLaunchDesc">${esc(launchDesc(state))}</p>${settings}</div><div class="set-row-control">${switchHtml("launchToggle", !!state.enabled, "rowLaunchLabel", { disabled: launch.busy, describedBy: "rowLaunchDesc" })}</div></div>`;
+  });
+}
+
+async function loadLaunch() {
+  if (typeof window.hubShell?.startAtLogin !== "function") return;
+  try {
+    launch.state = await window.hubShell.startAtLogin();
+  } catch {
+    launch.state = null;
+  }
+  renderLaunch();
+}
+
+async function setLaunch(wanted) {
+  launch.busy = true;
+  renderLaunch();
+  let state = null;
+  try {
+    state = await window.hubShell.setStartAtLogin(wanted);
+  } catch (error) {
+    state = { ...launch.state, error: error?.message || "" };
+  }
+  launch.busy = false;
+  launch.state = state?.supported ? state : launch.state;
+  renderLaunch();
+  if (state?.error) toast(`Das hat nicht geklappt. ${esc(systemName())} meldet: „${esc(state.error)}“`, { icon: "circle-alert", duration: 9000 });
+  else if (wanted && state && !state.enabled) toast(`${esc(systemName())} hat den Autostart nicht übernommen.`, { icon: "circle-alert" });
+  else if (state) say(state.enabled ? "Beim Anmelden starten an" : "Beim Anmelden starten aus");
+}
+
+function bindLaunch() {
+  $("benachrichtigungen").addEventListener("click", (event) => {
+    if (event.target.closest("#launchToggle") && !launch.busy) setLaunch(!launch.state?.enabled);
+    else if (event.target.closest("#launchSettings")) window.hubShell.openLoginItems?.();
+  });
+  addEventListener("focus", () => launch.state?.pending && loadLaunch());
+}
+
 const look = { theme: ["light", "dark"].includes(root.dataset.themeMode) ? root.dataset.themeMode : "auto" };
 const systemDark = matchMedia("(prefers-color-scheme: dark)");
 
@@ -3443,6 +3506,7 @@ export function init() {
   bindSchool();
   bindAccounts();
   bindNotify();
+  bindLaunch();
   bindLook();
   bindPlaces();
   bindTransit();
@@ -3451,6 +3515,7 @@ export function init() {
   bindAbout();
   bindNav();
   renderAll();
+  loadLaunch();
   if (!openHash()) markSection(sectionInView(), { instant: true });
   document.fonts?.ready.then(() => navState.current && placeMarker(navState.current, { instant: true }));
   loadGoogleCalendars();
