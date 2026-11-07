@@ -95,3 +95,4 @@ def test_the_mail_page_offers_the_new_dialog_instead_of_the_classic_page():
     dialog = (ROOT / 'app' / 'static' / 'app' / 'js' / 'mailbox.js').read_text(encoding='utf-8')
     assert '"/api/email/accounts"' in dialog
     assert not re.search(r"provider:\s*\"outlook\"", dialog)
+    assert 'data?.status?.googleConfigured === true' in dialog

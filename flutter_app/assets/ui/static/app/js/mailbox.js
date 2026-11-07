@@ -25,7 +25,7 @@ let choice = "";
 let busy = false;
 let removing = "";
 
-const googleSignIn = () => data?.status?.googleConfigured !== false;
+const googleSignIn = () => data?.status?.googleConfigured === true;
 const $ = (id) => document.getElementById(id);
 
 function build() {
@@ -103,7 +103,7 @@ function detailHtml() {
   }
   if (choice === "gmail") {
     return googleSignIn()
-      ? `<p class="dialog-text">Gmail verbindest du über dein Google-Konto. Das geht in den Einstellungen unter Konten.</p><div class="dialog-actions">${linkButton(SETTINGS, "Zu den Einstellungen")}</div>`
+      ? `<p class="dialog-text">Gmail verbindest du über dein Google-Konto. Dafür gibt es in den Einstellungen unter Konten den Knopf „Gmail hinzufügen“.</p><div class="dialog-actions">${linkButton(SETTINGS, "Zu den Einstellungen")}</div>`
       : gmailForm();
   }
   if (choice === "outlook") {
