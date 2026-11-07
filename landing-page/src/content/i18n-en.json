@@ -716,7 +716,7 @@
     "s1_p2": "By installing and using the App, you agree to these Terms of Service. If you do not agree with these terms, please do not use the App.",
     "s2_title": "§ 2 Description of Service",
     "s2_p1": "{{BRAND_NAME}} is a free app for school. The App enables, among other things, the management of timetables, grades, tasks, events, training plans, and public transit routes.",
-    "s2_p2": "The App operates offline-first: All data is stored exclusively on your device. No user account or internet connection is required for core functionality.",
+    "s2_p2": "The App operates offline-first: All data is stored exclusively on your device. No user account is required, and the apps for computers and Android need no internet connection for core functionality after setup.",
     "s2_p3": "The Provider reserves the right to change, expand, or limit the functionality of the App at any time.",
     "s3_title": "§ 3 Usage Rights",
     "s3_p1": "The source code of the App is licensed under the PolyForm Noncommercial License 1.0.0. Under it, you may use, modify and share the App for any noncommercial purpose, including as a school or other educational institution.",

@@ -716,7 +716,7 @@
     "s1_p2": "Mit der Installation und Nutzung der App erklärst du dich mit diesen Nutzungsbedingungen einverstanden. Wenn du mit diesen Bedingungen nicht einverstanden bist, nutze die App bitte nicht.",
     "s2_title": "§ 2 Leistungsbeschreibung",
     "s2_p1": "{{BRAND_NAME}} ist eine kostenlose App für den Schulalltag. Die App ermöglicht unter anderem die Verwaltung von Stundenplänen, Noten, Aufgaben, Terminen, Trainingsplänen und ÖPNV-Routen.",
-    "s2_p2": "Die App funktioniert offline-first: Alle Daten werden ausschließlich lokal auf deinem Gerät gespeichert. Es werden kein Benutzerkonto und keine Internetverbindung für die Kernfunktionen benötigt.",
+    "s2_p2": "Die App funktioniert offline-first: Alle Daten werden ausschließlich lokal auf deinem Gerät gespeichert. Es wird kein Benutzerkonto benötigt, und die Apps für Computer und Android brauchen nach der Einrichtung keine Internetverbindung für die Kernfunktionen.",
     "s2_p3": "Der Anbieter behält sich das Recht vor, den Funktionsumfang der App jederzeit zu ändern, zu erweitern oder einzuschränken.",
     "s3_title": "§ 3 Nutzungsrechte",
     "s3_p1": "Der Quellcode der App steht unter der PolyForm Noncommercial License 1.0.0. Danach darfst du die App für jeden nicht-kommerziellen Zweck nutzen, verändern und weitergeben, auch als Schule oder andere Bildungseinrichtung.",
