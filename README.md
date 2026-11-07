@@ -40,7 +40,7 @@ The current version is 0.5.2, a closed beta released on 7 October 2026. Get it f
 
 | Platform | What you get |
 |:---|:---|
-| macOS | Native app. Needs Python 3: on the first start the app creates its own Python environment and installs its packages once, which takes a few minutes. |
+| macOS | Native app. On Apple silicon it brings its own backend and needs no Python. On Intel Macs it needs Python 3 installed and kept; the first start sets up its own Python environment from it and installs its packages once, which takes a few minutes. |
 | Windows | Installer for the desktop app, backend included. |
 | Linux | AppImage of the desktop app, backend included. |
 | Android | Signed app package. |
@@ -183,6 +183,8 @@ npm install                            # needs Node 22.12 or newer
 npm run build:win                      # per-user installer for Windows
 npm run build:linux                    # AppImage and .deb
 ```
+
+`build_macos.sh` needs Xcode. It first freezes the backend for Apple silicon with `scripts/build_backend_macos.sh`, which downloads a pinned, checksummed CPython and so needs the network; `MACOS_FROZEN_BACKEND=0` skips that for a quick local build. The app starts the frozen backend unless its project folder is a git checkout, and Intel Macs keep starting it with Python.
 
 <details>
 <summary>What the desktop build and the first start do in detail</summary>

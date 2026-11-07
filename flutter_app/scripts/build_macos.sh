@@ -4,13 +4,56 @@ set -e
 source "$(dirname "$0")/build_common.sh"
 
 BUILD_MODE="${1:---release}"
+REPO_ROOT="$(dirname "$PROJECT_DIR")"
+
+# Apple silicon Macs start this frozen server and need no Python. Intel Macs
+# keep the Python fallback bundled below. MACOS_FROZEN_BACKEND=0 skips the
+# freeze for a quicker local build. It runs first, so a failed freeze leaves
+# the build number alone.
+if [ "${MACOS_FROZEN_BACKEND:-1}" != "0" ]; then
+  echo "=== Freezing the backend for Apple silicon ==="
+  bash "$REPO_ROOT/scripts/build_backend_macos.sh" arm64
+fi
+
+# prepare_build moves the build number in five tracked files. Unless the build
+# gets to its end, they go back to what they were, also after Ctrl-C, so a
+# broken build leaves no bump. An EXIT trap does not run in the subshells of
+# the find loops below, where an ERR trap with set -E would.
+VERSION_FILES=(
+  "$PROJECT_DIR/build_number.txt"
+  "$PROJECT_DIR/build_version.txt"
+  "$PROJECT_DIR/lib/build_info.dart"
+  "$PROJECT_DIR/pubspec.yaml"
+  "$REPO_ROOT/landing-page/public/version.json"
+)
+SAVED_VERSIONS="$(mktemp -d)"
+for index in "${!VERSION_FILES[@]}"; do
+  if [ -f "${VERSION_FILES[$index]}" ]; then
+    cp -p "${VERSION_FILES[$index]}" "$SAVED_VERSIONS/$index"
+  fi
+done
+BUILD_FINISHED=0
+restore_versions() {
+  if [ "$BUILD_FINISHED" = 1 ]; then
+    rm -rf "$SAVED_VERSIONS"
+    return
+  fi
+  for index in "${!VERSION_FILES[@]}"; do
+    if [ -f "$SAVED_VERSIONS/$index" ]; then
+      cp -p "$SAVED_VERSIONS/$index" "${VERSION_FILES[$index]}"
+    fi
+  done
+  rm -rf "$SAVED_VERSIONS"
+  echo "=== Build failed, the version files are back to build $(cat "$PROJECT_DIR/build_number.txt" 2>/dev/null) ===" >&2
+}
+trap restore_versions EXIT
+
 prepare_build "build_macos.sh"
 
 cd "$PROJECT_DIR"
 flutter clean
 flutter build macos $BUILD_MODE --build-number="$BUILD_NUM"
 
-REPO_ROOT="$(dirname "$PROJECT_DIR")"
 PRODUCT_NAME="$(sed -n 's/^PRODUCT_NAME = //p' "$PROJECT_DIR/macos/Runner/Configs/AppInfo.xcconfig")"
 APP_BUNDLE="$PROJECT_DIR/build/macos/Build/Products/Release/$PRODUCT_NAME.app"
 BACKEND_DEST="$APP_BUNDLE/Contents/Resources/backend"
@@ -21,7 +64,11 @@ mkdir -p "$BACKEND_DEST"
 
 cp -R "$REPO_ROOT/app" "$BACKEND_DEST/app"
 cp "$REPO_ROOT/requirements.txt" "$BACKEND_DEST/requirements.txt"
+cp "$REPO_ROOT/requirements-desktop.txt" "$BACKEND_DEST/requirements-desktop.txt"
 cp "$REPO_ROOT/calendar_sync.py" "$BACKEND_DEST/calendar_sync.py" 2>/dev/null || true
+if [ "${MACOS_FROZEN_BACKEND:-1}" != "0" ]; then
+  ditto "$REPO_ROOT/build/freeze-macos-arm64/dist/server" "$BACKEND_DEST/server"
+fi
 
 echo "Backend bundled ($(du -sh "$BACKEND_DEST" | cut -f1))"
 
@@ -44,6 +91,16 @@ ENTITLEMENTS="$PROJECT_DIR/macos/Runner/Release.entitlements"
 seal_adhoc() {
   [ -n "$MACOS_SIGN_IDENTITY" ] && return 0
   echo "=== Re-sealing the ad-hoc signature after bundling ==="
+  # The frozen server and its libraries carry their own signatures, which the
+  # seal over the bundle then covers, so they are signed first.
+  if [ -d "$BACKEND_DEST/server" ]; then
+    while IFS= read -r -d '' f; do
+      if file -b "$f" | grep -q 'Mach-O'; then
+        codesign --force --sign - "$f"
+      fi
+    done < <(find "$BACKEND_DEST/server" -type f \( -perm -111 -o -name '*.dylib' -o -name '*.so' \) -print0)
+    codesign --verify --strict "$BACKEND_DEST/server/server"
+  fi
   codesign --force --sign - --entitlements "$ENTITLEMENTS" "$APP_BUNDLE"
   codesign --verify --deep --strict "$APP_BUNDLE"
 }
@@ -139,6 +196,8 @@ notarize_app() {
 seal_adhoc
 codesign_app
 notarize_app
+
+BUILD_FINISHED=1
 
 echo "=== Build complete: $VERSION_NAME Build $BUILD_NUM ==="
 echo "Output: build/macos/Build/Products/Release/"

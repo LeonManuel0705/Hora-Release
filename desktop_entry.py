@@ -15,11 +15,23 @@ directory); see app/paths.py.
 
 import os
 
-from app import local_ai
-from app.app import app, socketio
+
+def load_settings() -> None:
+    # The Mac app keeps its .env next to the data folder, where the Python
+    # backend always read it. It can hold the SECRET_KEY that encrypts that
+    # data, so it has to be loaded before the app module derives its keys.
+    settings = os.environ.get("HUB_ENV_FILE")
+    if settings and os.path.isfile(settings):
+        from dotenv import load_dotenv
+
+        load_dotenv(settings)
 
 
 def main() -> None:
+    load_settings()
+    from app import local_ai
+    from app.app import app, socketio
+
     local_ai.install_shutdown_hooks()
     host = os.environ.get("HUB_HOST", "127.0.0.1")
     port = int(os.environ.get("HUB_PORT", "5050"))

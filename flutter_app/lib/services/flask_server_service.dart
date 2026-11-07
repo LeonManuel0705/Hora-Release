@@ -16,11 +16,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../brand.dart';
 import '../build_info.dart';
+import 'backend_setup.dart';
 import 'legacy_import.dart';
 
 enum FlaskServerState { idle, starting, ready, error, alreadyRunning }
 
-enum SetupResult { success, brewNotFound, error, unsupportedPlatform }
+enum _Wait { ready, exited, timedOut }
 
 class FlaskServerService {
   static final FlaskServerService _instance = FlaskServerService._internal();
@@ -35,8 +36,10 @@ class FlaskServerService {
   bool _externalServer = false;
   String? _errorMessage;
 
-  bool isPythonMissing = false;
-  bool isSettingUp = false;
+  final _host = const HostSystem();
+  StartProblem problem = StartProblem.none;
+  String? errorDetail;
+  StartFailure? _packagesFailure;
   final ValueNotifier<String> setupProgress = ValueNotifier('');
 
   final ValueNotifier<FlaskServerState> state =
@@ -147,20 +150,23 @@ class FlaskServerService {
 
   Future<bool> confirmBackend() async {
     if (await _passesHandshake()) return true;
-    _errorMessage =
-        'Der Server auf Port $port hat sich nicht als ${Brand.name} ausgewiesen.\n'
-        'Versuch es noch einmal.';
-    state.value = FlaskServerState.error;
+    _fail(StartFailure('Das Programm auf Port $port hat sich nicht als ${Brand.name} ausgewiesen.\n'
+        'Versuch es noch einmal.'));
     return false;
+  }
+
+  void _fail(StartFailure failure) {
+    _errorMessage = failure.message;
+    errorDetail = failure.detail;
+    problem = failure.problem;
+    setupProgress.value = '';
+    state.value = FlaskServerState.error;
   }
 
   Future<String?> fetchLoginCode() =>
       requestLoginCode(Uri.parse(url), _desktopToken);
 
-  String get _portTakenMessage => 'Port $port ist schon belegt.\n'
-      'Dort läuft ein anderes Programm, zum Beispiel ein älteres ${Brand.name}, '
-      'das noch im Hintergrund läuft, oder eines aus dem Terminal. '
-      'Beende es und versuch es noch einmal.';
+  String get _portTakenMessage => StartText.portTaken(port).message;
 
   String get _homeDir =>
       Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'] ?? '';
@@ -207,7 +213,7 @@ class FlaskServerService {
     final outcome = await LegacyImport.copyInto(
       legacy: legacy,
       target: _defaultProjectPath,
-      python: await _findPythonPath(legacy),
+      python: await _findPythonPath(legacy, developer: false),
     );
     if (kDebugMode) print('FlaskServer: Import from $legacy: $outcome');
     switch (outcome) {
@@ -234,7 +240,9 @@ class FlaskServerService {
 
     state.value = FlaskServerState.starting;
     _errorMessage = null;
-    isPythonMissing = false;
+    errorDetail = null;
+    problem = StartProblem.none;
+    setupProgress.value = '';
 
     // 1. Reuse an already-running server only if it answers the handshake for
     //    this run's token; anything else on the port is refused.
@@ -251,10 +259,7 @@ class FlaskServerService {
       leftovers = sole ? await _ownLeftovers() : <int>{};
       if (leftovers.isEmpty) {
         if (!await _passesHandshake()) {
-          _errorMessage = !sole && _lockContended
-              ? '${Brand.name} läuft schon in einem anderen Fenster.'
-              : _portTakenMessage;
-          state.value = FlaskServerState.error;
+          _fail(StartFailure(!sole && _lockContended ? '${Brand.name} läuft schon in einem anderen Fenster.' : _portTakenMessage));
           return;
         }
         _externalServer = true;
@@ -273,20 +278,34 @@ class FlaskServerService {
     }
     final located = await _resolveProjectRoot();
     if (located == null || p.equals(located, _defaultProjectPath)) {
-      String? problem;
+      String? importProblem;
       try {
-        problem = await _importLegacyData(sole: sole || !_lockContended);
+        importProblem = await _importLegacyData(sole: sole || !_lockContended);
       } catch (_) {
-        problem = 'Die alten Daten ließen sich nicht übernehmen.\n'
+        importProblem = 'Die alten Daten ließen sich nicht übernehmen.\n'
             'Der alte Ordner ist unverändert. Versuch es noch einmal.';
       }
-      if (problem != null) {
-        _errorMessage = problem;
-        state.value = FlaskServerState.error;
+      if (importProblem != null) {
+        _fail(StartFailure(importProblem));
         return;
       }
     }
-    await _extractBundledBackend();
+
+    final frozen = Platform.isMacOS
+        ? await frozenServerFor(
+            host: _host,
+            executable: Platform.resolvedExecutable,
+            located: located,
+            rootOverride: _env('ROOT') != null,
+          )
+        : null;
+    if (frozen != null) {
+      await _killExistingServerOnPort(only: sole ? leftovers : const <int>{});
+      await _startFrozen(frozen, located ?? _defaultProjectPath);
+      return;
+    }
+
+    final copyFailure = await _extractBundledBackend();
 
     // Clear a dead listener squatting the port, or the backend an earlier run
     // of this app left behind, so the one started now runs the current code.
@@ -294,85 +313,163 @@ class FlaskServerService {
 
     final root = await _resolveProjectRoot();
     if (root == null) {
-      _errorMessage = 'Projektordner nicht gefunden.\n'
-          'Erwartet: Documents/${Brand.name} mit app/app.py';
-      state.value = FlaskServerState.error;
+      _fail(copyFailure ??
+          const StartFailure('Projektordner nicht gefunden.\n'
+              'Erwartet: Documents/${Brand.name} mit app/app.py'));
       return;
     }
 
-    final found = await _findPythonPath(root);
+    final developer = developerSource(_host, root, envRoot: _env('ROOT'));
+    final found = await _findPythonPath(root, developer: developer);
     if (found == null) {
-      isPythonMissing = true;
-      _errorMessage = 'Python 3 wurde nicht gefunden.\n'
-          'Bitte installiere Python 3.';
-      state.value = FlaskServerState.error;
+      _fail(Platform.isMacOS ? StartText.pythonMissing : StartText.pythonNotFound);
       return;
     }
+    if (!p.isWithin(root, found)) setupProgress.value = StartText.environment;
     final pythonPath = await ownEnvironment(root, found);
-    await _syncPipDependencies(root, pythonPath);
-    final listenersBefore = await _listenerPids();
+    if (!await _syncPipDependencies(root, pythonPath, checkout: developer)) return;
+    await _launch(
+      pythonPath,
+      ['-m', 'app.app'],
+      root,
+      backendEnvironment(token: _desktopToken, port: port),
+      frozen: false,
+      checkout: developer,
+    );
+  }
 
+  // The Python backend keeps the variables it always got. Both backends also
+  // get the app's version and build, which a backend without flutter_app/ next
+  // to it cannot read itself.
+  @visibleForTesting
+  static Map<String, String> backendEnvironment({required String token, required int port, String? frozenProject}) => {
+        'HUB_HOST': '127.0.0.1',
+        'HUB_DESKTOP_TOKEN': token,
+        'HUB_PORT': '$port',
+        'HUB_EXIT_WITH_PARENT': '1',
+        'HUB_APP_VERSION': BuildInfo.versionName,
+        'HUB_APP_BUILD': '${BuildInfo.buildNumber}',
+        if (frozenProject == null)
+          'FLASK_ENV': 'development'
+        else ...{
+          'HUB_DATA_DIR': p.join(frozenProject, 'data'),
+          'HUB_ENV_FILE': p.join(frozenProject, '.env'),
+          'PYTHONUNBUFFERED': '1',
+        },
+      };
+
+  // A git checkout or the folder named in HUB_ROOT is developer source: it finds
+  // its Python, syncs its packages and starts exactly as before.
+  @visibleForTesting
+  static bool developerSource(HostSystem host, String root, {String? envRoot}) =>
+      (envRoot != null && p.equals(envRoot, root)) || _isCheckout(host, root);
+
+  static bool _isCheckout(HostSystem host, String root) {
+    final git = p.join(root, '.git');
+    return host.isFile(git) || host.isDirectory(git);
+  }
+
+  // A git checkout or a folder named in HUB_ROOT is developer source and keeps
+  // running with Python, exactly as before; everything else gets the frozen
+  // backend from the app bundle when it runs on this Mac.
+  @visibleForTesting
+  static Future<String?> frozenServerFor({
+    required HostSystem host,
+    required String executable,
+    required String? located,
+    required bool rootOverride,
+  }) async {
+    if (located != null && (rootOverride || _isCheckout(host, located))) return null;
+    final server = FrozenBackend.find(host, executable);
+    if (server == null || !await FrozenBackend.runsHere(host, server)) return null;
+    return server;
+  }
+
+  Future<void> _startFrozen(String server, String project) async {
     try {
-      if (kDebugMode) {
-        print('FlaskServer: Starting with $pythonPath in $root');
-      }
+      Directory(project).createSync(recursive: true);
+      Directory(project).listSync();
+    } on FileSystemException catch (error) {
+      final denied = error.osError?.errorCode == 1;
+      _fail(denied ? StartText.documentsDenied(project) : StartText.notStartable('${error.message}: ${error.path}'));
+      return;
+    }
+    await FrozenBackend.clearQuarantine(_host, server);
+    await _launch(
+      server,
+      const [],
+      project,
+      backendEnvironment(token: _desktopToken, port: port, frozenProject: project),
+      frozen: true,
+    );
+  }
 
-      _flaskProcess = await Process.start(
-        pythonPath,
-        ['-m', 'app.app'],
-        workingDirectory: root,
-        environment: {
-          ...Platform.environment,
-          'HUB_HOST': '127.0.0.1',
-          'FLASK_ENV': 'development',
-          'HUB_DESKTOP_TOKEN': _desktopToken,
-          'HUB_PORT': '$port',
-          'HUB_EXIT_WITH_PARENT': '1',
-        },
+  Future<void> _launch(
+    String executable,
+    List<String> arguments,
+    String workingDirectory,
+    Map<String, String> environment, {
+    required bool frozen,
+    bool checkout = false,
+  }) async {
+    final listenersBefore = await _listenerPids();
+    final output = OutputTail();
+    final Process process;
+    try {
+      if (kDebugMode) print('FlaskServer: Starting $executable in $workingDirectory');
+      process = await _host.start(
+        executable,
+        arguments,
+        workingDirectory: workingDirectory,
+        environment: {...Platform.environment, ...environment},
       );
+    } on ProcessException catch (error) {
+      _fail(StartText.notStartable(error.message));
+      return;
+    }
+    _flaskProcess = process;
+    void echo(String line) {
+      if (kDebugMode) print('Backend: $line');
+    }
 
-      _flaskProcess!.stdout.transform(const SystemEncoding().decoder).listen(
-        (data) {
-          if (kDebugMode) print('Flask stdout: $data');
-        },
-      );
+    final streams = Future.wait([output.follow(process.stdout, echo), output.follow(process.stderr, echo)]);
+    Future<StartFailure> explain(int code, {required bool running}) async {
+      await streams.timeout(const Duration(seconds: 1), onTimeout: () => const []);
+      final failure = running
+          ? StartText.crashed(output.lines, code)
+          : StartText.exited(output.lines, code, frozen: frozen, checkout: checkout, packages: _packagesFailure, port: port);
+      if (failure.reinstallPackages && !checkout) _forgetPackages(workingDirectory);
+      return failure;
+    }
 
-      _flaskProcess!.stderr.transform(const SystemEncoding().decoder).listen(
-        (data) {
-          if (kDebugMode) print('Flask stderr: $data');
-        },
-      );
-
-      _flaskProcess!.exitCode.then((code) {
-        if (state.value == FlaskServerState.ready ||
-            state.value == FlaskServerState.starting) {
-          if (kDebugMode) print('FlaskServer: Process exited with code $code');
-          _errorMessage = 'Server unerwartet beendet (Code: $code)';
-          state.value = FlaskServerState.error;
-          _flaskProcess = null;
-        }
-      });
-
-      final ready = await _waitForServer();
-      if (ready && !await _passesHandshake()) {
-        _errorMessage = _portTakenMessage;
-        state.value = FlaskServerState.error;
-        await _killProcess();
-      } else if (ready) {
-        await _rememberServer(listenersBefore);
-        state.value = FlaskServerState.ready;
-        if (kDebugMode) print('FlaskServer: Ready on port $port');
-      } else {
-        _errorMessage = 'Server konnte nicht gestartet werden.\n'
-            'Timeout nach 15 Sekunden.';
-        state.value = FlaskServerState.error;
-        await _killProcess();
-      }
-    } catch (e) {
-      _errorMessage = 'Fehler beim Starten: $e';
-      state.value = FlaskServerState.error;
+    final exited = process.exitCode;
+    final outcome = await _waitForServer(exited);
+    if (outcome == _Wait.ready && !await _passesHandshake()) {
+      _fail(StartFailure(_portTakenMessage));
+      await _killProcess();
+    } else if (outcome == _Wait.ready) {
+      await _rememberServer(listenersBefore);
+      state.value = FlaskServerState.ready;
+      if (kDebugMode) print('FlaskServer: Ready on port $port');
+      unawaited(exited.then((code) async {
+        if (_flaskProcess != process) return;
+        _flaskProcess = null;
+        if (state.value == FlaskServerState.ready) _fail(await explain(code, running: true));
+      }));
+    } else if (outcome == _Wait.exited) {
+      _flaskProcess = null;
+      _fail(await explain(await exited, running: false));
+    } else {
+      _fail(StartText.timedOut(output.lines));
       await _killProcess();
     }
+  }
+
+  void _forgetPackages(String root) {
+    try {
+      final hash = File(p.join(root, '.requirements_hash'));
+      if (hash.existsSync()) hash.deleteSync();
+    } catch (_) {}
   }
 
   Future<void> restart() async {
@@ -389,175 +486,6 @@ class FlaskServerService {
     }
     await _killProcess();
     state.value = FlaskServerState.idle;
-  }
-
-  Future<SetupResult> setupPython() async {
-    // Automatic Python installation is implemented via Homebrew and is
-    // macOS-only. On Windows/Linux, direct the user to install Python manually
-    // (the UI offers a python.org link).
-    if (!Platform.isMacOS) {
-      setupProgress.value =
-          'Automatische Installation wird nur auf macOS unterstützt.\n'
-          'Bitte installiere Python 3 manuell (python.org) und starte neu.';
-      return SetupResult.unsupportedPlatform;
-    }
-
-    if (isSettingUp) return SetupResult.error;
-    isSettingUp = true;
-    setupProgress.value = 'Python-Installation wird vorbereitet...';
-
-    try {
-      final root = await _resolveProjectRoot() ?? _defaultProjectPath;
-
-      String? pythonPath = await _findSystemPython3();
-
-      if (pythonPath == null) {
-        setupProgress.value = 'Prüfe ob Homebrew verfügbar ist...';
-        final brewWhich = await Process.run('which', ['brew']);
-        if (brewWhich.exitCode == 0) {
-          setupProgress.value = 'Installiere Python 3 via Homebrew...\n'
-              'Das kann einige Minuten dauern.';
-          final brewResult = await _runProcessWithProgress(
-            'brew',
-            ['install', 'python3'],
-            progressPrefix: 'Homebrew',
-          );
-          if (brewResult != 0) {
-            setupProgress.value = 'Homebrew-Installation fehlgeschlagen.';
-            isSettingUp = false;
-            return SetupResult.error;
-          }
-          pythonPath = await _findSystemPython3();
-        } else {
-          setupProgress.value = 'Homebrew nicht gefunden.\n'
-              'Prüfe Xcode Command Line Tools...';
-          if (File('/usr/bin/python3').existsSync()) {
-            pythonPath = '/usr/bin/python3';
-          }
-        }
-      }
-
-      if (pythonPath == null) {
-        setupProgress.value = 'Python 3 konnte nicht installiert werden.\n'
-            'Bitte installiere Homebrew oder Python manuell.';
-        isSettingUp = false;
-        return SetupResult.brewNotFound;
-      }
-
-      if (kDebugMode) print('FlaskServer: Setup using Python at $pythonPath');
-
-      final venvPath = p.join(root, 'venv');
-      if (!Directory(venvPath).existsSync()) {
-        setupProgress.value = 'Erstelle virtuelle Umgebung...';
-        final venvResult = await Process.run(
-          pythonPath,
-          ['-m', 'venv', 'venv'],
-          workingDirectory: root,
-        );
-        if (venvResult.exitCode != 0) {
-          final stderr = (venvResult.stderr as String).trim();
-          setupProgress.value = 'venv-Erstellung fehlgeschlagen.\n$stderr';
-          isSettingUp = false;
-          return SetupResult.error;
-        }
-      }
-
-      final venvPython = p.join(venvPath, 'bin', 'python3');
-      final reqPath = p.join(root, 'requirements.txt');
-      if (File(reqPath).existsSync()) {
-        setupProgress.value = 'Installiere Abhängigkeiten...\n'
-            'Das kann einige Minuten dauern.';
-        final pipResult = await _runProcessWithProgress(
-          File(venvPython).existsSync() ? venvPython : pythonPath,
-          ['-m', 'pip', 'install', '-r', reqPath],
-          progressPrefix: 'pip',
-          workingDirectory: root,
-        );
-        if (pipResult != 0) {
-          setupProgress.value = 'pip install fehlgeschlagen.';
-          isSettingUp = false;
-          return SetupResult.error;
-        }
-      }
-
-      setupProgress.value = 'Installation abgeschlossen. Server wird gestartet...';
-      isPythonMissing = false;
-      isSettingUp = false;
-
-      await start();
-      return SetupResult.success;
-    } catch (e) {
-      setupProgress.value = 'Unerwarteter Fehler: $e';
-      isSettingUp = false;
-      return SetupResult.error;
-    }
-  }
-
-  Future<String?> _findSystemPython3() async {
-    for (final path in [
-      '/usr/bin/python3',
-      '/usr/local/bin/python3',
-      '/opt/homebrew/bin/python3'
-    ]) {
-      if (File(path).existsSync()) {
-        try {
-          final version = await Process.run(path, ['--version']);
-          final versionStr = '${version.stdout}${version.stderr}';
-          if (versionStr.contains('Python 3')) return path;
-        } catch (_) {}
-      }
-    }
-
-    try {
-      final result = await Process.run('which', ['python3']);
-      if (result.exitCode == 0) {
-        final path = (result.stdout as String).trim();
-        if (path.isNotEmpty) {
-          final version = await Process.run(path, ['--version']);
-          final versionStr = '${version.stdout}${version.stderr}';
-          if (versionStr.contains('Python 3')) return path;
-        }
-      }
-    } catch (_) {}
-
-    return null;
-  }
-
-  Future<int> _runProcessWithProgress(
-    String executable,
-    List<String> args, {
-    String progressPrefix = '',
-    String? workingDirectory,
-  }) async {
-    try {
-      final process = await Process.start(
-        executable,
-        args,
-        workingDirectory: workingDirectory,
-      );
-      final prefix = progressPrefix.isNotEmpty ? '$progressPrefix: ' : '';
-
-      process.stdout.transform(const SystemEncoding().decoder).listen((data) {
-        final line = data.trim();
-        if (line.isNotEmpty) {
-          setupProgress.value = '$prefix$line';
-          if (kDebugMode) print('Setup stdout: $line');
-        }
-      });
-
-      process.stderr.transform(const SystemEncoding().decoder).listen((data) {
-        final line = data.trim();
-        if (line.isNotEmpty) {
-          setupProgress.value = '$prefix$line';
-          if (kDebugMode) print('Setup stderr: $line');
-        }
-      });
-
-      return await process.exitCode;
-    } catch (e) {
-      if (kDebugMode) print('Setup process error: $e');
-      return -1;
-    }
   }
 
   // Only processes LISTENING on 127.0.0.1:port, where the backend binds, count —
@@ -696,7 +624,8 @@ class FlaskServerService {
     }
   }
 
-  Future<String?> _findPythonPath(String projectRoot) async {
+  Future<String?> _findPythonPath(String projectRoot, {required bool developer}) async {
+    if (Platform.isMacOS && !developer) return (await MacPython.locate(_host, root: projectRoot)).path;
     final venvPaths = Platform.isWindows
         ? [
             p.join(projectRoot, 'venv', 'Scripts', 'python.exe'),
@@ -786,39 +715,83 @@ class FlaskServerService {
     }
   }
 
-  Future<void> _syncPipDependencies(String root, String pythonPath) async {
-    final reqFile = File(p.join(root, 'requirements.txt'));
-    if (!reqFile.existsSync()) return;
+  Future<bool> _syncPipDependencies(String root, String pythonPath, {required bool checkout}) async {
+    _packagesFailure = null;
+    final sync = await syncPackages(
+      host: _host,
+      root: root,
+      python: pythonPath,
+      checkout: checkout,
+      progress: (text) => setupProgress.value = text,
+    );
+    setupProgress.value = '';
+    if (kDebugMode) {
+      if (sync.failure case final failure?) print('FlaskServer: pip failed: ${failure.detail}');
+    }
+    if (sync.proceed) {
+      _packagesFailure = sync.failure;
+      return true;
+    }
+    _fail(sync.failure!);
+    return false;
+  }
+
+  // A git checkout is synced exactly as before: requirements.txt, the old
+  // hash, a quiet pip without time limits, and the backend starts whatever pip
+  // says. An extracted backend installs the desktop subset with progress and
+  // limits, and stops on a failed first install, since nothing could run yet.
+  @visibleForTesting
+  static Future<({bool proceed, StartFailure? failure})> syncPackages({
+    required HostSystem host,
+    required String root,
+    required String python,
+    required bool checkout,
+    required void Function(String text) progress,
+  }) async {
+    final desktop = File(p.join(root, 'requirements-desktop.txt'));
+    final requirements = !checkout && desktop.existsSync() ? desktop : File(p.join(root, 'requirements.txt'));
+    if (!requirements.existsSync()) return (proceed: true, failure: null);
 
     final hashFile = File(p.join(root, '.requirements_hash'));
-    final currentHash = reqFile.readAsStringSync().hashCode.toString();
-    if (hashFile.existsSync() &&
-        hashFile.readAsStringSync().trim() == currentHash) {
-      return;
+    final content = requirements.readAsStringSync();
+    final currentHash = checkout ? content.hashCode.toString() : sha256.convert(utf8.encode(content)).toString();
+    final installedBefore = hashFile.existsSync();
+    if (installedBefore && hashFile.readAsStringSync().trim() == currentHash) return (proceed: true, failure: null);
+
+    progress(StartText.setup);
+    if (checkout) {
+      final result = await host.run(
+        python,
+        ['-m', 'pip', 'install', '-r', requirements.path, '--quiet'],
+        workingDirectory: root,
+        timeout: null,
+      );
+      if (result?.exitCode == 0) {
+        _rememberHash(hashFile, currentHash);
+        return (proceed: true, failure: null);
+      }
+      return (proceed: true, failure: result == null ? null : PipInstall.explain(const LineSplitter().convert('${result.stderr}')));
     }
 
-    if (kDebugMode) print('FlaskServer: Syncing pip dependencies...');
-    setupProgress.value = 'Einmalige Einrichtung: Pakete werden installiert …\n'
-        'Das kann ein paar Minuten dauern.';
-    try {
-      // `python -m pip` works identically on every platform and avoids having
-      // to locate a pip binary (which differs: bin/pip vs Scripts/pip.exe).
-      final result = await Process.run(
-        pythonPath,
-        ['-m', 'pip', 'install', '-r', reqFile.path, '--quiet'],
-        workingDirectory: root,
-      );
-      if (result.exitCode == 0) {
-        hashFile.writeAsStringSync(currentHash);
-        if (kDebugMode) print('FlaskServer: pip sync done');
-      } else {
-        if (kDebugMode) print('FlaskServer: pip sync failed: ${result.stderr}');
-      }
-    } catch (e) {
-      if (kDebugMode) print('FlaskServer: pip sync error: $e');
-    } finally {
-      setupProgress.value = '';
+    final failure = await PipInstall.run(
+      host: host,
+      python: python,
+      requirements: requirements.path,
+      workingDirectory: root,
+      progress: progress,
+    );
+    if (failure == null) {
+      _rememberHash(hashFile, currentHash);
+      return (proceed: true, failure: null);
     }
+    return (proceed: installedBefore, failure: failure);
+  }
+
+  // An unwritable hash only means pip runs again next time, as before.
+  static void _rememberHash(File file, String hash) {
+    try {
+      file.writeAsStringSync(hash);
+    } on FileSystemException catch (_) {}
   }
 
   String? _findBundledBackend() {
@@ -869,22 +842,22 @@ class FlaskServerService {
       rethrow;
     }
     if (previous.existsSync()) previous.deleteSync(recursive: true);
-    for (final name in ['requirements.txt', 'calendar_sync.py']) {
+    for (final name in ['requirements.txt', 'requirements-desktop.txt', 'calendar_sync.py']) {
       final source = File(p.join(bundle, name));
       if (source.existsSync()) source.copySync(p.join(dest, name));
     }
     File(p.join(dest, _installedBuildFile)).writeAsStringSync('$build\n');
   }
 
-  Future<bool> _extractBundledBackend() async {
+  Future<StartFailure?> _extractBundledBackend() async {
     final bundlePath = _findBundledBackend();
     if (bundlePath == null) {
       if (kDebugMode) print('FlaskServer: No bundled backend found in app bundle');
-      return false;
+      return null;
     }
 
     final home = _homeDir;
-    if (home.isEmpty) return false;
+    if (home.isEmpty) return null;
 
     final dest = _defaultProjectPath;
     const build = BuildInfo.buildNumber;
@@ -893,7 +866,7 @@ class FlaskServerService {
     // a folder this app extracted is refreshed when the app's build changes.
     if (!bundleIsNewer(dest, build)) {
       if (kDebugMode) print('FlaskServer: Backend at $dest is current');
-      return true;
+      return null;
     }
 
     final updating = File(p.join(dest, 'app', 'app.py')).existsSync();
@@ -901,14 +874,20 @@ class FlaskServerService {
       if (kDebugMode) {
         print('FlaskServer: ${updating ? 'Updating' : 'Extracting'} backend from $bundlePath to $dest');
       }
-      setupProgress.value = updating ? 'Backend wird aktualisiert …' : 'Backend wird kopiert …';
+      setupProgress.value = updating ? '${Brand.name} wird aktualisiert …' : '${Brand.name} wird eingerichtet …';
       installBundledBackend(bundlePath, dest, build);
       setupProgress.value = '';
-      return true;
+      return null;
+    } on FileSystemException catch (e) {
+      setupProgress.value = '';
+      if (kDebugMode) print('FlaskServer: Backend copy failed: $e');
+      return e.osError?.errorCode == 1
+          ? StartText.documentsDenied(dest)
+          : StartText.notStartable('${e.message}: ${e.path}');
     } catch (e) {
       setupProgress.value = '';
       if (kDebugMode) print('FlaskServer: Backend copy failed: $e');
-      return false;
+      return StartText.notStartable('$e');
     }
   }
 
@@ -949,37 +928,47 @@ class FlaskServerService {
     return File(p.join(dir, 'app', 'app.py')).existsSync();
   }
 
-  Future<bool> _waitForServer({
-    int maxRetries = 30,
-    Duration interval = const Duration(milliseconds: 500),
+  Future<_Wait> _waitForServer(
+    Future<int> exited, {
+    Duration limit = const Duration(seconds: 60),
   }) async {
-    for (int i = 0; i < maxRetries; i++) {
-      await Future.delayed(interval);
-      if (await _isServerRunning()) return true;
-
-      if (_flaskProcess == null) return false;
+    var gone = false;
+    unawaited(exited.then((_) => gone = true));
+    final clock = Stopwatch()..start();
+    var hint = 0;
+    while (clock.elapsed < limit) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (gone) return _Wait.exited;
+      if (await _isServerRunning()) return gone ? _Wait.exited : _Wait.ready;
+      if (hint == 0 && clock.elapsed >= const Duration(seconds: 8)) {
+        hint = 1;
+        setupProgress.value = StartText.slow;
+      } else if (hint == 1 && clock.elapsed >= const Duration(seconds: 30)) {
+        hint = 2;
+        setupProgress.value = StartText.verySlow;
+      }
     }
-    return false;
+    return gone ? _Wait.exited : _Wait.timedOut;
   }
 
   Future<void> _killProcess() async {
-    if (_flaskProcess == null) return;
+    final process = _flaskProcess;
+    if (process == null) return;
+    _flaskProcess = null;
 
     try {
       if (kDebugMode) print('FlaskServer: Sending SIGTERM');
-      _flaskProcess!.kill(ProcessSignal.sigterm);
+      process.kill(ProcessSignal.sigterm);
 
-      final exited = await _flaskProcess!.exitCode
+      final exited = await process.exitCode
           .timeout(const Duration(seconds: 3), onTimeout: () => -1);
 
       if (exited == -1) {
         if (kDebugMode) print('FlaskServer: SIGTERM timeout, sending SIGKILL');
-        _flaskProcess!.kill(ProcessSignal.sigkill);
+        process.kill(ProcessSignal.sigkill);
       }
     } catch (e) {
       if (kDebugMode) print('FlaskServer: Error killing process: $e');
     }
-
-    _flaskProcess = null;
   }
 }

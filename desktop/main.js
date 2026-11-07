@@ -13,7 +13,8 @@ const store = require('./src/store');
 const { Backend, proveBackend, requestLoginCode } = require('./src/backend');
 const { browserLoginUrl } = require('./src/rules');
 const { hardenContents, hardenSession, isHubUrl, openExternally } = require('./src/security');
-const { canvasColor, createMainWindow } = require('./src/window');
+const { createLoginItem, startedHidden } = require('./src/login-item');
+const { canvasColor, createMainWindow, revealWindow } = require('./src/window');
 const { createScreens } = require('./src/screens');
 const { takeOver } = require('./src/takeover');
 const { createTray, trayIsVisible } = require('./src/tray');
@@ -23,6 +24,8 @@ const THEME_SOURCES = new Set(['system', 'light', 'dark']);
 const QUICK_NOTE_SHORTCUT = 'CommandOrControl+Alt+N';
 
 const token = crypto.randomBytes(32).toString('hex');
+const openedAtLogin = startedHidden(process.argv);
+const loginItem = createLoginItem({ app, shell, appId: config.appId, name: config.brand.name });
 
 let mainWindow = null;
 let backend = null;
@@ -47,7 +50,7 @@ function showWindow() {
   const win = liveWindow();
   if (!win) return;
   if (win.isMinimized()) win.restore();
-  if (!win.isVisible()) win.show();
+  if (!win.isVisible()) revealWindow(win);
   win.focus();
 }
 
@@ -151,6 +154,7 @@ async function startBackend(withoutEncryptedFrom = null) {
   if (current !== generation || quitting) return;
   if (!result.ok) {
     screens.problem(result.problem.kind, result.problem);
+    if (openedAtLogin) showWindow();
     return;
   }
   loadHub();
@@ -235,6 +239,21 @@ function registerHubBridge() {
     const url = browserLoginUrl(config.hubUrl, await requestLoginCode(token));
     return url ? openExternally(url) : false;
   });
+
+  ipcMain.handle('hub:login-item', async (event, wanted) => {
+    if (!fromHub(event)) return null;
+    if (typeof wanted === 'boolean') {
+      try {
+        loginItem.set(wanted);
+      } catch (error) {
+        log('start at login not changed:', error.message);
+        return { ...loginItem.state(), error: error.message };
+      }
+    }
+    return loginItem.state();
+  });
+
+  ipcMain.handle('hub:login-item-settings', (event) => (fromHub(event) ? loginItem.openSettings() : false));
 
   ipcMain.on('hub:quick-note-result', (event, result) => {
     if (!fromHub(event) || !quickNote.pending) return;
@@ -334,11 +353,17 @@ async function ready() {
   screens = createScreens({ getWindow: liveWindow, onAction: onScreenAction });
   registerHubBridge();
 
-  mainWindow = createMainWindow();
+  mainWindow = createMainWindow({ hidden: openedAtLogin });
   wireWindow(mainWindow);
   screens.loading(copy.progress.starting);
 
-  setUpTray().catch((error) => log('tray setup failed:', error.message));
+  // Started at login, the app waits in the tray. Without a tray there is no
+  // other way back to the window, so it opens after all.
+  setUpTray()
+    .catch((error) => log('tray setup failed:', error.message))
+    .then(() => {
+      if (openedAtLogin && !backgroundMode) showWindow();
+    });
   registerShortcut();
 
   await cleared;

@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import ServiceManagement
 import UserNotifications
 
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
@@ -94,6 +95,43 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
           }
         }
       } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    let loginItem = FlutterMethodChannel(
+      name: "app/login-item",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    loginItem.setMethodCallHandler { call, result in
+      guard #available(macOS 13.0, *) else {
+        result(["supported": false])
+        return
+      }
+      let service = SMAppService.mainApp
+      func state() -> [String: Any] {
+        let pending = service.status == .requiresApproval
+        return ["supported": true, "enabled": service.status == .enabled || pending, "pending": pending]
+      }
+      switch call.method {
+      case "status":
+        result(state())
+      case "set":
+        let on = call.arguments as? Bool ?? false
+        do {
+          if on {
+            try service.register()
+          } else if service.status != .notRegistered {
+            try service.unregister()
+          }
+          result(state())
+        } catch {
+          result(FlutterError(code: "LOGIN_ITEM", message: error.localizedDescription, details: nil))
+        }
+      case "openSettings":
+        SMAppService.openSystemSettingsLoginItems()
+        result(true)
+      default:
         result(FlutterMethodNotImplemented)
       }
     }
