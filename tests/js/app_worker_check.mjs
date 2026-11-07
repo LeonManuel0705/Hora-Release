@@ -19,11 +19,15 @@ const tick = () => new Promise((done) => setTimeout(done, 5));
 
 class Cache {
   entries = new Map();
+  constructor(state) {
+    this.state = state;
+  }
   async match(key) {
     const hit = this.entries.get(urlOf(key));
     return hit && new Response(hit.body, { status: hit.status, headers: hit.headers });
   }
   async put(key, response) {
+    if (this.state.full && urlOf(key).includes("/__pin/")) throw new DOMException("Quota exceeded", "QuotaExceededError");
     this.entries.set(urlOf(key), { body: await response.text(), status: response.status, headers: [...response.headers] });
   }
   async keys() {
@@ -36,7 +40,7 @@ class Cache {
 
 function world() {
   const named = new Map();
-  const state = { broken: 0, online: true, deploys: 0, asked: [], held: new Map(), served: new Map(), live: new Set() };
+  const state = { broken: 0, online: true, deploys: 0, asked: [], held: new Map(), served: new Map(), live: new Set(), clock: 1e12, full: false };
   const fail = () => {
     if (state.broken < 1) return;
     state.broken -= 1;
@@ -45,7 +49,7 @@ function world() {
   const caches = {
     async open(name) {
       fail();
-      if (!named.has(name)) named.set(name, new Cache());
+      if (!named.has(name)) named.set(name, new Cache(state));
       return named.get(name);
     },
     async has(name) {
@@ -109,6 +113,7 @@ function world() {
       URL,
       TextEncoder,
       DOMException,
+      Date: { now: () => (state.clock += 1) },
       console,
     };
     scope.self = scope;
@@ -203,6 +208,10 @@ async function installed(w, files) {
   assert.equal(await startPage(), "2", "and gets the current headers of the host on the next start");
   assert.equal(await two.load("tab-c", "main.dart.js"), "code(2)", "the next start runs the new build");
   w.state.live.delete("tab-a");
+  await two.open("tab-back");
+  assert.ok(w.shells().includes(`app-shell-${one.build}`), "a tab in the back-forward cache keeps its copy for a day");
+  assert.equal(await two.load("tab-a", "main.dart.js"), "code(1)", "and its build when it comes back");
+  w.state.clock += 25 * 60 * 60 * 1000;
   await two.open("tab-d");
   assert.deepEqual(w.shells(), [`app-shell-${two.build}`], "the old copy goes once no tab runs it");
   assert.ok(!(await (await w.caches.open("app-pins")).keys()).some((request) => request.url.endsWith("tab-a")), "pins of closed tabs are dropped");
@@ -289,6 +298,38 @@ async function installed(w, files) {
   await retiring.activate();
   assert.deepEqual([...w.named.keys()], [], "it removes every offline copy");
   assert.ok(w.registration.unregistered, "and itself");
+}
+
+{
+  const w = world();
+  w.deploy(first);
+  await installed(w, first);
+  const restarted = w.worker(first);
+  w.state.full = true;
+  w.state.online = false;
+  assert.equal(await restarted.load("tab-full", "main.dart.js"), "code(1)", "a full storage only loses the pin, the files still come from the copy");
+}
+
+{
+  const w = world();
+  w.deploy(first);
+  const one = await installed(w, first);
+  w.deploy(second);
+  const release = w.hold("/pwa/main.dart.js");
+  const two = w.worker(second);
+  const install = two.install();
+  const partial = async () => (await w.caches.open(`app-shell-${two.build}`)).match("/pwa/assets/assets/ui/pages/tasks.html");
+  while (!w.state.asked.includes("/pwa/main.dart.js") || !(await partial())) await tick();
+  w.state.online = false;
+  release();
+  await assert.rejects(install);
+  await one.open("tab-short");
+  assert.ok(w.shells().includes(`app-shell-${two.build}`), "a start after an interrupted update keeps what was downloaded");
+  w.state.online = true;
+  w.state.asked.length = 0;
+  const again = w.worker(second);
+  await again.install();
+  assert.deepEqual(w.state.asked, ["/pwa/main.dart.js"], "and the next attempt only fetches what is still missing");
 }
 
 for (const [changed, failure] of [

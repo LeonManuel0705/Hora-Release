@@ -9,6 +9,7 @@ const PINS = "app-pins";
 const READY = `${BASE}__ready`;
 const FILES = `${BASE}__files`;
 const LANES = 6;
+const GRACE = 24 * 60 * 60 * 1000;
 
 const off = MANIFEST === "off";
 const build = MANIFEST && !off ? MANIFEST.build : "";
@@ -74,6 +75,9 @@ async function fill() {
   const cache = await caches.open(shellName(build));
   if (await cache.match(READY)) return;
   const known = await earlier();
+  if (!(await cache.match(FILES))) {
+    await cache.put(FILES, new Response(JSON.stringify(MANIFEST.files), { headers: { "X-Started": String(Date.now()) } }));
+  }
   const paths = Object.keys(MANIFEST.files);
   let next = 0;
   const lane = async () => {
@@ -86,7 +90,6 @@ async function fill() {
     }
   };
   await Promise.all(Array.from({ length: LANES }, lane));
-  await cache.put(FILES, new Response(JSON.stringify(MANIFEST.files)));
   await cache.put(READY, new Response(String(Date.now())));
   opened.delete(build);
 }
@@ -113,9 +116,11 @@ async function finished(id) {
   return stamp ? Number(await stamp.text()) || 0 : null;
 }
 
+const pinRecord = (id) => new Response(id, { headers: { "X-Seen": String(Date.now()) } });
+
 async function pin(client, id) {
   pins.set(client, Promise.resolve(id));
-  await (await caches.open(PINS)).put(pinUrl(client), new Response(id));
+  await (await caches.open(PINS)).put(pinUrl(client), pinRecord(id));
 }
 
 function pinned(client) {
@@ -125,7 +130,7 @@ function pinned(client) {
     const stored = await store.match(pinUrl(client));
     if (stored) return stored.text();
     const id = (await ready(build)) ? build : "";
-    await store.put(pinUrl(client), new Response(id));
+    await store.put(pinUrl(client), pinRecord(id)).catch(() => {});
     return id;
   });
   return remember(pins, client, lookup, () => true);
@@ -137,9 +142,14 @@ async function tidy() {
   const kept = new Set([build]);
   for (const request of await store.keys()) {
     const client = decodeURIComponent(request.url.slice(request.url.lastIndexOf("/") + 1));
+    const stored = await store.match(request);
+    if (!stored) continue;
+    const id = await stored.text();
     if (live.has(client)) {
-      const stored = await store.match(request);
-      if (stored) kept.add(await stored.text());
+      kept.add(id);
+      await store.put(request, pinRecord(id));
+    } else if (Date.now() - (Number(stored.headers.get("X-Seen")) || 0) < GRACE) {
+      kept.add(id);
     } else {
       pins.delete(client);
       await store.delete(request);
@@ -151,12 +161,18 @@ async function tidy() {
     if (id === null ? !name.startsWith("flutter-") : kept.has(id)) continue;
     if (id !== null) {
       const at = await finished(id);
-      const busy = !!(self.registration.installing || self.registration.waiting);
-      if (at === null ? busy : own === null || at >= own) continue;
+      if (at === null ? await unfinishedKept(name, own) : own === null || at >= own) continue;
       opened.delete(id);
     }
     await caches.delete(name);
   }
+}
+
+async function unfinishedKept(name, own) {
+  if (self.registration.installing || self.registration.waiting) return true;
+  const list = await (await caches.open(name)).match(FILES);
+  const started = list ? Number(list.headers.get("X-Started")) || 0 : 0;
+  return own === null || started > own;
 }
 
 async function retire() {
