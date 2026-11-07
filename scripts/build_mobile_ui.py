@@ -43,6 +43,7 @@ def render_pages(out):
             brand_name='__APP_BRAND__',
             brand_previous=','.join(brand.PREVIOUS_NAMES),
             brand_repository='',
+            brand_website=brand.WEBSITE,
             active=page,
             ui={'theme': '__APP_THEME__', 'motion': '__APP_MOTION__'},
             data_json='__APP_DATA__',

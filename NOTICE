@@ -67,3 +67,7 @@ PostgreSQL database on servers) and GPL-2.0 with a linking exception
 (PyInstaller, build tooling only). None of these restrict the licensing of Hora
 itself. Generated notices for the bundled web dependencies are in the NOTICES
 file produced by the Flutter build.
+
+The QR code encoder in app/static/app/js/qrcodegen.js is the QR Code generator
+library by Project Nayuki, compiled from its TypeScript source, under the MIT
+License. Its copyright and permission notice stay at the top of that file.

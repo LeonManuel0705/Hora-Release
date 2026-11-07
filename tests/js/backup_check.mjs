@@ -3,7 +3,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { resolve, dirname } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, BODIES } = await import(pathToFileURL(resolve(here, "../../app/static/app/js/backup.js")).href);
+const { wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, contents, BODIES } = await import(pathToFileURL(resolve(here, "../../app/static/app/js/backup.js")).href);
 
 const nb = String.fromCharCode(160);
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -286,6 +286,20 @@ const tests = {
     assert.deepEqual(BODIES.grades({ subject: "2", points: 12, type: "klausur", semester: "Q1", date: "2026-09-01" }), { subject: "2", points: 12, type: "klausur", date: "2026-09-01", title: "", semester: "Q1" });
     assert.deepEqual(BODIES.events({ title: "Fahrt", date: "2026-10-13", endDate: "2026-10-15", start: null, end: null, place: "Hafen", notes: "", kind: "school" }), { title: "Fahrt", date: "2026-10-13", endDate: "2026-10-15", place: "Hafen", notes: "", kind: "school" });
     assert.deepEqual(BODIES.notes({ title: "Idee", details: "x", type: "idea", created: "2026-10-01T10:00:00" }), { title: "Idee", details: "x", type: "idea", created: "2026-10-01T10:00:00" });
+  },
+  "a backup names what it holds before anything is taken over"() {
+    const file = {
+      grades: [{ subject: "m", points: 12, type: "klausur", date: "2026-10-01", semester: "Q3" }, { subject: "", points: 9, date: "2026-10-02" }],
+      deadlines: [{ kind: "Test", title: "Vektoren", date: "2026-11-12" }, { kind: "Hausaufgabe", title: "S. 40", date: "2026-11-10" }, { kind: "Hausaufgabe", title: "S. 41", date: "2026-11-11" }],
+      tasks: [{ title: "Referat" }, { title: "Erledigt", done: true }],
+      notes: [],
+      events: [{ title: "Elternabend", date: "2026-11-20" }],
+      places: { home: { name: "Lindenallee", lat: 52.52, lon: 13.4 }, school: { name: "" } },
+    };
+    assert.equal(contents(file), `1${nb}Note, 2${nb}Hausaufgaben, 1${nb}Test, 1${nb}Aufgabe, 1${nb}Termin und 1${nb}Ort`);
+    assert.equal(contents({ grades: [{ subject: "m", points: 3, date: "2026-10-01" }] }), `1${nb}Note`);
+    assert.equal(contents({}), "");
+    assert.equal(contents(null), "");
   },
   "the closing line says what came, what was there and what failed"() {
     assert.equal(summary({ settings: true, made: { grades: 84, Test: 15, Klausur: 1, tasks: 2, events: 13, places: 2 }, known: 0, failed: 0 }), `Übernommen: Stundenplan und Einstellungen, 84${nb}Noten, 15${nb}Tests, 1${nb}Klausur, 2${nb}Aufgaben, 13${nb}Termine und 2${nb}Orte.`);

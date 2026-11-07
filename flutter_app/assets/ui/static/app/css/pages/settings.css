@@ -606,6 +606,9 @@
 .catalog-card { padding: 16px 22px 6px; }
 #subjectsCard { padding: 4px 22px; }
 .set-head-action { align-self: center; margin-left: auto; }
+.set-head-actions { display: flex; flex-wrap: wrap; align-self: center; gap: 8px; margin-left: auto; }
+.set-head-actions .btn { border-radius: var(--radius-pill); }
+.is-touch .set-head-actions .btn { min-height: 44px; }
 .subject-row, .teacher-row { padding: 11px 0; }
 .teacher-row .icon-button.is-danger { color: var(--ink-muted); }
 
@@ -765,6 +768,8 @@
   .catalog-card { padding: 14px 16px 4px; }
   #subjectsCard { padding: 2px 16px; }
   .set-head-action { order: 3; height: 36px; margin-left: 0; }
+  .set-head-actions { order: 3; width: 100%; margin-left: 0; }
+  .set-head-actions .btn { flex: 1 1 0; }
   .catalog-head { flex-wrap: wrap; }
   .room-add .field-control { flex: 1; width: auto; font-size: 16px; }
   .raster-card { padding: 16px 16px 8px; }

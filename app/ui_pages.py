@@ -10,6 +10,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, g, jsonify, render_template, request, send_file
 
+from . import brand
 from . import calendar_cache
 from . import database as db
 from . import transit_service
@@ -85,6 +86,7 @@ def render_page(active):
         asset_version=int(time.time()),
         offline_worker=True,
         server_behind=code_stamp() != LOADED_CODE,
+        brand_website=brand.WEBSITE,
     )
 
 
