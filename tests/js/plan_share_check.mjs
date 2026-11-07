@@ -295,10 +295,49 @@ const tests = {
     assert.deepEqual(Object.keys(fitted.values["app-subjects"].items), ["s-mathe-lk"]);
     assert.deepEqual(Object.keys(fitted.values["app-timetable-edits"]).sort(), ["A:1:1", "B:1:1"]);
   },
-  "more blocks than this app shows are refused when replacing"() {
-    assert.throws(() => fitPlan(planOf(oberstufe()), { mine: emptyState(), defaults: empty }, { maxBlocks: 8 }), (error) => error.reason === "blocks");
-    const merged = fitPlan(planOf(oberstufe()), { mine: emptyState(), defaults: empty }, { mode: "merge", maxBlocks: 8 });
-    assert.ok(merged.dropped > 0);
+  "lessons beyond the blocks this app shows are counted, not refused"() {
+    const fitted = fitPlan(planOf(oberstufe()), { mine: emptyState(), defaults: empty }, { maxBlocks: 8 });
+    assert.equal(fitted.values["app-block-times"].blocks.length, 8);
+    assert.deepEqual([fitted.filled, fitted.dropped], [40, 2]);
+    assert.equal(Object.keys(fitted.values["app-timetable-edits"]).some((key) => Number(key.split(":")[2]) > 8), false);
+  },
+  "a plan ends at its last block with a lesson"() {
+    const tall = state({ blocks: [...twoBlocks, ...Array.from({ length: 8 }, (_, index) => ({ n: index + 3, start: `${12 + index}:00`, end: `${12 + index}:45` }))] });
+    assert.equal(planOf(tall).blocks.length, 2);
+    assert.equal(fitPlan(planOf(tall), { mine: emptyState(), defaults: empty }, { maxBlocks: 8 }).dropped, 0);
+  },
+  "merging needs the same start and end, so a double lesson does not land in a short period"() {
+    const short = [{ n: 1, start: "08:00", end: "08:45" }, { n: 2, start: "08:50", end: "09:35" }];
+    const fitted = fitPlan(planOf(state()), { mine: { ...emptyState(), blocks: short }, defaults: { ...empty, blocks: short } }, { mode: "merge" });
+    assert.deepEqual([fitted.filled, fitted.dropped, fitted.changed], [0, 2, false]);
+  },
+  "merging into a plan without A/B counts the B lessons it cannot hold"() {
+    const theirs = state();
+    theirs.timetable.B["3"] = [{ block: 2, subject: "d", room: "R2" }];
+    const mine = { ...emptyState(), blocks: clone(twoBlocks), weeks: false };
+    const fitted = fitPlan(planOf(theirs), { mine, defaults: { ...empty, blocks: twoBlocks } }, { mode: "merge" });
+    assert.deepEqual([fitted.filled, fitted.dropped], [2, 1]);
+  },
+  "a merge keeps the stored lessons of a subject that was put aside"() {
+    const mine = state();
+    mine.subjects.x = { name: "Latein", short: "Lat", hue: "olive", type: "GK", teacherId: "", room: "", custom: true, retired: true };
+    mine.edits = { "A:3:1": { subject: "x", room: "R9" } };
+    const theirs = state();
+    theirs.timetable.A["3"] = [{ block: 1, subject: "d", room: "R2" }];
+    const fitted = fitPlan(planOf(theirs), { mine, defaults: base, own: { subjects: { items: { x: { custom: true, name: "Latein", short: "Lat", hue: "olive", type: "GK" } }, removed: ["x"] } } }, { mode: "merge" });
+    assert.deepEqual(fitted.values["app-timetable-edits"]["A:3:1"], { subject: "x", room: "R9" });
+    assert.equal(fitted.kept, 3);
+  },
+  "names that objects already know make no subject"() {
+    const values = {
+      "app-subjects": JSON.parse('{"items":{"s-a":{"custom":true,"name":"A","hue":"slate","type":"GK"},"__proto__":{"custom":true,"name":"Evil","hue":"slate","type":"GK"}},"removed":[]}'),
+      "app-block-times": { v: 2, blocks: [{ n: 1, start: "08:00", end: "09:30" }] },
+      "app-timetable-edits": { "A:1:1": { subject: "s-a", room: "R" }, "A:2:1": { subject: "toString", room: "R" }, "A:3:1": { subject: "constructor", room: "R" }, "A:4:1": { subject: "hasOwnProperty", room: "R" } },
+    };
+    const model = planOfValues(values, { abReference: "2026-01-12" });
+    assert.deepEqual(model.subjects.map((item) => item.name), ["A"]);
+    assert.equal(model.lessons.filter((lesson) => lesson.week === "A").length, 1);
+    assert.equal({}.custom, undefined);
   },
   "numbers as keys on a phone are matched by name"() {
     const phone = { ...empty, subjects: { 4: { name: "Deutsch", label: "Deutsch", short: "Deu", hue: "brick" } }, courses: { 4: { type: "GK" } } };
@@ -312,7 +351,7 @@ const tests = {
     const mine = emptyState();
     mine.subjects = { c: { name: "Chor", short: "Cho", hue: "teal", type: "GK", teacherId: "", room: "Aula", custom: true } };
     mine.timetable.A["1"] = [{ block: 1, subject: "c", room: "Aula", teacher: "" }];
-    const short = planOf({ ...state(), blocks: [{ n: 1, start: "08:00", end: "08:45" }, { n: 2, start: "08:50", end: "09:35" }, { n: 3, start: "09:50", end: "10:35" }], timetable: { A: days({ 2: [{ block: 1, subject: "m", room: "R1" }, { block: 2, subject: "d", room: "R2" }, { block: 3, subject: "d", room: "R2" }] }), B: days() } });
+    const short = planOf({ ...state(), blocks: [{ n: 1, start: "08:00", end: "09:30" }, { n: 2, start: "09:30", end: "09:45" }, { n: 3, start: "09:50", end: "11:20" }], timetable: { A: days({ 2: [{ block: 1, subject: "m", room: "R1" }, { block: 2, subject: "d", room: "R2" }, { block: 3, subject: "d", room: "R2" }] }), B: days() } });
     const fitted = fitPlan(short, { mine, defaults: empty }, { mode: "merge" });
     assert.deepEqual([fitted.filled, fitted.kept, fitted.dropped], [2, 0, 1]);
     assert.deepEqual(fitted.values["app-timetable-edits"]["A:2:1"], { subject: "s-mathe-lk", room: "R1" });

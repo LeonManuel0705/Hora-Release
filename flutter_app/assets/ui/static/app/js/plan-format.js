@@ -42,10 +42,11 @@ export function planOf({ subjects, teachers, blocks, timetable, edits, weeks, ab
   const shown = weeks ? ["A", "B"] : ["A"];
   const own = record(edits);
   const people = new Map((teachers || []).map((teacher) => [teacher.id, teacher]));
+  const active = (key) => typeof key === "string" && Object.hasOwn(subjects, key) && !subjects[key].retired;
   const used = [];
   shown.forEach((week) => DAYS.forEach((day) => order.forEach(({ n }) => {
     const entry = (timetable?.[week]?.[String(day)] || []).find((item) => item.block === n);
-    if (entry && subjects[entry.subject] && !subjects[entry.subject].retired && !used.includes(entry.subject)) used.push(entry.subject);
+    if (entry && active(entry.subject) && !used.includes(entry.subject)) used.push(entry.subject);
   })));
   const rank = { LK: 0, GK: 1, SK: 2 };
   used.sort((a, b) => (rank[subjects[a].type] ?? 1) - (rank[subjects[b].type] ?? 1) || plain(subjects[a].name).localeCompare(plain(subjects[b].name), "de"));
@@ -79,7 +80,7 @@ export function planOf({ subjects, teachers, blocks, timetable, edits, weeks, ab
   return {
     subjects: list,
     teachers: staff.map((id) => ({ title: TITLES.includes(people.get(id).title) ? people.get(id).title : "", name: text(people.get(id).name).trim().slice(0, LIMIT.teacher).trim() || "?" })),
-    blocks: order.map(({ start, end }) => ({ start, end })),
+    blocks: order.slice(0, Math.max(1, ...lessons.map((lesson) => lesson.block))).map(({ start, end }) => ({ start, end })),
     weeks: !!weeks,
     reference: weeks && isDay(abReference) ? abReference : null,
     lessons,
@@ -278,7 +279,7 @@ export function planOfValues(values, school) {
   const teachers = Object.entries(record(record(values[KEYS.teachers]).items))
     .filter(([, teacher]) => bounded(teacher?.name, 1, LIMIT.teacher))
     .map(([id, teacher]) => ({ id, title: TITLES.includes(teacher.title) ? teacher.title : "", name: teacher.name.trim() }));
-  const subjects = {};
+  const subjects = Object.create(null);
   Object.entries(record(saved.items)).forEach(([key, item]) => {
     if (!item?.custom || !bounded(item.name, 1, LIMIT.name) || !HUES.includes(item.hue)) return;
     const type = TYPES.includes(item.type) ? item.type : "GK";
@@ -290,7 +291,7 @@ export function planOfValues(values, school) {
     DAYS.forEach((day) => {
       timetable[week][String(day)] = blocks.flatMap(({ n }) => {
         const cell = record(cells[`${week}:${day}:${n}`]);
-        return subjects[cell.subject] ? [{ block: n, subject: cell.subject, room: text(cell.room).slice(0, LIMIT.room) }] : [];
+        return typeof cell.subject === "string" && Object.hasOwn(subjects, cell.subject) ? [{ block: n, subject: cell.subject, room: text(cell.room).slice(0, LIMIT.room) }] : [];
       });
     });
   });
@@ -318,7 +319,6 @@ const weekParity = (reference) => {
 
 export function fitPlan(model, { mine, defaults, own = {} }, { mode = "replace", skip = [], maxBlocks = LIMIT.blocks } = {}) {
   const replace = mode !== "merge";
-  if (replace && model.blocks.length > maxBlocks) fail("blocks");
   const left = new Set(skip);
   const keys = fileKeys(mine.subjects);
   const values = wholeSchool(mine);
@@ -333,26 +333,38 @@ export function fitPlan(model, { mine, defaults, own = {} }, { mode = "replace",
   const count = { A: { filled: 0, kept: 0, dropped: 0 }, B: { filled: 0, kept: 0, dropped: 0 } };
   const placed = [];
   const chosen = model.lessons.filter((lesson) => !left.has(lesson.subject));
+  const aside = new Set(Object.entries(record(mine.edits)).filter(([, cell]) => typeof cell?.subject === "string" && Object.hasOwn(mine.subjects, cell.subject) && mine.subjects[cell.subject].retired).map(([key]) => key));
   if (replace) {
+    const fits = Math.min(model.blocks.length, maxBlocks);
     Object.keys(cells).forEach((key) => delete cells[key]);
-    ["A", "B"].forEach((week) => DAYS.forEach((day) => model.blocks.forEach((_, index) => (cells[`${week}:${day}:${index + 1}`] = null))));
+    ["A", "B"].forEach((week) => DAYS.forEach((day) => model.blocks.slice(0, fits).forEach((_, index) => (cells[`${week}:${day}:${index + 1}`] = null))));
     chosen.forEach((lesson) => (model.weeks ? [lesson.week] : ["A", "B"]).forEach((week) => {
+      if (lesson.block > fits) {
+        count[week].dropped += 1;
+        return;
+      }
       placed.push([lesson, `${week}:${lesson.day}:${lesson.block}`]);
       count[week].filled += 1;
     }));
-    values[KEYS.blocks] = { v: 2, blocks: model.blocks.map((block, index) => ({ n: index + 1, start: block.start, end: block.end })) };
+    values[KEYS.blocks] = { v: 2, blocks: model.blocks.slice(0, fits).map((block, index) => ({ n: index + 1, start: block.start, end: block.end })) };
     values[KEYS.weeks] = model.weeks;
   } else {
-    const startsAt = new Map(mine.blocks.map((block) => [block.start, block.n]));
+    const slots = new Map(mine.blocks.map((block) => [`${block.start}-${block.end}`, block.n]));
+    const twinInA = (lesson) => model.lessons.some((other) => other.week === "A" && other.day === lesson.day && other.block === lesson.block && other.subject === lesson.subject && other.room === lesson.room);
     const shifted = model.weeks && mine.weeks && isDay(model.reference) && isDay(mine.abReference) && weekParity(model.reference) !== weekParity(mine.abReference);
     const flip = (week) => (week === "A" ? "B" : "A");
     chosen.forEach((lesson) => {
-      const weeks = !mine.weeks ? (lesson.week === "A" ? ["A"] : []) : !model.weeks ? ["A", "B"] : [shifted ? flip(lesson.week) : lesson.week];
-      const n = startsAt.get(model.blocks[lesson.block - 1]?.start);
+      if (!mine.weeks && lesson.week === "B") {
+        if (!twinInA(lesson)) count.A.dropped += 1;
+        return;
+      }
+      const weeks = !mine.weeks || !model.weeks ? (mine.weeks ? ["A", "B"] : ["A"]) : [shifted ? flip(lesson.week) : lesson.week];
+      const block = model.blocks[lesson.block - 1];
+      const n = block ? slots.get(`${block.start}-${block.end}`) : undefined;
       weeks.forEach((week) => {
         const key = `${week}:${lesson.day}:${n}`;
         if (n == null) count[week].dropped += 1;
-        else if (cells[key] || placed.some(([, other]) => other === key)) count[week].kept += 1;
+        else if (cells[key] || aside.has(key) || placed.some(([, other]) => other === key)) count[week].kept += 1;
         else {
           placed.push([lesson, key]);
           count[week].filled += 1;
@@ -414,7 +426,9 @@ export function fitPlan(model, { mine, defaults, own = {} }, { mode = "replace",
   values[KEYS.rooms] = { added: [...rooms], removed: [...goneRooms] };
   const source = { abReference: replace && model.weeks && model.reference ? model.reference : mine.abReference, subjects: fileSubjects(defaults.subjects, keys) };
   const most = (field) => Math.max(count.A[field], count.B[field]);
-  return { added, filled: most("filled"), kept: most("kept"), dropped: most("dropped"), changed: replace || placed.length > 0, values: fitSchool(values, source, { ...defaults, own }).values };
+  const result = fitSchool(values, source, { ...defaults, own }).values;
+  if (!replace && aside.size) result[KEYS.lessons] = { ...record(result[KEYS.lessons]), ...Object.fromEntries([...aside].map((key) => [key, mine.edits[key]])) };
+  return { added, filled: most("filled"), kept: most("kept"), dropped: most("dropped"), changed: replace || placed.length > 0, values: result };
 }
 
 export const changedKeys = (before, after) => PLAN_KEYS.filter((key) => !sameValue(before[key], after[key]));

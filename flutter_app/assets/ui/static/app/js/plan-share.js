@@ -435,7 +435,6 @@ function reasonText(error, { file = false } = {}) {
   if (reason === "newer") return `Dieser Plan kommt aus einer neueren Version von ${BRAND}. Aktualisiere die App, dann klappt es.`;
   if (reason === "empty") return "In diesem Plan stehen keine Stunden.";
   if (reason === "unsupported") return `Dieses Gerät kann Plan-Links nicht lesen. Lass dir den Plan als Datei schicken.`;
-  if (reason === "blocks") return `Der Plan hat mehr Stunden am Tag, als hier ins Raster passen (höchstens ${MAX_BLOCKS}).`;
   return file ? "Die Datei ist unvollständig oder beschädigt. Lass sie dir noch einmal schicken." : "Der Link ist unvollständig oder beschädigt. Lass ihn dir noch einmal schicken.";
 }
 
@@ -584,21 +583,18 @@ function browserNote() {
 function previewView(model, origin = {}) {
   const skip = new Set();
   const hasMine = myPlan().lessons.length > 0;
-  const tooMany = model.blocks.length > MAX_BLOCKS;
-  if (tooMany && !hasMine) {
-    show("Plan übernehmen", `<p class="share-lead">${esc(reasonText(new PlanError("blocks")))} Aktualisiere ${esc(BRAND)}, dann klappt es.</p>`);
-    return;
-  }
-  const merged = (left) => {
+  const dryRun = (mode, left) => {
     try {
-      return fitPlan(model, context(), { mode: "merge", skip: left, maxBlocks: MAX_BLOCKS });
+      return fitPlan(model, context(), { mode, skip: left, maxBlocks: MAX_BLOCKS });
     } catch {
       return { filled: 0, dropped: 0 };
     }
   };
+  const merged = (left) => dryRun("merge", left);
+  const beyond = (lost) => (lost ? `${plural(lost, "Stunde passt", "Stunden passen")} nicht hinein, weil hier höchstens ${MAX_BLOCKS}\u00a0Stunden am Tag gehen.` : "");
   const mine = [...data.blocks].sort((a, b) => a.n - b.n);
   const sameTimes = model.blocks.length === mine.length && model.blocks.every((block, index) => block.start === mine[index].start && block.end === mine[index].end);
-  let mode = !hasMine ? "replace" : tooMany || !merged([]).dropped ? "merge" : "replace";
+  let mode = !hasMine || merged([]).dropped ? "replace" : "merge";
   const chips = model.subjects.map((subject, index) => `<button type="button" class="share-chip" data-skip="${index}" aria-pressed="true" style="--hue: var(--hue-${subject.hue})"><i aria-hidden="true"></i><span>${esc(subject.name)}${subject.type === "LK" ? " LK" : ""}</span></button>`).join("");
   const pick = model.subjects.length > 1
     ? `<button class="text-button share-pick-toggle" type="button" id="sharePickToggle" aria-expanded="false" aria-controls="sharePickList"><span>Fächer auswählen</span>${icon("chevron-down")}</button><div class="share-pick" id="sharePickList" hidden><p class="share-row-desc">Tipp die Fächer an, die du nicht hast.</p><div class="share-chips">${chips}</div></div>`
@@ -606,12 +602,12 @@ function previewView(model, origin = {}) {
   const choice = hasMine
     ? `<fieldset class="share-choice"><legend class="share-label">So übernehmen</legend>
       <label class="share-option"><input type="radio" name="shareMode" value="merge"${mode === "merge" ? " checked" : ""}><span class="share-option-text"><b>Ergänzen</b><small id="shareMerge"></small></span></label>
-      <label class="share-option"><input type="radio" name="shareMode" value="replace"${mode === "replace" ? " checked" : ""}${tooMany ? " disabled" : ""}><span class="share-option-text"><b>Ersetzen</b><small id="shareReplace"></small></span></label></fieldset>`
+      <label class="share-option"><input type="radio" name="shareMode" value="replace"${mode === "replace" ? " checked" : ""}><span class="share-option-text"><b>Ersetzen</b><small id="shareReplace"></small></span></label></fieldset>`
     : "";
   const note = origin.link ? browserNote() : origin.backup ? `<p class="share-note">${icon("info")}<span>Aus der Sicherung kommt nur der Stundenplan, alles andere bleibt, wie es ist.</span></p>` : "";
   const html = `<div class="share-preview" role="img" aria-label="${esc(planLine(model))}">${weeksHtml(model)}</div>
     <p class="share-summary" id="shareSummary">${esc(planLine(model))}</p>
-    ${pick}${choice}${note}${errorLine("")}
+    ${pick}${choice}${hasMine ? "" : `<p class="share-note" id="shareFit" hidden>${icon("info")}<span></span></p>`}${note}${errorLine("")}
     <div class="share-actions"><button class="btn btn-quiet" type="button" data-share-close><span>Abbrechen</span></button><button class="btn btn-primary" type="button" id="shareApply" data-focus>${icon("check")}<span>Übernehmen</span></button></div>`;
   show("Plan übernehmen?", html, (body) => {
     const apply = body.querySelector("#shareApply");
@@ -620,13 +616,19 @@ function previewView(model, origin = {}) {
       body.querySelector("#shareSummary").textContent = planLine(model, left);
       body.querySelectorAll(".share-cell[data-subject]").forEach((cell) => cell.classList.toggle("is-free", skip.has(Number(cell.dataset.subject))));
       apply.disabled = describePlan(model, left).subjects === 0;
-      if (!hasMine) return;
+      const lost = beyond(dryRun("replace", left).dropped);
+      if (!hasMine) {
+        const fit = body.querySelector("#shareFit");
+        fit.hidden = !lost;
+        fit.querySelector("span").textContent = lost;
+        return;
+      }
       const { filled, dropped } = merged(left);
       const outside = dropped ? ` ${plural(dropped, "Stunde passt", "Stunden passen")} nicht in dein Raster.` : "";
       body.querySelector("#shareMerge").textContent = filled
-        ? `Deine Stunden bleiben, ${plural(filled, "freie Stunde", "freie Stunden")} pro Woche ${filled === 1 ? "kommt" : "kommen"} dazu.${outside}`
-        : dropped ? "Keine dieser Stunden passt in dein Raster, die Stundenzeiten sind anders." : "Bei dir ist schon jede dieser Stunden belegt.";
-      body.querySelector("#shareReplace").textContent = tooMany ? reasonText(new PlanError("blocks")) : `Dein Plan wird durch diesen ersetzt${sameTimes ? "" : ", auch die Stundenzeiten"}. Deine Fächer und Noten bleiben.`;
+        ? `Deine Stunden bleiben. ${plural(filled, "Stunde", "Stunden")} pro Woche ${filled === 1 ? "kommt" : "kommen"} dort dazu, wo du frei hast.${outside}`
+        : dropped ? "Keine dieser Stunden passt in dein Raster." : "Bei dir ist schon jede dieser Stunden belegt.";
+      body.querySelector("#shareReplace").textContent = `Dein Plan wird durch diesen ersetzt${sameTimes ? "" : ", auch die Stundenzeiten"}. ${lost ? `${lost} ` : ""}Deine Fächer und Noten bleiben.`;
     };
     body.querySelector("#sharePickToggle")?.addEventListener("click", (event) => {
       const list = body.querySelector("#sharePickList");
@@ -658,7 +660,7 @@ function previewView(model, origin = {}) {
         return;
       }
       const size = describePlan(model, left);
-      const lessons = mode === "merge" ? fitted.filled : perWeek(size);
+      const lessons = fitted.filled;
       const message = mode === "merge"
         ? `${plural(lessons, "Stunde", "Stunden")} pro Woche ergänzt`
         : `Plan übernommen: ${plural(size.subjects, "Fach", "Fächer")} und ${plural(lessons, "Stunde", "Stunden")} pro Woche`;
