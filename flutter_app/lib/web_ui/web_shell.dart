@@ -7,6 +7,7 @@ import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web/web.dart' as web;
 
 import '../brand.dart';
@@ -14,6 +15,8 @@ import '../main.dart' show buildClassicHome;
 import '../services/database_service.dart';
 import '../services/web_tab_guard.dart';
 import '../theme.dart';
+import 'home_screen_hint.dart';
+import 'lasting_storage.dart';
 import 'ui_api.dart';
 import 'ui_bridge.dart';
 import 'ui_pages.dart';
@@ -24,7 +27,7 @@ import 'web_start_script.dart';
 Widget buildWebHome() => const WebShell();
 
 extension type _Reply._(JSObject _) implements JSObject {
-  external factory _Reply({int status, JSObject headers, JSAny? body, bool busy});
+  external factory _Reply({int status, JSObject headers, JSAny? body, bool busy, int protocol});
 }
 
 extension type _HubHistory._(JSObject _) implements JSObject {
@@ -43,6 +46,7 @@ class WebShell extends StatefulWidget {
 class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShellHost<WebShell> {
   static const _scope = '/hub';
   static const _worker = 'hub_worker.js';
+  static const _protocol = 1;
 
   late final UiBridge _bridge = UiBridge(
     api: UiApi(this),
@@ -57,6 +61,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
   bool _preparing = false;
   bool _fellBack = false;
   bool _elsewhere = false;
+  bool _keeping = false;
   bool? _pageDark;
   int _covered = 0;
   DateTime? _pausedAt;
@@ -96,6 +101,8 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
 
   Future<void> _boot() async {
     if (!mounted) return;
+    final device = _device();
+    if (device.standalone) unawaited(_keepData());
     if (!_modern()) return _fallBack();
     try {
       await DatabaseService().database;
@@ -107,6 +114,11 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     if (!mounted || _elsewhere) return;
     unawaited(UiWeather.instance.refresh());
     _listen();
+    if (await homeScreenHintDue(device) && mounted) {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) await overPage(() => showHomeScreenHint(context, device, withData: prefs.containsKey('user_bundesland')));
+    }
+    if (!mounted) return;
     if (await askWelcome() && mounted) {
       setState(() => _preparing = true);
       await importWelcomeHolidays().timeout(const Duration(seconds: 12), onTimeout: () {});
@@ -115,6 +127,30 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     }
     if (!mounted || _elsewhere) return;
     _createFrame();
+  }
+
+  static HomeScreenDevice _device() {
+    final navigator = web.window.navigator;
+    var standalone = false;
+    try {
+      standalone = web.window.matchMedia('(display-mode: standalone)').matches ||
+          (navigator as JSObject)['standalone'].dartify() == true;
+    } catch (_) {}
+    return HomeScreenDevice(
+      agent: navigator.userAgent,
+      touchPoints: navigator.maxTouchPoints,
+      platform: navigator.platform,
+      standalone: standalone,
+    );
+  }
+
+  Future<void> _keepData() async {
+    if (_keeping || !(web.window.navigator as JSObject).has('storage')) return;
+    _keeping = true;
+    try {
+      final storage = web.window.navigator.storage;
+      if (!(await storage.persisted().toDart).toDart) await storage.persist().toDart;
+    } catch (_) {}
   }
 
   Future<void> _register() async {
@@ -169,6 +205,10 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     final data = event.data.dartify();
     if (data is! Map<Object?, Object?> || data['type'] != 'hub-request') return;
     final port = ports.first;
+    if ((data['protocol'] ?? 1) != _protocol) {
+      port.postMessage(_Reply(busy: true, protocol: _protocol));
+      return;
+    }
     if (_elsewhere || !mounted) {
       port.postMessage(_Reply(busy: true));
       return;
@@ -178,6 +218,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
 
   Future<void> _answer(web.MessagePort port, UiBridgeRequest request) async {
     final reply = await _bridge.handle(request);
+    if (savesUserData(request.method, request.path, reply.status)) unawaited(_keepData());
     final body = reply.body;
     port.postMessage(_Reply(
       status: reply.status,
@@ -209,7 +250,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     frame
       ..id = 'hub-frame'
       ..title = Brand.name
-      ..allow = 'geolocation'
+      ..allow = 'geolocation; web-share'
       ..src = _scope;
     web.document.body?.append(frame);
     _frame = frame;

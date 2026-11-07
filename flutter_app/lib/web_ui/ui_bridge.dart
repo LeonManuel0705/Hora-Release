@@ -91,9 +91,23 @@ class UiBridge {
       if (request.path.startsWith('/api/')) return await _api(request);
       return const UiBridgeReply(404);
     } catch (_) {
+      if (request.navigate) return _unavailable();
       return UiBridgeReply.json(500, {'success': false, 'error': 'Interner Fehler'});
     }
   }
+
+  static UiBridgeReply _unavailable() => const UiBridgeReply(
+        503,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'",
+        },
+        body: '<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<title>Nicht geladen</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;'
+            'font:16px/1.5 system-ui,sans-serif;color-scheme:light dark;text-align:center;padding:24px;box-sizing:border-box">'
+            '<p>Diese Seite ließ sich gerade nicht laden.<br><a href="">Noch einmal versuchen</a></p></body></html>',
+      );
 
   static UiBridgeReply _missing() => const UiBridgeReply(
         404,

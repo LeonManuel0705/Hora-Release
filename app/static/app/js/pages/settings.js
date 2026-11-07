@@ -4,10 +4,11 @@ import {
   LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, hasPlan, activeSubjectKeys, motionDefault, slug, teacherLabel, periodWords, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
 import { toast, setTheme, syncTime } from "../shell.js";
-import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, contents } from "../backup.js";
+import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, contents, offerFile } from "../backup.js";
 import { askBackup, importFlow } from "../plan-share.js";
 import { platformName } from "../feedback.js";
 import { suggestShort, pickHue } from "../setup-data.js";
+import { storageNote, safariOnMac } from "../persistence.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -3278,10 +3279,43 @@ function renderDataMeta() {
   if (node) node.textContent = areas.length ? `Auf diesem Gerät: ${joinWords(areas)}` : "Noch nichts geändert";
 }
 
+let keptData = null;
+
+function storageManager() {
+  try {
+    return window.top.navigator.storage || null;
+  } catch {
+    return navigator.storage || null;
+  }
+}
+
+function storageRow() {
+  const note = storageNote({ shell: root.dataset.shell, persisted: keptData, device: appleDevice(), homeScreen: onHomeScreen(), macSafari: safariOnMac(navigator.userAgent, navigator.maxTouchPoints || 0), brand: BRAND });
+  if (!note) return "";
+  const control = {
+    tab: `<span class="status is-warn">Vorläufig</span>`,
+    kept: `<span class="status is-ok">${icon("circle-check")}Dauerhaft</span>`,
+    ask: `<button class="btn btn-quiet" type="button" id="dataKeep">${icon("hard-drive")}Dauerhaft speichern</button>`,
+  }[note.state];
+  return row({ id: "rowStorage", label: "Speicher", desc: note.text, control });
+}
+
+async function keepData() {
+  let kept = false;
+  try {
+    kept = await storageManager().persist();
+  } catch {}
+  keptData = kept;
+  renderData();
+  if (kept) say("Dauerhaft gespeichert");
+  else toast("Der Browser lässt das gerade nicht zu. Sichere deine Einträge ab und zu mit Exportieren.", { icon: "circle-alert" });
+}
+
 function renderData() {
   const card = $("dataCard");
   keepFocus(card, () => {
     card.innerHTML = [
+      storageRow(),
       row({ id: "rowExport", label: "Sichern", desc: "Stundenplan, Fächer, Noten, Tests, Klausuren, Aufgaben, Termine, Orte und Einstellungen als Datei", control: `<button class="btn btn-quiet" type="button" id="dataExport">${icon("download")}Exportieren</button>` }),
       row({ id: "rowImport", label: "Wiederherstellen", desc: `Übernimmt eine gesicherte Datei von ${BRAND}, auch von einem anderen Gerät. Vorhandene Noten, Aufgaben und Termine bleiben. Stecken Noten oder Aufgaben in der Datei, kannst du vorher wählen, ob nur der Stundenplan kommt.`, control: `<button class="btn btn-quiet" type="button" id="dataImport">${icon("upload")}Importieren</button>` }),
       row({ id: "rowWipe", label: "Alles auf diesem Gerät löschen", desc: "Stundenplan, Fächer und Stundenraster wieder wie in IServ, alle Einstellungen wie beim ersten Start.", control: `<button class="btn btn-quiet danger-button" type="button" id="dataWipe">${icon("trash-2")}Löschen</button>` }),
@@ -3313,13 +3347,30 @@ function portableValues() {
   return values;
 }
 
+const exported = { records: undefined, pending: null };
+
+function readRecords() {
+  const pending = request("GET", "/api/ui/export").then((answer) => answer.data);
+  exported.pending = pending;
+  pending.then((records) => {
+    if (exported.pending === pending) exported.records = records;
+  }, () => {});
+  return pending;
+}
+
+function forgetRecords() {
+  exported.records = undefined;
+  readRecords();
+}
+
+// The records are read before the tap, so that the share sheet still opens inside the click on iPhone and iPad.
 async function exportData() {
+  let records = exported.records;
+  if (records === undefined) records = await (exported.pending || readRecords()).catch(() => null);
   const payload = { app: BRAND, version: VERSION, exportedAt: new Date().toISOString(), values: portableValues() };
   const keys = schoolDefaults ? fileKeys(data.subjects) : new Map();
   if (schoolDefaults) payload.school = { abReference: data.abReference, subjects: fileSubjects(schoolDefaults.subjects, keys) };
-  try {
-    payload.data = fileRecords((await request("GET", "/api/ui/export")).data, keys);
-  } catch {}
+  if (records) payload.data = fileRecords(records, keys);
   const name = `${slug(BRAND) || "app"}-sicherung-${isoDate(now())}.json`;
   const missing = payload.data ? "" : ", aber ohne Noten, Aufgaben und Termine. Sie ließen sich gerade nicht lesen.";
   const shell = window.hubShell;
@@ -3340,14 +3391,12 @@ async function exportData() {
     toast(`Gesichert in „${esc(saved.folder)}“ als „${esc(saved.name)}“${missing}`, { icon: missing ? "triangle-alert" : "download", action: reveal });
     return;
   }
-  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  const result = await offerFile(name, JSON.stringify(payload, null, 2));
+  if (result === "cancelled") return;
+  if (result === "failed") {
+    toast("Die Sicherung ließ sich nicht teilen. Versuch es noch einmal.", { icon: "circle-alert" });
+    return;
+  }
   toast(`Gesichert als „${esc(name)}“${missing}`, { icon: missing ? "triangle-alert" : "download" });
 }
 
@@ -3406,6 +3455,7 @@ async function carryRecords(plan) {
       failed += 1;
     }
   }
+  forgetRecords();
   return { made, known, failed, undo };
 }
 
@@ -3420,6 +3470,7 @@ async function dropRecords(undo) {
       left += 1;
     }
   }
+  forgetRecords();
   return left;
 }
 
@@ -3571,8 +3622,13 @@ async function wipeData() {
 function bindData() {
   const card = $("dataCard");
   const file = $("importFile");
+  readRecords();
+  card.addEventListener("pointerdown", (event) => {
+    if (event.target.closest("#dataExport")) readRecords();
+  });
   card.addEventListener("click", (event) => {
     if (event.target.closest("#dataExport")) exportData();
+    else if (event.target.closest("#dataKeep")) keepData();
     else if (event.target.closest("#dataImport")) file.click();
     else if (event.target.closest("#dataWipe")) wipeData();
   });
@@ -3581,6 +3637,12 @@ function bindData() {
     file.value = "";
     if (chosen) importData(chosen);
   });
+  if (root.dataset.shell === "web" && storageManager()?.persisted) {
+    storageManager().persisted().then((kept) => {
+      keptData = kept;
+      renderData();
+    }, () => {});
+  }
 }
 
 function bindAbout() {

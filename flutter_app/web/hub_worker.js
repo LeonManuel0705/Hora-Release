@@ -4,6 +4,7 @@
 const APP = new URL("./", self.location).pathname;
 const SCOPE = "/hub";
 const WAIT = 20000;
+const PROTOCOL = 1;
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
 self.addEventListener("install", () => self.skipWaiting());
@@ -37,17 +38,17 @@ function answer(reply) {
   return new Response(empty ? null : reply.body, { status: reply.status, headers });
 }
 
-function unavailable(navigate) {
+function unavailable(navigate, outdated) {
   if (!navigate) {
     return new Response(JSON.stringify({ success: false, error: "Gerade nicht erreichbar" }), {
       status: 503,
       headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
     });
   }
-  const page = '<!doctype html><html lang="de"><meta charset="utf-8"><meta http-equiv="refresh" content="2">'
+  const page = `<!doctype html><html lang="de"><meta charset="utf-8">${outdated ? "" : '<meta http-equiv="refresh" content="2">'}`
     + '<meta name="viewport" content="width=device-width, initial-scale=1"><title>Einen Moment</title>'
     + '<body style="margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.5 system-ui,sans-serif;color-scheme:light dark">'
-    + "<p>Einen Moment, gleich geht es weiter.</p></body></html>";
+    + `<p>${outdated ? "Starte die App einmal neu, dann geht es weiter." : "Einen Moment, gleich geht es weiter."}</p></body></html>`;
   return new Response(page, {
     status: 503,
     headers: {
@@ -67,6 +68,7 @@ async function relay(request, navigate) {
   const url = new URL(request.url);
   const message = {
     type: "hub-request",
+    protocol: PROTOCOL,
     navigate,
     method: request.method,
     path: url.pathname,
@@ -75,11 +77,14 @@ async function relay(request, navigate) {
     body: request.method === "GET" || request.method === "HEAD" ? null : await request.text(),
     contentType: request.headers.get("Content-Type"),
   };
+  let outdated = false;
   for (const client of await hosts()) {
     const reply = await ask(client, message);
     if (reply && !reply.busy) return answer(reply);
+    if (reply && reply.protocol > PROTOCOL) self.registration.update().catch(() => {});
+    if (reply && reply.protocol < PROTOCOL) outdated = true;
   }
-  return unavailable(navigate);
+  return unavailable(navigate, outdated);
 }
 
 self.addEventListener("fetch", (event) => {

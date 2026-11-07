@@ -86,7 +86,8 @@ class AssistantEngine {
           );
         }
         if (online) {
-          final hit = await (lookup ?? WikiCacheService.instance.lookup)(entity);
+          final hit = await (lookup ?? WikiCacheService.instance.lookup)(entity)
+              .onError<WikiUnreachable>((_, __) => null);
           if (hit != null) {
             return AssistantResponse(
               text: ResearchService.instance.formatResult(hit),
@@ -110,33 +111,47 @@ class AssistantEngine {
 
   /// Full answer path: offline first, then online Wikipedia fallback for entity
   /// queries if the device has network. Never calls an LLM.
-  Future<AssistantResponse> answer(String message, {bool online = true}) async {
+  Future<AssistantResponse> answer(
+    String message, {
+    bool online = true,
+    Future<Map<String, dynamic>?> Function(String entity)? lookup,
+  }) async {
     final local = await answerOffline(message);
     if (local != null) return local;
 
-    if (online && ResearchService.instance.wantsResearch(message)) {
-      final entity = ResearchService.instance.extractEntity(message);
-      if (entity != null) {
-        final hit = await WikiCacheService.instance.lookup(entity);
-        if (hit != null) {
-          return AssistantResponse(
-            text: ResearchService.instance.formatResult(hit),
-            source: AssistantSource.wikipedia,
-            online: true,
-          );
-        }
-        return AssistantResponse(
-          text: 'Ich konnte zu **"$entity"** keinen Wikipedia-Eintrag finden. '
-              'Prüfe bitte die Schreibweise oder gib mehr Kontext.',
-          source: AssistantSource.unknown,
-        );
-      }
+    final entity = ResearchService.instance.wantsResearch(message) ? ResearchService.instance.extractEntity(message) : null;
+    if (entity == null) {
+      return const AssistantResponse(
+        text: 'Darauf habe ich keine Antwort. Versuch es bitte anders zu formulieren.',
+        source: AssistantSource.unknown,
+      );
     }
-
-    return const AssistantResponse(
-      text: 'Ich konnte deine Frage gerade nicht beantworten – ich habe dafür keine Offline-Vorlage '
-          'und ohne Internet auch keinen anderen Weg. Versuch es bitte anders zu formulieren.',
-      source: AssistantSource.unknown,
+    if (!online) {
+      return const AssistantResponse(
+        text: 'Ohne Internet kann ich nicht bei Wikipedia nachschlagen. Frag noch einmal, wenn du wieder online bist.',
+        source: AssistantSource.unknown,
+      );
+    }
+    final Map<String, dynamic>? hit;
+    try {
+      hit = await (lookup ?? WikiCacheService.instance.lookup)(entity);
+    } on WikiUnreachable {
+      return AssistantResponse(
+        text: 'Wikipedia ist gerade nicht erreichbar. Frag gleich noch einmal nach **"$entity"**.',
+        source: AssistantSource.unknown,
+      );
+    }
+    if (hit == null) {
+      return AssistantResponse(
+        text: 'Ich konnte zu **"$entity"** keinen Wikipedia-Eintrag finden. '
+            'Prüfe bitte die Schreibweise oder gib mehr Kontext.',
+        source: AssistantSource.unknown,
+      );
+    }
+    return AssistantResponse(
+      text: ResearchService.instance.formatResult(hit),
+      source: AssistantSource.wikipedia,
+      online: true,
     );
   }
 

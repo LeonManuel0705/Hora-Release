@@ -36,11 +36,41 @@ void main() {
     expect(File('web/flutter_bootstrap.js').readAsStringSync(), isNot(contains('serviceWorker')));
   });
 
+  test('the hub worker and the page agree on the message format', () {
+    final worker = RegExp(r'const PROTOCOL = (\d+);').firstMatch(File('web/hub_worker.js').readAsStringSync())!.group(1);
+    final page = RegExp(r'_protocol = (\d+);').firstMatch(File('lib/web_ui/web_shell.dart').readAsStringSync())!.group(1);
+    expect(worker, page);
+    final relay = File('web/hub_worker.js').readAsStringSync();
+    expect(relay, contains('reply.protocol > PROTOCOL) self.registration.update()'), reason: 'an older worker fetches its newer self');
+    expect(relay, contains('reply.protocol < PROTOCOL) outdated = true'), reason: 'a newer worker stops refreshing for an older page');
+    expect(File('lib/web_ui/web_shell.dart').readAsStringSync(), contains('_Reply(busy: true, protocol: _protocol)'));
+  });
+
+  test('the offline worker keeps the whole build and the start no longer throws it away', () {
+    final worker = File('web/app_worker.js').readAsStringSync();
+    final builder = File('../scripts/build_web_app.py').readAsStringSync();
+    final page = File('web/index.html').readAsStringSync();
+    expect(worker, contains('const MANIFEST = null;'));
+    expect(builder, contains("WORKER = 'app_worker.js'"));
+    expect(builder, contains("'canvaskit/chromium/'"));
+    expect(File('web/flutter_bootstrap.js').readAsStringSync(), contains('canvasKitVariant: "full"'));
+    expect(page, contains("register('app_worker.js'"));
+    expect(File('web/flutter_bootstrap.js').readAsStringSync(), contains('fontFallbackBaseUrl: "fonts/"'));
+    expect(Directory('web/fonts').listSync(recursive: true).whereType<File>().where((file) => file.path.endsWith('.woff2')), isNotEmpty);
+    expect(page, contains(r'app_worker\.js'));
+    expect(page, isNot(contains('caches.delete')));
+  });
+
   test('the web app may reach every outside service the shared logic calls', () {
     final policy = RegExp('Content-Security-Policy: (.*)').firstMatch(block('/pwa/*'))!.group(1)!;
     final connect = RegExp('connect-src ([^;]+)').firstMatch(policy)!.group(1)!.split(' ').toSet();
     final hosts = <String>{};
-    for (final path in ['lib/web_ui/ui_transit.dart', 'lib/web_ui/ui_weather.dart', 'lib/services/holiday_service.dart']) {
+    for (final path in [
+      'lib/web_ui/ui_transit.dart',
+      'lib/web_ui/ui_weather.dart',
+      'lib/services/holiday_service.dart',
+      'lib/services/assistant/wiki_cache.dart',
+    ]) {
       final source = File(path).readAsStringSync();
       hosts.addAll(RegExp(r"Uri\.https\('([^']+)'").allMatches(source).map((match) => 'https://${match[1]}'));
       hosts.addAll(RegExp(r"_base = '([^']+)'").allMatches(source).map((match) => 'https://${match[1]}'));
@@ -49,5 +79,10 @@ void main() {
     expect(hosts, isNotEmpty);
     expect(hosts.difference(connect), isEmpty);
     expect(block('/pwa/*'), contains('geolocation=(self)'));
+    expect(connect, containsAll(['https://de.wikipedia.org', 'https://en.wikipedia.org']));
+    expect(RegExp('frame-src ([^;]+)').firstMatch(policy)!.group(1)!.split(' '), containsAll(["'self'", 'blob:']));
+    expect(policy, isNot(contains('google')), reason: 'the web app loads no font and no style from Google');
+    expect(File('web/app_worker.js').readAsStringSync(), isNot(contains('gstatic')));
+    expect(File('lib/web_ui/web_shell.dart').readAsStringSync(), contains("allow = 'geolocation; web-share'"));
   });
 }
