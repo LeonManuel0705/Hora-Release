@@ -42,7 +42,10 @@ Future<void> answerWeek(Database db, SharedPreferences prefs, String letter, Dat
 
 /// Asks the installs that kept their letter when the phone took over the desktop's count which week it is.
 /// It asks once: dismissing keeps the letter. Answers true when the letter changed, so the page has to load again.
-Future<bool> askWeekOnce(BuildContext context, {DateTime? now}) => settleWeekQuestion(
+/// It never throws: the shells wait for it before they show the page, and a failure here must not keep the page away.
+Future<bool> askWeekOnce(BuildContext context, {DateTime? now}) async {
+  try {
+    return await settleWeekQuestion(
       now: now,
       ask: (question) async => context.mounted
           ? showDialog<String>(
@@ -52,6 +55,11 @@ Future<bool> askWeekOnce(BuildContext context, {DateTime? now}) => settleWeekQue
             )
           : null,
     );
+  } catch (error) {
+    debugPrint('Die Frage nach der Woche ging nicht: $error');
+    return false;
+  }
+}
 
 @visibleForTesting
 Future<bool> settleWeekQuestion({DateTime? now, required Future<String?> Function(String question) ask}) async {

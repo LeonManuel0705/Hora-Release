@@ -112,6 +112,18 @@ void main() {
     expect(asked, 0);
   });
 
+  testWidgets('a failing question still lets the page come', (tester) async {
+    AppProvider.forgetWeekRule();
+    SharedPreferences.setMockInitialValues({AppProvider.abReferenceKey: '2026-01-12', AppProvider.abAskKey: 'kaputt'});
+    late BuildContext page;
+    await tester.pumpWidget(MaterialApp(home: Builder(builder: (context) => (page = context, const SizedBox()).$2)));
+    final changed = await tester.runAsync(() => askWeekOnce(page, now: monday));
+    expect(changed, isFalse);
+    expect(find.byType(WeekQuestionDialog), findsNothing);
+    final failure = await tester.runAsync(() => settleWeekQuestion(now: monday, ask: (question) async => 'A').then<Object?>((_) => null, onError: (Object error) => error));
+    expect(failure, isA<TypeError>());
+  });
+
   testWidgets('the dialog asks with A-Woche and B-Woche and gives back the choice', (tester) async {
     String? picked = 'none';
     await tester.pumpWidget(MaterialApp(
