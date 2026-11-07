@@ -510,7 +510,7 @@
         "icon": "bus",
         "to": "Transit services",
         "what": "stops, addresses and time of your search, with a saved home or school also where they are, with “In der Nähe” (nearby) your location. Goes to Transitous, for ticket prices in Berlin and Brandenburg to transport.rest, in the older views also to transport.rest and, for fares, to Deutsche Bahn",
-        "when": "when you open the timetable and when searching",
+        "when": "when you open the timetable, when searching, and by itself around the end of school if your school and home are saved",
         "tone": "ok"
       },
       {
@@ -762,6 +762,7 @@
     "s3_sub1_p1": "All data you enter (timetables, grades, tasks, training data, notes, etc.) is stored exclusively on your device. The App stores login details, for example for IServ and email, in encrypted form. In the apps for computers, this also applies to grades, homework, tests, exams, presentations, events, notes, mail drafts, saved places and the assistant's history. Stored unencrypted in a local database there are the timetable with subjects, teachers, rooms and times, the task list, training data, Pomodoro statistics, reviews, bookmarks, tickets and the settings, which include your birthday and weather location. The cached substitution plan is also stored there unencrypted. On Android and in the web app, all data except the login details is stored unencrypted. The Provider has no access to this data at any time.",
     "s3_sub2_title": "b) Real-Time Transit Data",
     "s3_sub2_p1": "When you use the transit feature, the App sends requests to Transitous (api.transitous.org) and, for ticket prices in Berlin and Brandenburg, to transport.rest (v6.vbb.transport.rest). These requests contain the stops, addresses and times of your search. If you have saved your home or your school as a place, connections from or to there also include its location, and “In der Nähe” (nearby) includes your current location if you allow it. In the older views of the computer app, requests also go to transport.rest and, for fares, to Deutsche Bahn. No device IDs are transmitted.",
+    "s3_sub2_p2": "If you have saved your school and your home as places, the App also asks Transitous by itself for the next connections from school to home when you open a page of the App between 90 minutes before your last lesson ends and two hours after. This includes the location of both places.",
     "s3_sub3_title": "c) No Telemetry",
     "s3_sub3_p1": "{{BRAND_NAME}} contains no analytics, no tracking, no crash reporters, and no telemetry. No usage statistics are collected whatsoever.",
     "s3_sub4_title": "d) Other Services",

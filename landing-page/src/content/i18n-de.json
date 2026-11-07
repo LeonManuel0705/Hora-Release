@@ -510,7 +510,7 @@
         "icon": "bus",
         "to": "Fahrplan-Dienste",
         "what": "Haltestellen, Adressen und Uhrzeit deiner Suche, mit gespeichertem Zuhause oder Schulort auch deren Lage, mit „In der Nähe“ dein Standort. Geht an Transitous, für Ticketpreise in Berlin und Brandenburg an transport.rest, in den älteren Ansichten ebenfalls an transport.rest und für Preise an die Deutsche Bahn",
-        "when": "beim Öffnen des Fahrplans und beim Suchen",
+        "when": "beim Öffnen des Fahrplans, beim Suchen und rund ums Schulende von selbst, wenn Schule und Zuhause gespeichert sind",
         "tone": "ok"
       },
       {
@@ -762,6 +762,7 @@
     "s3_sub1_p1": "Sämtliche von dir eingegebenen Daten (Stundenpläne, Noten, Aufgaben, Trainingsdaten, Notizen etc.) werden ausschließlich auf deinem Gerät gespeichert. Zugangsdaten, etwa für IServ und E-Mail, speichert die App verschlüsselt. In den Apps für Computer gilt das auch für Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Termine, Notizen, Mail-Entwürfe, gespeicherte Orte und den Verlauf des Assistenten. Unverschlüsselt in einer lokalen Datenbank liegen dort der Stundenplan mit Fächern, Lehrkräften, Räumen und Zeiten, die Aufgabenliste, Trainingsdaten, Pomodoro-Statistik, Rückblicke, Lesezeichen, Tickets und die Einstellungen, zu denen auch Geburtstag und Wetterort gehören. Auch der zwischengespeicherte Vertretungsplan liegt dort unverschlüsselt. Auf Android und in der Web-App liegen alle Daten außer den Zugangsdaten unverschlüsselt. Der Anbieter hat zu keinem Zeitpunkt Zugriff auf diese Daten.",
     "s3_sub2_title": "b) ÖPNV-Echtzeitdaten",
     "s3_sub2_p1": "Wenn du die Fahrplanfunktion nutzt, sendet die App Anfragen an Transitous (api.transitous.org), für Ticketpreise in Berlin und Brandenburg an transport.rest (v6.vbb.transport.rest). Übermittelt werden die Haltestellen, Adressen und Uhrzeiten deiner Suche. Hast du dein Zuhause oder deine Schule als Ort gespeichert, geht für Verbindungen von dort oder dorthin auch deren Lage mit, und mit „In der Nähe“ dein aktueller Standort, wenn du ihn freigibst. In den älteren Ansichten der Computer-App gehen Anfragen außerdem an transport.rest und für Preise an die Deutsche Bahn. Geräte-IDs werden nicht übermittelt.",
+    "s3_sub2_p2": "Hast du deine Schule und dein Zuhause als Ort gespeichert, fragt die App außerdem von selbst bei Transitous die nächsten Verbindungen von der Schule nach Hause ab, wenn du zwischen 90 Minuten vor dem Ende deiner letzten Stunde und zwei Stunden danach eine Seite der App öffnest. Dabei geht die Lage beider Orte mit.",
     "s3_sub3_title": "c) Keine Telemetrie",
     "s3_sub3_p1": "{{BRAND_NAME}} enthält keine Analytics, kein Tracking, keine Crash-Reporter und keine Telemetrie. Es werden keinerlei Nutzungsstatistiken erhoben.",
     "s3_sub4_title": "d) Weitere Dienste",
