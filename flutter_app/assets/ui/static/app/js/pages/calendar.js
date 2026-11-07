@@ -1505,6 +1505,11 @@ function targetFor(item, changes) {
       if (series.endDate) moved.endDate = by(series.endDate);
       if (rule) moved.recurrence = { ...rule, exceptions: rule.exceptions.map(by), until: rule.until ? by(rule.until) : null };
     }
+    // The sheet shows one occurrence, so its last day counts from that occurrence and not from the first of the series.
+    if ("endDate" in changes) {
+      const span = changes.endDate ? dayDiff(parseDate(changes.date || item.date), changes.endDate) : 0;
+      moved.endDate = span > 0 ? isoDate(addDays(parseDate(moved.date || series.date), span)) : null;
+    }
     return { target: series, changes: moved };
   }
   const rule = normalizeRecurrence(series.recurrence);
