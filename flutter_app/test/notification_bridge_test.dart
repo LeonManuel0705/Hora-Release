@@ -96,6 +96,7 @@ void main() {
       expect(mobileStartScript(ios: false, insets: '', permission: state), contains('var permission = "$state";'));
     }
     expect(mobileStartScript(ios: true, insets: '', permission: 'default'), isNot(contains('createObjectURL')));
+    expect(mobileStartScript(ios: true, insets: '', permission: 'default'), isNot(contains('hubShell')), reason: 'only the Android app saves files');
   });
 
   test('a download from the page is decoded both ways and only kinds the app writes are kept', () {

@@ -68,7 +68,8 @@ String mobileStartScript({required bool ios, required String insets, required St
 
 // The WebView saves no downloads, and blob: addresses are out of reach of fetch under the
 // page's CSP, so the page's blobs are kept by address and handed over when a link saves one.
-// The page learns what became of the file from an "app:download" event.
+// The page learns what became of the file from an "app:download" event. Code that saves on
+// purpose calls hubShell.saveFile, as in the Mac window, and gets the result back.
 const _downloadScript = '''
   var limit = ${Downloads.maxBytes};
   var blobs = new Map();
@@ -95,19 +96,37 @@ const _downloadScript = '''
       else failed(message.name);
     }, function () { failed(message.name); });
   }
+  function encoded(blob) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var text = String(reader.result || "");
+        resolve(text.slice(text.indexOf(",") + 1));
+      };
+      reader.onerror = function () { reject(reader.error); };
+      reader.readAsDataURL(blob);
+    });
+  }
   function save(name, blob) {
     if (blob.size > limit) {
       failed(name, "too-large");
       return;
     }
-    var reader = new FileReader();
-    reader.onload = function () {
-      var text = String(reader.result || "");
-      hand({ name: name, data: text.slice(text.indexOf(",") + 1) });
-    };
-    reader.onerror = function () { failed(name); };
-    reader.readAsDataURL(blob);
+    encoded(blob).then(function (data) { hand({ name: name, data: data }); }, function () { failed(name); });
   }
+  window.hubShell = Object.freeze({
+    nativeNotifications: true,
+    saveFile: function (name, content) {
+      var blob = content instanceof Blob ? content : new Blob([content == null ? "" : content]);
+      if (blob.size > limit) return Promise.resolve({ error: "too-large" });
+      return encoded(blob).then(function (data) {
+        return bridge("saveFile", { name: String(name || ""), data: data });
+      }).then(function (result) {
+        if (result && result.state === "saved") return { name: result.name, folder: result.folder };
+        return { error: result && result.state === "cancelled" ? "cancelled" : (result && result.reason) || "failed" };
+      });
+    },
+  });
   document.addEventListener("click", function (event) {
     var link = event.target && event.target.closest ? event.target.closest("a[download]") : null;
     if (!link) return;

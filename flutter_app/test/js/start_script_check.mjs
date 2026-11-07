@@ -104,4 +104,19 @@ assert.deepEqual(calls.splice(0), [["saveFile", { name: "gruss.txt", url: "data:
 assert.deepEqual(outcomes.splice(0), [{ state: "saved", name: "gruss.txt", folder: "Download" }]);
 assert.equal(click({ href: "/hub/tasks" }).prevented, false);
 assert.equal(calls.length, 0);
+
+assert.equal(hubShell.nativeNotifications, true);
+answers.saveFile = { state: "saved", name: "sicherung (1).json", folder: "Downloads" };
+assert.deepEqual(await hubShell.saveFile("sicherung.json", '{"a":1}'), { name: "sicherung (1).json", folder: "Downloads" });
+assert.deepEqual(calls.splice(0), [["saveFile", { name: "sicherung.json", data: Buffer.from('{"a":1}').toString("base64") }]]);
+answers.saveFile = { state: "cancelled", name: "sicherung.json", folder: null };
+assert.deepEqual(await hubShell.saveFile("sicherung.json", "x"), { error: "cancelled" });
+answers.saveFile = { state: "failed", name: "x.exe", folder: null, reason: "type" };
+assert.deepEqual(await hubShell.saveFile("x.exe", "x"), { error: "type" });
+answers.saveFile = null;
+assert.deepEqual(await hubShell.saveFile("sicherung.json", "x"), { error: "failed" });
+calls.splice(0);
+assert.deepEqual(await hubShell.saveFile("riesig.json", new Blob([new Uint8Array(64 * 1024 * 1024 + 1)])), { error: "too-large" });
+assert.equal(calls.length, 0);
+assert.deepEqual(outcomes, [], "a save on purpose answers the caller, not the download event");
 process.stdout.write("ok");

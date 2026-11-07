@@ -68,7 +68,8 @@ class AndroidDevice {
     final answer = await _call<Map<Object?, Object?>>('saveDownload', {'name': file.$1, 'type': file.$2, 'bytes': bytes});
     final state = answer?['state'], name = answer?['name'], folder = answer?['folder'];
     if (state != 'saved' && state != 'cancelled') return SavedFile('failed', file.$1);
-    return SavedFile(state as String, name is String && name.isNotEmpty ? name : file.$1, folder: folder is String ? folder : null);
+    final shown = folder == 'Download' ? 'Downloads' : folder;
+    return SavedFile(state as String, name is String && name.isNotEmpty ? name : file.$1, folder: shown is String ? shown : null);
   }
 
   static Future<bool> canInstall() async => await _call<bool>('canInstall') ?? false;
