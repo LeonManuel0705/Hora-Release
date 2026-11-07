@@ -414,6 +414,7 @@
 .cell-new .btn { height: 38px; }
 .cell-label small { font-weight: var(--weight-regular); color: var(--ink-muted); }
 .is-touch .cell-new .field-control { font-size: 16px; }
+.is-touch :is(.set-head-action[data-open-setup], .plan-empty .btn, .cell-new .btn, .cell-new .field-control) { min-height: 44px; }
 
 .plan-add {
   position: absolute;

@@ -358,7 +358,9 @@ html.setup-open { overflow: hidden; }
   .setup-extra .btn, .setup-extra-ok { grid-column: 2; justify-self: start; }
 }
 
-.is-touch .setup-chip, .is-touch .setup-brush, .is-touch .setup-cell { min-height: 44px; }
+.is-touch .setup :is(.setup-chip, .setup-brush, .setup-cell, .setup-weeks button, .setup-copy, .setup-undo, .setup-share, .setup-extra .btn, .setup-row .field-control, .setup-brush-new .field-control) { min-height: 44px; }
+.is-touch .setup :is(.setup-close, .setup-stepper .icon-button, .setup-brush-new .icon-button) { width: 44px; height: 44px; }
+.is-touch .setup-type label { min-width: 44px; height: 44px; }
 .is-touch .setup .field-control { font-size: 16px; }
 .is-touch .setup-option.is-grade { width: 48px; height: 48px; }
 
