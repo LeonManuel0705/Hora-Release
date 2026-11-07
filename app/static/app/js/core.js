@@ -30,7 +30,7 @@ export const MONTHS_SHORT = ["Jan", "Feb", "März", "Apr", "Mai", "Juni", "Juli"
 export const platform = {
   mac: /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent),
   electron: /Electron/.test(navigator.userAgent),
-  desktop: /Electron/.test(navigator.userAgent) || Boolean(window.hubShell),
+  desktop: /Electron/.test(navigator.userAgent) || (Boolean(window.hubShell) && !["android", "ios"].includes(document.documentElement.dataset.shell)),
   touch: matchMedia("(hover: none)").matches,
 };
 
