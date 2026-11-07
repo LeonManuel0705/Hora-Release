@@ -308,10 +308,13 @@ def _body(item):
         body['recurrence'] = _rrule(rule, start) if rule else []
     if start and (rule or item.get('recurrence')):
         body['start']['timeZone'] = body['end']['timeZone'] = _zone()
-    if 'reminder_minutes' in item:
-        minutes = item.get('reminder_minutes')
-        body['reminders'] = {'useDefault': True, 'overrides': None} if minutes is None else {
-            'useDefault': False, 'overrides': [] if minutes < 0 else [{'method': 'popup', 'minutes': minutes}]}
+    # Like the rule, a reminder goes out only when it was changed here, and then only the pop-up is replaced.
+    if item.get('reminder_changed'):
+        minutes, others = item.get('reminder_minutes'), list(item.get('reminder_others') or [])
+        if minutes is not None:
+            body['reminders'] = {'useDefault': False, 'overrides': others + ([] if minutes < 0 else [{'method': 'popup', 'minutes': minutes}])}
+        elif not others:
+            body['reminders'] = {'useDefault': True, 'overrides': None}
     return body
 
 
@@ -609,6 +612,8 @@ def _local_fields(view):
     fields['rule_changed'] = None
     if 'reminder_minutes' in view:
         fields['reminder_minutes'] = view['reminder_minutes']
+        fields['reminder_others'] = view.get('reminder_others') or None
+        fields['reminder_changed'] = None
     return fields
 
 
@@ -908,7 +913,9 @@ def _overlay(items, buckets, start, end):
         instances = by_series.get(item.get('google_id')) if item.get('google_id') else None
         if not instances:
             continue
-        if not _settled(item):
+        # Right after a change sent from here the copy still holds Google's old occurrences: all of them are stale.
+        stale = max(view.get('updated') or '' for _, _, view in instances) < (item.get('google_seen') or '')
+        if not _settled(item) or stale:
             hide.update((calendar, key) for calendar, key, _ in instances)
             continue
         rule = ui_data.recurrence_rule(item.get('recurrence'))
@@ -944,8 +951,8 @@ def live_overlay(found, start, end):
 
 
 def own_views(views):
-    """Own event views as they stand beside Google's: a series without the days Google took over, and none for an event
-    whose rule only Google can show, as its occurrences come from Google."""
+    """Own event views as they stand beside Google's: a series names the days Google took over in `googleDays`, which the
+    page leaves out but never stores, and an event whose rule only Google can show gets no view, as Google shows it."""
     if not connected():
         return views
     items = {f"loc-{item.get('id')}": item for item in ui_data.load_list('calendar')}
@@ -957,9 +964,16 @@ def own_views(views):
             continue
         days = skip.get(str(item.get('id')))
         if days and view.get('recurrence'):
-            view = {**view, 'recurrence': {**view['recurrence'], 'exceptions': sorted(set(view['recurrence']['exceptions']) | days)}}
+            view = {**view, 'googleDays': sorted(days)}
         result.append(view)
     return result
+
+
+def taken_days(item):
+    """The days of an own series that Google shows itself. A page sends them back as exceptions only by mistake."""
+    if not connected() or not item.get('google_id'):
+        return set()
+    return set(series_overlay()[1].get(str(item.get('id'))) or ())
 
 
 def events(start, end):

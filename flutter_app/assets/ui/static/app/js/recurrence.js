@@ -39,12 +39,13 @@ function nth(start, rule, index) {
   return date.getDate() === first.getDate() ? isoOf(date) : null;
 }
 
-// An exception still counts towards a limit of n times, as in RFC 5545.
+/* An exception still counts towards a limit of n times, as in RFC 5545. "googleDays" are days Google shows itself:
+   they are left out like exceptions but belong to the page only and are never stored. */
 export function occurrenceDates(item, from, to) {
   const rule = normalizeRecurrence(item.recurrence);
   const span = item.endDate && item.endDate > item.date ? daysBetween(item.date, item.endDate) : 0;
   if (!rule) return item.date <= to && shifted(item.date, span) >= from ? [item.date] : [];
-  const skip = new Set(rule.exceptions);
+  const skip = new Set([...rule.exceptions, ...(item.googleDays || [])]);
   const dates = [];
   let index = 0;
   if (!rule.count && (rule.freq === "daily" || rule.freq === "weekly")) {

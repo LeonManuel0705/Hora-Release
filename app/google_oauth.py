@@ -526,6 +526,15 @@ def _reminder_minutes(event: Dict):
     return max(minutes) if minutes else -1
 
 
+def _other_reminders(event: Dict):
+    """The reminders of an event that do not pop up (e-mail), so that a change of the pop-up here keeps them."""
+    reminders = event.get('reminders')
+    if not isinstance(reminders, dict) or reminders.get('useDefault', True):
+        return []
+    return [{'method': str(item['method']), 'minutes': item['minutes']} for item in reminders.get('overrides') or []
+            if isinstance(item, dict) and item.get('method') and item.get('method') != 'popup' and isinstance(item.get('minutes'), int)]
+
+
 def calendar_event_view(event: Dict, calendar: Dict) -> Dict:
     start = event.get('start', {})
     end = event.get('end', {})
@@ -567,6 +576,7 @@ def calendar_event_view(event: Dict, calendar: Dict) -> Dict:
         "attendees": _guests(event),
         "attendee_total": len([person for person in event.get('attendees') or [] if isinstance(person, dict) and not person.get('resource')]),
         "reminder_minutes": _reminder_minutes(event),
+        "reminder_others": _other_reminders(event),
         "recurrence": [str(line) for line in event.get('recurrence') or []] or None,
         "original_date": original_date,
         "original_time": original_time,

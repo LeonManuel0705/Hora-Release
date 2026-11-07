@@ -224,8 +224,65 @@ def test_occurrences_changed_or_deleted_in_google_are_left_to_google(client, goo
     shown = sorted((item['title'], item['date'], item['start']) for item in calendar_cache.events(day(0), day(100)))
     assert shown == [('Klavier', day(9), '16:00'), ('Klavier bei Frau Kunz', day(23), '15:00')]
     own = next(item for item in ui_data.events(TODAY) if item['title'] == 'Klavier')
-    assert {day(9), day(16), day(23)} <= set(own['recurrence']['exceptions'])
-    assert day(30) not in own['recurrence']['exceptions']
+    assert {day(9), day(16), day(23)} <= set(own['googleDays'])
+    assert day(30) not in own['googleDays'] and own['recurrence']['exceptions'] == []
+
+
+def test_days_google_shows_itself_are_never_stored_or_sent_back(client, google):
+    _, reply = create(client, recurrence={'freq': 'weekly'})
+    ref = reply['event']['id']
+    master = google.live()[0]['id']
+    occurrences(google, master, 'Klavier', 2, 93, changes={9: {'start': '16:00', 'end': '16:45'}})
+    due_again()
+    calendar_cache.sync(full=True)
+    own = next(item for item in ui_data.events(TODAY) if item['title'] == 'Klavier' and not item.get('synced'))
+    assert own['recurrence']['exceptions'] == [] and day(9) in own['googleDays']
+    stale = {**own['recurrence'], 'exceptions': [day(9), day(30)]}
+    assert client.patch(f'/api/ui/events/{ref}', json={'recurrence': stale}).status_code == 200
+    assert local_events()[0]['recurrence']['exceptions'] == [day(30)]
+    sent = [details['body'].get('recurrence') for name, details in google.calls if name in ('events.patch', 'events.update')][-1]
+    assert sent[0] == 'RRULE:FREQ=WEEKLY' and len(sent) == 2 and day(30).replace('-', '') in sent[1] and day(9).replace('-', '') not in sent[1]
+
+
+def test_an_unchanged_rule_or_reminder_is_not_sent_again(client, google):
+    _, reply = create(client, recurrence={'freq': 'weekly'}, reminderMinutes=30)
+    ref = reply['event']['id']
+    google.change('primary', google.live()[0]['id'], summary='Klavier bei Frau Kunz')
+    due_again()
+    calendar_cache.sync(full=True)
+    calls = len(google.calls)
+    client.patch(f'/api/ui/events/{ref}', json={'title': 'Klavierstunde', 'recurrence': {'freq': 'weekly'}, 'reminderMinutes': 30})
+    bodies = [details['body'] for name, details in google.calls[calls:] if name in ('events.patch', 'events.update')]
+    assert bodies and all(body['summary'] == 'Klavierstunde' and 'recurrence' not in body and 'reminders' not in body for body in bodies)
+
+
+def test_google_s_old_occurrences_stay_hidden_right_after_a_change_from_here(client, google):
+    _, reply = create(client, recurrence={'freq': 'weekly'})
+    master = google.live()[0]['id']
+    occurrences(google, master, 'Klavier', 2, 30)
+    due_again()
+    calendar_cache.sync(full=True)
+    assert calendar_cache.events(day(0), day(40)) == []
+    client.patch(f"/api/ui/events/{reply['event']['id']}", json={'title': 'Klavierstunde'})
+    item = local_events()[0]
+    assert item.get('google_id') and not item.get('google_dirty') and not item.get('google_new')
+    assert calendar_cache.events(day(0), day(40)) == []
+    own = next(item for item in ui_data.events(TODAY) if item['title'] == 'Klavierstunde' and not item.get('synced'))
+    assert own['recurrence']['exceptions'] == [] and 'googleDays' not in own
+
+
+def test_a_reminder_that_only_mails_stays_in_google(client, google):
+    _, reply = create(client)
+    ref = reply['event']['id']
+    master = google.live()[0]['id']
+    google.change('primary', master, reminders={'useDefault': False, 'overrides': [{'method': 'email', 'minutes': 60}]})
+    due_again()
+    calendar_cache.sync(full=True)
+    client.patch(f'/api/ui/events/{ref}', json={'title': 'Klavierstunde'})
+    assert 'reminders' not in google.calls[-1][1].get('body', {})
+    assert google.live()[0]['reminders'] == {'useDefault': False, 'overrides': [{'method': 'email', 'minutes': 60}]}
+    client.patch(f'/api/ui/events/{ref}', json={'reminderMinutes': 30})
+    assert google.live()[0]['reminders'] == {'useDefault': False, 'overrides': [{'method': 'email', 'minutes': 60}, {'method': 'popup', 'minutes': 30}]}
 
 
 def test_occurrences_of_a_series_with_an_edit_still_waiting_stay_hidden(client, google):

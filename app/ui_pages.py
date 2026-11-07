@@ -438,10 +438,17 @@ def _event_payload(payload, item, creating):
     if 'recurrence' in payload:
         if payload.get('recurrence') is not None and not ui_data.recurrence_rule(payload.get('recurrence')):
             raise ValueError('Wiederholung ungültig')
-        item['recurrence'] = ui_data.recurrence_rule(payload.get('recurrence'))
-        item['rule_changed'] = True
+        rule = ui_data.recurrence_rule(payload.get('recurrence'))
+        if rule and not creating:
+            kept = set((ui_data.recurrence_rule(item.get('recurrence')) or {}).get('exceptions') or ())
+            taken = calendar_cache.taken_days(item)
+            rule['exceptions'] = [day for day in rule['exceptions'] if day in kept or day not in taken]
+        if rule != ui_data.recurrence_rule(item.get('recurrence')):
+            item.update(recurrence=rule, rule_changed=True)
     if 'reminderMinutes' in payload:
-        item['reminder_minutes'] = ui_data.reminder_minutes(payload.get('reminderMinutes'))
+        minutes = ui_data.reminder_minutes(payload.get('reminderMinutes'))
+        if minutes != item.get('reminder_minutes'):
+            item.update(reminder_minutes=minutes, reminder_changed=True)
 
 
 @bp.route('/api/ui/events', methods=['POST'])

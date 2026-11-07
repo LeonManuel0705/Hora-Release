@@ -48,6 +48,12 @@ const tests = {
     assert.deepEqual(occurrenceDates({ date: "2027-01-31", recurrence: { freq: "monthly", count: 6 } }, "2027-01-01", "2028-12-31"), ["2027-01-31", "2027-03-31", "2027-05-31", "2027-07-31", "2027-08-31", "2027-10-31"]);
     assert.deepEqual(occurrenceDates({ date: "2028-02-29", recurrence: { freq: "yearly", count: 3 } }, "2028-01-01", "2040-12-31"), ["2028-02-29", "2032-02-29", "2036-02-29"]);
   },
+  "days Google shows itself are left out but still count, and never become exceptions"() {
+    const item = event({ freq: "weekly", count: 4 }, { googleDays: ["2026-11-11"] });
+    assert.deepEqual(occurrenceDates(item, "2026-11-01", "2026-12-31"), ["2026-11-04", "2026-11-18", "2026-11-25"]);
+    assert.deepEqual(normalizeRecurrence(item.recurrence).exceptions, []);
+    assert.deepEqual(expandEvents([item], "2026-11-01", "2026-12-31").map((entry) => entry.date), ["2026-11-04", "2026-11-18", "2026-11-25"]);
+  },
   "a series that started long ago is counted from far away without walking every day"() {
     assert.deepEqual(occurrenceDates({ date: "2020-01-06", recurrence: { freq: "weekly" } }, "2026-11-09", "2026-11-15"), ["2026-11-09"]);
     assert.deepEqual(occurrenceDates({ date: "2020-01-01", recurrence: { freq: "daily" } }, "2026-11-09", "2026-11-10"), ["2026-11-09", "2026-11-10"]);
