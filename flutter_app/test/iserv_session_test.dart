@@ -333,6 +333,26 @@ void main() {
     expect(renewals, 1, reason: 'a live session is not signed in again');
   });
 
+  test('calls that find the session over together share one new sign-in and all get their data', () async {
+    IServSession? session = _session(school.origin);
+    await session.signIn('lea', 'geheim');
+    school.forget();
+    var signIns = 0;
+    final renewal = IServRenewal(() => session, () async {
+      signIns++;
+      session = null;
+      final fresh = _session(school.origin);
+      final entered = await fresh.signIn('lea', 'geheim') == IServSignIn.entered;
+      if (entered) session = fresh;
+      return entered;
+    });
+    final answers = await Future.wait([
+      for (var call = 0; call < 3; call++) iservApi(() => session, renewal.call, '/iserv/exercise/api/exercises'),
+    ]);
+    expect([for (final answer in answers) answer?.statusCode], [200, 200, 200]);
+    expect(signIns, 1, reason: 'the old session is dropped while the sign-in runs, the others wait for it');
+  });
+
   test('when signing in again fails, the API gives nothing instead of the sign-in page', () async {
     final session = _session(school.origin);
     await session.signIn('lea', 'geheim');

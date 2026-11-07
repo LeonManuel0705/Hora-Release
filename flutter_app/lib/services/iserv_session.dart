@@ -211,6 +211,24 @@ class IServSession {
   }
 }
 
+/// Signs in again once for all calls that found the same session over: a call that comes while
+/// that sign-in runs waits for it instead of giving up on its data.
+class IServRenewal {
+  IServRenewal(this._current, this._signIn);
+
+  final IServSession? Function() _current;
+  final Future<bool> Function() _signIn;
+  Future<bool>? _pending;
+
+  Future<bool> call(IServSession expired) {
+    final pending = _pending;
+    if (pending != null) return pending;
+    final current = _current();
+    if (!identical(current, expired)) return Future.value(current != null);
+    return _pending = _signIn().whenComplete(() => _pending = null);
+  }
+}
+
 /// Calls an IServ API and signs in again once when the session turned out to be over.
 /// [renew] gets the session that expired, so parallel calls sign in only once.
 Future<Response<Object?>?> iservApi(

@@ -435,22 +435,21 @@ class IServService {
     }
   }
 
-  Future<bool>? _renewing;
-
-  Future<bool> _renew(IServSession expired) {
-    if (!identical(_session, expired)) return Future.value(_session != null);
-    return _renewing ??= _signInAgain().whenComplete(() => _renewing = null);
-  }
+  late final _renewal = IServRenewal(() => _session, _signInAgain);
 
   Future<bool> _signInAgain() async {
-    if (_isWebViewSession) return false;
+    if (_isWebViewSession) {
+      _signInCause = 'login';
+    } else if (await _reconnect()) {
+      return true;
+    }
     _sessionToken = null;
     _dio = null;
     _session = null;
-    return _reconnect();
+    return false;
   }
 
-  Future<Response<Object?>?> _api(String path, [Map<String, dynamic>? query]) => iservApi(() => _session, _renew, path, query: query);
+  Future<Response<Object?>?> _api(String path, [Map<String, dynamic>? query]) => iservApi(() => _session, _renewal.call, path, query: query);
 
   Future<List<IServNotification>> getNotifications() async {
     if (!isConnected || _dio == null) return getCachedNotifications();
