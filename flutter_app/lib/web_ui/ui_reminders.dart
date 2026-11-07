@@ -11,13 +11,6 @@ import 'ui_data.dart' show daysBetween, dayOf, isoOf, uiCourseTypes, uiHues, uiN
 const uiReminderMorning = 7 * 60;
 const uiReminderEvening = 18 * 60;
 const _noteLimit = 160;
-const _categoryDefaults = <String, (bool, int?)>{
-  'lessons': (true, 10),
-  'tests': (true, 1),
-  'homework': (true, 1),
-  'events': (true, 15),
-  'tasks': (true, null),
-};
 
 class UiReminder {
   const UiReminder({required this.key, required this.at, required this.title, required this.body, required this.kind, this.silent = false, this.until});
@@ -59,18 +52,18 @@ class UiReminderPrefs {
     final notify = _map(_map(saved)['notify']);
     final chosen = _map(notify['categories']);
     final quiet = _map(notify['quiet']);
-    final fallback = uiNotifyDefaults()['enabled'] == true;
-    UiReminderCategory category(String key, (bool, int?) base) {
-      final own = _map(chosen[key]);
-      return UiReminderCategory(own.containsKey('on') ? _truthy(own['on']) : base.$1, own.containsKey('lead') ? own['lead'] : base.$2);
+    final defaults = uiNotifyDefaults();
+    UiReminderCategory category(Map<String, Object?> base) {
+      final own = _map(chosen[base['key']]);
+      return UiReminderCategory(own.containsKey('on') ? _truthy(own['on']) : base['on'] != false, own.containsKey('lead') ? own['lead'] : base['lead']);
     }
 
     return UiReminderPrefs(
-      enabled: notify['enabled'] is bool ? notify['enabled'] as bool : fallback,
+      enabled: notify['enabled'] is bool ? notify['enabled'] as bool : defaults['enabled'] == true,
       sound: notify['sound'] != false,
       quietFrom: _minuteOf(quiet['from']) ?? 22 * 60,
       quietTo: _minuteOf(quiet['to']) ?? 7 * 60,
-      categories: {for (final entry in _categoryDefaults.entries) entry.key: category(entry.key, entry.value)},
+      categories: {for (final base in _list(defaults['categories']).map(_map)) '${base['key']}': category(base)},
     );
   }
 
