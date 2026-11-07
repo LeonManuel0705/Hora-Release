@@ -597,7 +597,7 @@
       }
     ],
     "lock_title": "What is encrypted",
-    "lock_text": "{{BRAND_NAME}} stores your IServ and mail login details encrypted, on the computer with Fernet and a key from 600,000 PBKDF2 rounds, on Android in the system's encrypted storage. On the computer, {{BRAND_NAME}} encrypts grades, tests, events and notes the same way. Everything else is not encrypted, but it only exists on your device.",
+    "lock_text": "{{BRAND_NAME}} stores your IServ and mail login details encrypted, on the computer with Fernet and a key from 600,000 PBKDF2 rounds, on Android in the system's encrypted storage. On the computer, {{BRAND_NAME}} encrypts grades, homework, tests, exams, events, notes, mail drafts, saved places and your history with Luna the same way. Not encrypted there are the timetable with subjects and rooms, the task list, training, bookmarks, tickets and the settings, and on Android and in the web app everything except the login details. All of it stays on your device.",
     "lock_number": "600,000",
     "lock_number_label": "PBKDF2 rounds for your login details on the computer",
     "no_title": "What doesn't exist",
@@ -750,7 +750,7 @@
     "s2_p2": "We do not collect, store, or process any personal data through the App, unless you use features that require an internet connection (e.g., real-time public transit data) or the App makes one of the requests listed in Section 3 d) by itself.",
     "s3_title": "§ 3 Data Processing in the App",
     "s3_sub1_title": "a) Locally Stored Data",
-    "s3_sub1_p1": "All data you enter (timetables, grades, tasks, training data, notes, etc.) is stored exclusively on your device. The App stores login details, for example for IServ and email, in encrypted form. In the apps for computers, this also applies to grades, tests, events and notes. All other data is stored unencrypted in a local database on your device. The Provider has no access to this data at any time.",
+    "s3_sub1_p1": "All data you enter (timetables, grades, tasks, training data, notes, etc.) is stored exclusively on your device. The App stores login details, for example for IServ and email, in encrypted form. In the apps for computers, this also applies to grades, homework, tests, exams, presentations, events, notes, mail drafts, saved places and the assistant's history. Stored unencrypted in a local database there are the timetable with subjects, teachers, rooms and times, the task list, training data, Pomodoro statistics, reviews, bookmarks, tickets and the settings, which include your birthday and weather location, as well as the cached substitution plan. On Android and in the web app, all data except the login details is stored unencrypted. The Provider has no access to this data at any time.",
     "s3_sub2_title": "b) Real-Time Transit Data",
     "s3_sub2_p1": "When you use the transit feature, the App sends requests to Transitous (api.transitous.org) and, for ticket prices in Berlin and Brandenburg, to transport.rest (v6.vbb.transport.rest). These requests contain the stops, addresses and times of your search. If you have saved your home or your school as a place, connections from or to there also include its location, and “In der Nähe” (nearby) includes your current location if you allow it. In the older views of the computer app, requests also go to transport.rest and, for fares, to Deutsche Bahn. No device IDs are transmitted.",
     "s3_sub3_title": "c) No Telemetry",
