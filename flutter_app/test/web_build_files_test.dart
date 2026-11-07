@@ -36,6 +36,19 @@ void main() {
     expect(File('web/flutter_bootstrap.js').readAsStringSync(), isNot(contains('serviceWorker')));
   });
 
+  test('the offline worker keeps the whole build and the start no longer throws it away', () {
+    final worker = File('web/app_worker.js').readAsStringSync();
+    final builder = File('../scripts/build_web_app.py').readAsStringSync();
+    final page = File('web/index.html').readAsStringSync();
+    expect(worker, contains('const MANIFEST = null;'));
+    expect(builder, contains("WORKER = 'app_worker.js'"));
+    expect(builder, contains("'canvaskit/chromium/'"));
+    expect(File('web/flutter_bootstrap.js').readAsStringSync(), contains('canvasKitVariant: "full"'));
+    expect(page, contains("register('app_worker.js'"));
+    expect(page, contains(r'app_worker\.js'));
+    expect(page, isNot(contains('caches.delete')));
+  });
+
   test('the web app may reach every outside service the shared logic calls', () {
     final policy = RegExp('Content-Security-Policy: (.*)').firstMatch(block('/pwa/*'))!.group(1)!;
     final connect = RegExp('connect-src ([^;]+)').firstMatch(policy)!.group(1)!.split(' ').toSet();

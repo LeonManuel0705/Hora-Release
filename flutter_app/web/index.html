@@ -168,14 +168,16 @@
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
         return Promise.all(registrations.filter(function(registration) {
           var worker = registration.active || registration.waiting || registration.installing;
-          return !worker || !/\/hub_worker\.js$/.test(new URL(worker.scriptURL).pathname);
+          return !worker || !/\/app_worker\.js$|\/hub_worker\.js$/.test(new URL(worker.scriptURL).pathname);
         }).map(function(registration) { return registration.unregister(); }));
       }).catch(function() {});
-      if (window.caches) {
-        caches.keys().then(function(names) {
-          return Promise.all(names.map(function(name) { return caches.delete(name); }));
-        }).catch(function() {});
-      }
+      window.addEventListener('flutter-first-frame', function() {
+        setTimeout(function() {
+          navigator.serviceWorker.register('app_worker.js', { updateViaCache: 'none' }).then(function(registration) {
+            return registration.update();
+          }).catch(function() {});
+        }, 3000);
+      }, { once: true });
     }
 
     window.addEventListener('flutter-first-frame', function() {

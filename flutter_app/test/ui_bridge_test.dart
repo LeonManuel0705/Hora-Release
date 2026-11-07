@@ -277,6 +277,17 @@ void main() {
     expect(other.status, 404);
   });
 
+  test('a page that cannot be built says so instead of showing raw data', () async {
+    final hub = UiBridge(api: UiApi(null), pages: _UnbuiltPages(), openNative: (_) async => false, startScript: webStartScript);
+    final reply = await hub.handle(const UiBridgeRequest(method: 'GET', path: '/hub/calendar', navigate: true));
+    expect(reply.status, 503);
+    expect(reply.headers['Content-Type'], startsWith('text/html'));
+    expect(reply.body, contains('Diese Seite ließ sich gerade nicht laden.'));
+    expect(reply.body, isNot(contains('success')));
+    final exported = await hub.handle(const UiBridgeRequest(method: 'GET', path: '/api/ui/export'));
+    expect(exported.headers['Content-Type'], startsWith('application/json'));
+  });
+
   test('static files come from the bundle once and never from outside it', () async {
     loaded.clear();
     final hub = bridge();
@@ -350,4 +361,12 @@ void main() {
     final html = UiPages.withStartScript('<html><head>\n<meta charset="utf-8"><title>x</title></head></html>', 'abc', 'go();');
     expect(html, '<html><head>\n<meta charset="utf-8"><script nonce="abc">go();</script><title>x</title></head></html>');
   });
+}
+
+class _UnbuiltPages extends UiPages {
+  _UnbuiltPages() : super(browser: true);
+
+  @override
+  Future<String> render(String page, {required String nonce, String? day, String? startScript}) =>
+      Future.error(StateError('offline'));
 }
