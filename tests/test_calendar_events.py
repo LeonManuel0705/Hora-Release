@@ -275,3 +275,9 @@ def test_beyond_the_copy_only_untouched_occurrences_are_hidden(client, google):
     found = [{**google_oauth.calendar_event_view(event, calendar), 'calendar_id': google.primary} for event in google.live() if event.get('recurringEventId')]
     hidden = calendar_cache.live_overlay(found, day(95), day(120))
     assert sorted(key for _, key in hidden) == [f'{master}_100', f'{master}_114']
+
+
+def test_a_long_description_reaches_the_page_whole():
+    text = '<p>Agenda</p>' + 'x' * 3000 + '<a href="https://zoom.us/j/123">Beitreten</a>'
+    shown = calendar_cache.view({'id': 'x', 'calendar_id': 'cal', 'start_date': day(1), 'start_time': '10:00', 'end_date': day(1), 'end_time': '11:00', 'description': text})
+    assert shown['notes'] == text

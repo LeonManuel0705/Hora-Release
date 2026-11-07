@@ -843,7 +843,7 @@ def view(item):
         'title': str(item.get('title') or 'Termin'),
         'place': str(item.get('location') or ''),
         'kind': kind_of(item.get('calendar'), item.get('title')),
-        'notes': str(item.get('description') or '')[:2000],
+        'notes': str(item.get('description') or ''),
         'source': SOURCE,
         'synced': True,
     }

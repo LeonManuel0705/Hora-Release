@@ -8,7 +8,21 @@ import { events as eventApi, debounced, serverId } from "../api.js";
 import { expandEvents, normalizeRecurrence, splitOccurrence, occurrenceId, ruleText } from "../recurrence.js";
 import { readPrefs } from "../reminders.js";
 
-const saveText = debounced(700, (key, id, changes) => eventApi.update(id, changes));
+const typedBefore = new Map();
+const saveText = debounced(700, (key, id, changes) => {
+  const sent = eventApi.update(id, changes);
+  const before = typedBefore.get(key);
+  typedBefore.delete(key);
+  if (!before) return;
+  sent.catch(() => {
+    const item = state.events.find((entry) => entry.id === id);
+    if (!item) return;
+    Object.assign(item, before);
+    render();
+    if (state.selected === id) renderPanel();
+    toast(`Die Änderung an „${esc(item.title)}“ kam nicht im Google-Kalender an.`, { icon: "wifi-off" });
+  });
+});
 
 const $ = (id) => document.getElementById(id);
 const extra = data.page || {};
@@ -853,10 +867,16 @@ function plainText(value) {
   const text = String(value || "");
   if (!/<[a-z!/]/i.test(text)) return text;
   const doc = new DOMParser().parseFromString(text.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li)>/gi, "\n"), "text/html");
+  doc.querySelectorAll("a[href]").forEach((link) => {
+    const href = link.getAttribute("href") || "";
+    const label = link.textContent.trim();
+    if (/^https?:\/\//i.test(href) && label !== href) link.textContent = label ? `${label} (${href})` : href;
+  });
   return (doc.body.textContent || "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-const linked = (text) => esc(text).replace(/https:\/\/[^\s<>"']+/g, (url) => `<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+const formatted = (value) => /<[a-z!/]/i.test(String(value || ""));
+const linked = (text) => String(text).split(/(https:\/\/[^\s<>"')]+)/g).map((part, index) => (index % 2 ? `<a href="${esc(part)}" target="_blank" rel="noopener">${esc(part)}</a>` : esc(part))).join("");
 
 function panelHead(markClass, markIcon, title, { editable = false, deletable = false, style = "", draft = false } = {}) {
   const heading = editable
@@ -958,7 +978,7 @@ function panelEdit(item) {
         <span class="field-label" id="calKindLabel">Art</span>
         <div class="field-body" role="group" aria-labelledby="calKindLabel">${Object.entries(KINDS).map(([key, kind]) => `<button type="button" class="pill cal-kind" data-kind="${key}" aria-pressed="${item.kind === key}" style="--k:${kindVar(key)}"><i class="cal-dot"></i>${kind.label}</button>`).join("")}</div>
       </div>` : ""}
-      <label class="field"><span class="field-label">${own ? "Notizen" : "Beschreibung"}</span><textarea class="field-control" id="calPanelNotes" rows="3" placeholder="${own ? "Was du mitbringen oder vorbereiten willst" : "Was dazu im Kalender stehen soll"}">${esc(own ? item.notes || "" : plainText(item.notes))}</textarea></label>
+      <label class="field"><span class="field-label">${own ? "Notizen" : "Beschreibung"}</span><textarea class="field-control" id="calPanelNotes" rows="3" placeholder="${own ? "Was du mitbringen oder vorbereiten willst" : "Was dazu im Kalender stehen soll"}">${esc(own ? item.notes || "" : plainText(item.notes))}</textarea>${!own && formatted(item.notes) ? '<span class="cal-hint">Beim Ändern geht die Formatierung verloren, Links bleiben als Adresse.</span>' : ""}</label>
       ${own ? "" : `${guestsHtml(item)}${linksHtml(item) ? `<div class="field">${linksHtml(item)}</div>` : ""}`}
       ${draft ? `<div class="cal-save"><button class="btn btn-quiet" type="button" data-draft-cancel>Abbrechen</button><button class="btn btn-primary" type="button" data-draft-save>${icon("check")}Anlegen</button></div>` : `<p class="panel-source">${icon("calendar-days")}${own ? ownSource(item) : "Aus dem Google-Kalender, Änderungen gehen dorthin"}</p>`}
     </div>`;
@@ -1470,14 +1490,22 @@ function removeEvent(id, { silent = false } = {}) {
   if (index < 0) return;
   state.events.splice(index, 1);
   removed.add(base.synced ? base.id : serverId(base.id) || base.id);
-  eventApi.remove(base.id);
+  const sent = eventApi.remove(base.id);
   shareEvents();
   leave();
-  if (silent) return;
   if (base.synced) {
-    toast(`Gelöscht: „${esc(base.title)}“, auch im Google-Kalender`, { icon: "trash-2" });
+    sent.then(() => {
+      if (!silent) toast(`Gelöscht: „${esc(base.title)}“, auch im Google-Kalender`, { icon: "trash-2" });
+    }, () => {
+      state.events.splice(Math.min(index, state.events.length), 0, base);
+      removed.delete(base.id);
+      shareEvents();
+      render();
+      toast(`„${esc(base.title)}“ ließ sich im Google-Kalender nicht löschen.`, { icon: "wifi-off" });
+    });
     return;
   }
+  if (silent) return;
   toast(`Gelöscht: „${esc(base.title)}“${series ? " mit allen Terminen der Reihe" : ""}`, {
     icon: "trash-2",
     action: { label: "Rückgängig", undo: true, run: () => {
@@ -1574,6 +1602,7 @@ function typed(field, value) {
     return null;
   }
   const target = item.series ? seriesOf(item) || item : item;
+  if (target.synced && !typedBefore.has(`${target.id}:${field}`)) typedBefore.set(`${target.id}:${field}`, { [field]: target[field] });
   target[field] = value;
   return target;
 }
