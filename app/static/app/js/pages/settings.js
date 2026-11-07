@@ -1330,7 +1330,12 @@ function renderIserv() {
   } else if (prefs.iserv.connected) {
     const offline = flags.offline;
     const stand = syncTime("iserv");
-    const status = offline ? `<span class="status is-offline">${icon("wifi-off")}Offline</span>` : `<span class="status is-ok">${icon("circle-check")}Verbunden</span>`;
+    // The phone names a failed sign-in as Google does; there the data is only as old as the last one that worked.
+    const since = stand ? `, du siehst den Stand von ${stand} Uhr` : "";
+    const status = offline ? `<span class="status is-offline">${icon("wifi-off")}Offline</span>`
+      : info.state === "login" ? `<span class="status is-warn">${icon("circle-alert")}Abgelaufen</span>`
+        : info.state === "offline" ? `<span class="status is-offline">${icon("wifi-off")}Nicht erreichbar</span>`
+          : `<span class="status is-ok">${icon("circle-check")}Verbunden</span>`;
     const parts = ["plan", "homework", "mail"].map((part) => [part, accounts.report?.[part]]).filter(([, answer]) => answer);
     // When IServ was out of reach, every part says so: once is enough.
     const report = !parts.length ? "" : !parts.some(([, answer]) => answer.ok)
@@ -1338,7 +1343,9 @@ function renderIserv() {
       : [...new Set(parts.map(([part, answer]) => partSentence(part, answer)).filter(Boolean))].join(" ");
     const detail = offline
       ? `Abgleichen geht erst wieder, wenn ${BRAND} läuft.`
-      : `${stand ? `Stand ${stand} Uhr.` : "Noch nicht abgeglichen."}${report ? ` ${report}` : ""}`;
+      : info.state === "login" ? `Die Anmeldung klappt nicht mehr${since}. Trenn IServ und verbinde es neu.`
+        : info.state === "offline" ? `IServ ist gerade nicht erreichbar${since}.`
+          : `${stand ? `Stand ${stand} Uhr.` : "Noch nicht abgeglichen."}${report ? ` ${report}` : ""}`;
     html = row({
       id: "rowIserv",
       cls: "is-stack",

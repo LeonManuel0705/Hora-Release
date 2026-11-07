@@ -797,11 +797,13 @@ class UiData {
     final row = rows.isEmpty ? null : rows.first;
     final username = text(row?['username']);
     final server = text(row?['iserv_url']).replaceFirst(RegExp(r'^https?://'), '').replaceFirst(RegExp(r'/+$'), '');
+    final cause = username.isEmpty || browser ? null : IServService().signInCause;
     return {
       'connected': username.isNotEmpty,
       'name': username,
       'school': server,
       'features': browser ? <String>[] : ['Vertretungsplan'],
+      if (username.isNotEmpty && !browser) 'state': cause == 'login' || cause == 'offline' ? cause : 'ok',
     };
   }
 
