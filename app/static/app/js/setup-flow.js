@@ -132,11 +132,13 @@ export function open(options = {}) {
   focusFirst();
 }
 
-// Closing keeps what the open step holds, as Weiter would. Times and weeks only count once they are complete.
+// Closing keeps what the open step holds, as Weiter would. Weeks only count once answered, times only once the start,
+// the count or a break was changed, never for a length that was only tapped to look at it.
 function commitOpenStep() {
   const id = current();
   if (id === "subjects" || id === "details") commitSubjects();
-  else if ((id === "times" || id === "weeks") && VIEWS[id].ready()) leaveStep(id);
+  else if (id === "weeks" && VIEWS.weeks.ready()) leaveStep(id);
+  else if (id === "times" && model.timesEdited && VIEWS.times.ready()) leaveStep(id);
 }
 
 async function close({ to = "" } = {}) {
@@ -897,6 +899,7 @@ function onClick(event) {
   if (count && !count.disabled) {
     const { least, most } = timesCount();
     model.template.count = Math.max(least, Math.min(most, model.template.count + Number(count.dataset.count)));
+    model.timesEdited = true;
     refreshTimes();
     return;
   }
@@ -940,11 +943,13 @@ function onChange(event) {
   }
   if (target.id === "setupStart") {
     if (plan.minutesOfClock(target.value) != null) model.template.start = target.value;
+    model.timesEdited = true;
     refreshTimes();
     return;
   }
   if (target.id === "setupSmall" || target.id === "setupBig") {
     model.template[target.id === "setupSmall" ? "small" : "big"] = Number(target.value);
+    model.timesEdited = true;
     refreshTimes();
     return;
   }

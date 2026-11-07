@@ -310,6 +310,31 @@ CASES["closing a step left half done keeps nothing of it"] = async () => {
   assert.deepEqual(storeWrites(page), ["PUT app-settings"]);
 };
 
+CASES["closing after only tapping another period length keeps the stored times"] = async () => {
+  const page = await boot();
+  page.flow.open({});
+  const run = driver(page);
+  await answerSchool(run);
+  await run.next();
+  assert.equal(run.step(), "times");
+  await run.change({ name: "times", value: "45" });
+  await run.fire("cancel", { preventDefault() {} });
+  assert.equal(page.core.storage.get("app-block-times"), null);
+  assert.deepEqual(storeWrites(page), ["PUT app-settings"]);
+};
+
+CASES["closing after changing the count keeps the new times"] = async () => {
+  const page = await boot();
+  page.flow.open({});
+  const run = driver(page);
+  await answerSchool(run);
+  await run.next();
+  await run.change({ name: "times", value: "45" });
+  await run.fire("click", { target: run.control("[data-count]", { dataset: { count: "1" } }) });
+  await run.fire("cancel", { preventDefault() {} });
+  assert.equal(page.core.storage.get("app-block-times").blocks.length, 9);
+};
+
 async function toDone(run) {
   await answerSchool(run);
   for (let index = 0; index < 6; index += 1) await run.next();
