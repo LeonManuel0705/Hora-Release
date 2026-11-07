@@ -194,8 +194,29 @@ function paintProgress() {
   host.innerHTML = `<ol class="setup-steps" aria-label="Schritt ${index + 1} von ${COUNTED.length}">${COUNTED.map((step, at) => `<li class="${at < index ? "is-past" : at === index ? "is-now" : ""}"${at === index ? ' aria-current="step"' : ""}><i aria-hidden="true"></i><span>${esc(step.label)}</span></li>`).join("")}</ol>`;
 }
 
+const FOCUS_KEYS = ["week", "copy-week", "undo", "count", "setup-next", "setup-back"];
+
+// What identifies a control across a repaint: its data attribute, or else its id.
+function focusKey(node) {
+  if (!node?.getAttribute) return "";
+  for (const name of FOCUS_KEYS) {
+    const value = node.getAttribute(`data-${name}`);
+    if (value !== null) return value ? `[data-${name}="${CSS.escape(value)}"]` : `[data-${name}]`;
+  }
+  return node.id ? `#${CSS.escape(node.id)}` : "";
+}
+
+const focusIn = (host) => (host?.contains(document.activeElement) ? focusKey(document.activeElement) : "");
+
+function refocus(host, key, fallback) {
+  if (!key) return;
+  const found = host.querySelector(key);
+  (found && !found.disabled ? found : fallback?.())?.focus({ preventScroll: true });
+}
+
 function paintFoot() {
   const foot = flow.dialog.querySelector("#setupFoot");
+  const focused = focusIn(foot);
   const id = current();
   const step = VIEWS[id];
   const back = flow.step > 0 && id !== "done" ? `<button class="btn btn-quiet setup-back" type="button" data-setup-back>${icon("chevron-left")}Zurück</button>` : "";
@@ -203,6 +224,7 @@ function paintFoot() {
   const label = step.next ? step.next() : "Weiter";
   const hint = step.hint ? `<p class="setup-hint" id="setupHint">${step.hint()}</p>` : "";
   foot.innerHTML = `${back}${hint}<button class="btn btn-primary setup-next" type="button" data-setup-next${ready && !flow.busy ? "" : " disabled"}${hint ? ' aria-describedby="setupHint"' : ""}>${esc(label)}${id === "done" ? "" : icon("chevron-right")}</button>`;
+  refocus(foot, focused);
 }
 
 function render({ direction = 0, enter = false } = {}) {
@@ -567,15 +589,17 @@ function fitCells() {
 
 function paintBoard({ grid = true } = {}) {
   const head = flow.stage.querySelector("#setupBoardHead");
-  if (head) head.innerHTML = boardHead();
   const table = flow.stage.querySelector("#setupGrid");
+  const focused = focusIn(head);
+  const inGrid = !!table?.contains(document.activeElement);
+  if (head) head.innerHTML = boardHead();
   if (table && grid) {
-    const focused = table.contains(document.activeElement);
     table.setAttribute("aria-label", abWeeks() ? `Stundenplan der ${model.week}-Woche` : "Stundenplan");
     table.innerHTML = gridHtml();
     fitCells();
-    if (focused) table.querySelector('[tabindex="0"]')?.focus({ preventScroll: true });
+    if (inGrid) table.querySelector('[tabindex="0"]')?.focus({ preventScroll: true });
   }
+  if (head) refocus(head, focused, () => table?.querySelector('[tabindex="0"]'));
   paintFoot();
 }
 
@@ -801,9 +825,9 @@ function refreshTimes() {
   const host = flow.stage.querySelector("#setupTimesHost");
   if (!host) return;
   const blocks = draftBlocks();
-  const focused = document.activeElement?.id;
+  const focused = focusIn(host);
   host.innerHTML = `${timesDetail()}${model.times ? `${timelineHtml(blocks)}<p class="setup-note" id="setupTimesNote">${timesNote(blocks)}</p>` : ""}`;
-  if (focused && host.querySelector(`#${focused}`)) host.querySelector(`#${focused}`).focus({ preventScroll: true });
+  refocus(host, focused, () => host.querySelector("[data-count]:not(:disabled)") || host.querySelector("#setupStart"));
   paintFoot();
 }
 
