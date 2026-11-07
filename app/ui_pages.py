@@ -686,6 +686,44 @@ def google_events():
     return jsonify({'success': True, 'events': ui_data.events(today), **calendar_cache.page_state()})
 
 
+@bp.route('/api/ui/google/school', methods=['GET', 'POST', 'DELETE'])
+def google_school_calendar():
+    """The switch for the school week in Google. Off asks the page first whether the calendar stays in Google."""
+    from . import google_oauth, google_school
+    if request.method == 'GET':
+        return jsonify({'success': True, 'school': google_school.view()})
+    if request.method == 'DELETE':
+        payload = _payload() or {}
+        calendar = google_school.turn_off(keep=payload.get('keep') is not False)
+        return jsonify({'success': True, 'calendar': calendar, 'school': google_school.view()})
+    account = google_oauth.calendar_account() if calendar_cache.connected() else None
+    if not account or google_oauth.login_expired(account):
+        return _error('Verbinde zuerst Google.', 409)
+    if not google_oauth.can('school', account):
+        return jsonify({'success': False, 'needs': 'school', 'error': 'Google muss erst erlauben, dass ein eigener Kalender angelegt wird.'}), 403
+    google_school.turn_on(account)
+    return jsonify({'success': True, 'school': google_school.view()})
+
+
+SCHOOL_SOURCES = ('/api/ui/deadlines', '/api/hub/school/', '/api/hub/bundesland', '/api/hub/holidays')
+SCHOOL_KEYS = {'app-timetable-edits', 'app-block-times', 'app-ab-swap', 'app-ab-weeks', 'app-subjects', 'app-teachers', 'app-rooms'}
+
+
+@bp.after_app_request
+def school_entries_follow(response):
+    """A saved change to the plan, the tests or the holidays reaches the school calendar in Google shortly after."""
+    path = request.path
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and response.status_code < 400 and (
+        path.startswith(SCHOOL_SOURCES) or path.removeprefix('/api/ui/store/') in SCHOOL_KEYS
+    ):
+        try:
+            from . import google_school
+            google_school.changed()
+        except Exception:
+            pass
+    return response
+
+
 PLAN_PROBLEMS = {
     'setup': 'IServ ist nicht verbunden.',
     'login': 'Die Anmeldung bei IServ ist abgelaufen. Verbinde IServ in den Einstellungen neu.',

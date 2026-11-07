@@ -64,6 +64,19 @@ def _google():
     return google_oauth
 
 
+def _school():
+    from . import google_school
+    return google_school
+
+
+def _managed():
+    """The calendar the app fills with the school week. The copy leaves it out, the pages show the plan itself."""
+    try:
+        return _school().managed()
+    except Exception:
+        return set()
+
+
 def connected():
     try:
         return bool(_google().calendar_account())
@@ -213,6 +226,8 @@ def _pull_full(service, email, today, previous=None):
         token = page.get('nextPageToken')
         if not token:
             break
+    managed = _managed()
+    calendars = [item for item in calendars if item.get('id') not in managed]
     cache = {
         'version': CACHE_VERSION,
         'account': email,
@@ -258,8 +273,11 @@ def _pull_changes(service, cache):
     cancelled = set()
     seen = {}
     closed = []
+    managed = _managed()
     for calendar in list(cache['calendars']):
         name = calendar['id']
+        if name in managed:
+            continue
         try:
             items = google.list_calendar_events(service, name, updatedMin=cache['synced_at'], showDeleted=True, singleEvents=False)
         except Exception as error:
@@ -724,14 +742,20 @@ def nudge():
     _worker['wake'].set()
 
 
+def wake():
+    _worker['wake'].set()
+
+
 def _background():
     stop, wake = _worker['stop'], _worker['wake']
     while not stop.is_set():
-        try:
-            background_round()
-        except Exception as error:
-            log.warning('Background calendar check failed: %s', type(error).__name__)
-        wake.wait(TICK_SECONDS)
+        for job in (background_round, _school().background_round):
+            try:
+                job()
+            except Exception as error:
+                log.warning('Background calendar job failed: %s', type(error).__name__)
+        soon = _school().seconds_until_due()
+        wake.wait(TICK_SECONDS if soon is None else min(TICK_SECONDS, max(soon, 0.05)))
         wake.clear()
 
 
@@ -840,6 +864,8 @@ def settings_view():
             for item in cache.get('calendars', []) if cache.get('account') == account
         ],
         target=target_calendar(cache if cache.get('account') == account else None, account),
+        school=_school().view(),
+        may_make_calendars=google.covers(scopes, 'school'),
     )
     return view
 
@@ -908,6 +934,7 @@ def events(start, end):
     linked = {item.get('google_id') for item in ui_data.load_list('calendar') if item.get('google_id')}
     calendars = {calendar['id']: calendar for calendar in cache.get('calendars', [])}
     open_to_edits = _open_to_edits(cache)
+    hidden = hidden | _managed()
     result = []
     for calendar_id, bucket in cache.get('events', {}).items():
         if calendar_id in hidden:

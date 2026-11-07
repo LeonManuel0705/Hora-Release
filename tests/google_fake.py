@@ -33,6 +33,28 @@ class _Call:
         return self._run(self)
 
 
+class _Batch:
+    """Runs its requests one after the other and hands each answer to the callback, like the real batch does. Without
+    network the whole batch fails, a refusal of a single request reaches only its callback."""
+
+    def __init__(self, google, callback):
+        self._google = google
+        self._callback = callback
+        self._items = []
+
+    def add(self, request, callback=None, request_id=None):
+        self._items.append((request_id or str(len(self._items) + 1), request, callback or self._callback))
+
+    def execute(self):
+        self._google._guard('batch', size=len(self._items))
+        for request_id, request, callback in self._items:
+            try:
+                answer, error = request.execute(), None
+            except FakeHttpError as failure:
+                answer, error = None, failure
+            callback(request_id, answer, error)
+
+
 class FakeGoogle:
     """Stands in for the Calendar API as far as the sync uses it.
 
@@ -47,7 +69,7 @@ class FakeGoogle:
 
     def __init__(self, primary='me@example.org'):
         self.primary = primary
-        self.calendars = {primary: {'id': primary, 'summary': 'Privat', 'primary': True, 'backgroundColor': '#4285f4', 'accessRole': 'owner'}}
+        self.listed = {primary: {'id': primary, 'summary': 'Privat', 'primary': True, 'backgroundColor': '#4285f4', 'accessRole': 'owner'}}
         self.store = {primary: {}}
         self.calls = []
         self.offline = False
@@ -55,6 +77,7 @@ class FakeGoogle:
         self.lost_answers = set()
         self.hooks = {}
         self.quiet_patch = False
+        self.write_budget = None
         self._ids = itertools.count(1)
         self._last = datetime.now(timezone.utc)
 
@@ -73,8 +96,12 @@ class FakeGoogle:
 
     def _writable(self, calendar):
         key = self._calendar(calendar)
-        if self.calendars.get(key, {}).get('accessRole', 'owner') not in ('owner', 'writer'):
+        if self.listed.get(key, {}).get('accessRole', 'owner') not in ('owner', 'writer'):
             raise FakeHttpError(403, 'requiredAccessLevel')
+        if self.write_budget is not None:
+            if self.write_budget <= 0:
+                raise FakeHttpError(403, 'rateLimitExceeded')
+            self.write_budget -= 1
         return self.store[key]
 
     def _readable(self, calendar):
@@ -91,11 +118,11 @@ class FakeGoogle:
         return event
 
     def add_calendar(self, key, name, role='owner', color='#0b8043'):
-        self.calendars[key] = {'id': key, 'summary': name, 'primary': False, 'backgroundColor': color, 'accessRole': role}
+        self.listed[key] = {'id': key, 'summary': name, 'primary': False, 'backgroundColor': color, 'accessRole': role}
         self.store[key] = {}
 
     def remove_calendar(self, key):
-        del self.calendars[key]
+        del self.listed[key]
         del self.store[key]
 
     def put(self, calendar, title, day, start=None, end=None, key=None, age=0, **extra):
@@ -153,13 +180,47 @@ class FakeGoogle:
                 raise FakeHttpError(400)
         return result
 
+    def new_batch_http_request(self, callback=None):
+        return _Batch(self, callback)
+
     def calendarList(self):
         def listing(pageToken=None):
             def run(call):
                 self._guard('calendarList.list')
-                return {'items': list(self.calendars.values())}
+                return {'items': [dict(item) for item in self.listed.values()]}
             return _Call(run)
-        return SimpleNamespace(list=listing)
+
+        def get(calendarId):
+            def run(call):
+                self._guard('calendarList.get', calendar=calendarId)
+                key = self.primary if calendarId == 'primary' else calendarId
+                if key not in self.listed:
+                    raise FakeHttpError(404)
+                return dict(self.listed[key])
+            return _Call(run)
+        return SimpleNamespace(list=listing, get=get)
+
+    def calendars(self):
+        def insert(body):
+            def run(call):
+                self._guard('calendars.insert', body=body)
+                key = f'c{next(self._ids)}@group.calendar.google.com'
+                self.add_calendar(key, body['summary'], role='owner', color='#9fe1e7')
+                self.listed[key].update(description=body.get('description', ''), timeZone=body.get('timeZone', ''))
+                return {'id': key, 'summary': body['summary']}
+            return _Call(run)
+
+        def delete(calendarId):
+            def run(call):
+                self._guard('calendars.delete', calendar=calendarId)
+                if calendarId not in self.listed or calendarId == self.primary:
+                    raise FakeHttpError(404)
+                if self.listed[calendarId].get('accessRole') != 'owner':
+                    raise FakeHttpError(403, 'forbidden')
+                self.remove_calendar(calendarId)
+                return ''
+            return _Call(run)
+        return SimpleNamespace(insert=insert, delete=delete)
 
     def events(self):
         def first_day(event):
