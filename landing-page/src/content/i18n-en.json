@@ -144,7 +144,7 @@
     "web_title": "{{BRAND_NAME}} on {device}",
     "web_lead": "The web app only shows reminders once it is on your Home Screen.",
     "choice_title": "{{BRAND_NAME}} for Android or Linux",
-    "choice_lead": "Your browser reports Linux with a touch screen. That can also be an Android tablet in desktop view."
+    "choice_lead": "Your browser reports Linux. That can also be an Android tablet in desktop view."
   },
   "platforms": {
     "macos": {

@@ -144,7 +144,7 @@
     "web_title": "{{BRAND_NAME}} auf dem {device}",
     "web_lead": "Erinnerungen zeigt die Web-App nur, wenn sie auf dem Home-Bildschirm liegt.",
     "choice_title": "{{BRAND_NAME}} für Android oder Linux",
-    "choice_lead": "Dein Browser meldet Linux mit Touchscreen. Das kann auch ein Android-Tablet in der Desktop-Ansicht sein."
+    "choice_lead": "Dein Browser meldet Linux. Das kann auch ein Android-Tablet in der Desktop-Ansicht sein."
   },
   "platforms": {
     "macos": {
