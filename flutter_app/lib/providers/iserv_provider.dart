@@ -17,6 +17,8 @@ class IServProvider extends ChangeNotifier {
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 
+  String? get signInCause => _service.signInCause;
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -370,6 +372,7 @@ class IServProvider extends ChangeNotifier {
         id: n.id.hashCode,
         title: n.title,
         body: n.message ?? 'Neue IServ-Benachrichtigung',
+        kind: NotificationKind.iserv,
       );
     }
   }

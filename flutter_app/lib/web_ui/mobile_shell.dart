@@ -3,6 +3,7 @@
 
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -13,12 +14,156 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart' show buildClassicHome;
+import '../services/android_device.dart';
+import '../services/downloads.dart';
 import '../services/notification_service.dart';
+import '../services/reminder_scheduler.dart';
 import '../services/update_service.dart';
 import '../theme.dart';
 import 'ui_server.dart';
 import 'ui_shell.dart';
 import 'ui_weather.dart';
+
+String mobileStartScript({required bool ios, required String insets, required String permission}) => '''
+(function () {
+  var root = document.documentElement;
+  root.dataset.shell = "${ios ? 'ios' : 'android'}";
+  $insets
+  var permission = ${jsonEncode(permission)};
+  function bridge(name, value) {
+    if (!window.flutter_inappwebview || !window.flutter_inappwebview.callHandler) return Promise.resolve(null);
+    return window.flutter_inappwebview.callHandler(name, value);
+  }
+  function Reminder(title, options) {
+    var given = options || {};
+    bridge("notify", { title: String(title || ""), body: given.body ? String(given.body) : "", tag: given.tag ? String(given.tag) : "", silent: given.silent === true });
+  }
+  Object.defineProperty(Reminder, "permission", { get: function () { return permission; } });
+  Reminder.requestPermission = function (callback) {
+    return bridge("notifyPermission", true).then(function (value) {
+      permission = value || permission;
+      if (typeof callback === "function") callback(permission);
+      return permission;
+    });
+  };
+  window.Notification = Reminder;
+  window.addEventListener("app:notify-permission", function (event) {
+    if (event.detail) permission = String(event.detail);
+  });
+  ${ios ? '' : _downloadScript}
+  function send() {
+    try {
+      if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+        window.flutter_inappwebview.callHandler("theme", root.dataset.theme || "light");
+      }
+    } catch (error) {}
+  }
+  var modern = !!(window.CSS && CSS.supports("color", "light-dark(#000, #fff)") && CSS.supports("selector(:has(a))") && "popover" in HTMLElement.prototype);
+  function check() { bridge("support", modern); }
+  new MutationObserver(send).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  window.addEventListener("flutterInAppWebViewPlatformReady", function () { send(); check(); });
+  document.addEventListener("DOMContentLoaded", function () { send(); check(); });
+})();
+''';
+
+// The WebView saves no downloads, and blob: addresses are out of reach of fetch under the
+// page's CSP, so the page's blobs are kept by address and handed over when a link saves one.
+// The page learns what became of the file from an "app:download" event. Code that saves on
+// purpose calls hubShell.saveFile, as in the Mac window, and gets the result back.
+const _downloadScript = '''
+  var limit = ${Downloads.maxBytes};
+  var blobs = new Map();
+  var create = URL.createObjectURL;
+  var revoke = URL.revokeObjectURL;
+  URL.createObjectURL = function (object) {
+    var url = create.call(URL, object);
+    if (object instanceof Blob) blobs.set(url, object);
+    return url;
+  };
+  URL.revokeObjectURL = function (url) {
+    blobs.delete(url);
+    return revoke.call(URL, url);
+  };
+  function tell(detail) {
+    window.dispatchEvent(new CustomEvent("app:download", { detail: detail }));
+  }
+  function failed(name, reason) {
+    tell({ state: "failed", name: name, folder: null, reason: reason || null });
+  }
+  function hand(message) {
+    bridge("saveFile", message).then(function (result) {
+      if (result && result.state) tell(result);
+      else failed(message.name);
+    }, function () { failed(message.name); });
+  }
+  function encoded(blob) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var text = String(reader.result || "");
+        resolve(text.slice(text.indexOf(",") + 1));
+      };
+      reader.onerror = function () { reject(reader.error); };
+      reader.readAsDataURL(blob);
+    });
+  }
+  function save(name, blob) {
+    if (blob.size > limit) {
+      failed(name, "too-large");
+      return;
+    }
+    encoded(blob).then(function (data) { hand({ name: name, data: data }); }, function () { failed(name); });
+  }
+  window.hubShell = Object.freeze({
+    nativeNotifications: true,
+    saveFile: function (name, content) {
+      var blob = content instanceof Blob ? content : new Blob([content == null ? "" : content]);
+      if (blob.size > limit) return Promise.resolve({ error: "too-large" });
+      return encoded(blob).then(function (data) {
+        return bridge("saveFile", { name: String(name || ""), data: data });
+      }).then(function (result) {
+        if (result && result.state === "saved") return { name: result.name, folder: result.folder };
+        return { error: result && result.state === "cancelled" ? "cancelled" : (result && result.reason) || "failed" };
+      });
+    },
+  });
+  document.addEventListener("click", function (event) {
+    var link = event.target && event.target.closest ? event.target.closest("a[download]") : null;
+    if (!link) return;
+    var href = link.getAttribute("href") || "";
+    var name = link.getAttribute("download") || "";
+    if (href.indexOf("blob:") === 0 && blobs.has(href)) {
+      event.preventDefault();
+      save(name, blobs.get(href));
+    } else if (href.indexOf("data:") === 0) {
+      event.preventDefault();
+      if (href.length > limit * 4 / 3 + 4096) failed(name, "too-large");
+      else hand({ name: name, url: href });
+    }
+  }, true);''';
+
+const _downloadText = (Downloads.maxBytes + 2) ~/ 3 * 4;
+
+/// The bytes the page hands over for a download, or null when they are missing, broken or larger
+/// than a download may be.
+Uint8List? downloadBytes(Map<Object?, Object?> value) {
+  final data = value['data'], address = value['url'];
+  try {
+    if (data is String) return data.length <= _downloadText ? base64Decode(data) : null;
+    if (address is String && address.length <= _downloadText + 4096) {
+      final bytes = UriData.parse(address).contentAsBytes();
+      return bytes.length <= Downloads.maxBytes ? bytes : null;
+    }
+  } on FormatException {
+    return null;
+  }
+  return null;
+}
+
+bool downloadTooLarge(Map<Object?, Object?> value) {
+  final data = value['data'], address = value['url'];
+  return (data is String && data.length > _downloadText) || (address is String && address.length > _downloadText + 4096);
+}
 
 class MobileShell extends StatefulWidget {
   const MobileShell({super.key});
@@ -38,6 +183,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
   DateTime? _pausedAt;
   String _pausedDay = '';
   bool _setupRunning = false;
+  bool _asking = false;
 
   @override
   void initState() {
@@ -79,41 +225,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
         'document.documentElement.style.setProperty("--safe-right","0px");';
   }
 
-  String get _startScript => '''
-(function () {
-  var root = document.documentElement;
-  root.dataset.shell = "${Platform.isIOS ? 'ios' : 'android'}";
-  ${_insetScript(_insets, _keyboard)}
-  var permission = "${NotificationService().permissionGranted ? 'granted' : 'default'}";
-  function bridge(name, value) {
-    if (!window.flutter_inappwebview || !window.flutter_inappwebview.callHandler) return Promise.resolve(null);
-    return window.flutter_inappwebview.callHandler(name, value);
-  }
-  function Reminder(title, options) {
-    bridge("notify", { title: String(title || ""), body: options && options.body ? String(options.body) : "" });
-  }
-  Object.defineProperty(Reminder, "permission", { get: function () { return permission; } });
-  Reminder.requestPermission = function () {
-    return bridge("notifyPermission", true).then(function (value) {
-      permission = value || permission;
-      return permission;
-    });
-  };
-  window.Notification = Reminder;
-  function send() {
-    try {
-      if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-        window.flutter_inappwebview.callHandler("theme", root.dataset.theme || "light");
-      }
-    } catch (error) {}
-  }
-  var modern = !!(window.CSS && CSS.supports("color", "light-dark(#000, #fff)") && CSS.supports("selector(:has(a))") && "popover" in HTMLElement.prototype);
-  function check() { bridge("support", modern); }
-  new MutationObserver(send).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
-  window.addEventListener("flutterInAppWebViewPlatformReady", function () { send(); check(); });
-  document.addEventListener("DOMContentLoaded", function () { send(); check(); });
-})();
-''';
+  String get _startScript => mobileStartScript(ios: Platform.isIOS, insets: _insetScript(_insets, _keyboard), permission: NotificationService().permission);
 
   UnmodifiableListView<UserScript> get _scripts => UnmodifiableListView([
         UserScript(source: _startScript, injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START),
@@ -127,10 +239,63 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     final controller = _controller;
     if (controller == null) return;
     try {
-      await controller.removeAllUserScripts();
-      await controller.addUserScripts(userScripts: _scripts.toList());
+      await _renewScripts(controller);
       await controller.evaluateJavascript(source: _insetScript(insets, keyboard));
     } catch (_) {}
+  }
+
+  Future<void> _renewScripts(InAppWebViewController controller) async {
+    await controller.removeAllUserScripts();
+    await controller.addUserScripts(userScripts: _scripts.toList());
+  }
+
+  Future<void> _permissionChanged(String state) async {
+    ReminderScheduler.instance.markChanged();
+    final controller = _controller;
+    if (controller != null) {
+      try {
+        await _renewScripts(controller);
+        await controller.evaluateJavascript(source: 'window.dispatchEvent(new CustomEvent("app:notify-permission", { detail: ${jsonEncode(state)} }));');
+      } catch (_) {}
+    }
+    await ReminderScheduler.instance.reschedule();
+  }
+
+  Future<String> _askPermission() async {
+    final service = NotificationService();
+    await service.initialize();
+    final before = await service.refreshPermission();
+    if (before != 'default') return before;
+    _asking = true;
+    try {
+      await service.requestPermissions();
+    } finally {
+      _asking = false;
+    }
+    final after = service.permission;
+    if (after != before) unawaited(_permissionChanged(after));
+    return after;
+  }
+
+  Future<bool> _notify(Map<Object?, Object?> value) async {
+    final title = '${value['title'] ?? ''}'.trim();
+    if (title.isEmpty) return false;
+    final tag = '${value['tag'] ?? ''}';
+    if (tag.isNotEmpty && Platform.isAndroid && await ReminderScheduler.instance.covers(tag)) return true;
+    return NotificationService().showNotification(
+      id: tag.isEmpty ? DateTime.now().millisecondsSinceEpoch & 0x7fffffff : ReminderScheduler.idFor(tag),
+      title: title,
+      body: '${value['body'] ?? ''}',
+      kind: NotificationKind.reminders,
+      silent: value['silent'] == true,
+    );
+  }
+
+  Future<Map<String, Object?>> _saveFile(Map<Object?, Object?> value) async {
+    final name = '${value['name'] ?? ''}';
+    final bytes = downloadBytes(value);
+    if (bytes == null) return SavedFile('failed', name, reason: downloadTooLarge(value) ? 'too-large' : null).toJson();
+    return (await AndroidDevice.saveDownload(name, bytes)).toJson();
   }
 
   @override
@@ -173,8 +338,21 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     final port = _server.port;
     final alive = await _server.ensureAlive();
     unawaited(UiWeather.instance.refresh());
+    final service = NotificationService();
+    final known = service.permission;
+    // The system prompt of our own request pauses the app too; that answer is the page's to handle.
+    final changed = !_asking && await service.refreshPermission() != known;
+    if (Platform.isAndroid) {
+      if (changed) ReminderScheduler.instance.markChanged();
+      unawaited(ReminderScheduler.instance.reschedule());
+    }
     final controller = _controller;
     if (controller == null || !mounted) return;
+    if (changed) {
+      try {
+        await _renewScripts(controller);
+      } catch (_) {}
+    }
     if (!alive && _server.port != port) {
       final current = await controller.getUrl();
       final path = current?.path.startsWith('/hub') == true ? current!.path : '/hub';
@@ -182,7 +360,8 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
       return;
     }
     final long = paused != null && DateTime.now().difference(paused) > const Duration(minutes: 10);
-    if (!alive || long || _pausedDay != _dayKey()) await controller.reload();
+    // A permission changed in the system settings shows in every row of the page, so reload it.
+    if (!alive || long || changed || _pausedDay != _dayKey()) await controller.reload();
   }
 
   SystemUiOverlayStyle get _overlay {
@@ -247,6 +426,8 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     _setupRunning = true;
     await welcomeOrHolidays();
     if (!mounted) return;
+    // A force stop drops every alarm without a trace, so each launch sets them all again.
+    if (Platform.isAndroid) unawaited(ReminderScheduler.instance.reschedule(whole: true));
     unawaited(_checkForUpdates());
   }
 
@@ -254,10 +435,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     await Future<void>.delayed(const Duration(seconds: 2));
     if (!mounted) return;
     final info = await UpdateService.checkForUpdate();
-    if (info != null && mounted) {
-      UpdateService.sendUpdateNotification(info);
-      UpdateService.showUpdateDialog(context, info);
-    }
+    if (info != null && mounted) UpdateService.showUpdateDialog(context, info);
   }
 
   Future<void> _debugScript(InAppWebViewController controller) async {
@@ -331,28 +509,14 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
                     ),
                     onWebViewCreated: (controller) {
                       _controller = controller;
-                      controller.addJavaScriptHandler(
-                        handlerName: 'notifyPermission',
-                        callback: (args) async {
-                          final service = NotificationService();
-                          if (!service.isInitialized) await service.initialize();
-                          if (service.permissionGranted) return 'granted';
-                          final granted = await service.requestPermissions();
-                          return granted ? 'granted' : 'denied';
-                        },
-                      );
+                      controller.addJavaScriptHandler(handlerName: 'notifyPermission', callback: (args) => _askPermission());
                       controller.addJavaScriptHandler(
                         handlerName: 'notify',
-                        callback: (args) async {
-                          final value = args.isNotEmpty && args.first is Map ? args.first as Map : const {};
-                          final title = '${value['title'] ?? ''}'.trim();
-                          if (title.isEmpty) return false;
-                          return NotificationService().showNotification(
-                            id: DateTime.now().millisecondsSinceEpoch & 0x7fffffff,
-                            title: title,
-                            body: '${value['body'] ?? ''}',
-                          );
-                        },
+                        callback: (args) => _notify(args.isNotEmpty && args.first is Map ? args.first as Map : const {}),
+                      );
+                      controller.addJavaScriptHandler(
+                        handlerName: 'saveFile',
+                        callback: (args) => _saveFile(args.isNotEmpty && args.first is Map ? args.first as Map : const {}),
                       );
                       controller.addJavaScriptHandler(
                         handlerName: 'support',
@@ -376,8 +540,11 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
                       if (uri != null) unawaited(_external(uri));
                       return false;
                     },
-                    onGeolocationPermissionsShowPrompt: (controller, origin) async =>
-                        GeolocationPermissionShowPromptResponse(origin: origin, allow: true, retain: true),
+                    onGeolocationPermissionsShowPrompt: (controller, origin) async => GeolocationPermissionShowPromptResponse(
+                      origin: origin,
+                      allow: !Platform.isAndroid || await AndroidDevice.requestLocation(),
+                      retain: false,
+                    ),
                     onLoadStop: (controller, url) async {
                       if (!_shown && mounted) {
                         setState(() => _shown = true);

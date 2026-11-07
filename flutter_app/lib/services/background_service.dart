@@ -5,7 +5,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
@@ -16,6 +15,8 @@ import 'database_service.dart';
 import 'iserv_service.dart';
 import 'calendar_sync_service.dart';
 import 'email_service.dart';
+import 'notification_service.dart';
+import 'reminder_scheduler.dart';
 
 bool get _isBackgroundSupported {
   if (kIsWeb) return false;
@@ -36,6 +37,8 @@ const String kIServSyncTask = 'iservSync';
 const String kCacheCleanupTask = 'cacheCleanup';
 const String kOfflineQueueTask = 'offlineQueue';
 const String kUpdateCheckTask = 'updateCheck';
+// Also enqueued by name from ReminderReceiver.kt after a reboot, an app update or a clock change.
+const String kReminderPlanTask = 'reminderPlan';
 
 // uniqueNames — also the iOS BGTaskScheduler identifiers (see Info.plist &
 // AppDelegate.swift, which must list these verbatim).
@@ -45,48 +48,9 @@ const String kIServSyncPeriodic = 'iserv_sync_periodic';
 const String kUpdateCheckPeriodic = 'update_check_periodic';
 const String kCacheCleanupPeriodic = 'cache_cleanup_periodic';
 const String kOfflineQueuePeriodic = 'offline_queue_periodic';
+const String kReminderPlanPeriodic = 'reminder_plan_periodic';
 const String kImmediateSync = 'immediate_sync';
 
-
-Future<FlutterLocalNotificationsPlugin> _initBackgroundNotifications() async {
-  final plugin = FlutterLocalNotificationsPlugin();
-  const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const iosSettings = DarwinInitializationSettings(
-    requestAlertPermission: false,
-    requestBadgePermission: false,
-    requestSoundPermission: false,
-  );
-  const initSettings = InitializationSettings(
-    android: androidSettings,
-    iOS: iosSettings,
-  );
-  await plugin.initialize(initSettings);
-  return plugin;
-}
-
-
-Future<void> _showBackgroundNotification(
-  FlutterLocalNotificationsPlugin plugin, {
-  required int id,
-  required String title,
-  required String body,
-  String channelId = 'background',
-  String channelName = 'Hintergrund-Benachrichtigungen',
-}) async {
-  final androidDetails = AndroidNotificationDetails(
-    channelId,
-    channelName,
-    channelDescription: 'Benachrichtigungen während die App im Hintergrund läuft',
-    importance: Importance.high,
-    priority: Priority.high,
-  );
-  const iosDetails = DarwinNotificationDetails();
-  final details = NotificationDetails(
-    android: androidDetails,
-    iOS: iosDetails,
-  );
-  await plugin.show(id, title, body, details);
-}
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -119,6 +83,9 @@ void callbackDispatcher() {
         case kUpdateCheckPeriodic:
           await _checkForUpdateInBackground();
           break;
+        case kReminderPlanTask:
+        case kReminderPlanPeriodic:
+          return await ReminderScheduler.instance.reschedule(whole: true);
       }
       return true;
     } catch (e) {
@@ -154,6 +121,8 @@ Future<void> _syncIServWithNotifications() async {
 
     await iservService.syncAll();
 
+    await ReminderScheduler.instance.reschedule();
+
     final fresh = await iservService.getCachedNotifications();
     final newUnread = fresh.where(
       (n) => !n.read && !previousIds.contains(n.id),
@@ -161,15 +130,14 @@ Future<void> _syncIServWithNotifications() async {
 
     if (newUnread.isEmpty) return;
 
-    final plugin = await _initBackgroundNotifications();
+    final notifications = NotificationService();
+    await notifications.initialize();
     for (final n in newUnread) {
-      await _showBackgroundNotification(
-        plugin,
+      await notifications.showNotification(
         id: n.id.hashCode,
         title: n.title,
         body: n.message ?? 'Neue IServ-Benachrichtigung',
-        channelId: 'iserv',
-        channelName: 'IServ',
+        kind: NotificationKind.iserv,
       );
     }
   } catch (_) {}
@@ -200,14 +168,12 @@ Future<void> _checkForUpdateInBackground() async {
 
     final versionName = data['versionName'] as String? ?? remoteVersion;
 
-    final plugin = await _initBackgroundNotifications();
-    await _showBackgroundNotification(
-      plugin,
+    final notifications = NotificationService();
+    await notifications.initialize();
+    await notifications.showNotification(
       id: 9999,
       title: '${Brand.name} Update verfügbar',
       body: '$versionName ist jetzt verfügbar.',
-      channelId: 'updates',
-      channelName: 'Updates',
     );
 
     await prefs.setString('bg_update_notified_version', remoteVersion);
@@ -343,6 +309,17 @@ class BackgroundService {
       ),
       existingWorkPolicy: ExistingWorkPolicy.keep,
     );
+
+    // iOS would need this identifier in Info.plist, and the iPhone gets the web app anyway.
+    if (Platform.isAndroid) {
+      await Workmanager().registerPeriodicTask(
+        kReminderPlanPeriodic,
+        kReminderPlanTask,
+        frequency: const Duration(hours: 24),
+        constraints: Constraints(networkType: NetworkType.not_required),
+        existingWorkPolicy: ExistingWorkPolicy.keep,
+      );
+    }
   }
 
   Future<void> cancelAllTasks() async {

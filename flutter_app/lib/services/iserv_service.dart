@@ -59,6 +59,12 @@ class IServService {
 
   String? get iservUrl => _baseUrl;
 
+  /// Why IServ answers with old data: 'setup' (never connected), 'login' (the sign-in was refused,
+  /// asks for a second factor or another service, or a session could not be renewed) or
+  /// 'offline' (IServ was out of reach for a sign-in, an API call or the plan). Null while the
+  /// last sign-in worked and IServ answers.
+  String? get signInCause => _signInCause;
+
   bool get hasDioSession => _dio != null && _cookieJar != null;
 
   Future<bool> hasValidCookies() async {
@@ -169,6 +175,14 @@ class IServService {
       if (outcome == IServSignIn.refused) {
         _signInCause = 'login';
         return {'success': false, 'error': 'Falscher Benutzername oder Passwort'};
+      }
+      if (outcome == IServSignIn.twoFactor) {
+        _signInCause = 'login';
+        return {'success': false, 'error': 'Dein IServ-Konto verlangt nach dem Passwort einen Bestätigungscode. Diese Anmeldung kann die App noch nicht.'};
+      }
+      if (outcome == IServSignIn.external) {
+        _signInCause = 'login';
+        return {'success': false, 'error': 'Deine Schule meldet bei IServ über einen anderen Dienst an. Diese Anmeldung kann die App noch nicht.'};
       }
       if (outcome == IServSignIn.stuck) {
         _signInCause = 'offline';
@@ -427,22 +441,42 @@ class IServService {
     }
   }
 
+  late final _renewal = IServRenewal(() => _session, _signInAgain);
+
+  Future<bool> _signInAgain() async {
+    if (_isWebViewSession) {
+      _signInCause = 'login';
+    } else if (await _reconnect()) {
+      return true;
+    }
+    _sessionToken = null;
+    _dio = null;
+    _session = null;
+    return false;
+  }
+
+  Future<Response<Object?>?> _api(String path, [Map<String, dynamic>? query]) async {
+    try {
+      final response = await iservApi(() => _session, _renewal.call, path, query: query);
+      if (response != null) _reached();
+      return response;
+    } on DioException {
+      _signInCause = 'offline';
+      rethrow;
+    }
+  }
+
+  void _reached() {
+    if (_signInCause == 'offline') _signInCause = null;
+  }
+
   Future<List<IServNotification>> getNotifications() async {
     if (!isConnected || _dio == null) return getCachedNotifications();
 
     try {
-      final response = await _dio!.get(
-        '/iserv/messenger/api/messages',
-        options: Options(
-          headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-          },
-          responseType: ResponseType.json,
-        ),
-      );
+      final response = await _api('/iserv/messenger/api/messages');
 
-      if (response.statusCode != 200) return await getCachedNotifications();
+      if (response == null || response.statusCode != 200) return await getCachedNotifications();
 
       final data = response.data;
 
@@ -481,18 +515,9 @@ class IServService {
     if (!isConnected || _dio == null) return getCachedExercises();
 
     try {
-      final response = await _dio!.get(
-        '/iserv/exercise/api/exercises',
-        options: Options(
-          headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-          },
-          responseType: ResponseType.json,
-        ),
-      );
+      final response = await _api('/iserv/exercise/api/exercises');
 
-      if (response.statusCode != 200) return await getCachedExercises();
+      if (response == null || response.statusCode != 200) return await getCachedExercises();
 
       final data = response.data;
 
@@ -542,21 +567,11 @@ class IServService {
 
 
       _log('getEvents: fetching event sources...');
-      final sourcesResponse = await _dio!.get(
-        '/iserv/calendar/api/eventsources',
-        options: Options(
-          headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-          },
-          responseType: ResponseType.json,
-          validateStatus: (status) => status != null && status < 500,
-        ),
-      );
+      final sourcesResponse = await _api('/iserv/calendar/api/eventsources');
 
-      _log('getEvents: eventsources status=${sourcesResponse.statusCode}, type=${sourcesResponse.headers.value("content-type")}');
+      _log('getEvents: eventsources status=${sourcesResponse?.statusCode}, type=${sourcesResponse?.headers.value("content-type")}');
 
-      if (sourcesResponse.statusCode != 200) {
+      if (sourcesResponse == null || sourcesResponse.statusCode != 200) {
         _log('getEvents: eventsources non-200 → cached');
         return await getCachedEvents();
       }
@@ -693,22 +708,11 @@ class IServService {
     String endpoint, Map<String, dynamic> params, DateTime now,
   ) async {
     try {
-      final response = await _dio!.get(
-        endpoint,
-        queryParameters: params,
-        options: Options(
-          headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-          },
-          responseType: ResponseType.json,
-          validateStatus: (status) => status != null && status < 500,
-        ),
-      );
+      final response = await _api(endpoint, params);
 
-      _log('  feed $endpoint → status=${response.statusCode}');
+      _log('  feed $endpoint → status=${response?.statusCode}');
 
-      if (response.statusCode != 200) return null;
+      if (response == null || response.statusCode != 200) return null;
 
       final data = response.data;
       final List<IServEvent> events = [];
@@ -896,6 +900,11 @@ class IServService {
         if (session != null) plan = await fetchIServPlan(session, displayId: displayId);
       }
 
+      if (plan.state == IServPlanState.failed) {
+        _signInCause = 'offline';
+      } else if (plan.state != IServPlanState.expired) {
+        _reached();
+      }
       switch (plan.state) {
         case IServPlanState.found:
           final files = <Map<String, dynamic>>[];
@@ -915,6 +924,7 @@ class IServService {
           return _getCachedVertretungsplanResult(cause: 'offline');
       }
     } catch (e) {
+      _signInCause = 'offline';
       return _getCachedVertretungsplanResult(cause: 'offline');
     }
   }

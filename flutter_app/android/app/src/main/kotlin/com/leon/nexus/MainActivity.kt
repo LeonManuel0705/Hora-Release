@@ -1,28 +1,44 @@
 package com.leon.nexus
 
+import android.Manifest
 import android.app.ActivityManager
 import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.StatFs
+import android.provider.MediaStore
 import android.provider.Settings
 import android.view.WindowManager
+import androidx.core.content.FileProvider
+import com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.io.IOException
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "app/focus_mode"
     private val ASSISTANT_MODEL_CHANNEL = "app/assistant_model"
+    private val DEVICE_CHANNEL = "app/device"
+    private val LOCATION_REQUEST = 4711
+    private val SAVE_REQUEST = 4712
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var locationResult: MethodChannel.Result? = null
+    private var saveResult: MethodChannel.Result? = null
+    private var saveBytes: ByteArray? = null
     private var previousInterruptionFilter: Int = NotificationManager.INTERRUPTION_FILTER_ALL
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -74,6 +90,29 @@ class MainActivity: FlutterActivity() {
             }
         }
 
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "requestLocation" -> requestLocation(result)
+                "missingAlarms" -> {
+                    val ids = call.argument<List<Int>>("ids") ?: emptyList()
+                    result.success(ids.filter { !alarmPlanned(it) })
+                }
+                "saveDownload" -> {
+                    val name = call.argument<String>("name")
+                    val type = call.argument<String>("type")
+                    val bytes = call.argument<ByteArray>("bytes")
+                    if (name == null || type == null || bytes == null) result.success(mapOf("state" to "failed")) else saveDownload(name, type, bytes, result)
+                }
+                "canInstall" -> result.success(canInstallPackages())
+                "allowInstall" -> result.success(openInstallSettings())
+                "install" -> {
+                    val path = call.argument<String>("path")
+                    result.success(path != null && installPackage(path))
+                }
+                else -> result.notImplemented()
+            }
+        }
+
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "$ASSISTANT_MODEL_CHANNEL/network").setStreamHandler(
             object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
@@ -90,6 +129,133 @@ class MainActivity: FlutterActivity() {
     override fun onDestroy() {
         stopWatchingNetwork()
         super.onDestroy()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != LOCATION_REQUEST) return
+        val waiting = locationResult ?: return
+        locationResult = null
+        waiting.success(grantResults.any { it == PackageManager.PERMISSION_GRANTED })
+    }
+
+    // flutter_local_notifications keys the alarm of a reminder by its id and its receiver; a
+    // force stop or a reboot removes that PendingIntent together with the alarm.
+    private fun alarmPlanned(id: Int): Boolean {
+        val intent = Intent(this, ScheduledNotificationReceiver::class.java)
+        return PendingIntent.getBroadcast(this, id, intent, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE) != null
+    }
+
+    private fun locationGranted(): Boolean =
+        checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    private fun requestLocation(result: MethodChannel.Result) {
+        if (locationGranted()) {
+            result.success(true)
+            return
+        }
+        if (locationResult != null) {
+            result.success(false)
+            return
+        }
+        locationResult = result
+        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), LOCATION_REQUEST)
+    }
+
+    // Android 10 and later save into Downloads without asking. Older ones need a storage
+    // permission for that, so the system's own "save as" picks the place there.
+    private fun saveDownload(name: String, type: String, bytes: ByteArray, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, type)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            if (uri == null) {
+                result.success(mapOf("state" to "failed", "name" to name))
+                return
+            }
+            try {
+                contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: throw IOException("no stream")
+                contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+                result.success(mapOf("state" to "saved", "name" to (displayName(uri) ?: name), "folder" to Environment.DIRECTORY_DOWNLOADS))
+            } catch (e: Exception) {
+                contentResolver.delete(uri, null, null)
+                result.success(mapOf("state" to "failed", "name" to name))
+            }
+            return
+        }
+        if (saveResult != null) {
+            result.success(mapOf("state" to "failed", "name" to name))
+            return
+        }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType(type)
+            .putExtra(Intent.EXTRA_TITLE, name)
+        saveResult = result
+        saveBytes = bytes
+        try {
+            startActivityForResult(intent, SAVE_REQUEST)
+        } catch (e: Exception) {
+            saveResult = null
+            saveBytes = null
+            result.success(mapOf("state" to "failed", "name" to name))
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != SAVE_REQUEST) return
+        val waiting = saveResult ?: return
+        val bytes = saveBytes
+        saveResult = null
+        saveBytes = null
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null || bytes == null) {
+            waiting.success(mapOf("state" to "cancelled"))
+            return
+        }
+        val written = try {
+            contentResolver.openOutputStream(uri)?.use { it.write(bytes) } != null
+        } catch (e: Exception) {
+            false
+        }
+        waiting.success(if (written) mapOf("state" to "saved", "name" to (displayName(uri) ?: "")) else mapOf("state" to "failed"))
+    }
+
+    private fun displayName(uri: Uri): String? =
+        contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+
+    private fun canInstallPackages(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
+
+    private fun openInstallSettings(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        return try {
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun installPackage(path: String): Boolean {
+        return try {
+            val uri = FileProvider.getUriForFile(this, "$packageName.files", File(path))
+            val intent = Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun networkStatus(): Map<String, Boolean> {
