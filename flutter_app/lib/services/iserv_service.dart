@@ -59,6 +59,11 @@ class IServService {
 
   String? get iservUrl => _baseUrl;
 
+  /// Why IServ answers with old data: 'setup' (never connected), 'login' (the sign-in was refused,
+  /// asks for a second factor or another service, or a session could not be renewed) or
+  /// 'offline' (IServ was out of reach). Null after the last sign-in worked.
+  String? get signInCause => _signInCause;
+
   bool get hasDioSession => _dio != null && _cookieJar != null;
 
   Future<bool> hasValidCookies() async {

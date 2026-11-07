@@ -132,7 +132,11 @@ mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost {
   @override
   Map<String, Object?> iservStatus() {
     final provider = context.read<IServProvider>();
-    return {'connected': provider.isConnected, 'has_credentials': provider.isConnected || provider.username != null};
+    return {
+      'connected': provider.isConnected,
+      'has_credentials': provider.isConnected || provider.username != null,
+      'cause': provider.signInCause,
+    };
   }
 
   @override
