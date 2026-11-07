@@ -1273,7 +1273,11 @@ function renderIserv() {
     const offline = flags.offline;
     const stand = syncTime("iserv");
     const status = offline ? `<span class="status is-offline">${icon("wifi-off")}Offline</span>` : `<span class="status is-ok">${icon("circle-check")}Verbunden</span>`;
-    const report = accounts.report ? ["plan", "homework", "mail"].map((part) => partSentence(part, accounts.report[part])).filter(Boolean).join(" ") : "";
+    const parts = ["plan", "homework", "mail"].map((part) => [part, accounts.report?.[part]]).filter(([, answer]) => answer);
+    // When IServ was out of reach, every part says so: once is enough.
+    const report = !parts.length ? "" : !parts.some(([, answer]) => answer.ok)
+      ? parts[0][1].message || "IServ ist gerade nicht erreichbar."
+      : [...new Set(parts.map(([part, answer]) => partSentence(part, answer)).filter(Boolean))].join(" ");
     const detail = offline
       ? `Abgleichen geht erst wieder, wenn ${BRAND} läuft.`
       : `${stand ? `Stand ${stand} Uhr.` : "Noch nicht abgeglichen."}${report ? ` ${report}` : ""}`;

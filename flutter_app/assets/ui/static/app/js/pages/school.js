@@ -606,10 +606,10 @@ function planStand() {
 
 function changesHtml(head) {
   const time = clockState();
-  const time = syncTime();
+  const synced = syncTime();
   const stand = flags.offline
-    ? `<p class="side-meta is-offline">${icon("wifi-off")}${time ? `Offline, Stand ${esc(time)} Uhr` : "Offline"}</p>`
-    : time ? `<p class="side-meta">Stand ${esc(time)} Uhr</p>` : "";
+    ? `<p class="side-meta is-offline">${icon("wifi-off")}${synced ? `Offline, Stand ${esc(synced)} Uhr` : "Offline"}</p>`
+    : synced ? `<p class="side-meta">Stand ${esc(synced)} Uhr</p>` : "";
   const days = changeDays();
   const groups = days.map((day) => {
     const changed = lessonsOn(day).filter((lesson) => lesson.changed);
