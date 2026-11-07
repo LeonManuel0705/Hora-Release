@@ -82,7 +82,7 @@
         "icon": "building",
         "hue": "iris",
         "title": "IServ",
-        "text": "Sign in once with your IServ account. On the computer, {{BRAND_NAME}} then reads your IServ mail and the substitution plan. On Android, assignments and events arrive on their own, and new messages show up as notifications.",
+        "text": "Sign in once with your IServ account. On the computer and on Android, {{BRAND_NAME}} then fetches the substitution plan, and on the computer your IServ mail too. On Android, assignments and events arrive on their own, and new messages show up as notifications.",
         "facts": [
           "IServ mail on the computer",
           "Assignments and events on Android",

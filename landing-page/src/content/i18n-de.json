@@ -82,7 +82,7 @@
         "icon": "building",
         "hue": "iris",
         "title": "IServ",
-        "text": "Melde dich einmal mit deinem IServ-Konto an. Am Computer liest {{BRAND_NAME}} dann deine IServ-Mails und den Vertretungsplan. Auf Android kommen Aufgaben und Termine von selbst, neue Nachrichten melden sich als Mitteilung.",
+        "text": "Melde dich einmal mit deinem IServ-Konto an. Am Computer und auf Android holt {{BRAND_NAME}} dann den Vertretungsplan, am Computer auch deine IServ-Mails. Auf Android kommen Aufgaben und Termine von selbst, neue Nachrichten melden sich als Mitteilung.",
         "facts": [
           "IServ-Mail am Computer",
           "Aufgaben und Termine auf Android",
