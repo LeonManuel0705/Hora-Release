@@ -369,7 +369,8 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     _setupRunning = true;
     await welcomeOrHolidays();
     if (!mounted) return;
-    if (Platform.isAndroid) unawaited(ReminderScheduler.instance.reschedule());
+    // A force stop drops every alarm without a trace, so each launch sets them all again.
+    if (Platform.isAndroid) unawaited(ReminderScheduler.instance.reschedule(whole: true));
     unawaited(_checkForUpdates());
   }
 
