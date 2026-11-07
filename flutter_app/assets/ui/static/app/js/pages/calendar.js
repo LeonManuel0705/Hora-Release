@@ -5,7 +5,7 @@ import {
 import { animates, travels, flipKeyed, exitInPlace, crossfade, token, ms } from "../motion.js";
 import { toast, parseNote, cleanTitle, phraseAt, typing, shortcutsEnabled, overlayOpen, registerSearch, pageUrl, placeNear, clampSheet } from "../shell.js";
 import { events as eventApi, debounced, serverId } from "../api.js";
-import { expandEvents, normalizeRecurrence, splitOccurrence, ruleText } from "../recurrence.js";
+import { expandEvents, normalizeRecurrence, splitOccurrence, occurrenceId, ruleText } from "../recurrence.js";
 import { readPrefs } from "../reminders.js";
 
 const saveText = debounced(700, (key, id, changes) => eventApi.update(id, changes));
@@ -1363,7 +1363,7 @@ function shareEvents() {
 }
 
 function addEvent(fields, { quiet = false } = {}) {
-  const item = { id: `neu-${Date.now()}`, place: "", kind: "private", notes: "", ...fields, synced: false };
+  const item = { place: "", kind: "private", notes: "", ...fields, id: `neu-${Date.now()}`, synced: false };
   delete item.draft;
   if (!item.recurrence) delete item.recurrence;
   if (item.reminderMinutes == null) delete item.reminderMinutes;
@@ -1560,7 +1560,10 @@ function typed(field, value) {
     item[field] = value;
     return null;
   }
-  if (item.series && state.scope !== "all") return targetFor(item, { [field]: value }).target && null;
+  if (item.series && state.scope !== "all") {
+    targetFor(item, { [field]: value });
+    return null;
+  }
   const target = item.series ? seriesOf(item) || item : item;
   target[field] = value;
   return target;
@@ -1571,6 +1574,18 @@ function rule(changes) {
   const base = item?.series ? seriesOf(item) : item;
   const current = normalizeRecurrence(base?.recurrence) || { freq: "weekly", interval: 1, until: null, count: null, exceptions: [] };
   return { ...current, ...changes };
+}
+
+/* After a change to the rule the open occurrence may no longer exist: the sheet stays on the series. */
+function changeRule(recurrence) {
+  const item = panelItem();
+  const base = item?.series ? seriesOf(item) || item : item;
+  if (!base) return;
+  updateEvent({ recurrence });
+  state.scope = "all";
+  state.selected = [state.selected, occurrenceId(base.id, base.date), base.id].find((id) => findEntry(id));
+  renderPanel();
+  markSelected();
 }
 
 function bindPanel() {
@@ -1625,9 +1640,9 @@ function bindPanel() {
     const target = event.target;
     if (target.id === "calPanelDate" && target.value) {
       const span = spanDays(item);
-      const now = updateEvent({ date: target.value, ...(span ? { endDate: isoDate(addDays(parseDate(target.value), span)) } : {}) }) || item;
-      $("calDateText").textContent = shortDate(parseDate(now.date));
-      panel.querySelector("[data-date-pick]").setAttribute("aria-label", `Datum ändern, ${longDate(parseDate(now.date))}`);
+      const moved = updateEvent({ date: target.value, ...(span ? { endDate: isoDate(addDays(parseDate(target.value), span)) } : {}) }) || item;
+      $("calDateText").textContent = shortDate(parseDate(moved.date));
+      panel.querySelector("[data-date-pick]").setAttribute("aria-label", `Datum ändern, ${longDate(parseDate(moved.date))}`);
       panel.querySelector("[data-date-pick]").focus({ preventScroll: true });
     }
     if (target.id === "calPanelStart") {
@@ -1653,21 +1668,18 @@ function bindPanel() {
     }
     if (target.id === "calPanelRepeat") {
       const choice = REPEATS.find(([value]) => value === target.value);
-      updateEvent({ recurrence: choice?.[2] ? rule({ ...choice[2], interval: choice[2].interval || 1 }) : null });
-      renderPanel();
+      changeRule(choice?.[2] ? rule({ ...choice[2], interval: choice[2].interval || 1 }) : null);
       $("calPanelRepeat")?.focus({ preventScroll: true });
     }
     if (target.id === "calPanelEnds") {
-      const base = panelItem();
       const choice = target.value;
-      updateEvent({ recurrence: rule({ count: choice === "count" ? 10 : null, until: choice === "until" ? isoDate(addDays(parseDate(base.date), 90)) : null }) });
-      renderPanel();
+      changeRule(rule({ count: choice === "count" ? 10 : null, until: choice === "until" ? isoDate(addDays(parseDate(panelItem().date), 90)) : null }));
       $(choice === "count" ? "calPanelCount" : choice === "until" ? "calPanelUntil" : "calPanelEnds")?.focus({ preventScroll: true });
     }
-    if (target.id === "calPanelUntil" && target.value) updateEvent({ recurrence: rule({ until: target.value, count: null }) });
+    if (target.id === "calPanelUntil" && target.value) changeRule(rule({ until: target.value, count: null }));
     if (target.id === "calPanelCount") {
       const count = Math.round(Number(target.value));
-      if (count >= 1 && count <= 1000) updateEvent({ recurrence: rule({ count, until: null }) });
+      if (count >= 1 && count <= 1000) changeRule(rule({ count, until: null }));
       else target.value = rule({}).count || 10;
     }
     if (target.id === "calPanelReminder") updateEvent({ reminderMinutes: target.value === "" ? null : Number(target.value) });
