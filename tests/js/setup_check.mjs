@@ -115,6 +115,16 @@ const tests = {
     assert.equal(core.hourIcon({ h: 9, rain: 70, code: 61 }), "cloud-rain");
     assert.equal(core.hourIcon({ h: 9, rain: 10, code: 95 }), "cloud-lightning");
   },
+  async "the sky follows the hour the page is showing, not the hour it was built"() {
+    const hours = [{ h: 8, temp: 5, rain: 0, code: 0 }, { h: 15, temp: 7, rain: 80, code: 63 }];
+    const day = await coreWith({ weather: { code: 0, hours } });
+    assert.equal(day.currentSky(8).kind, "clear");
+    assert.equal(day.currentSky(15).kind, "rain");
+    assert.equal(day.skyCode(15), 63);
+    assert.equal(day.currentSky(12).kind, "clear");
+    const older = await coreWith({ weather: { code: 3, hours: [{ h: 15, temp: 7, rain: 80 }] } });
+    assert.equal(older.currentSky(15).kind, "cloudy");
+  },
   "reminders start on for someone new and the choice is stored"() {
     reminders.adoptDefault();
     assert.equal(core.storage.get("app-settings")?.notify?.enabled, true);

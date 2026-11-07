@@ -1,7 +1,7 @@
 import {
   data, flags, esc, icon, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, abWeeks, isoWeek, subject, hueVar, glue, lessonsFor, activeLessons, nextSchoolDay, relativeDay, inDays, duration, shortDate,
-  longDate, eventsOn, nextDeparture, weatherAt, rainFrom, hourIcon, hasWeather, currentSky, storage, changesFor, ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, nextRepeatDate, followLinks, homeworkDate,
+  longDate, eventsOn, nextDeparture, weatherAt, rainFrom, hourIcon, hasWeather, currentSky, skyCode, storage, changesFor, ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, nextRepeatDate, followLinks, homeworkDate,
   holidayOn, hasPlan, NO_TEACHER, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "./core.js";
 import { animates, travels, rich, level, flipKeyed, exitInPlace, enterInPlace, setDigits, pop, crossfade, swapText, breath, chalkCheck, bezier, token, ms } from "./motion.js";
 import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
@@ -861,7 +861,7 @@ function renderWeatherChip() {
   chip.hidden = !item;
   if (!item) return;
   const sky = currentSky(hour);
-  const glyph = hourIcon({ ...item, code: Number.isInteger(data.weather.code) ? data.weather.code : item.code });
+  const glyph = hourIcon({ ...item, code: skyCode(hour) });
   const word = sky?.word || (item.rain >= 40 ? "Regen möglich" : "");
   const html = `${icon(glyph)}<b>${item.temp}°</b>${word ? `<span>${esc(word)}</span>` : ""}`;
   if (chip.dataset.html === html) return;
