@@ -777,11 +777,12 @@
     "intro": "Das neue",
     "title": "{{BRAND_NAME}} 0.5",
     "lede": "Morgens die erste Stunde mit Raum, nachmittags die Hausaufgaben aus IServ.¹",
+    "lede_plain": "Morgens die erste Stunde mit Raum, abends alles, was morgen fällig ist.",
     "cta": "Kostenlos laden",
     "cta_web": "Web-App öffnen",
     "cta_generic": "{{BRAND_NAME}} laden",
     "cta_note": "Für {platform}, {size} MB. Auch für {others}.",
-    "cta_note_web": "Auf dem iPhone läuft {{BRAND_NAME}} als Web-App. Auch für Mac, Windows, Linux und Android.",
+    "cta_note_web": "Auf dem {device} läuft {{BRAND_NAME}} als Web-App. Auch für {others}.",
     "cta_note_generic": "Für Mac, Windows, Linux, Android und iPhone.",
     "more": "Schultag ansehen",
     "hero_alt": "Die Übersicht von {{BRAND_NAME}} um 7:12 Uhr: Gleich Chemie in Raum B206, darunter die Aufgaben für heute und die nächsten Abgaben.",
@@ -806,7 +807,7 @@
         "id": "plan",
         "label": "Stundenplan",
         "title": "A-Woche, B-Woche, Vertretungen.",
-        "text": "Dein Stundenplan mit euren Blockzeiten. Den Vertretungsplan holt {{BRAND_NAME}} jeden Morgen aus IServ.",
+        "text": "Dein Stundenplan mit euren Blockzeiten. Den Vertretungsplan holt {{BRAND_NAME}} jeden Morgen aus IServ.¹",
         "alt": "Der Stundenplan der A-Woche mit Fächern und Räumen, daneben der Vertretungsplan."
       },
       {
@@ -1030,7 +1031,8 @@
     "free_title": "Bei {{BRAND_NAME}} nicht.",
     "free_text": "Von dir bekomme ich nichts, kein Geld und keine Daten. Ich baue {{BRAND_NAME}} aus Spaß und aus Überzeugung: Eine App für die Schule gehört nicht hinter eine Paywall, und deine Daten gehören weder Werbefirmen noch sonst jemandem. Sie gehören dir. Deshalb liegen sie nur auf deinem Gerät, und nicht einmal ich komme an sie heran.",
     "free_label": "Preis: 0 Euro",
-    "footnote_iserv": "¹ IServ gibt es in den Apps für Mac, Windows, Linux und Android. Auf dem iPhone läuft {{BRAND_NAME}} als Web-App, dort geht IServ nicht.",
+    "footnote_iserv": "¹ Hausaufgaben und Termine aus IServ holt {{BRAND_NAME}} in der App für Android. Am Computer kommen aus IServ deine Mails und der Vertretungsplan. Auf dem iPhone läuft {{BRAND_NAME}} als Web-App, dort geht IServ nicht.",
+    "footnote_iserv_web": "¹ IServ gibt es nur in den Apps für Mac, Windows, Linux und Android. In der Web-App auf deinem {device} geht IServ nicht, Hausaufgaben trägst du dort selbst ein.",
     "footnote_agent": "² Das Sprachmodell für den Assistenten lädt {{BRAND_NAME}} erst, wenn du ihn zum ersten Mal öffnest, etwa 3 GB."
   }
 }

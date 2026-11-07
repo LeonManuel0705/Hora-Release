@@ -1,6 +1,6 @@
 import { brandName, escapeHtml, getLang, raw, t } from "../lib/i18n.js";
 import { reducedMotion } from "../lib/motion.js";
-import { detectPlatform, megabytes, PLATFORMS } from "../lib/platform.js";
+import { detectPlatform, deviceName, ISERV_HOMEWORK, megabytes, PLATFORMS } from "../lib/platform.js";
 import { clamp, onScroll, revealOnce, wordReveal } from "../lib/scroll.js";
 import { luna } from "../lib/luna.js";
 import { macHTML, showScreen } from "../components/device.js";
@@ -16,11 +16,12 @@ const keepHyphens = (text) => escapeHtml(text).replace(/(\S+-\S+)/g, '<span clas
 const words = (text) => escapeHtml(text).split(/\s+/).map((word) => `<span class="w">${word}</span>`).join(" ");
 
 function hero() {
-  const { button, note } = cta();
+  const { id, button, note } = cta();
+  const lede = ISERV_HOMEWORK.has(id) ? t("start.lede") : t("start.lede_plain");
   return `<section class="ap-hero" aria-labelledby="ap-hero-title">
     <div class="ap-hero-copy" data-hero-copy>
       <h1 class="ap-hero-head" id="ap-hero-title"><span class="ap-hero-name">${escapeHtml(t("start.intro"))}</span><span class="ap-hero-title">${escapeHtml(t("start.title"))}</span></h1>
-      <p class="ap-hero-lede">${escapeHtml(t("start.lede"))}</p>
+      <p class="ap-hero-lede">${escapeHtml(lede)}</p>
       <div class="ap-hero-cta">${button}<a class="ap-link" href="#tag">${escapeHtml(t("start.more"))}${CHEVRON}</a></div>
       <p class="ap-hero-note">${escapeHtml(note)}</p>
     </div>
@@ -129,7 +130,7 @@ function getHora() {
     <ul class="ap-platforms ap-reveal">${platforms}</ul>
     <div class="ap-get-cta ap-reveal">${button}<a class="ap-link" href="/download">${escapeHtml(t("start.get_all"))}${CHEVRON}</a></div>
     <p class="ap-fine">${escapeHtml(t("start.fine"))}</p>
-    <p class="ap-fine ap-footnote">${escapeHtml(t("start.footnote_iserv"))}</p>
+    <p class="ap-fine ap-footnote">${escapeHtml(PLATFORMS[mine]?.kind === "pwa" ? t("start.footnote_iserv_web", { device: deviceName(mine) }) : t("start.footnote_iserv"))}</p>
     <p class="ap-fine ap-footnote">${escapeHtml(t("start.footnote_agent"))}</p>
     <p class="ap-fine ap-footnote">${escapeHtml(t("start.footnote"))}</p>
   </section>`;

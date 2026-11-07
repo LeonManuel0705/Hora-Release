@@ -777,11 +777,12 @@
     "intro": "Introducing",
     "title": "{{BRAND_NAME}} 0.5",
     "lede": "Your first lesson and its room in the morning, your IServ homework in the afternoon.¹",
+    "lede_plain": "Your first lesson and its room in the morning, everything due tomorrow in the evening.",
     "cta": "Download free",
     "cta_web": "Open web app",
     "cta_generic": "Get {{BRAND_NAME}}",
     "cta_note": "For {platform}, {size} MB. Also for {others}.",
-    "cta_note_web": "On iPhone, {{BRAND_NAME}} runs as a web app. Also for Mac, Windows, Linux and Android.",
+    "cta_note_web": "On {device}, {{BRAND_NAME}} runs as a web app. Also for {others}.",
     "cta_note_generic": "For Mac, Windows, Linux, Android and iPhone.",
     "more": "See a school day",
     "hero_alt": "{{BRAND_NAME}} at 7:12 in the morning (German): chemistry in room B206 next, with today's tasks and upcoming deadlines below.",
@@ -806,7 +807,7 @@
         "id": "plan",
         "label": "Timetable",
         "title": "A week, B week, substitutions.",
-        "text": "Your timetable with your school's periods. {{BRAND_NAME}} fetches the substitution plan from IServ every morning.",
+        "text": "Your timetable with your school's periods. {{BRAND_NAME}} fetches the substitution plan from IServ every morning.¹",
         "alt": "The A-week timetable (German) with subjects and rooms, next to it the substitution plan."
       },
       {
@@ -1030,7 +1031,8 @@
     "free_title": "Not with {{BRAND_NAME}}.",
     "free_text": "I get nothing from you, no money and no data. I build {{BRAND_NAME}} for fun and out of conviction: a school app does not belong behind a paywall, and your data belongs neither to advertisers nor to anyone else. It belongs to you. That is why it stays on your device, and not even I can get to it.",
     "free_label": "Price: 0 euros",
-    "footnote_iserv": "¹ IServ works in the apps for Mac, Windows, Linux and Android. On iPhone, {{BRAND_NAME}} runs as a web app, where IServ is not available.",
+    "footnote_iserv": "¹ {{BRAND_NAME}} fetches homework and events from IServ in the Android app. On the computer, IServ gives you your mail and the substitution plan. On iPhone, {{BRAND_NAME}} runs as a web app, where IServ is not available.",
+    "footnote_iserv_web": "¹ IServ is only available in the apps for Mac, Windows, Linux and Android. The web app on your {device} has no IServ, so you add homework yourself.",
     "footnote_agent": "² {{BRAND_NAME}} downloads the assistant's language model only when you first open it, about 3 GB."
   }
 }

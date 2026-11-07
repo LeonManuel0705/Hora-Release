@@ -22,15 +22,27 @@ export const PLATFORMS = {
 
 export const ORDER = ["macos", "windows", "linux", "android", "ios", "web"];
 
+// Where the app fetches homework from IServ today. Add the desktop ids once the desktop backend does it too.
+export const ISERV_HOMEWORK = new Set(["android"]);
+
+const ipad = () => /iPad/.test(navigator.userAgent || "") || (/Mac/.test(navigator.userAgentData?.platform || navigator.platform || "") && navigator.maxTouchPoints > 1);
+
 export function detectPlatform() {
   const ua = navigator.userAgent || "";
   const platform = navigator.userAgentData?.platform || navigator.platform || "";
-  if (/iPhone|iPad|iPod/.test(ua) || (/Mac/.test(platform) && navigator.maxTouchPoints > 1)) return "ios";
+  if (/iPhone|iPod/.test(ua) || ipad()) return "ios";
   if (/Android/i.test(ua)) return "android";
+  if (/CrOS/.test(ua) || /Chrome ?OS/i.test(platform)) return "web";
   if (/Mac/i.test(platform) || /Mac OS X/.test(ua)) return "macos";
   if (/Win/i.test(platform) || /Windows/.test(ua)) return "windows";
   if (/Linux|X11/i.test(platform) || /Linux/.test(ua)) return "linux";
   return null;
+}
+
+export function deviceName(id) {
+  if (id === "ios") return ipad() ? "iPad" : "iPhone";
+  if (id === "web") return "Chromebook";
+  return "";
 }
 
 export function megabytes(bytes) {
