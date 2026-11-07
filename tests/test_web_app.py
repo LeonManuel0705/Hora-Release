@@ -8,6 +8,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -92,12 +93,36 @@ def test_the_file_list_holds_what_the_app_loads_and_leaves_out_the_rest(tmp_path
     assert b'\r\n' not in written
 
 
-def test_the_off_switch_replaces_the_list(tmp_path):
+def test_a_build_is_only_published_with_its_full_list_and_unchanged_files(tmp_path):
+    build = script('build_web_app')
+    page = '<!doctype html><html><head><meta charset="utf-8"></head><body>Plan</body></html>'
+    fake_build(tmp_path, {'index.html': page, 'main.dart.js': 'main', 'assets/a.json': '{}'})
+    assert build.verify(tmp_path) == ['the worker has no file list, build with scripts/build_web_app.py']
+    build.stamp(tmp_path)
+    assert build.verify(tmp_path) == []
+    (tmp_path / 'index.html').write_text(page.replace('<head>', '<head>\n<!-- added by the host -->\n'), encoding='utf-8')
+    assert build.verify(tmp_path) == [], 'a comment and line breaks from the host are not a change'
+    (tmp_path / 'index.html').write_text(page.replace('Plan', 'Plan 2'), encoding='utf-8')
+    (tmp_path / 'main.dart.js').write_text('changed', encoding='utf-8')
+    (tmp_path / 'assets' / 'a.json').unlink()
+    (tmp_path / 'extra.js').write_text('new', encoding='utf-8')
+    assert build.verify(tmp_path) == [
+        'assets/a.json is listed but missing',
+        'index.html changed after the list was written',
+        'main.dart.js changed after the list was written',
+        'extra.js is not in the list',
+    ]
+
+
+def test_the_off_switch_replaces_the_list_and_passes_the_check(tmp_path):
     build = script('build_web_app')
     fake_build(tmp_path, {'index.html': '<html></html>', 'main.dart.js': 'main'})
     build.stamp(tmp_path)
     build.switch_off(tmp_path)
     assert manifest_of(tmp_path) == 'off'
+    assert build.verify(tmp_path) == []
+    result = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'build_web_app.py'), '--verify', str(tmp_path / 'missing')], capture_output=True, text=True)
+    assert result.returncode == 1
 
 
 @pytest.fixture()

@@ -295,6 +295,11 @@ async function installed(w, files) {
   const w = world();
   w.deploy({ ...second, "main.dart.js": "code(3)" });
   await assert.rejects(w.worker(second).install(), /belongs to another build/, "a copy that mixes two deploys is never finished");
+  w.deploy({ ...second, "assets/assets/ui/pages/tasks.html": "<html><head></head>tasks 3</html>" });
+  await assert.rejects(w.worker(second).install(), /tasks.html belongs to another build/, "page templates are checked too");
+  w.deploy({ ...second, "assets/assets/ui/pages/tasks.html": "<html>\n  <head></head>\n  tasks 2\n</html>" });
+  await w.worker(second).install();
+  assert.ok(await w.finished(w.worker(second).build), "comments and line breaks the host adds do not count");
 }
 
 console.log("app worker: ok");

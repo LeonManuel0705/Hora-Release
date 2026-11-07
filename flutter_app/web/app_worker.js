@@ -21,6 +21,7 @@ let filling = null;
 const shellName = (id) => `${SHELL}${id}`;
 const pinUrl = (client) => `${BASE}__pin/${encodeURIComponent(client)}`;
 const sourceOf = (path) => (path === "index.html" ? BASE : BASE + path);
+const comparable = (html) => html.replace(/<!--[\s\S]*?-->/g, "").replace(/[ \t\n\r\f]+/g, "");
 
 function later(event, promise) {
   try {
@@ -41,8 +42,9 @@ function remember(memo, key, promise, keep) {
   return promise;
 }
 
-async function digest(response) {
-  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", await response.arrayBuffer()));
+async function digest(path, response) {
+  const bytes = path.endsWith(".html") ? new TextEncoder().encode(comparable(await response.text())) : await response.arrayBuffer();
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   return Array.from(hash, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -66,9 +68,7 @@ async function earlier() {
 async function fetched(path) {
   const response = await plain(await fetch(sourceOf(path), { cache: "no-cache" }));
   if (!response.ok) throw new Error(`${path}: ${response.status}`);
-  if (!path.endsWith(".html") && (await digest(response.clone())) !== MANIFEST.files[path]) {
-    throw new Error(`${path} belongs to another build`);
-  }
+  if ((await digest(path, response.clone())) !== MANIFEST.files[path]) throw new Error(`${path} belongs to another build`);
   return response;
 }
 
