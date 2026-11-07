@@ -259,13 +259,26 @@ class UpdateDownloader {
     final target = File(p.join(directory.path, fileName(version)));
     if (await matches(target, package)) return target;
     final part = File('${target.path}.part');
-    await _dio.download(
-      package.url,
-      part.path,
-      cancelToken: cancel,
-      onReceiveProgress: progress == null ? null : (received, _) => progress(received, package.size),
-    );
-    if (!await matches(part, package)) {
+    final token = cancel ?? CancelToken();
+    var overrun = false;
+    try {
+      await _dio.download(
+        package.url,
+        part.path,
+        cancelToken: token,
+        onReceiveProgress: (received, _) {
+          if (received > package.size && !overrun) {
+            overrun = true;
+            token.cancel();
+            return;
+          }
+          progress?.call(received, package.size);
+        },
+      );
+    } on DioException {
+      if (!overrun) rethrow;
+    }
+    if (overrun || !await matches(part, package)) {
       if (await FileSystemEntity.type(part.path) != FileSystemEntityType.notFound) await part.delete();
       throw const UpdateBroken();
     }
@@ -503,7 +516,15 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
           _note(isDark, 'Bestätige das Update im Fenster von Android.'),
           _primary(isDark, Icons.install_mobile_rounded, 'Installation öffnen', () => unawaited(_install())),
           const SizedBox(height: 12),
-          _quiet(isDark, 'Später', () => Navigator.of(context).pop()),
+          Row(children: [
+            Expanded(child: _quiet(isDark, 'Später', () => Navigator.of(context).pop())),
+            Expanded(
+              child: _quiet(isDark, 'Im Browser laden', () {
+                Navigator.of(context).pop();
+                _openUpdateUrl(updateInfo.updateUrl);
+              }),
+            ),
+          ]),
         ]),
       _Step.failed => Column(children: [
           _note(isDark, _problem),
@@ -522,153 +543,156 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final still = MediaQuery.disableAnimationsOf(context);
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 400),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: isDark ? AppPalette.overlayDark : AppPalette.overlay,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isDark ? AppPalette.lineDark : AppPalette.line),
-          boxShadow: [
-            BoxShadow(
-              color: isDark ? Colors.black.withValues(alpha: .5) : const Color(0xFF14201A).withValues(alpha: .18),
-              blurRadius: 36,
-              spreadRadius: -10,
-              offset: const Offset(0, 14),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppTheme.primaryColor,
-                    ),
-                    child: const Icon(
-                      Icons.system_update_rounded,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Neues Update verfügbar',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                    ),
-                    child: Text(
-                      'Version ${updateInfo.versionName}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+    return PopScope(
+      canPop: _step != _Step.loading && _step != _Step.checking,
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: isDark ? AppPalette.overlayDark : AppPalette.overlay,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: isDark ? AppPalette.lineDark : AppPalette.line),
+            boxShadow: [
+              BoxShadow(
+                color: isDark ? Colors.black.withValues(alpha: .5) : const Color(0xFF14201A).withValues(alpha: .18),
+                blurRadius: 36,
+                spreadRadius: -10,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
                         color: AppTheme.primaryColor,
                       ),
+                      child: const Icon(
+                        Icons.system_update_rounded,
+                        color: Colors.white,
+                        size: 32,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-
-            if (updateInfo.changelog.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                    const SizedBox(height: 16),
                     Text(
-                      'Neuheiten',
+                      'Neues Update verfügbar',
                       style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: isDark
-                            ? AppTheme.darkTextSecondary
-                            : AppTheme.lightTextSecondary,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? AppTheme.darkText : AppTheme.lightText,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    ...updateInfo.changelog.take(4).map((item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            margin: const EdgeInsets.only(top: 6),
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: AppTheme.primaryColor,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              item,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: isDark
-                                    ? AppTheme.darkTextMuted
-                                    : AppTheme.lightTextMuted,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(999),
+                        color: AppTheme.primaryColor.withValues(alpha: 0.1),
                       ),
-                    )),
+                      child: Text(
+                        'Version ${updateInfo.versionName}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
 
-            Container(
-              height: 1,
-              color: isDark ? AppPalette.lineDark : AppPalette.line,
-            ),
+              if (updateInfo.changelog.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Neuheiten',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? AppTheme.darkTextSecondary
+                              : AppTheme.lightTextSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...updateInfo.changelog.take(4).map((item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              margin: const EdgeInsets.only(top: 6),
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppTheme.primaryColor,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                item,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: isDark
+                                      ? AppTheme.darkTextMuted
+                                      : AppTheme.lightTextMuted,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                    ],
+                  ),
+                ),
 
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: AnimatedSize(
-                duration: still ? Duration.zero : const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                child: AnimatedSwitcher(
-                  duration: still ? Duration.zero : const Duration(milliseconds: 200),
-                  child: KeyedSubtree(key: ValueKey(_step), child: _actions(isDark)),
+              Container(
+                height: 1,
+                color: isDark ? AppPalette.lineDark : AppPalette.line,
+              ),
+
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: AnimatedSize(
+                  duration: still ? Duration.zero : const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedSwitcher(
+                    duration: still ? Duration.zero : const Duration(milliseconds: 200),
+                    child: KeyedSubtree(key: ValueKey(_step), child: _actions(isDark)),
+                  ),
                 ),
               ),
-            ),
 
-            Container(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Text(
-                'Installiert: ${UpdateService.currentVersionName}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted)
-                      .withValues(alpha: 0.6),
+              Container(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text(
+                  'Installiert: ${UpdateService.currentVersionName}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: (isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted)
+                        .withValues(alpha: 0.6),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

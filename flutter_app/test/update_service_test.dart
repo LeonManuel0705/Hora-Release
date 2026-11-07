@@ -111,6 +111,16 @@ void main() {
       expect(folder.listSync(recursive: true).whereType<File>(), isEmpty);
     });
 
+    test('a download that runs past the announced size is stopped there', () async {
+      final seen = <int>[];
+      await expectLater(
+        downloader().fetch(package(size: 50000), '0.6.0', progress: (received, total) => seen.add(received)),
+        throwsA(isA<UpdateBroken>()),
+      );
+      expect(seen.every((received) => received <= 50000), isTrue, reason: 'progress never shows more than the file has');
+      expect(folder.listSync(recursive: true).whereType<File>(), isEmpty);
+    });
+
     test('old installers are cleared, the one for the offered version stays', () async {
       final updates = Directory('${folder.path}/updates')..createSync();
       File('${updates.path}/${Brand.name}-0.5.2.apk').writeAsStringSync('alt');
