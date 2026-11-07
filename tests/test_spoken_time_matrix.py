@@ -147,3 +147,36 @@ def test_commands_and_reminders_read_the_same_wherever_the_words_stand(monkeypat
                 wrong.append(f'{message!r} gave {got}, meant {meant}')
     assert not wrong, f'{len(wrong)} read wrongly, the first: ' + '; '.join(wrong[:12])
 
+
+
+SHORT_TITLES = ['Zahnarzt', 'Elternabend', 'Oma anrufen', 'Dosenpfand wegbringen', 'Treffen mit Sophie', 'Mittagessen', 'Frisör', 'Dienstplan abgeben']
+SHORT_DAYS = [('Do', '2026-10-08'), ('Do.', '2026-10-08'), ('am Do', '2026-10-08'), ('am do', '2026-10-08'), ('do', None)]
+SHORT_CLOCKS = [
+    ('15:30–16:15', '15:30'), ('15:30-16:15', '15:30'), ('15:30 bis 16:15', '15:30'), ('von 15:30 bis 16:15', '15:30'), ('15:30', '15:30'),
+    ('um 15:30', '15:30'), ('15 Uhr', '15:00'), ('um 15 Uhr', '15:00'), ('15.30 Uhr', '15:30'), ('ab 15 Uhr', '15:00'), ('', None),
+]
+SHORT_ORDERS = [('title', 'day', 'clock'), ('day', 'clock', 'title'), ('title', 'clock', 'day'), ('clock', 'day', 'title'), ('day', 'title', 'clock')]
+
+
+def short_sentences():
+    """The table the quick fields are held to as well (tests/js/quick_entry_check.mjs): a written short day in front of a
+    name stays text unless a clock stands before it, one in lower case only counts behind "am"."""
+    for title, (day_words, day), (clock_words, clock) in product(SHORT_TITLES, SHORT_DAYS, SHORT_CLOCKS):
+        for order in SHORT_ORDERS:
+            parts = {'title': title, 'day': day_words, 'clock': clock_words}
+            sequence = [(kind, parts[kind]) for kind in order if parts[kind]]
+            index = next(position for position, (kind, _) in enumerate(sequence) if kind == 'day')
+            meant = day
+            following = sequence[index + 1][0] if index + 1 < len(sequence) else None
+            preceding = sequence[index - 1][0] if index else None
+            if day_words in ('Do', 'Do.') and following == 'title' and preceding != 'clock':
+                meant = None
+            rest = ' '.join(words for kind, words in sequence if kind == 'title' or (kind == 'day' and not meant))
+            yield ' '.join(words for _, words in sequence), rest, meant, clock
+
+
+def test_a_short_weekday_reads_like_in_the_quick_fields_wherever_it_stands():
+    cases = [(text, read(text), (rest, day, clock)) for text, rest, day, clock in short_sentences()]
+    wrong = [case for case in cases if case[1] != case[2]]
+    listed = '; '.join(f'{text!r} gave {got}, meant {meant}' for text, got, meant in wrong[:12])
+    assert not wrong, f'{len(wrong)} of {len(cases)} read wrongly, the first: {listed}'

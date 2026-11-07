@@ -3,7 +3,7 @@ import {
   weekType, abWeeks, isoWeek, subject, hueVar, blockOf, lessonsFor, inDays, duration, shortDate, longDate, storage, ASSESSMENTS, isAssessment, isOverdue, assessmentCount,
   WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "../core.js";
 import { animates, travels, flipKeyed, exitInPlace, crossfade, token, ms } from "../motion.js";
-import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen, registerSearch, pageUrl } from "../shell.js";
+import { toast, parseNote, cleanTitle, phraseAt, typing, shortcutsEnabled, overlayOpen, registerSearch, pageUrl } from "../shell.js";
 import { events as eventApi, debounced, serverId } from "../api.js";
 
 const saveText = debounced(700, (key, id, changes) => eventApi.update(id, changes));
@@ -30,8 +30,6 @@ const ONLINE = /discord|zoom|teams|videocall|video|online|jitsi|webex|meet|https
 const TRAINING_WORDS = /\b(gym|training|schwimm\w*|laufen|joggen|fu(ß|ss)ball|tennis|kletter\w*|sport|yoga|workout|volleyball|basketball|handball|tanzen|radtour)\b/i;
 const PRIVATE_WORDS = /\b(nachhilfe|arzt|zahnarzt|geburtstag|kino|party|essen|friseur|fahrstunde|konzert)\b/i;
 const SCHOOL_WORDS = /\b(schule|referat\w*|abikasse|abiball|klausur|test|elternabend|konferenz|infoabend|kurs\w*|lerngruppe|projektwoche|wandertag|exkursion|studien\w*|uni|hpi)\b/i;
-const WEEKDAY_WORDS = /\b(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)\b/i;
-const WEEKDAY_INDEX = { sonntag: 0, montag: 1, dienstag: 2, mittwoch: 3, donnerstag: 4, freitag: 5, samstag: 6 };
 
 const holidays = (extra.holidays || []).map((item) => ({ ...item, endDate: item.endDate || item.date }));
 const deadlines = flags.empty ? [] : data.deadlines.filter((item) => DUE_KINDS.includes(item.kind) && item.status !== "abgegeben");
@@ -963,16 +961,16 @@ function moveItemFocus(direction) {
 const PAGE_NOISE = /\b(S\.|Seite|Nr\.|Nummer|Aufgabe|Aufg\.|Unit|Kapitel)\s*\d+[a-z]?(\s*(f\.|ff\.|bis\s*\d+))?/gi;
 const TIME_RANGE = /(?:\bvon\s+)?\b([01]?\d|2[0-3])(?:[:.]([0-5]\d))?\s*(?:uhr\s*)?(?:-|–|bis)\s*([01]?\d|2[0-3])(?:[:.]([0-5]\d))?(?:\s*uhr)?\b/i;
 const TIME_SINGLE = [
-  /(?:\b(?:um|ab|gegen)\s+)?\b([01]?\d|2[0-3])[:.]([0-5]\d)(?:\s*uhr)?\b/i,
+  /(?:\b(?:um|ab|gegen|so)\s+)?\b([01]?\d|2[0-3])[:.]([0-5]\d)(?:\s*uhr)?\b/i,
   /\b(?:um|ab|gegen)\s+([01]?\d|2[0-3])(?:\s*uhr)?\b/i,
-  /\b([01]?\d|2[0-3])\s*uhr\b/i,
+  /(?:\bso\s+)?\b([01]?\d|2[0-3])\s*uhr\b/i,
 ];
 const pad = (value) => String(value).padStart(2, "0");
 const hhmm = (minute) => `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;
 
 function cut(text, phrase) {
   if (!phrase) return text;
-  const index = text.toLowerCase().indexOf(phrase.toLowerCase());
+  const index = phraseAt(text, phrase);
   return index < 0 ? text : `${text.slice(0, index)} ${text.slice(index + phrase.length)}`;
 }
 
@@ -998,23 +996,9 @@ function defaultDay() {
   return state.picked ? state.focus : todayIso();
 }
 
-function parseEntry(text) {
+export function parseEntry(text) {
   const info = parseNote(text);
-  let date = info.date || null;
-  const later = !date && text.match(/(?:^|\s)((?:(?:bis|für|am|ab)\s+)?übermorgen)(?=$|[\s.,;!?])/i);
-  if (later) {
-    date = isoDate(addDays(startOfDay(now()), 2));
-    info.phrases.date = later[1];
-  }
-  if (!date) {
-    const weekday = text.match(WEEKDAY_WORDS);
-    if (weekday) {
-      const base = startOfDay(now());
-      const offset = (WEEKDAY_INDEX[weekday[1].toLowerCase()] - base.getDay() + 7) % 7 || 7;
-      date = isoDate(addDays(base, offset));
-      info.phrases.date = weekday[0];
-    }
-  }
+  const date = info.date || null;
   const time = parseTime(cut(text, info.phrases.date));
   let start = time?.start || null;
   let end = time?.end || null;

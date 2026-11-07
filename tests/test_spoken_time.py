@@ -244,3 +244,37 @@ def test_every_find_lies_inside_the_text_and_none_reaches_into_another():
 ])
 def test_behind_a_word_that_may_number_something_only_a_near_date_is_a_day(today, text, day):
     assert read(text, today)[1] == day
+
+
+@pytest.mark.parametrize('text, rest, day, clock', [
+    ('Zahnarzt Do 15:30–16:15', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Zahnarzt Do 15:30-16:15', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Zahnarzt Do. 15 Uhr', 'Zahnarzt', '2026-10-08', '15:00'),
+    ('Do 15:30 Zahnarzt', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('15:30 Do Zahnarzt', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Zahnarzt 15:30 Do', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Zahnarzt Do', 'Zahnarzt', '2026-10-08', None),
+    ('Zahnarzt am do 15:30', 'Zahnarzt', '2026-10-08', '15:30'),
+    ('Zahnarzt Do mit Mama', 'Zahnarzt mit Mama', '2026-10-08', None),
+    ('Brunch So 10 Uhr', 'Brunch', '2026-10-11', '10:00'),
+    ('Mi 18 Uhr Kino', 'Kino', '2026-10-07', '18:00'),
+    ('Zahnarzt Do morgen 8 Uhr', 'Zahnarzt', '2026-10-08', '08:00'),
+    ('Kino Fr', 'Kino', '2026-10-09', None),
+])
+def test_a_short_weekday_counts_where_nothing_else_can_be_meant(text, rest, day, clock):
+    assert read(text) == (rest, day, clock)
+
+
+@pytest.mark.parametrize('text, rest, clock', [
+    ('Gespräch mit Fr. Müller 15 Uhr', 'Gespräch mit Fr. Müller', '15:00'),
+    ('Treffen mit Di Maria um 15 Uhr', 'Treffen mit Di Maria', '15:00'),
+    ('Fr. Dr. Weber anrufen um 15 Uhr', 'Fr. Dr. Weber anrufen', '15:00'),
+    ('Lady Di Doku schauen um 20 Uhr', 'Lady Di Doku schauen', '20:00'),
+    ('Do Zahnarzt 15:30', 'Do Zahnarzt', '15:30'),
+    ('So 10 Uhr Brunch', 'Brunch', '10:00'),
+    ('Zahnarzt do 15:30', 'Zahnarzt do', '15:30'),
+    ('Mo-Fr Praktikum 8 Uhr', 'Mo-Fr Praktikum', '08:00'),
+    ('Praktikum Mo - Fr 8 Uhr', 'Praktikum Mo - Fr', '08:00'),
+])
+def test_a_short_weekday_in_front_of_a_name_or_opening_a_sentence_stays_text(text, rest, clock):
+    assert read(text) == (rest, None, clock)
