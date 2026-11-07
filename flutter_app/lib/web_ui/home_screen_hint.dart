@@ -26,7 +26,7 @@ class HomeScreenDevice {
   bool get inBrowserTab => name != null && !standalone;
 
   static final _apps = RegExp('GSA/|FBAN|FBAV|FB_IAB|Instagram|musical_ly|BytedanceWebview|Snapchat|LinkedInApp|Line/|Pinterest');
-  static final _browsers = RegExp('CriOS|FxiOS|EdgiOS|OPiOS|OPT/|Ddg/|DuckDuckGo|Brave');
+  static final _browsers = RegExp('CriOS|FxiOS|EdgiOS|OPiOS|OPT/|Ddg/|DuckDuckGo');
 
   bool get insideApp => !agent.contains('Safari/') || _apps.hasMatch(agent);
 
