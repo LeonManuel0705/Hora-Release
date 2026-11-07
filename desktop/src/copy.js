@@ -8,7 +8,7 @@ const name = brand.name;
 const progress = {
   starting: `${name} startet …`,
   leftover: `Ein älteres ${name} läuft noch im Hintergrund und wird beendet …`,
-  slow: 'Beim ersten Start nach einer Installation dauert das etwas länger.',
+  slow: 'Der Start dauert etwas länger.',
   verySlow: `Das dauert ungewöhnlich lange. ${name} wartet noch bis zu 30 Sekunden.`,
 };
 
