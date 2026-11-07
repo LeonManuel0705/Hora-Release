@@ -90,7 +90,8 @@ void main() {
     expect(made.status, 200);
     final link = json(made)['bookmark'] as Map;
     expect([link['title'], link['url'], link['category']], ['Schulportal', 'https://portal.example.org/', 'Work']);
-    expect((await shown(hub)).map((item) => item['id']), contains(link['id']));
+    final onPage = (await shown(hub)).singleWhere((item) => item['id'] == link['id']);
+    expect(onPage.containsKey('icon'), isTrue);
 
     final db = await UiDb.open();
     expect((await db.query('bookmarks', where: 'id = ?', whereArgs: [link['id']])).single['title'], 'Schulportal');

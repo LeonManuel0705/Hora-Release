@@ -42,8 +42,25 @@ def test_the_bookmarks_page_is_part_of_the_new_interface(client):
     links = page_data(html)["page"]["bookmarks"]
     assert {link["title"] for link in links} == {"Schulportal", "Wörterbuch"}
     assert all(isinstance(link["id"], str) for link in links)
-    assert next(link for link in links if link["title"] == "Schulportal") == {"id": str(first["id"]), "title": "Schulportal", "url": "https://portal.example.org/", "category": "Work"}
+    assert next(link for link in links if link["title"] == "Schulportal") == {"id": str(first["id"]), "title": "Schulportal", "url": "https://portal.example.org/", "category": "Work", "icon": None}
     assert page_data(html)["page"]["siteFallback"] is True
+
+
+@pytest.mark.parametrize("url", ["javascript:alert(1)", "kein link", "ftp://files.example.org/", "https://", "mailto:x@example.org", "data:text/html,x"])
+def test_only_web_addresses_are_kept_like_on_the_phone(client, url):
+    response = client.post("/api/hub/bookmarks", json={"title": "X", "url": url})
+    assert response.status_code == 400 and response.get_json()["success"] is False
+    assert client.get("/api/hub/bookmarks").get_json()["bookmarks"] == []
+
+
+def test_a_bookmark_needs_a_title_and_one_of_the_four_categories(client):
+    assert client.post("/api/hub/bookmarks", json={"title": " ", "url": "https://example.org/"}).status_code == 400
+    made = client.post("/api/hub/bookmarks", json={"title": "X", "url": "https://example.org/", "category": "Hack"}).get_json()["bookmark"]
+    assert made["category"] == "Other"
+    assert client.put(f"/api/hub/bookmarks/{made['id']}", json={"url": "javascript:alert(1)"}).status_code == 400
+    assert client.put(f"/api/hub/bookmarks/{made['id']}", json={"category": "Dev"}).get_json()["bookmark"]["category"] == "Dev"
+    kept = client.get("/api/hub/bookmarks").get_json()["bookmarks"]
+    assert [(link["url"], link["category"]) for link in kept] == [("https://example.org/", "Dev")]
 
 
 def test_the_classic_bookmarks_page_moved_out_of_the_way(client):

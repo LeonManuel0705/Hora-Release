@@ -690,30 +690,61 @@ def get_bookmarks():
     bookmarks = db.get_hub_bookmarks(category=category)
     return jsonify({'bookmarks': bookmarks})
 
+BOOKMARK_CATEGORIES = {'Work', 'Personal', 'Dev', 'Other'}
+
+
+def _bookmark_fields(data, creating):
+    fields = {}
+    if creating or 'title' in data:
+        fields['title'] = str(data.get('title') or '').strip()[:200]
+        if not fields['title']:
+            raise ValueError('Titel und Adresse fehlen')
+    if creating or 'url' in data:
+        url = str(data.get('url') or '').strip()[:2000]
+        if not url:
+            raise ValueError('Titel und Adresse fehlen')
+        try:
+            parts = urlsplit(url)
+            web = parts.scheme in ('http', 'https') and bool(parts.hostname)
+        except ValueError:
+            web = False
+        if not web:
+            raise ValueError('Das ist keine Webadresse')
+        fields['url'] = url
+    if creating or 'category' in data:
+        fields['category'] = data.get('category') if data.get('category') in BOOKMARK_CATEGORIES else 'Other'
+    if 'favicon' in data:
+        fields['favicon'] = data['favicon'] if isinstance(data['favicon'], str) else None
+    return fields
+
+
 @app.route('/api/hub/bookmarks', methods=['POST'])
 def create_bookmark():
-    data = request.get_json()
-    if not data or not data.get('title') or not data.get('url'):
-        return jsonify({'success': False, 'error': 'Title and URL required'}), 400
-    bookmark_id = db.create_hub_bookmark(
-        title=data['title'],
-        url=data['url'],
-        category=data.get('category', 'Other'),
-        favicon=data.get('favicon')
-    )
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'success': False, 'error': 'JSON erwartet'}), 400
+    try:
+        fields = _bookmark_fields(data, creating=True)
+    except ValueError as problem:
+        return jsonify({'success': False, 'error': str(problem)}), 400
+    bookmark_id = db.create_hub_bookmark(**fields)
     bookmark = db.get_hub_bookmark(bookmark_id)
     site_icons.retry(bookmark['url'])
     return jsonify({'success': True, 'bookmark': bookmark})
 
 @app.route('/api/hub/bookmarks/<int:bookmark_id>', methods=['PUT'])
 def update_bookmark(bookmark_id):
-    data = request.get_json()
-    if not data:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data:
         return jsonify({'success': False, 'error': 'No data provided'}), 400
     bookmark = db.get_hub_bookmark(bookmark_id)
     if not bookmark:
         return jsonify({'success': False, 'error': 'Bookmark not found'}), 404
-    db.update_hub_bookmark(bookmark_id, **{k: data[k] for k in ('title', 'url', 'category', 'favicon') if k in data})
+    try:
+        fields = _bookmark_fields(data, creating=False)
+    except ValueError as problem:
+        return jsonify({'success': False, 'error': str(problem)}), 400
+    db.update_hub_bookmark(bookmark_id, **fields)
     updated = db.get_hub_bookmark(bookmark_id)
     _forget_unused_icon(bookmark['url'])
     site_icons.retry(updated['url'])
@@ -742,7 +773,7 @@ def bookmark_icon(bookmark_id):
     except OSError:
         body = None
     if body is None:
-        return _no_store(app.response_class(status=404))
+        return _no_store(app.response_class(status=204 if bookmark else 404))
     response = app.response_class(body, mimetype=icon.kind)
     response.add_etag()
     response.headers['Cache-Control'] = 'private, max-age=86400'

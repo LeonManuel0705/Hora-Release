@@ -19,6 +19,15 @@ Future<Uint8List?> siteIcon(String url) async {
   }
 }
 
+/// Whether an icon is kept, the site had none lately, or nothing is known, without asking the site.
+Future<bool?> knownSiteIcon(String url) async {
+  try {
+    return await platform.siteIconKnown(url);
+  } on Object {
+    return null;
+  }
+}
+
 Future<void> forgetSiteIcon(String url, Iterable<String> stillUsed) async {
   try {
     await platform.forgetSiteIcon(url, stillUsed);

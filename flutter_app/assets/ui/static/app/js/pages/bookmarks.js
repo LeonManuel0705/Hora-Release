@@ -11,12 +11,15 @@ const ENDPOINT = "/api/hub/bookmarks";
 const CATEGORIES = [["Other", "Sonstiges"], ["Work", "Arbeit"], ["Personal", "Persönlich"], ["Dev", "Dev"]];
 const CATEGORY = Object.fromEntries(CATEGORIES);
 const ICON_LOOK = 2;
+const SITE_MEMORY = "app-link-site-icons";
+const SITE_RETRY = 7 * 864e5;
 
 const view = (row) => ({
   id: String(row.id),
   title: String(row.title || "").trim(),
   url: String(row.url || "").trim(),
   category: CATEGORY[row.category] ? row.category : "Other",
+  icon: typeof row.icon === "boolean" ? row.icon : null,
 });
 
 const state = { links: (page.bookmarks || []).map(view), filter: "all", editing: null, invoker: null, busy: false };
@@ -48,14 +51,53 @@ function siteIcon(url) {
   return page.siteFallback && address?.protocol === "https:" ? `${address.origin}/favicon.ico` : "";
 }
 
+function siteMemory() {
+  try {
+    const kept = JSON.parse(localStorage.getItem(SITE_MEMORY) || "{}");
+    return kept && typeof kept === "object" ? kept : {};
+  } catch {
+    return {};
+  }
+}
+
+function rememberSite(site, works) {
+  try {
+    const kept = siteMemory();
+    kept[site] = { works, at: Date.now() };
+    localStorage.setItem(SITE_MEMORY, JSON.stringify(kept));
+  } catch {}
+}
+
+// A site that turned the window away is not asked again for a week, so a missing logo costs at most one failed request.
+function siteVerdict(site) {
+  const kept = site ? siteMemory()[site] : null;
+  if (!kept) return null;
+  if (kept.works) return "works";
+  return Date.now() - kept.at < SITE_RETRY ? "fails" : null;
+}
+
+function logoSource(link, key) {
+  const known = iconState.get(key);
+  const site = siteIcon(link.url);
+  const verdict = siteVerdict(site);
+  const route = `src="${ENDPOINT}/${encodeURIComponent(link.id)}/icon?v=${iconVersion(link.url)}&look=${ICON_LOOK}"`;
+  const direct = `src="${esc(site)}" data-tried="1"`;
+  if (known === "none") return "";
+  if (known === "site") return direct;
+  if (known === "ok" || link.icon === true) return route;
+  if (link.icon === false) return verdict === "works" ? direct : "";
+  return route;
+}
+
 function logoHtml(link) {
   const host = hostOf(link.url);
   const letter = ([...(link.title || host || "?").trim()][0] || "?").toUpperCase();
   const key = `${link.id}:${iconVersion(link.url)}`;
   const known = iconState.get(key);
   const site = siteIcon(link.url);
-  const source = known === "site" ? `src="${esc(site)}" data-tried="1"` : `src="${ENDPOINT}/${encodeURIComponent(link.id)}/icon?v=${iconVersion(link.url)}&look=${ICON_LOOK}"`;
-  const image = known === "none" ? "" : `<img ${source} data-key="${esc(key)}" data-site="${esc(site)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
+  const source = logoSource(link, key);
+  const asked = siteVerdict(site) === "fails" ? "" : site;
+  const image = source ? `<img ${source} data-key="${esc(key)}" data-site="${esc(asked)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : "";
   const shown = known === "ok" || known === "site" ? " has-icon is-known" : "";
   return `<span class="link-logo${shown}" style="--hue: var(--hue-${hueOf(host)})" aria-hidden="true"><span class="link-letter">${esc(letter)}</span>${image}</span>`;
 }
@@ -108,11 +150,14 @@ function onIcon(event) {
   if (!(image instanceof HTMLImageElement) || !image.closest(".link-logo")) return;
   const key = image.dataset.key;
   const logo = image.parentElement;
+  const site = image.dataset.tried ? image.dataset.site : "";
   if (event.type === "load" && image.naturalWidth >= 8) {
-    iconState.set(key, image.dataset.tried ? "site" : "ok");
+    iconState.set(key, site ? "site" : "ok");
+    if (site) rememberSite(site, true);
     logo.classList.add("has-icon");
     return;
   }
+  if (site) rememberSite(site, false);
   if (image.dataset.site && !image.dataset.tried) {
     image.dataset.tried = "1";
     image.src = image.dataset.site;
@@ -140,7 +185,8 @@ async function request(method, url, body) {
 function readAddress(value) {
   const typed = value.trim();
   if (!typed) return { error: "Trag eine Adresse ein." };
-  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(typed) ? typed : `https://${typed}`;
+  const explicit = /^[a-z][a-z0-9+.-]*:\/\//i.test(typed) || /^https?:/i.test(typed);
+  const candidate = explicit ? typed : `https://${typed}`;
   const address = webAddress(candidate);
   if (!address || !address.hostname || /\s/.test(typed)) return { error: "Das sieht nicht nach einer Webadresse aus. Sie beginnt etwa mit https://" };
   return { url: address.href };
@@ -220,39 +266,59 @@ async function save(event) {
   }
 }
 
+// A deleted bookmark stays on the server while its undo is offered, so undo brings back the same one in its place.
+const pendingDeletes = new Map();
+
 async function remove() {
   const link = state.links.find((item) => item.id === state.editing);
   if (!link || state.busy) return;
-  state.busy = true;
-  try {
-    await request("DELETE", `${ENDPOINT}/${encodeURIComponent(link.id)}`);
-  } catch {
-    state.busy = false;
-    setFieldError(null, $("linkError"), "Das ließ sich gerade nicht löschen. Versuch es gleich noch einmal.");
-    return;
-  }
-  state.busy = false;
   closeSheet();
+  const index = state.links.indexOf(link);
   const tile = document.querySelector(`#linkGrid .link-tile[data-id="${CSS.escape(link.id)}"]`);
   await exitInPlace(tile);
   state.links = state.links.filter((item) => item.id !== link.id);
   render({ flip: true });
   $("linkAdd").focus({ preventScroll: true });
-  toast(`„${esc(link.title)}“ gelöscht`, {
+  const { node } = toast(`„${esc(link.title)}“ gelöscht`, {
     icon: "trash-2",
-    action: { label: "Rückgängig", undo: true, run: () => restore(link) },
+    action: { label: "Rückgängig", undo: true, run: () => restore(link.id) },
   });
+  pendingDeletes.set(link.id, { link, index, node, timer: setTimeout(() => settleDelete(link.id), 10500) });
 }
 
-async function restore(link) {
-  try {
-    const result = await request("POST", ENDPOINT, { title: link.title, url: link.url, category: link.category });
-    state.links = [view(result.bookmark), ...state.links];
-    render({ flip: true });
-    say(`${link.title} ist wieder da`);
-  } catch {
-    toast("Das Lesezeichen ließ sich nicht zurückholen.", { icon: "circle-alert" });
+function settleDelete(id, leaving = false) {
+  const pending = pendingDeletes.get(id);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  if (!leaving && pending.node.isConnected) {
+    pending.timer = setTimeout(() => settleDelete(id), 1000);
+    return;
   }
+  pendingDeletes.delete(id);
+  fetch(`${ENDPOINT}/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "same-origin", keepalive: true })
+    .then((response) => {
+      if (!response.ok) throw new Error(String(response.status));
+    })
+    .catch(() => {
+      if (leaving) return;
+      putBack(pending);
+      toast(`„${esc(pending.link.title)}“ ließ sich gerade nicht löschen.`, { icon: "circle-alert" });
+    });
+}
+
+function putBack(pending) {
+  if (state.links.some((item) => item.id === pending.link.id)) return;
+  state.links.splice(Math.min(pending.index, state.links.length), 0, pending.link);
+  render({ flip: true });
+}
+
+function restore(id) {
+  const pending = pendingDeletes.get(id);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pendingDeletes.delete(id);
+  putBack(pending);
+  say(`${pending.link.title} ist wieder da`);
 }
 
 function openLink(link) {
@@ -312,4 +378,5 @@ export function init() {
     if (!document.activeElement || document.activeElement === document.body || $("linkSheet").contains(document.activeElement)) back.focus({ preventScroll: true });
   });
   registerSearch(paletteItems);
+  addEventListener("pagehide", () => [...pendingDeletes.keys()].forEach((id) => settleDelete(id, true)));
 }

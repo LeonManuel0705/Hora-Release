@@ -10,6 +10,7 @@ import '../brand.dart';
 import '../build_info.dart';
 import '../providers/app_provider.dart';
 import '../services/holiday_service.dart';
+import '../services/site_icons.dart';
 import 'ui_db.dart';
 import 'ui_weather.dart';
 
@@ -793,7 +794,9 @@ class UiData {
       {'id': text(row['id']), 'title': text(row['title']), 'url': text(row['url']), 'category': text(row['category']).isEmpty ? 'Other' : text(row['category'])};
 
   Future<Map<String, Object?>> pageBookmarks() async => {
-        'bookmarks': [for (final row in await db.query('bookmarks', orderBy: 'created_at DESC')) bookmarkView(row)],
+        'bookmarks': [
+          for (final row in await db.query('bookmarks', orderBy: 'created_at DESC')) {...bookmarkView(row), 'icon': await knownSiteIcon(text(row['url']))},
+        ],
         'siteFallback': false,
       };
 

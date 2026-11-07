@@ -713,16 +713,34 @@ def test_a_vector_is_served_in_its_colours_for_a_light_surface_and_other_images_
     assert bitmap.data == png() and bitmap.headers['Content-Type'] == 'image/png'
 
 
-def test_a_bookmark_without_an_icon_answers_not_found_and_is_asked_again_next_time(client, site, net):
+def test_a_bookmark_without_an_icon_answers_no_content_and_is_not_asked_again_at_once(client, site, net):
     response = client.get(f"/api/hub/bookmarks/{bookmark(client, 'http://site.test/')}/icon")
-    assert response.status_code == 404 and response.data == b'' and response.headers['Cache-Control'] == 'no-store'
+    assert response.status_code == 204 and response.data == b'' and response.headers['Cache-Control'] == 'no-store'
     unknown = client.get('/api/hub/bookmarks/987654/icon')
     assert unknown.status_code == 404 and site.paths().count('/favicon.ico') == 1
 
 
+def test_known_tells_what_is_kept_without_asking_anyone(client, icons, site, net):
+    url = 'http://site.test/'
+    assert icons.known(url) is None and icons.known('kein link') is False
+    number = bookmark(client, url)
+    assert site.paths() == []
+    assert client.get(f'/api/hub/bookmarks/{number}/icon').status_code == 204
+    asked = len(site.paths())
+    assert icons.known(url) is False and len(site.paths()) == asked
+    marker = next(icons.ICON_DIR.glob('*.none'))
+    stale = time.time() - icons.RETRY - 1
+    os.utime(marker, (stale, stale))
+    assert icons.known(url) is None
+    site.routes['/favicon.ico'] = reply(png())
+    assert client.get(f'/api/hub/bookmarks/{number}/icon').status_code == 200
+    assert icons.known(url) is True
+
+
 @pytest.mark.parametrize('url', ['javascript:alert(1)', 'http://127.0.0.1:5050/api/hub/bookmarks', 'kein link'])
-def test_a_bookmark_that_is_no_web_address_has_no_icon_and_asks_nobody(client, site, net, url):
-    assert client.get(f'/api/hub/bookmarks/{bookmark(client, url)}/icon').status_code == 404
+def test_a_bookmark_that_is_no_web_address_has_no_icon_and_asks_nobody(hub, client, site, net, url):
+    number = hub.db.create_hub_bookmark(title='Alt', url=url)
+    assert client.get(f'/api/hub/bookmarks/{number}/icon').status_code == 204
     assert net.opened == []
 
 
@@ -737,9 +755,9 @@ def test_the_icon_is_only_for_the_signed_in_app_itself(hub, client, site, net):
 
 def test_saving_a_bookmark_lets_a_missing_icon_be_tried_again(client, site, net):
     number = bookmark(client, 'http://site.test/')
-    assert client.get(f'/api/hub/bookmarks/{number}/icon').status_code == 404
+    assert client.get(f'/api/hub/bookmarks/{number}/icon').status_code == 204
     site.routes['/favicon.ico'] = reply(png())
-    assert client.get(f'/api/hub/bookmarks/{number}/icon').status_code == 404
+    assert client.get(f'/api/hub/bookmarks/{number}/icon').status_code == 204
     client.put(f'/api/hub/bookmarks/{number}', json={'title': 'Neu'})
     assert client.get(f'/api/hub/bookmarks/{number}/icon').data == png()
 

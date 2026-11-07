@@ -6,4 +6,6 @@ import 'dart:typed_data';
 // A page in the browser may not read other sites, so there the bookmarks keep their letter.
 Future<Uint8List?> loadSiteIcon(String url) async => null;
 
+Future<bool?> siteIconKnown(String url) async => false;
+
 Future<void> forgetSiteIcon(String url, Iterable<String> stillUsed) async {}
