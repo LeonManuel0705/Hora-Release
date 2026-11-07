@@ -3,6 +3,8 @@
 
 import json
 import re
+import shutil
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -32,6 +34,17 @@ def client(tmp_path, monkeypatch):
 def page_data(client, path="/hub"):
     html = client.get(path).get_data(as_text=True)
     return json.loads(re.search(r'<script type="application/json" id="appData">(.*?)</script>', html, re.S).group(1))
+
+
+def test_the_setup_logic_holds_up_under_node():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    major = int(re.match(r"v(\d+)", subprocess.run([node, "--version"], capture_output=True, text=True).stdout).group(1))
+    if major < 18:
+        pytest.skip("node is too old")
+    result = subprocess.run([node, str(ROOT / "tests" / "js" / "setup_check.mjs")], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_someone_new_has_no_class_until_they_name_it(client):
@@ -141,3 +154,10 @@ def test_the_forecast_asks_for_the_hourly_sky(monkeypatch):
     monkeypatch.setattr(requests, "get", fake_get)
     ui_data.refresh_weather({"city": "Potsdam", "lat": 52.4, "lon": 13.1})
     assert "weather_code" in seen["hourly"].split(",")
+
+
+def test_every_page_can_open_the_setup(client):
+    home = client.get("/hub").get_data(as_text=True)
+    assert "/static/app/css/setup.css" in home
+    main = (ROOT / "app" / "static" / "app" / "js" / "main.js").read_text(encoding="utf-8")
+    assert re.search(r"^initSetup\(\);$", main, re.M)
