@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart' show buildClassicHome;
+import '../services/android_device.dart';
 import '../services/notification_service.dart';
 import '../services/reminder_scheduler.dart';
 import '../services/update_service.dart';
@@ -415,8 +416,11 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
                       if (uri != null) unawaited(_external(uri));
                       return false;
                     },
-                    onGeolocationPermissionsShowPrompt: (controller, origin) async =>
-                        GeolocationPermissionShowPromptResponse(origin: origin, allow: true, retain: true),
+                    onGeolocationPermissionsShowPrompt: (controller, origin) async => GeolocationPermissionShowPromptResponse(
+                      origin: origin,
+                      allow: !Platform.isAndroid || await AndroidDevice.requestLocation(),
+                      retain: false,
+                    ),
                     onLoadStop: (controller, url) async {
                       if (!_shown && mounted) {
                         setState(() => _shown = true);

@@ -9,6 +9,9 @@
          apps. Without either the app falls back to inexact alarms. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!-- "In der Nähe" in Fahrplan looks up the closest stop, asked for only when tapped. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 
     <application
         android:label="Hora"

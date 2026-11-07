@@ -1,9 +1,11 @@
 package com.leon.nexus
 
+import android.Manifest
 import android.app.ActivityManager
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -22,7 +24,10 @@ import java.io.File
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "app/focus_mode"
     private val ASSISTANT_MODEL_CHANNEL = "app/assistant_model"
+    private val DEVICE_CHANNEL = "app/device"
+    private val LOCATION_REQUEST = 4711
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var locationResult: MethodChannel.Result? = null
     private var previousInterruptionFilter: Int = NotificationManager.INTERRUPTION_FILTER_ALL
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -74,6 +79,13 @@ class MainActivity: FlutterActivity() {
             }
         }
 
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "requestLocation" -> requestLocation(result)
+                else -> result.notImplemented()
+            }
+        }
+
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "$ASSISTANT_MODEL_CHANNEL/network").setStreamHandler(
             object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
@@ -90,6 +102,31 @@ class MainActivity: FlutterActivity() {
     override fun onDestroy() {
         stopWatchingNetwork()
         super.onDestroy()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != LOCATION_REQUEST) return
+        val waiting = locationResult ?: return
+        locationResult = null
+        waiting.success(grantResults.any { it == PackageManager.PERMISSION_GRANTED })
+    }
+
+    private fun locationGranted(): Boolean =
+        checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    private fun requestLocation(result: MethodChannel.Result) {
+        if (locationGranted()) {
+            result.success(true)
+            return
+        }
+        if (locationResult != null) {
+            result.success(false)
+            return
+        }
+        locationResult = result
+        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), LOCATION_REQUEST)
     }
 
     private fun networkStatus(): Map<String, Boolean> {
