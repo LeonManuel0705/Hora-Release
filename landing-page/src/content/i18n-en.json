@@ -128,6 +128,19 @@
     "done_close": "Close",
     "luna_label": "Tap Luna and she waves"
   },
+  "install": {
+    "title": "{{BRAND_NAME}} for {platform}",
+    "get": "Download now",
+    "after": "After the download",
+    "done": "Done",
+    "web_title": "{{BRAND_NAME}} on {device}",
+    "web_lead": "The web app only shows reminders once it is on your Home Screen.",
+    "web_steps": [
+      "Open the web app in Safari.",
+      "There, tap Share {share}, then “Add to Home Screen”.",
+      "From now on, start {{BRAND_NAME}} from the new icon and set it up there. What you enter in the Safari tab doesn't carry over."
+    ]
+  },
   "platforms": {
     "macos": {
       "name": "macOS",

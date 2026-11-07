@@ -128,6 +128,19 @@
     "done_close": "Schließen",
     "luna_label": "Luna antippen, dann winkt sie"
   },
+  "install": {
+    "title": "{{BRAND_NAME}} für {platform}",
+    "get": "Jetzt laden",
+    "after": "Nach dem Laden",
+    "done": "Fertig",
+    "web_title": "{{BRAND_NAME}} auf dem {device}",
+    "web_lead": "Erinnerungen zeigt die Web-App nur, wenn sie auf dem Home-Bildschirm liegt.",
+    "web_steps": [
+      "Web-App in Safari öffnen.",
+      "Dort Teilen {share} antippen, dann „Zum Home-Bildschirm“.",
+      "{{BRAND_NAME}} ab jetzt über das neue Symbol starten und erst dort einrichten. Was du im Safari-Tab einträgst, kommt dort nicht mit."
+    ]
+  },
   "platforms": {
     "macos": {
       "name": "macOS",

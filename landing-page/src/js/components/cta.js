@@ -15,9 +15,10 @@ export function cta() {
   const p = PLATFORMS[id];
   if (!p) return { id, button: `<a class="ap-btn" href="/download">${escapeHtml(t("start.cta_generic"))}</a>`, note: t("start.cta_note_generic") };
   if (p.kind === "pwa") {
+    const sheet = id === "ios" ? ' data-install="ios"' : "";
     const note = t("start.cta_note_web", { device: deviceName(id), others: othersThan(id) });
-    return { id, button: `<a class="ap-btn" href="${p.href}">${escapeHtml(t("start.cta_web"))}</a>`, note };
+    return { id, button: `<a class="ap-btn" href="${p.href}"${sheet}>${escapeHtml(t("start.cta_web"))}</a>`, note };
   }
   const note = t("start.cta_note", { platform: SHORT[id], size: megabytes(p.bytes), others: othersThan(id) });
-  return { id, button: `<a class="ap-btn" href="${p.href}" download data-download="${id}">${escapeHtml(t("start.cta"))}</a>`, note };
+  return { id, button: `<a class="ap-btn" href="${p.href}" download data-install="${id}">${escapeHtml(t("start.cta"))}</a>`, note };
 }

@@ -116,7 +116,7 @@ function getHora() {
     const p = PLATFORMS[id];
     const pwa = p.kind === "pwa";
     const meta = pwa ? t("start.cta_web") : `${megabytes(p.bytes)} MB`;
-    const attrs = pwa ? `href="${p.href}"` : `href="${p.href}" download data-download="${id}"`;
+    const attrs = pwa ? `href="${p.href}" data-install="${id}"` : `href="${p.href}" download data-install="${id}"`;
     return `<li><a class="ap-platform${id === mine ? " is-yours" : ""}" ${attrs}>
       <span class="ap-platform-mark">${platformMark(id, 30)}</span>
       <span class="ap-platform-name">${escapeHtml(SHORT[id])}</span>
