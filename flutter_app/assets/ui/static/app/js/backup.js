@@ -401,17 +401,27 @@ export function subjectsInUse(plan) {
 }
 
 const appleTouch = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform || ""));
+const homeScreen = () => [window, window.top].some((view) => {
+  try {
+    return view.matchMedia("(display-mode: standalone)").matches || view.navigator.standalone === true;
+  } catch {
+    return false;
+  }
+});
 
 // On iPhone and iPad a download from a home screen app goes nowhere, the share sheet offers "In Dateien sichern" in both modes.
 export async function offerFile(name, text, type = "application/json") {
   const file = new File([text], name, { type });
-  if (appleTouch() && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file] });
-      return "shared";
-    } catch (error) {
-      if (error?.name === "AbortError") return "cancelled";
+  if (appleTouch()) {
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file] });
+        return "shared";
+      } catch (error) {
+        if (error?.name === "AbortError") return "cancelled";
+      }
     }
+    if (homeScreen()) return "failed";
   }
   const url = URL.createObjectURL(file);
   const link = document.createElement("a");

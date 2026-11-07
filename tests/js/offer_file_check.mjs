@@ -23,9 +23,13 @@ globalThis.document = {
   body: { append: () => {} },
 };
 globalThis.setTimeout = (run, ms) => delays.push(ms);
+const view = { standalone: false };
+globalThis.window = { matchMedia: () => ({ matches: view.standalone }), navigator: { standalone: false } };
+globalThis.window.top = globalThis.window;
 
-function device({ agent, touch = 0, platform = "", share }) {
+function device({ agent, touch = 0, platform = "", share, standalone = false }) {
   const shared = [];
+  view.standalone = standalone;
   const navigator = { userAgent: agent, maxTouchPoints: touch, platform };
   if (share) {
     navigator.canShare = (data) => Array.isArray(data.files) && data.files.length > 0;
@@ -56,8 +60,15 @@ assert.equal(await offerFile("x.json", "{}"), "cancelled", "closing the share sh
 assert.equal(links.length, 0);
 
 device({ agent: IPHONE, platform: "iPhone", touch: 5, share: "NotAllowedError" });
-assert.equal(await offerFile("x.json", "{}"), "saved", "a refused share sheet falls back to the download");
+assert.equal(await offerFile("x.json", "{}"), "saved", "in a Safari tab a refused share sheet falls back to the download");
 assert.equal(links.length, 1);
+
+device({ agent: IPHONE, platform: "iPhone", touch: 5, share: "NotAllowedError", standalone: true });
+assert.equal(await offerFile("x.json", "{}"), "failed", "from the home screen a download would go nowhere, so it is reported as failed");
+assert.equal(links.length, 0);
+device({ agent: IPHONE, platform: "iPhone", touch: 5, standalone: true });
+assert.equal(await offerFile("x.json", "{}"), "failed", "the same without a share sheet");
+assert.equal(links.length, 0);
 
 for (const phone of [{ agent: PIXEL, platform: "Linux armv8l", touch: 5, share: true }, { agent: IPHONE, platform: "iPhone", touch: 5 }]) {
   shared = device(phone);

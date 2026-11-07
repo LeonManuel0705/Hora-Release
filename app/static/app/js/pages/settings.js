@@ -2997,13 +2997,25 @@ function portableValues() {
   return values;
 }
 
+const exported = { records: undefined, pending: null };
+
+function readRecords() {
+  const pending = request("GET", "/api/ui/export").then((answer) => answer.data);
+  exported.pending = pending;
+  pending.then((records) => {
+    if (exported.pending === pending) exported.records = records;
+  }, () => {});
+  return pending;
+}
+
+// The records are read before the tap, so that the share sheet still opens inside the click on iPhone and iPad.
 async function exportData() {
+  let records = exported.records;
+  if (records === undefined) records = await (exported.pending || readRecords()).catch(() => null);
   const payload = { app: BRAND, version: VERSION, exportedAt: new Date().toISOString(), values: portableValues() };
   const keys = schoolDefaults ? fileKeys(data.subjects) : new Map();
   if (schoolDefaults) payload.school = { abReference: data.abReference, subjects: fileSubjects(schoolDefaults.subjects, keys) };
-  try {
-    payload.data = fileRecords((await request("GET", "/api/ui/export")).data, keys);
-  } catch {}
+  if (records) payload.data = fileRecords(records, keys);
   const name = `${slug(BRAND) || "app"}-sicherung-${isoDate(now())}.json`;
   const missing = payload.data ? "" : ", aber ohne Noten, Aufgaben und Termine. Sie ließen sich gerade nicht lesen.";
   const shell = window.hubShell;
@@ -3024,7 +3036,12 @@ async function exportData() {
     toast(`Gesichert in „${esc(saved.folder)}“ als „${esc(saved.name)}“${missing}`, { icon: missing ? "triangle-alert" : "download", action: reveal });
     return;
   }
-  if ((await offerFile(name, JSON.stringify(payload, null, 2))) === "cancelled") return;
+  const result = await offerFile(name, JSON.stringify(payload, null, 2));
+  if (result === "cancelled") return;
+  if (result === "failed") {
+    toast("Die Sicherung ließ sich nicht teilen. Versuch es noch einmal.", { icon: "circle-alert" });
+    return;
+  }
   toast(`Gesichert als „${esc(name)}“${missing}`, { icon: missing ? "triangle-alert" : "download" });
 }
 
@@ -3241,6 +3258,10 @@ async function wipeData() {
 function bindData() {
   const card = $("dataCard");
   const file = $("importFile");
+  readRecords();
+  card.addEventListener("pointerdown", (event) => {
+    if (event.target.closest("#dataExport")) readRecords();
+  });
   card.addEventListener("click", (event) => {
     if (event.target.closest("#dataExport")) exportData();
     else if (event.target.closest("#dataKeep")) keepData();
