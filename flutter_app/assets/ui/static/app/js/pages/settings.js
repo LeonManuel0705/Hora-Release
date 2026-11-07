@@ -1,12 +1,13 @@
 import {
   data, root, variant, flags, platform, esc, icon, luna, storage, now, subject, hueVar, toMin, clock, hm, weekType, isoWeek,
   isoDate, minutesOf, lessonsFor, nextSchoolDay, WEEKDAYS, WEEKDAYS_SHORT,
-  LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, activeSubjectKeys, motionDefault, slug, teacherLabel, BRAND, BRAND_NAMES } from "../core.js";
+  LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, hasPlan, activeSubjectKeys, motionDefault, slug, teacherLabel, periodWords, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
 import { toast, setTheme, syncTime } from "../shell.js";
 import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, contents } from "../backup.js";
 import { askBackup, importFlow } from "../plan-share.js";
 import { platformName } from "../feedback.js";
+import { suggestShort, pickHue } from "../setup-data.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -25,6 +26,7 @@ const TYPE_ORDER = { LK: 0, GK: 1, SK: 2 };
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const plural = (count, one, many) => `${count}\u00a0${count === 1 ? one : many}`;
+const period = () => periodWords().one;
 const minutesText = (minutes) => `${minutes}\u00a0Min.`;
 const isClock = (value) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value || "");
 const joinWords = (words) => (words.length > 1 ? `${words.slice(0, -1).join(", ")} und ${words.at(-1)}` : words.join(""));
@@ -82,7 +84,7 @@ function prefDefaults() {
   const categories = {};
   (notify.categories || []).forEach((item) => (categories[item.key] = { on: item.on !== false, lead: item.lead ?? null }));
   return {
-    school: { grade: page.school?.grade ?? 12, state: page.school?.state ?? "BB", birthday: "" },
+    school: { grade: page.school?.grade ?? null, state: page.school?.state ?? "", birthday: "" },
     iserv: { connected: page.accounts?.iserv?.connected !== false },
     google: {
       connected: page.accounts?.google?.connected !== false,
@@ -118,7 +120,7 @@ function loadPrefs() {
 function withServerTruth(value) {
   value.iserv.connected = !!page.accounts?.iserv?.connected;
   value.google.connected = !!page.accounts?.google?.connected;
-  if (page.school?.state) value.school.state = page.school.state;
+  if (page.school) value.school.state = page.school.state || "";
   if (page.school?.grade) value.school.grade = page.school.grade;
   if (page.school && "birthday" in page.school) value.school.birthday = page.school.birthday || "";
   if (typeof page.places?.weather === "string") value.places.weather = page.places.weather;
@@ -205,6 +207,8 @@ const sameLesson = (a, b) => (!a && !b) || (!!a && !!b && a.subject === b.subjec
 const courseType = (key) => data.subjects[key]?.type || "GK";
 const plainName = (text) => String(text || "").replace(/\s+(LK|GK)$/, "");
 const sortedTeachers = () => [...data.teachers].sort((a, b) => a.name.localeCompare(b.name, "de") || a.label.localeCompare(b.label, "de"));
+// Only a plan that came in from elsewhere has a state to compare against. A plan typed in here is the user's own throughout.
+const imported = Object.values(schoolDefaults?.timetable || {}).some((days) => Object.values(days || {}).some((entries) => (entries || []).length));
 
 function readEdits() {
   const value = storage.get(LOCAL_KEYS.lessons);
@@ -212,6 +216,7 @@ function readEdits() {
 }
 
 function writeEdits(edits) {
+  if (!abAnswered()) storage.set(LOCAL_KEYS.abWeeks, abWeeks());
   if (Object.keys(edits).length) storage.set(LOCAL_KEYS.lessons, edits);
   else removeKey(LOCAL_KEYS.lessons);
   applySchoolEdits();
@@ -268,15 +273,15 @@ function commitPlan(mutate, message, glyph) {
 }
 
 function cellLabel(dow, block, entry, edited) {
-  const when = `${WEEKDAYS[dow]}, ${block.n}. Block, ${hm(block.start)} bis ${hm(block.end)}`;
-  const what = entry ? `${subject(entry.subject).name}, Raum ${entry.room}` : "frei";
+  const when = `${WEEKDAYS[dow]}, ${block.n}. ${period()}, ${hm(block.start)} bis ${hm(block.end)}`;
+  const what = entry ? `${subject(entry.subject).name}${entry.room ? `, Raum ${entry.room}` : ""}` : "frei";
   return `${when}: ${what}${edited ? ", selbst geändert" : ""}`;
 }
 
 function cellHtml(week, dow, block, row, col, edits) {
   const key = cellKey(week, dow, block.n);
   const entry = lessonAt(week, dow, block.n);
-  const edited = Object.hasOwn(edits, key);
+  const edited = imported && Object.hasOwn(edits, key);
   const classes = ["plan-cell"];
   if (!entry) classes.push("is-free");
   if (edited) classes.push("is-edited");
@@ -293,8 +298,9 @@ function cellHtml(week, dow, block, row, col, edits) {
 function gridHtml() {
   const edits = readEdits();
   const head = DAYS.map((dow) => `<th scope="col" class="plan-day"><span aria-hidden="true">${WEEKDAYS_SHORT[dow]}</span><span class="visually-hidden">${WEEKDAYS[dow]}</span></th>`).join("");
-  const body = planBlocks().map((block, row) => `<tr><th scope="row" class="plan-block"><span class="plan-block-num" aria-hidden="true">${block.n}</span><span class="plan-block-time" aria-hidden="true">${hm(block.start)}<br>${hm(block.end)}</span><span class="visually-hidden">${block.n}. Block, ${hm(block.start)} bis ${hm(block.end)}</span></th>${DAYS.map((dow, col) => cellHtml(plan.week, dow, block, row, col, edits)).join("")}</tr>`).join("");
-  return `<thead><tr><th scope="col" class="plan-corner"><span class="visually-hidden">Block</span></th>${head}</tr></thead><tbody>${body}</tbody>`;
+  const word = period();
+  const body = planBlocks().map((block, row) => `<tr><th scope="row" class="plan-block"><span class="plan-block-num" aria-hidden="true">${block.n}</span><span class="plan-block-time" aria-hidden="true">${hm(block.start)}<br>${hm(block.end)}</span><span class="visually-hidden">${block.n}. ${word}, ${hm(block.start)} bis ${hm(block.end)}</span></th>${DAYS.map((dow, col) => cellHtml(plan.week, dow, block, row, col, edits)).join("")}</tr>`).join("");
+  return `<thead><tr><th scope="col" class="plan-corner"><span class="visually-hidden">${word}</span></th>${head}</tr></thead><tbody>${body}</tbody>`;
 }
 
 const currentCell = () => $("planGrid").querySelector(`.plan-cell[data-row="${plan.row}"][data-col="${plan.col}"]`);
@@ -347,8 +353,7 @@ function renderAb() {
 }
 
 function setAbWeeks(on) {
-  if (on) removeKey(LOCAL_KEYS.abWeeks);
-  else storage.set(LOCAL_KEYS.abWeeks, false);
+  storage.set(LOCAL_KEYS.abWeeks, on);
   plan.week = on ? weekType(now()) : "A";
   applySchoolEdits();
   renderPlan();
@@ -391,10 +396,14 @@ function renderRhythm() {
 }
 
 function renderPlanMeta() {
-  const count = Object.keys(readEdits()).filter(visibleEdit).length;
-  $("planMeta").textContent = count ? `${plural(count, "Stunde", "Stunden")} selbst geändert` : "Wie in IServ";
+  const count = imported ? Object.keys(readEdits()).filter(visibleEdit).length : 0;
+  const lessons = shownWeeks().map((week) => Object.values(data.timetable[week] || {}).reduce((all, entries) => all + entries.length, 0));
+  const total = lessons.length > 1 ? `${plural(lessons[0], "Stunde", "Stunden")} in der A-Woche, ${lessons[1]} in der B-Woche` : plural(lessons[0], "Stunde", "Stunden");
+  $("planMeta").textContent = count ? `${plural(count, "Stunde", "Stunden")} selbst geändert` : lessons.some(Boolean) ? total : "Noch leer";
   $("planLegend").hidden = !count;
   $("resetPlan").hidden = !count;
+  const empty = $("planEmpty");
+  if (empty) empty.hidden = hasPlan();
 }
 
 function swapGrid(direction, paint) {
@@ -451,7 +460,7 @@ function clearCell(row, col) {
   const week = plan.week;
   commitPlan(
     (edits) => setLesson(edits, week, dow, block.n, null),
-    () => `${WEEKDAYS_SHORT[dow]}., ${block.n}.\u00a0Block${weekTag(week)} ist jetzt frei`,
+    () => `${WEEKDAYS_SHORT[dow]}., ${block.n}.\u00a0${period()}${weekTag(week)} ist jetzt frei`,
     "eraser",
   );
   currentCell()?.focus({ preventScroll: true });
@@ -501,7 +510,7 @@ function copyWeek() {
 function resetPlan() {
   const changed = commitPlan(
     (edits) => Object.keys(edits).filter(visibleEdit).forEach((key) => delete edits[key]),
-    (keys) => `Stundenplan wie in IServ, ${plural(keys.length, "Änderung", "Änderungen")} verworfen`,
+    (keys) => `Stundenplan zurückgesetzt, ${plural(keys.length, "Änderung", "Änderungen")} verworfen`,
     "rotate-ccw",
   );
   if (changed.length) (abWeeks() ? $("copyWeek") : currentCell())?.focus({ preventScroll: true });
@@ -557,16 +566,17 @@ function editorHtml({ week, dow, block, entry, base, edited }) {
   const override = own && entry && own.subject === entry.subject && data.teachers.some((teacher) => teacher.id === own.teacher) ? own.teacher : "";
   const baseName = base ? `${schoolDefaults.subjects[base.subject]?.label || subject(base.subject).label}${data.subjects[base.subject]?.retired ? ", gelöscht" : ""}` : "";
   const groups = subjectGroups().map((group) => `<fieldset class="pick-group"><legend class="pick-title${group.keys.length === 1 && subject(group.keys[0]).label === group.title ? " visually-hidden" : ""}">${esc(group.title)}</legend><div class="pick-grid">${group.keys.map((key) => `<label class="pick" style="--hue:${hueVar(key)}"><input type="radio" name="subject" value="${esc(key)}"${key === chosen ? " checked" : ""}><i class="subject-dot" aria-hidden="true"></i><span class="pick-name">${esc(subject(key).label)}</span>${icon("check", "pick-tick")}</label>`).join("")}</div></fieldset>`).join("");
-  const origin = edited
-    ? `<p class="cell-origin">${icon("graduation-cap")}<span>In IServ: ${base ? `${esc(baseName)}, ${esc(base.room)}` : "frei"}</span><button type="button" class="text-button" data-cell-origin><span>Wiederherstellen</span></button></p>`
+  const origin = edited && imported
+    ? `<p class="cell-origin">${icon("rotate-ccw")}<span>Vorher: ${base ? `${esc(baseName)}${base.room ? `, ${esc(base.room)}` : ""}` : "frei"}</span><button type="button" class="text-button" data-cell-origin><span>Wiederherstellen</span></button></p>`
     : "";
+  const create = `<div class="cell-new"><label class="visually-hidden" for="cellNewSubject">Neues Fach</label><input class="field-control" id="cellNewSubject" maxlength="32" placeholder="${groups ? "Anderes Fach anlegen" : "Fach anlegen, z. B. Mathematik"}" autocomplete="off" enterkeyhint="done" aria-describedby="cellSubjectError"><button type="button" class="btn btn-quiet" data-cell-new>${icon("plus")}Anlegen</button></div>`;
   return `<div class="sheet-head cell-head">
-      <div><h2 class="sheet-title" id="cellTitle">${WEEKDAYS[dow]}, ${block.n}.\u00a0Block</h2><p class="cell-when">${abWeeks() ? `${week}-Woche, ` : ""}${hm(block.start)} bis ${hm(block.end)}</p></div>
+      <div><h2 class="sheet-title" id="cellTitle">${WEEKDAYS[dow]}, ${block.n}.\u00a0${period()}</h2><p class="cell-when">${abWeeks() ? `${week}-Woche, ` : ""}${hm(block.start)} bis ${hm(block.end)}</p></div>
       <button class="icon-button" type="button" data-cell-close aria-label="Schließen">${icon("x")}</button>
     </div>
-    <fieldset class="cell-subjects" aria-describedby="cellSubjectError"><legend class="cell-label">Fach</legend>${groups}${errorHtml("cellSubjectError", "")}</fieldset>
+    <fieldset class="cell-subjects" aria-describedby="cellSubjectError"><legend class="cell-label">Fach</legend>${groups}${create}${errorHtml("cellSubjectError", "")}</fieldset>
     <div class="cell-room">
-      <label class="cell-label" for="cellRoom">Raum</label>
+      <label class="cell-label" for="cellRoom">Raum <small>freiwillig</small></label>
       <div class="cell-room-row"><input class="field-control cell-room-input" id="cellRoom" name="room" value="${esc(entry?.room || "")}" maxlength="12" list="roomOptions" autocomplete="off" spellcheck="false" autocapitalize="characters" enterkeyhint="done" aria-describedby="cellRoomError"><div class="room-picks" id="roomPicks" role="group" aria-label="Räume dieses Fachs"></div></div>
       ${errorHtml("cellRoomError", "")}
     </div>
@@ -682,25 +692,48 @@ function submitEditor() {
   const input = $("cellRoom");
   const room = normalizeRoom(input.value);
   input.value = room;
-  const subjectError = key ? "" : "Wähl ein Fach aus.";
-  const roomError = room ? "" : "Trag einen Raum ein, zum Beispiel R101.";
+  const subjectError = key ? "" : form.querySelector('input[name="subject"]') ? "Wähl ein Fach aus." : "Leg zuerst ein Fach an.";
   setError(null, $("cellSubjectError"), subjectError);
-  setError(input, $("cellRoomError"), roomError);
   if (subjectError) {
-    form.querySelector('input[name="subject"]')?.focus();
+    (form.querySelector('input[name="subject"]') || $("cellNewSubject"))?.focus();
     say(subjectError);
-    return;
-  }
-  if (roomError) {
-    input.focus();
-    say(roomError);
     return;
   }
   const label = subject(key).label;
   const chosenTeacher = $("cellTeacher")?.value || "";
   const teacher = chosenTeacher && chosenTeacher !== data.subjects[key]?.teacherId ? chosenTeacher : "";
   rememberRoom(room);
-  applyEditor({ subject: key, room, teacher }, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0Block${weekTag(editing.week)}: ${esc(label)} in ${esc(room)}`, "check");
+  applyEditor({ subject: key, room, teacher }, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0${period()}${weekTag(editing.week)}: ${esc(label)}${room ? ` in ${esc(room)}` : ""}`, "check");
+}
+
+function addSubjectInEditor() {
+  const editing = plan.editing;
+  const input = $("cellNewSubject");
+  if (!editing || !input) return;
+  const name = input.value.replace(/\s+/g, " ").trim().slice(0, 32);
+  if (!name) {
+    setError(input, $("cellSubjectError"), "Gib dem Fach einen Namen, zum Beispiel Mathematik.");
+    input.focus();
+    return;
+  }
+  const active = activeSubjectKeys();
+  let key = active.find((item) => plainName(data.subjects[item].label).toLowerCase() === name.toLowerCase()) || null;
+  if (!key) {
+    const hues = active.map((item) => data.subjects[item].hue);
+    const shorts = active.map((item) => data.subjects[item].short);
+    commitCatalog((draft) => {
+      key = uniqueSubjectKey(draft, name);
+      draft.subjects.items[key] = { custom: true, name, short: suggestShort(name, shorts), hue: pickHue(HUES[active.length % HUES.length], hues, HUES), type: "GK", teacher: "", room: "" };
+    }, `${esc(name)} angelegt`, "plus");
+  }
+  const block = planBlocks().find((item) => item.n === editing.n);
+  const room = $("cellRoom")?.value || "";
+  form.innerHTML = editorHtml({ week: editing.week, dow: editing.dow, block, entry: { subject: key, room }, base: baseLesson(editing.week, editing.dow, editing.n), edited: Object.hasOwn(readEdits(), editing.key) });
+  if (!lessonAt(editing.week, editing.dow, editing.n)) form.querySelector("[data-cell-clear]")?.remove();
+  plan.roomTouched = !!room;
+  syncEditor({ fill: true });
+  form.querySelector(`input[name="subject"][value="${CSS.escape(key)}"]`)?.focus();
+  say(`${name} gewählt`);
 }
 
 function bindEditor() {
@@ -719,6 +752,11 @@ function bindEditor() {
   });
   form.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
+    if (event.target.id === "cellNewSubject") {
+      event.preventDefault();
+      addSubjectInEditor();
+      return;
+    }
     if (event.target.matches('input[type="radio"]') || event.ctrlKey || event.metaKey) {
       event.preventDefault();
       submitEditor();
@@ -741,6 +779,10 @@ function bindEditor() {
       closeEditor();
       return;
     }
+    if (event.target.closest("[data-cell-new]")) {
+      addSubjectInEditor();
+      return;
+    }
     const pick = event.target.closest(".room-pick");
     if (pick) {
       const input = $("cellRoom");
@@ -753,10 +795,10 @@ function bindEditor() {
     const editing = plan.editing;
     if (!editing) return;
     if (event.target.closest("[data-cell-clear]")) {
-      applyEditor(null, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0Block${weekTag(editing.week)} ist jetzt frei`, "eraser");
+      applyEditor(null, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0${period()}${weekTag(editing.week)} ist jetzt frei`, "eraser");
     } else if (event.target.closest("[data-cell-origin]")) {
       const base = baseLesson(editing.week, editing.dow, editing.n);
-      applyEditor(base ? { subject: base.subject, room: base.room } : null, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0Block wieder wie in IServ`, "rotate-ccw");
+      applyEditor(base ? { subject: base.subject, room: base.room } : null, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0${period()} wiederhergestellt`, "rotate-ccw");
     }
   });
   let frame = 0;
@@ -856,8 +898,9 @@ function axisHtml(blocks) {
 }
 
 function rasterMeta(blocks) {
-  if (!blocks.length) return "Noch keine Blöcke";
-  return `${plural(blocks.length, "Block", "Blöcke")}, ${hm(blocks[0].start)} bis ${hm(blocks.at(-1).end)}`;
+  const words = periodWords(blocks);
+  if (!blocks.length) return `Noch keine ${words.many}`;
+  return `${plural(blocks.length, words.one, words.many)}, ${hm(blocks[0].start)} bis ${hm(blocks.at(-1).end)}`;
 }
 
 function pauseText(block, next) {
@@ -872,7 +915,7 @@ function rasterRowHtml(block, next) {
   const pause = pauseText(block, next);
   return `<div class="raster-row" role="group" aria-labelledby="rasterName${n}" data-n="${n}">
       <span class="raster-num" aria-hidden="true">${n}</span>
-      <span class="visually-hidden" id="rasterName${n}">${n}. Block</span>
+      <span class="visually-hidden" id="rasterName${n}">${n}. ${period()}</span>
       <input class="field-control raster-input" type="time" id="rasterStart${n}" value="${block.start}" data-n="${n}" data-edge="start" aria-label="Beginn" aria-describedby="rasterError${n}" required>
       <span class="raster-to" aria-hidden="true">bis</span>
       <input class="field-control raster-input" type="time" id="rasterEnd${n}" value="${block.end}" data-n="${n}" data-edge="end" aria-label="Ende" aria-describedby="rasterError${n}" required>
@@ -882,12 +925,15 @@ function rasterRowHtml(block, next) {
 }
 
 function addState(blocks) {
-  if (blocks.length >= MAX_BLOCKS) return { block: null, hint: `Höchstens ${MAX_BLOCKS} Blöcke am Tag.` };
+  const words = periodWords(blocks);
+  if (blocks.length >= MAX_BLOCKS) return { block: null, hint: `Höchstens ${MAX_BLOCKS}\u00a0${words.many} am Tag.` };
   const last = blocks.at(-1);
   if (!last) return { block: { n: 1, start: "08:00", end: "09:30" }, hint: "" };
-  const start = toMin(last.end) + 10;
-  const end = start + 90;
-  if (end > DAY_END) return { block: null, hint: `Nach ${hm(last.end)} passt kein Block mit 90 Minuten mehr in den Tag.` };
+  const length = toMin(last.end) - toMin(last.start);
+  const gaps = blocks.slice(1).map((block, index) => toMin(block.start) - toMin(blocks[index].end)).filter((gap) => gap >= 0);
+  const start = toMin(last.end) + (gaps.length ? Math.min(...gaps) : 10);
+  const end = start + length;
+  if (end > DAY_END) return { block: null, hint: `Nach ${hm(last.end)} passt ${words.none} ${words.one} mit ${length}\u00a0Minuten mehr in den Tag.` };
   return { block: { n: last.n + 1, start: timeOf(start), end: timeOf(end) }, hint: "" };
 }
 
@@ -895,21 +941,22 @@ function removeText(block) {
   const counts = blockLessons(block.n);
   const [a = 0, b = 0] = counts;
   const total = a + b;
-  if (!total) return `Im ${block.n}. Block steht keine Stunde. Er verschwindet aus Stundenplan, Übersicht und Kalender.`;
+  const words = periodWords();
+  if (!total) return `${words.inside} ${block.n}.\u00a0${words.one} steht nichts. ${words.it} verschwindet aus Stundenplan, Übersicht und Kalender.`;
   const one = total === 1;
   let where = "";
   if (counts.length > 1) where = a && b ? `, ${a} in der A-Woche und ${b} in der B-Woche` : one ? ` in der ${a ? "A" : "B"}-Woche` : `, alle in der ${a ? "A" : "B"}-Woche`;
-  return `Im ${block.n}. Block ${one ? "steht" : "stehen"} ${plural(total, "Stunde", "Stunden")}${where}. Beim Entfernen ${one ? "wird sie" : "werden sie"} geleert.`;
+  return `${words.inside} ${block.n}.\u00a0${words.one} ${one ? "steht" : "stehen"} ${plural(total, "Eintrag", "Einträge")}${where}. Beim Entfernen ${one ? "wird er" : "werden sie"} gelöscht.`;
 }
 
 function rasterFootHtml(blocks) {
   const last = blocks.at(-1);
   const add = addState(blocks);
   if (raster.confirm && blocks.length > 1) {
-    return `<div class="form-confirm raster-confirm" id="rasterConfirm" role="alert"><p>${removeText(last)}</p><div class="set-form-actions"><button type="button" class="btn btn-quiet" id="rasterKeep">Behalten</button><button type="button" class="btn btn-quiet danger-button" id="rasterConfirmRemove">${icon("trash-2")}${last.n}. Block entfernen</button></div></div>`;
+    return `<div class="form-confirm raster-confirm" id="rasterConfirm" role="alert"><p>${removeText(last)}</p><div class="set-form-actions"><button type="button" class="btn btn-quiet" id="rasterKeep">Behalten</button><button type="button" class="btn btn-quiet danger-button" id="rasterConfirmRemove">${icon("trash-2")}${last.n}.\u00a0${period()} entfernen</button></div></div>`;
   }
-  const remove = blocks.length > 1 ? `<button class="btn btn-quiet raster-remove" type="button" id="rasterRemove" aria-expanded="false">${icon("trash-2")}${last.n}. Block entfernen</button>` : "";
-  return `<button class="btn btn-quiet raster-add" type="button" id="rasterAdd"${add.block ? "" : ` aria-disabled="true" aria-describedby="rasterAddHint"`}>${icon("plus")}Block hinzufügen</button>${remove}<p class="raster-hint" id="rasterAddHint"${add.hint ? "" : " hidden"}>${add.hint}</p>`;
+  const remove = blocks.length > 1 ? `<button class="btn btn-quiet raster-remove" type="button" id="rasterRemove" aria-expanded="false">${icon("trash-2")}${last.n}.\u00a0${period()} entfernen</button>` : "";
+  return `<button class="btn btn-quiet raster-add" type="button" id="rasterAdd"${add.block ? "" : ` aria-disabled="true" aria-describedby="rasterAddHint"`}>${icon("plus")}${period()} hinzufügen</button>${remove}<p class="raster-hint" id="rasterAddHint"${add.hint ? "" : " hidden"}>${add.hint}</p>`;
 }
 
 function renderRasterFoot() {
@@ -951,6 +998,7 @@ function draftTimes() {
 function timeErrors(list, edited) {
   const errors = new Map();
   const blame = new Map();
+  const words = periodWords();
   const put = (n, edge, text) => {
     if (!errors.has(n)) errors.set(n, { edge, text });
   };
@@ -969,8 +1017,8 @@ function timeErrors(list, edited) {
       else put(block.n, "end", `Das Ende muss nach dem Beginn um ${hm(block.start)} liegen.`);
     }
     if (prev && isClock(prev.end) && isClock(block.start) && toMin(block.start) < toMin(prev.end)) {
-      if (side(`pair-${prev.n}`, edited?.n === prev.n && edited.edge === "end" ? "prev" : "next") === "prev") put(prev.n, "end", `Überschneidet sich mit dem ${block.n}. Block, der um ${hm(block.start)} beginnt.`);
-      else put(block.n, "start", `Überschneidet sich mit dem ${prev.n}. Block, der bis ${hm(prev.end)} geht.`);
+      if (side(`pair-${prev.n}`, edited?.n === prev.n && edited.edge === "end" ? "prev" : "next") === "prev") put(prev.n, "end", `Überschneidet sich mit ${words.dative} ${block.n}. ${words.one}, ${words.which} um ${hm(block.start)} beginnt.`);
+      else put(block.n, "start", `Überschneidet sich mit ${words.dative} ${prev.n}. ${words.one}, ${words.which} bis ${hm(prev.end)} geht.`);
     }
   });
   errors.blame = blame;
@@ -1048,7 +1096,7 @@ function commitTimes(edited) {
   renderDataMeta();
   const block = list.find((item) => item.n === edited.n);
   if (block) {
-    say(`${block.n}. Block, ${hm(block.start)} bis ${hm(block.end)}, gespeichert`);
+    say(`${block.n}. ${period()}, ${hm(block.start)} bis ${hm(block.end)}, gespeichert`);
     savedTick(block.n);
   }
 }
@@ -1084,7 +1132,7 @@ function addBlock({ keyboard = false } = {}) {
   enterInPlace(row);
   if (keyboard) $(`rasterStart${block.n}`)?.focus();
   const lessons = blockCount(block.n);
-  toast(`${block.n}. Block angelegt, ${hm(block.start)} bis ${hm(block.end)}${lessons ? `, mit ${plural(lessons, "Stunde", "Stunden")} aus IServ` : ""}`, {
+  toast(`${block.n}. ${period()} angelegt, ${hm(block.start)} bis ${hm(block.end)}${lessons ? `, mit ${plural(lessons, "Eintrag", "Einträgen")}` : ""}`, {
     icon: "plus",
     action: { label: "Rückgängig", undo: true, run: () => undoRaster(before) },
   });
@@ -1101,6 +1149,7 @@ function removeBlock() {
   if (blocks.length < 2) return;
   const last = blocks.at(-1);
   const lessons = blockCount(last.n);
+  const word = period();
   const before = rawOf([LOCAL_KEYS.blocks, LOCAL_KEYS.lessons]);
   const edits = dropBlockEdits(readEdits(), [last.n]);
   saveBlocks(blocks.slice(0, -1));
@@ -1108,7 +1157,7 @@ function removeBlock() {
   raster.confirm = false;
   refreshRaster();
   ($("rasterRemove") || $("rasterAdd"))?.focus({ preventScroll: true });
-  toast(`${last.n}. Block entfernt${lessons ? `, ${plural(lessons, "Stunde", "Stunden")} geleert` : ""}`, {
+  toast(`${last.n}.\u00a0${word} entfernt${lessons ? `, ${plural(lessons, "Eintrag", "Einträge")} gelöscht` : ""}`, {
     icon: "trash-2",
     action: { label: "Rückgängig", undo: true, run: () => undoRaster(before) },
   });
@@ -1124,7 +1173,8 @@ function resetTimes() {
   refreshRaster();
   $(`rasterStart${sortedBlocks()[0].n}`)?.focus({ preventScroll: true });
   const blocks = sortedBlocks();
-  toast(`Standardraster, ${plural(blocks.length, "Block", "Blöcke")} von ${hm(blocks[0].start)} bis ${hm(blocks.at(-1).end)}${lost ? `, ${plural(lost, "Stunde", "Stunden")} geleert` : ""}`, {
+  const words = periodWords(blocks);
+  toast(`Standardraster, ${plural(blocks.length, words.one, words.many)} von ${hm(blocks[0].start)} bis ${hm(blocks.at(-1).end)}${lost ? `, ${plural(lost, "Eintrag", "Einträge")} gelöscht` : ""}`, {
     icon: "rotate-ccw",
     action: { label: "Rückgängig", undo: true, run: () => undoRaster(before) },
   });
@@ -1169,19 +1219,24 @@ const school = { loading: null };
 const stateName = (code) => (page.states || []).find((item) => item.code === code)?.name || code;
 
 function gradeDesc(grade) {
+  if (!grade) return "Daran hängt, ob du Noten oder Punkte bekommst";
   if (grade >= 11) return `${grade === page.school?.grade && page.school?.semester ? `${page.school.semester}, ` : ""}Bewertung in Punkten von 0 bis 15`;
   return "Bewertung in Noten von 1 bis 6";
 }
 
+// The server sends no grade while nobody said which class it is. Then only a saved choice counts.
+const gradeKnown = () => !!page.school?.grade || Number.isInteger(storage.get(PREFS_KEY)?.school?.grade);
+
 function renderSchool() {
   const card = $("schoolCard");
   const info = page.school || {};
-  const grade = Number(prefs.school.grade);
+  const grade = gradeKnown() ? Number(prefs.school.grade) : 0;
   const state = school.loading || prefs.school.state;
+  const known = (page.states || []).some((item) => item.code === state);
   const rows = [
-    row({ id: "rowSchoolName", label: "Schule", desc: "Kommt aus IServ", control: info.name || info.town ? `<span class="set-value">${esc(info.name || "")}<small>${esc(info.town || "")}</small></span>` : "", cls: "is-stack" }),
-    row({ id: "rowGrade", label: "Klassenstufe", forId: "gradeSelect", desc: gradeDesc(grade), control: `<select class="field-control" id="gradeSelect" aria-describedby="rowGradeDesc">${GRADES.map((value) => `<option value="${value}"${value === grade ? " selected" : ""}>Klasse ${value}</option>`).join("")}</select>` }),
-    row({ id: "rowState", label: "Bundesland", forId: "stateSelect", desc: "Für Ferien und Feiertage im Kalender", control: `<select class="field-control" id="stateSelect" aria-describedby="rowStateDesc"${school.loading ? " disabled" : ""}>${(page.states || []).map((item) => `<option value="${item.code}"${item.code === state ? " selected" : ""}>${esc(item.name)}</option>`).join("")}</select>`, cls: "is-stack" }),
+    info.name ? row({ id: "rowSchoolName", label: "Schule", desc: "Aus deiner IServ-Anmeldung", control: `<span class="set-value">${esc(info.name)}<small>${esc(info.town || "")}</small></span>`, cls: "is-stack" }) : "",
+    row({ id: "rowGrade", label: "Klassenstufe", forId: "gradeSelect", desc: gradeDesc(grade), control: `<select class="field-control" id="gradeSelect" aria-describedby="rowGradeDesc">${grade ? "" : '<option value="" selected disabled>Bitte wählen</option>'}${GRADES.map((value) => `<option value="${value}"${value === grade ? " selected" : ""}>Klasse ${value}</option>`).join("")}</select>` }),
+    row({ id: "rowState", label: "Bundesland", forId: "stateSelect", desc: "Für Ferien und Feiertage im Kalender", control: `<select class="field-control" id="stateSelect" aria-describedby="rowStateDesc"${school.loading ? " disabled" : ""}>${known ? "" : '<option value="" selected disabled>Bitte wählen</option>'}${(page.states || []).map((item) => `<option value="${item.code}"${item.code === state ? " selected" : ""}>${esc(item.name)}</option>`).join("")}</select>`, cls: "is-stack" }),
     school.loading ? loadingHtml(`Lade Ferien und Feiertage für ${stateName(school.loading)}`, "Dauert nur einen Moment.") : "",
     row({ id: "rowBirthday", label: "Geburtstag", forId: "birthdayInput", desc: "Für passende Ticket-Empfehlungen im Fahrplan", cls: "is-stack", control: `<input class="field-control" type="date" id="birthdayInput" value="${esc(prefs.school.birthday || "")}" max="${isoDate(now())}" aria-describedby="rowBirthdayDesc">` }),
   ];
@@ -1189,10 +1244,10 @@ function renderSchool() {
 }
 
 function changeGrade(value) {
-  const before = Number(prefs.school.grade);
+  const before = gradeKnown() ? Number(prefs.school.grade) : 0;
   const grade = Number(value);
-  if (grade === before) return;
-  const switched = (before >= 11) !== (grade >= 11);
+  if (!grade || grade === before) return;
+  const switched = !!before && (before >= 11) !== (grade >= 11);
   commitPrefs(
     (draft) => (draft.school.grade = grade),
     renderSchool,

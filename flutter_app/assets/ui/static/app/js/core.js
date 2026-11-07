@@ -336,11 +336,49 @@ export function rainFrom(hour) {
   return rainy ? rainy.h : null;
 }
 
+// WMO weather codes as the forecast service sends them.
+const SKIES = [
+  [[0], "clear", "klar"],
+  [[1], "partly", "heiter"],
+  [[2], "partly", "wolkig"],
+  [[3], "cloudy", "bedeckt"],
+  [[45, 48], "fog", "Nebel"],
+  [[51, 53, 55, 56, 57], "drizzle", "Niesel"],
+  [[61, 63, 66], "rain", "Regen"],
+  [[65, 67], "rain", "starker Regen"],
+  [[80, 81, 82], "rain", "Schauer"],
+  [[71, 73, 75, 77, 85, 86], "snow", "Schnee"],
+  [[95, 96, 99], "storm", "Gewitter"],
+];
+
+const night = (hour) => hour >= 20 || hour < 7;
+
+export function skyOf(code, hour = 12) {
+  const found = Number.isInteger(code) ? SKIES.find(([codes]) => codes.includes(code)) : null;
+  if (!found) return null;
+  const [, kind, word] = found;
+  return { kind, word: kind === "clear" && !night(hour) ? "sonnig" : word };
+}
+
+// The forecast for the hour asked comes first. The current weather was read when the page was built, and the page stays open for hours.
+export function skyCode(hour) {
+  const exact = weatherHours().find((item) => item.h === hour);
+  if (Number.isInteger(exact?.code)) return exact.code;
+  if (Number.isInteger(data?.weather?.code)) return data.weather.code;
+  return weatherAt(hour)?.code;
+}
+
+export function currentSky(hour) {
+  return skyOf(skyCode(hour), hour);
+}
+
+const SKY_ICONS = { clear: ["sun", "moon"], partly: ["cloud-sun", "cloud-moon"], cloudy: ["cloud", "cloud"], fog: ["cloud-fog", "cloud-fog"], drizzle: ["cloud-drizzle", "cloud-drizzle"], rain: ["cloud-rain", "cloud-rain"], snow: ["cloud-snow", "cloud-snow"], storm: ["cloud-lightning", "cloud-lightning"] };
+
 export function hourIcon(item) {
+  const sky = skyOf(item.code, item.h);
+  if (sky) return SKY_ICONS[sky.kind][night(item.h) ? 1 : 0];
   if (item.rain >= 50) return "cloud-rain";
   if (item.rain >= 30) return "cloud-drizzle";
-  if (item.h >= 20 || item.h < 7) return "cloud-moon";
-  if (item.h >= 12 && item.h <= 14) return "cloud-sun";
   return "cloud";
 }
 
@@ -429,13 +467,35 @@ export const LOCAL_KEYS = {
   prefs: "app-settings",
 };
 
-export const abWeeks = () => storage.get(LOCAL_KEYS.abWeeks) !== false;
-export const gradeScale = () => ((storage.get(LOCAL_KEYS.prefs)?.school?.grade ?? 12) >= 11 ? "points" : "grades");
+const anyLesson = (timetable) => Object.values(timetable || {}).some((days) => Object.values(days || {}).some((entries) => (entries || []).length));
+const storedPlan = anyLesson(data?.timetable) || Object.values(storage.get(LOCAL_KEYS.lessons) || {}).some(Boolean);
+
+// A plan stored before A/B weeks were asked for keeps them on, as it always had them. A new plan has them once the answer is saved.
+export const abWeeks = () => {
+  const saved = storage.get(LOCAL_KEYS.abWeeks);
+  return typeof saved === "boolean" ? saved : storedPlan;
+};
+export const abAnswered = () => typeof storage.get(LOCAL_KEYS.abWeeks) === "boolean";
+export const abSettled = () => abAnswered() || storedPlan;
+export const hasPlan = () => anyLesson(abWeeks() ? data?.timetable : { A: data?.timetable?.A });
+export const gradeScale = () => {
+  const saved = storage.get(LOCAL_KEYS.prefs)?.school?.grade;
+  const grade = Number.isInteger(saved) ? saved : Number.isInteger(data?.user?.grade) ? data.user.grade : 12;
+  return grade >= 11 ? "points" : "grades";
+};
+
+// A school with single periods calls them Stunden, one with double periods Blöcke. The words fit into the sentences around them.
+export function periodWords(blocks = data?.blocks) {
+  const single = !!blocks?.length && blocks.every((block) => toMin(block.end) - toMin(block.start) <= 60);
+  return single
+    ? { one: "Stunde", many: "Stunden", dative: "der", inside: "In der", it: "Sie", which: "die", none: "keine" }
+    : { one: "Block", many: "Blöcke", dative: "dem", inside: "Im", it: "Er", which: "der", none: "kein" };
+}
 
 export const HUES = ["rose", "ochre", "olive", "moss", "jade", "teal", "lake", "slate", "iris", "orchid", "brick", "plum"];
 export const COURSE_TYPES = ["LK", "GK", "SK"];
 export const NO_TEACHER = "ohne Lehrkraft";
-export const MAX_BLOCKS = 8;
+export const MAX_BLOCKS = 12;
 export const activeSubjectKeys = () => Object.keys(data?.subjects || {}).filter((key) => !data.subjects[key].retired);
 
 const clone = (value) => JSON.parse(JSON.stringify(value));

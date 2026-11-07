@@ -6,6 +6,7 @@ import {
 import { animates, travels, token, ms } from "../motion.js";
 import { toast, registerSearch, syncTime, typing, overlayOpen, pageUrl, keepOneLine } from "../shell.js";
 import { deadlines as deadlineApi, grades as gradeApi } from "../api.js";
+import { askAtFirstEntry } from "../reminders.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -23,7 +24,10 @@ const RATINGS = [[13, "Sehr gut"], [10, "Gut"], [7, "Befriedigend"], [4, "Ausrei
 const CALC_TOOLS = [["ziel", "Zielnote"], ["fach", "Fachnote"], ["umrechnen", "Umrechnen"]];
 const CALC_SYSTEMS = [["points", "Punkte"], ["grades", "Noten"]];
 const MARKS = [6, 5.3, 5, 4.7, 4.3, 4, 3.7, 3.3, 3, 2.7, 2.3, 2, 1.7, 1.3, 1, 0.7];
-const SEMESTER = page.semester || "Q3";
+// Empty while the class is unknown, so the grades of now are shown without naming a term.
+const SEMESTER = page.semester || "";
+const IN_TERM = SEMESTER ? ` ${SEMESTER}` : "";
+const termName = (term) => term || "Jetzt";
 const SEMESTERS = (() => {
   const earlier = new Set(Object.values(page.history || {}).flatMap((terms) => Object.keys(terms || {})));
   const upper = /^Q([1-4])$/.exec(SEMESTER);
@@ -725,10 +729,12 @@ function gradesSummaryHtml() {
   const rows = semesterRows(SEMESTER);
   const value = overallOf(rows);
   const count = rows.reduce((sum, row) => sum + row.count, 0);
-  const previous = overallOf(semesterRows(SEMESTERS[SEMESTERS.indexOf(SEMESTER) - 1] || ""));
-  const trend = value != null && previous != null ? `${SEMESTERS[SEMESTERS.indexOf(SEMESTER) - 1]}: ${decimal(previous)}` : "";
-  return `<button type="button" class="ov-item ov-grades" data-open-grades="1" aria-label="Noten ${SEMESTER}${value != null ? `, Schnitt ${decimal(value)} Punkte` : ", noch keine Noten"}">
-    <span class="ov-item-text"><span class="side-title">Noten ${SEMESTER}</span><small>${value != null ? `${plural(count, "Note", "Noten")}${trend ? `, ${esc(trend)}` : ""}` : "Noch keine Noten eingetragen"}</small></span>
+  const at = SEMESTERS.indexOf(SEMESTER);
+  const before = at > 0 ? SEMESTERS[at - 1] : null;
+  const previous = before == null ? null : overallOf(semesterRows(before));
+  const trend = value != null && previous != null ? `${before}: ${decimal(previous)}` : "";
+  return `<button type="button" class="ov-item ov-grades" data-open-grades="1" aria-label="Noten${IN_TERM}${value != null ? `, Schnitt ${decimal(value)} Punkte` : ", noch keine Noten"}">
+    <span class="ov-item-text"><span class="side-title">Noten${IN_TERM}</span><small>${value != null ? `${plural(count, "Note", "Noten")}${trend ? `, ${esc(trend)}` : ""}` : "Noch keine Noten eingetragen"}</small></span>
     ${value != null ? `<span class="ov-number num">${decimal(value)}</span>` : ""}
     ${icon("chevron-right", "chev-end")}
   </button>`;
@@ -1005,8 +1011,8 @@ function gradeListHtml(key) {
     ? gradeFormHtml()
     : `<div class="grade-actions"><button type="button" class="text-button grade-add" data-grade-form>${icon("plus")}<span>Note eintragen</span></button>${list.length ? `<button type="button" class="text-button" data-calc-for="${esc(key)}"><span>Zielnote berechnen</span></button>` : ""}</div>`;
   return `<div class="field panel-grades">
-    <div class="field-split"><span class="field-label" id="gradesLabel">Noten ${SEMESTER}</span>${average != null ? `<span class="grade-average">Schnitt <b class="num">${decimal(average)}</b></span>` : ""}</div>
-    ${list.length ? `<ul class="grade-list" aria-labelledby="gradesLabel">${rows}</ul>` : `<p class="field-empty">Noch keine Note in ${SEMESTER}.</p>`}
+    <div class="field-split"><span class="field-label" id="gradesLabel">Noten${IN_TERM}</span>${average != null ? `<span class="grade-average">Schnitt <b class="num">${decimal(average)}</b></span>` : ""}</div>
+    ${list.length ? `<ul class="grade-list" aria-labelledby="gradesLabel">${rows}</ul>` : `<p class="field-empty">Noch keine Note${SEMESTER ? ` in ${SEMESTER}` : ""}.</p>`}
     ${past.length ? `<p class="grade-history">${esc(past.join(", "))} Punkte</p>` : ""}
     ${form}
   </div>`;
@@ -1063,7 +1069,7 @@ function gradesPanelHtml() {
   const scored = sortedSubjects(rows.filter((row) => row.value != null));
   const missing = sortedSubjects(rows.filter((row) => row.value == null && !retiredKey(row.key)));
   const switcher = SEMESTERS.length > 1
-    ? `<div class="segmented grade-switch" role="group" aria-label="Halbjahr">${SEMESTERS.map((item) => `<button type="button" data-semester="${esc(item)}" aria-pressed="${item === semester}">${esc(item)}</button>`).join("")}</div>`
+    ? `<div class="segmented grade-switch" role="group" aria-label="Halbjahr">${SEMESTERS.map((item) => `<button type="button" data-semester="${esc(item)}" aria-pressed="${item === semester}">${esc(termName(item))}</button>`).join("")}</div>`
     : "";
   const bars = scored.map((row) => {
     const info = subject(row.key);
@@ -1085,7 +1091,7 @@ function gradesPanelHtml() {
   }
   return `${panelHead("Noten", "Punkte, Leistungskurse zählen doppelt")}
     ${switcher}
-    ${value != null ? `<p class="grades-total"><b class="grades-number num">${decimal(value)}</b><span>Punkte im Schnitt${semester === SEMESTER ? `, ${plural(rows.reduce((sum, row) => sum + row.count, 0), "Note", "Noten")} bisher` : ""}</span></p>` : `<p class="field-empty">Für ${esc(semester)} sind noch keine Noten eingetragen.</p>`}
+    ${value != null ? `<p class="grades-total"><b class="grades-number num">${decimal(value)}</b><span>Punkte im Schnitt${semester === SEMESTER ? `, ${plural(rows.reduce((sum, row) => sum + row.count, 0), "Note", "Noten")} bisher` : ""}</span></p>` : `<p class="field-empty">${semester ? `Für ${esc(semester)} sind` : "Bisher sind"} noch keine Noten eingetragen.</p>`}
     ${entry}
     ${bars ? `<ol class="grade-bars" aria-label="Schnitt je Fach">${bars}</ol>` : ""}
     ${note ? `<p class="side-hint">${note}</p>` : ""}
@@ -1293,7 +1299,7 @@ function scaleHtml(overall) {
   }).join("");
   const title = grades ? "Noten und Bewertung" : "Punkte und Noten";
   const label = grades ? "Noten der Mittelstufe mit Wert und Bewertung" : "Punkte und Noten in der Oberstufe";
-  const hint = mine == null ? "" : grades ? `Umrandet: dein Schnitt in ${SEMESTER} als Note.` : `Umrandet: dein Schnitt in ${SEMESTER}, gerundet.`;
+  const hint = mine == null ? "" : grades ? `Umrandet: dein Schnitt${SEMESTER ? ` in ${SEMESTER}` : ""} als Note.` : `Umrandet: dein Schnitt${SEMESTER ? ` in ${SEMESTER}` : ""}, gerundet.`;
   return `<details class="calc scale-box"${state.calc.table ? " open" : ""}>
     <summary class="calc-summary"><span>${title}</span>${icon("chevron-down", "calc-chev")}</summary>
     <table class="scale${grades ? " is-grades" : ""}" aria-label="${label}"><tbody>${rows}</tbody></table>
@@ -1598,6 +1604,7 @@ function saveTest() {
   if (draft.block) item.block = draft.block;
   state.items.push(item);
   deadlineApi.create(item);
+  askAtFirstEntry();
   const index = abWeeks() ? weekIndexOf(item.date) : null;
   if (index != null) state.week = index;
   renderWeekSwitch();

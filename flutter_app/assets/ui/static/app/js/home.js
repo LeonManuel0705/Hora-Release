@@ -1,8 +1,8 @@
 import {
   data, flags, esc, icon, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, abWeeks, isoWeek, subject, hueVar, glue, lessonsFor, activeLessons, nextSchoolDay, relativeDay, inDays, duration, shortDate,
-  longDate, eventsOn, nextDeparture, weatherAt, rainFrom, hourIcon, hasWeather, storage, changesFor, ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, nextRepeatDate, followLinks, homeworkDate,
-  WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "./core.js";
+  longDate, eventsOn, nextDeparture, weatherAt, rainFrom, hourIcon, hasWeather, currentSky, skyCode, periodWords, storage, changesFor, ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, nextRepeatDate, followLinks, homeworkDate,
+  holidayOn, hasPlan, NO_TEACHER, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "./core.js";
 import { animates, travels, rich, level, flipKeyed, exitInPlace, enterInPlace, setDigits, pop, crossfade, swapText, breath, chalkCheck, bezier, token, ms } from "./motion.js";
 import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
 import { toast, openPage, registerSearch, typing, shortcutsEnabled, overlayOpen, placeNear, clampSheet, parseNote, cleanTitle, syncTime } from "./shell.js";
@@ -16,6 +16,8 @@ const WRITTEN_DAYS = 14;
 const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const clamp = (value, low = 0, high = 1) => Math.min(high, Math.max(low, value));
 const widow = (text) => text.replace(/ (\S{1,12})$/, "\u00a0$1");
+const PERIOD = periodWords();
+const nth = (n) => `${n}. ${PERIOD.one}`;
 
 const state = {
   tasks: flags.empty ? [] : [...data.tasks, ...(data.taskPool || []).filter((task) => !task.done && task.date && !task.someday)].map((task) => ({ ...task })),
@@ -37,6 +39,7 @@ function computeDay(date) {
   const lessons = lessonsFor(date);
   const active = activeLessons(lessons);
   const base = { date, nowMin, lessons, active, changes: changesFor(date) };
+  if (!hasPlan()) return { ...base, kind: "unplanned" };
   if (!active.length) return { ...base, kind: "free", school: nextSchoolDay(date) };
   const first = active[0];
   const last = active[active.length - 1];
@@ -93,9 +96,9 @@ function changeLine(day) {
   const lines = [];
   if (cancelled.length) {
     const end = day.active.length ? day.active[day.active.length - 1].end : null;
-    lines.push(`${cancelled.map((lesson) => `${lesson.block}.`).join(" und ")} Block entfällt${end ? `, Schluss um ${hm(end)}` : ""}`);
+    lines.push(`${cancelled.map((lesson) => `${lesson.block}.`).join(" und ")} ${PERIOD.one} entfällt${end ? `, Schluss um ${hm(end)}` : ""}`);
   }
-  moved.forEach((lesson) => lines.push(`${lesson.block}. Block heute in ${lesson.room} statt ${lesson.movedFrom}`));
+  moved.forEach((lesson) => lines.push(`${nth(lesson.block)} heute in ${lesson.room} statt ${lesson.movedFrom}`));
   if (!lines.length) return "";
   return `<p class="today-change">${icon("calendar-x-2")}<span>${esc(lines.join(". "))}.</span></p>`;
 }
@@ -119,8 +122,9 @@ function heroCopy(day) {
   const change = inSchool(day) ? changeLine(day) : "";
   const title = (text) => `<h2 class="today-title" id="todayTitle">${esc(text)}</h2>`;
   const eyebrow = (text) => `<p class="today-eyebrow">${text}</p>`;
-  const place = (lesson) => (lesson.movedFrom ? `<b>${esc(lesson.room)}</b> statt ${esc(lesson.movedFrom)}` : `<b>${esc(lesson.room)}</b>`);
-  const upNext = (lesson) => `Danach <b>${esc(label(lesson.subject))}</b>, ${esc(lesson.room)}, ${hm(lesson.start)}`;
+  const place = (lesson) => (lesson.movedFrom ? `<b>${esc(lesson.room)}</b> statt ${esc(lesson.movedFrom)}` : lesson.room ? `<b>${esc(lesson.room)}</b>` : "");
+  const where = (lesson) => [place(lesson), lesson.teacher && lesson.teacher !== NO_TEACHER ? esc(lesson.teacher) : ""].filter(Boolean).map((part) => `${part}, `).join("");
+  const upNext = (lesson) => `Danach <b>${esc(label(lesson.subject))}</b>, ${lesson.room ? `${esc(lesson.room)}, ` : ""}${hm(lesson.start)}`;
   const closing = (last) => `Danach Schulschluss um <b>${hm(last.end)}</b>`;
   const tomorrow = (school) => {
     if (!school) return "In den nächsten zehn Tagen steht nichts im Stundenplan";
@@ -131,8 +135,8 @@ function heroCopy(day) {
     const lesson = day.lesson;
     const left = lesson.endMin - day.nowMin;
     return {
-      head: `${eyebrow(`Jetzt, ${lesson.block}. Block`)}${change}${title(label(lesson.subject))}`,
-      meta: `${place(lesson)}, ${esc(lesson.teacher)}, `,
+      head: `${eyebrow(`Jetzt, ${nth(lesson.block)}`)}${change}${title(label(lesson.subject))}`,
+      meta: where(lesson),
       parts: { lead: "noch", value: String(left), unit: "Min.", sr: `Noch ${spoken(left)} bis ${hm(lesson.end)}.` },
       next: day.next ? upNext(day.next) : closing(day.last),
     };
@@ -140,13 +144,13 @@ function heroCopy(day) {
   if (day.kind === "break" || day.kind === "soon" || day.kind === "morning") {
     const lesson = day.lesson;
     const wait = lesson.startMin - day.nowMin;
-    const head = day.kind === "break" ? `Pause bis ${hm(lesson.start)}` : day.kind === "soon" ? `Gleich, ${lesson.block}. Block` : `Heute ab ${hm(lesson.start)}`;
+    const head = day.kind === "break" ? `Pause bis ${hm(lesson.start)}` : day.kind === "soon" ? `Gleich, ${nth(lesson.block)}` : `Heute ab ${hm(lesson.start)}`;
     const parts = day.kind === "morning"
       ? { plain: `in ${duration(wait)}` }
       : { lead: "in", value: String(wait), unit: "Min.", sr: `Beginn in ${spoken(wait)} um ${hm(lesson.start)}.` };
     return {
       head: `${eyebrow(head)}${change}${title(label(lesson.subject))}`,
-      meta: `${place(lesson)}, ${esc(lesson.teacher)}, `,
+      meta: where(lesson),
       parts,
       next: day.next ? upNext(day.next) : closing(day.last),
     };
@@ -154,12 +158,23 @@ function heroCopy(day) {
   const later = eventsOn(day.date).filter((event) => event.start && toMin(event.end || event.start) > day.nowMin);
   const school = day.school || nextSchoolDay(day.date);
   const open = openTasks();
-  const workload = open.length ? `${open.length} ${open.length === 1 ? "Aufgabe" : "Aufgaben"} offen, etwa ${effort(open.reduce((sum, task) => sum + (task.minutes || 0), 0))}` : "Alle Aufgaben erledigt";
-  if (day.kind === "free") {
-    const weekend = [0, 6].includes(day.date.getDay());
-    const event = later[0];
+  const workload = open.length ? `${open.length} ${open.length === 1 ? "Aufgabe" : "Aufgaben"} offen, etwa ${effort(open.reduce((sum, task) => sum + (task.minutes || 0), 0))}` : todayTasks().length ? "Alle Aufgaben erledigt" : "";
+  const weekend = [0, 6].includes(day.date.getDay());
+  const holiday = holidayOn(day.date);
+  if (day.kind === "unplanned") {
+    const when = holiday ? holiday.title : weekend ? "Wochenende" : "";
     return {
-      head: `${eyebrow(weekend ? "Wochenende" : "Heute frei")}${title(event ? event.title : "Kein Unterricht")}`,
+      head: `${when ? eyebrow(esc(when)) : ""}${title("Noch kein Stundenplan")}`,
+      meta: "Trag ihn einmal ein, dann steht hier, welche Stunde gerade dran ist und in welchem Raum.",
+      parts: { plain: "" },
+      next: `<button class="btn btn-primary today-setup" type="button" data-open-setup="home">${icon("table-2")}Stundenplan eintragen</button><span class="today-setup-note">dauert etwa fünf Minuten</span>`,
+    };
+  }
+  if (day.kind === "free") {
+    const event = later[0];
+    const what = event ? event.title : holiday && !weekend ? holiday.title : "Kein Unterricht";
+    return {
+      head: `${eyebrow(weekend ? "Wochenende" : "Heute frei")}${title(what)}`,
       meta: event ? `<b>${esc(event.start)}</b>${event.place ? `, ${esc(event.place)}` : ""}` : workload,
       parts: { plain: "" },
       next: tomorrow(school),
@@ -225,6 +240,7 @@ function sceneModel(day) {
   const due = deadlines.filter((item) => !isAssessment(item) && !item.pinned && item.diff >= -7 && item.diff <= 3 && item.status !== "abgegeben").length;
   const hour = day.nowMin / 60;
   const time = hour < 5 || hour >= 21 ? "night" : hour < 7.5 ? "dawn" : hour < 17.5 ? "day" : "dusk";
+  const sky = currentSky(Math.floor(hour))?.kind || null;
   const bloom = total > 0 && !open.length;
   const lampOn = (!!test && test.diff <= 1) || time === "dusk" || time === "night";
   const candidates = [];
@@ -242,11 +258,12 @@ function sceneModel(day) {
   const reading = open.find((task) => /lesen|lektüre|kapitel|korrektur/i.test(task.title));
   if (reading && !preview) candidates.push({ key: "book", tip: reading.title, rank: 5, order: 0 });
   if (flags.scene === "lesen") candidates.push({ key: "book", tip: "Seminararbeit: Kapitel 3 gegenlesen", rank: 0, order: 0 });
-  if (!day.active.length && !preview) candidates.push({ key: "football", tip: "Heute frei", rank: 6, order: 0 });
+  if (!day.active.length && !preview && day.kind !== "unplanned") candidates.push({ key: "football", tip: "Heute frei", rank: 6, order: 0 });
   const props = pickProps(candidates);
   const bits = [open.length ? `${open.length} ${open.length === 1 ? "offene Aufgabe" : "offene Aufgaben"}` : bloom ? "alles erledigt" : "nichts offen", ...props.map((prop) => prop.tip).filter(Boolean)];
   return {
     time,
+    sky,
     minute: day.nowMin,
     books: Math.min(4, open.length),
     papers: open.length > 4,
@@ -302,6 +319,7 @@ function renderHero(day, previous) {
 }
 
 function trackModel(day) {
+  if (day.kind === "unplanned") return { mode: "none", lessons: [], date: day.date };
   if (["free", "evening"].includes(day.kind)) {
     const school = day.school;
     if (!school) return { mode: "empty", lessons: [], date: day.date };
@@ -325,12 +343,18 @@ const stateWords = { "is-done": "vorbei", "is-now": "läuft", "is-next": "als N�
 function renderTrack(day) {
   const track = $("track");
   const model = trackModel(day);
+  track.hidden = model.mode === "none";
+  if (track.hidden) {
+    track.dataset.signature = "";
+    track.replaceChildren();
+    return;
+  }
   const byBlock = new Map(model.lessons.map((lesson) => [lesson.block, lesson]));
   const signature = `${model.mode}|${isoDate(model.date)}|${model.lessons.map((lesson) => `${lesson.block}${lesson.subject}${lesson.cancelled ? "x" : ""}${lesson.room}`).join()}`;
-  track.setAttribute("aria-label", model.mode === "preview" ? `Blöcke am ${longDate(model.date)}` : "Blöcke heute");
+  track.setAttribute("aria-label", model.mode === "preview" ? `${PERIOD.many} am ${longDate(model.date)}` : `${PERIOD.many} heute`);
   if (track.dataset.signature !== signature) {
     track.dataset.signature = signature;
-    const caption = model.mode === "preview" ? `<span class="track-caption" aria-hidden="true">Blöcke ${esc(relativeDay(model.offset, model.date))}</span>` : "";
+    const caption = model.mode === "preview" ? `<span class="track-caption" aria-hidden="true">${PERIOD.many} ${esc(relativeDay(model.offset, model.date))}</span>` : "";
     track.innerHTML = data.blocks.map((block) => {
       const start = toMin(block.start);
       const left = ((start - DAY_START) / SPAN) * 100;
@@ -339,13 +363,13 @@ function renderTrack(day) {
       const time = `${hm(block.start)}–${hm(block.end)}`;
       const place = `style="left:${left.toFixed(3)}%;width:${width.toFixed(3)}%"`;
       if (!lesson) {
-        return `<div class="segment is-free" role="button" aria-disabled="true" data-block="${block.n}" tabindex="-1" ${place} aria-label="${block.n}. Block, ${hm(block.start)} bis ${hm(block.end)}, frei">
+        return `<div class="segment is-free" role="button" aria-disabled="true" data-block="${block.n}" tabindex="-1" ${place} aria-label="${nth(block.n)}, ${hm(block.start)} bis ${hm(block.end)}, frei">
           <span class="segment-time"><span class="segment-clock">${time}</span></span><span class="segment-label"><span class="label-full">Frei</span><span class="label-short">frei</span></span></div>`;
       }
       const info = subject(lesson.subject);
       const test = testOnDate(isoDate(model.date), block.n);
-      const tip = `${block.n}. Block, ${time}: <b>${esc(info.name)}</b> in ${esc(lesson.room)}, ${esc(lesson.teacher)}${test ? `<br>${esc(test.kind)}: ${esc(test.title)}` : ""}${lesson.cancelled ? "<br>Entfällt" : ""}`;
-      return `<div class="segment" role="button" data-block="${block.n}" tabindex="-1" data-tip="${esc(tip)}" data-tip-side="below" data-page-action="school" ${place}>
+      const tip = `${nth(block.n)}, ${time}: <b>${esc(info.name)}</b>${lesson.room ? ` in ${esc(lesson.room)}` : ""}${lesson.teacher && lesson.teacher !== NO_TEACHER ? `, ${esc(lesson.teacher)}` : ""}${test ? `<br>${esc(test.kind)}: ${esc(test.title)}` : ""}${lesson.cancelled ? "<br>Entfällt" : ""}`;
+      return `<div class="segment" role="button" data-block="${block.n}" tabindex="-1" data-tip="${esc(tip)}" data-tip-side="below" data-page-action="school" style="left:${left.toFixed(3)}%;width:${width.toFixed(3)}%;--hue:${hueVar(lesson.subject)}">
         <span class="segment-fill" aria-hidden="true"></span>
         <svg class="segment-outline" aria-hidden="true" focusable="false"><rect pathLength="1"/></svg>
         <span class="segment-time"><span class="segment-done-icon">${icon("check")}</span><span class="segment-clock">${time}</span></span>
@@ -364,7 +388,7 @@ function renderTrack(day) {
     node.style.setProperty("--p", progress.toFixed(4));
     const test = testOnDate(isoDate(model.date), lesson.block);
     const status = stateWords[cls];
-    node.setAttribute("aria-label", `${lesson.block}. Block, ${hm(lesson.start)} bis ${hm(lesson.end)}, ${subject(lesson.subject).name}, ${lesson.room}, ${lesson.teacher}${test ? `, ${test.kind}` : ""}${status ? `, ${status}` : ""}`);
+    node.setAttribute("aria-label", `${nth(lesson.block)}, ${hm(lesson.start)} bis ${hm(lesson.end)}, ${subject(lesson.subject).name}${lesson.room ? `, ${lesson.room}` : ""}${lesson.teacher && lesson.teacher !== NO_TEACHER ? `, ${lesson.teacher}` : ""}${test ? `, ${test.kind}` : ""}${status ? `, ${status}` : ""}`);
     if (!focusTarget && (cls === "is-now" || cls === "is-next")) focusTarget = node;
   });
   const segments = [...track.querySelectorAll(".segment")];
@@ -373,7 +397,27 @@ function renderTrack(day) {
     const pick = focusTarget || segments.find((node) => !node.classList.contains("is-free")) || segments[0];
     segments.forEach((node) => (node.tabIndex = node === pick ? 0 : -1));
   }
+  fitTrack();
   placeMarker(day, model);
+}
+
+// The text's own width, unclipped and to the fraction of a pixel. scrollWidth rounds and misses an ellipsis by a few tenths.
+function textWidth(node) {
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  return range.getBoundingClientRect().width;
+}
+
+function fitTrack() {
+  const segments = [...$("track").querySelectorAll(".segment")];
+  const over = (node) => {
+    const label = node.querySelector(".segment-label");
+    return !!label && textWidth(label) > label.getBoundingClientRect().width + 0.05;
+  };
+  segments.forEach((node) => node.classList.remove("is-tight", "is-bare"));
+  segments.filter(over).forEach((node) => node.classList.add("is-tight"));
+  // One lesson shown as a dot among labelled ones looks broken. Then the whole track shows dots, the tooltip keeps the name.
+  if (segments.some((node) => node.classList.contains("is-tight") && over(node))) segments.forEach((node) => node.classList.add("is-bare"));
 }
 
 function markerFor(day, model) {
@@ -671,7 +715,7 @@ function renderDue() {
   renderWritten(written, date);
   if (!overdue.length && !soon.length && !pinned.length) {
     const stand = flags.offline ? ` (Stand ${syncTime()} Uhr)` : "";
-    list.innerHTML = `<li class="empty-line" data-flip="due-empty">Bis ${longDate(horizon)} keine Abgaben${stand}.<small>Tests und Hausaufgaben kommen automatisch aus IServ.</small></li>`;
+    list.innerHTML = `<li class="empty-line" data-flip="due-empty">Bis ${longDate(horizon)} keine Abgaben${stand}.<small>Tests und Hausaufgaben trägst du unter Schule ein.</small></li>`;
     return;
   }
   let html = overdue.map((item) => dueRow(item, date)).join("");
@@ -695,6 +739,7 @@ function weekStart(day) {
 
 function renderWeek(day) {
   const { monday, next } = weekStart(day);
+  const planned = hasPlan();
   const today = isoDate(day.date);
   const friday = addDays(monday, 4);
   $("weekTitle").textContent = next ? "Nächste Woche" : "Diese Woche";
@@ -709,6 +754,7 @@ function renderWeek(day) {
     const iso = isoDate(date);
     const lessons = lessonsFor(date);
     const active = activeLessons(lessons);
+    const holiday = holidayOn(date);
     const byBlock = new Map(lessons.map((lesson) => [lesson.block, lesson]));
     const isToday = iso === today;
     const past = iso < today || (isToday && ["afterSoon", "evening"].includes(day.kind));
@@ -717,8 +763,8 @@ function renderWeek(day) {
       return lesson && !lesson.cancelled ? `<i style="--hue:${hueVar(lesson.subject)}"></i>` : `<i class="is-free"></i>`;
     }).join("");
     const line = active.length
-      ? `${active.length} ${active.length === 1 ? "Block" : "Blöcke"}, ${active[0].startMin === DAY_START ? "" : `${hm(active[0].start)} `}bis ${hm(active[active.length - 1].end)}`
-      : "Unterrichtsfrei";
+      ? `${active.length} ${active.length === 1 ? PERIOD.one : PERIOD.many}, ${active[0].startMin === DAY_START ? "" : `${hm(active[0].start)} `}bis ${hm(active[active.length - 1].end)}`
+      : holiday ? holiday.title : planned ? "Unterrichtsfrei" : "";
     const overdueHere = state.deadlines.filter((item) => item.date === iso && isOverdue(item, today));
     const markers = [];
     if (past && !isToday) {
@@ -726,7 +772,7 @@ function renderWeek(day) {
     } else {
       state.deadlines.filter((item) => item.date === iso && !item.pinned && item.status !== "abgegeben").forEach((item) => {
         const name = subject(item.subject).name.replace(/ LK$/, "");
-        const block = item.block ? `, ${item.block}. Block` : "";
+        const block = item.block ? `, ${nth(item.block)}` : "";
         const test = isAssessment(item);
         const text = `${item.kind} ${name}${block}`;
         markers.push({ order: test ? 0 : 1, text, html: `<p class="marker${test ? " is-test" : ""}">${icon(test ? ASSESSMENTS[item.kind].icon : "list-checks")}<span>${esc(text)}</span></p>` });
@@ -746,14 +792,14 @@ function renderWeek(day) {
     let headExtra = "";
     if (isToday && !past) headExtra = `<span class="today-tag">heute</span>`;
     else if (past && overdueHere.length) headExtra = `<i class="day-alert" aria-hidden="true"></i>`;
-    else if (past) headExtra = icon("check", "day-check");
+    else if (past && planned) headExtra = icon("check", "day-check");
     const subjects = active.map((lesson) => subject(lesson.subject).name).join(", ");
-    const aria = `${longDate(date)}${isToday ? ", heute" : ""}, ${line}${subjects ? `: ${subjects}` : ""}${markers.length ? `. ${markers.map((marker) => marker.text).join(". ")}` : ""}`;
+    const aria = `${longDate(date)}${isToday ? ", heute" : ""}${line ? `, ${line}` : ""}${subjects ? `: ${subjects}` : ""}${markers.length ? `. ${markers.map((marker) => marker.text).join(". ")}` : ""}`;
     const classes = ["day", isToday ? "is-today" : "", past && !isToday ? "is-past" : "", past && overdueHere.length ? "has-alert" : ""].filter(Boolean).join(" ");
     cells.push(`<li><button type="button" class="${classes}" data-page-action="calendar" style="--d:${i}" aria-label="${esc(aria)}">
       <span class="day-head"><span class="day-name">${WEEKDAYS_SHORT[date.getDay()]}</span><em>${date.getDate()}.</em>${headExtra}</span>
       <span class="day-bar" aria-hidden="true">${bar}</span>
-      <span class="day-body">${past && !isToday ? "" : `<span class="day-line">${esc(line)}</span>`}${shown}${extra}</span>
+      <span class="day-body">${(past && !isToday) || !line ? "" : `<span class="day-line">${esc(line)}</span>`}${shown}${extra}</span>
     </button></li>`);
   }
   const strip = $("weekStrip");
@@ -784,7 +830,8 @@ function renderWeather() {
   const bus = day && (day.kind === "lesson" || day.kind === "break") ? nextDeparture(day.last.endMin) : day?.kind === "afterSoon" ? reachableBus(day) : null;
   const rain = rainFrom(hour);
   const wind = data.weather.wind == null ? "" : `, Wind ${data.weather.wind} km/h`;
-  let summary = `Jetzt <b>${current.temp}°</b>, ${current.rain >= 30 ? "Niesel" : hour >= 12 && hour <= 14 ? "heiter bis wolkig" : "bedeckt"}${wind}.`;
+  const sky = currentSky(hour);
+  let summary = `Jetzt <b>${current.temp}°</b>${sky ? `, ${sky.word}` : ""}${wind}.`;
   if (bus) {
     const busHour = Math.floor(toMin(bus.time) / 60);
     summary += rain == null || rain > busHour ? ` Heimweg um ${bus.time} noch trocken.` : ` Zum Heimweg um ${bus.time} Regen, Jacke einpacken.`;
@@ -803,6 +850,23 @@ function renderWeather() {
     </li>`;
   }).join("");
   pop([...$("weatherHours").children]);
+}
+
+function renderWeatherChip() {
+  const chip = $("headWeather");
+  if (!chip) return;
+  const hour = now().getHours();
+  const item = hasWeather() ? weatherAt(hour) : null;
+  chip.hidden = !item;
+  if (!item) return;
+  const sky = currentSky(hour);
+  const glyph = hourIcon({ ...item, code: skyCode(hour) });
+  const word = sky?.word || (item.rain >= 40 ? "Regen möglich" : "");
+  const html = `${icon(glyph)}<b>${item.temp}°</b>${word ? `<span>${esc(word)}</span>` : ""}`;
+  if (chip.dataset.html === html) return;
+  chip.dataset.html = html;
+  chip.innerHTML = html;
+  chip.setAttribute("aria-label", `Wetter${data.weather.place ? ` in ${data.weather.place}` : ""}: ${item.temp} Grad${word ? `, ${word}` : ""}. Vorhersage öffnen`);
 }
 
 function interactiveRows() {
@@ -1060,7 +1124,7 @@ function restoreTask(id, kind, before = null, someday = false) {
 }
 
 function createTask({ title, subjectKey, date, block, minutes = 20, notes = "" }) {
-  const task = { id: `new-${Date.now()}`, title, subject: subjectKey, anchor: block ? `vor dem ${block}. Block` : "", minutes, notes, done: false };
+  const task = { id: `new-${Date.now()}`, title, subject: subjectKey, anchor: block ? `vor ${PERIOD.dative} ${nth(block)}` : "", minutes, notes, done: false };
   if (date && date > todayIso()) task.date = date;
   if (block) task.block = block;
   state.tasks.push(task);
@@ -1341,6 +1405,7 @@ function render(previous) {
   const day = computeDay(date);
   state.day = day;
   renderHeader(day);
+  renderWeatherChip();
   renderHero(day, previous);
   renderTrack(day);
   const dayChanged = !previous || isoDate(previous.date) !== isoDate(day.date);
@@ -1406,6 +1471,12 @@ export function initHome() {
   const day = render(null);
   choreograph(day);
   requestAnimationFrame(() => requestAnimationFrame(() => $("track").classList.add("is-live")));
+  let fitFrame = 0;
+  new ResizeObserver(() => {
+    cancelAnimationFrame(fitFrame);
+    fitFrame = requestAnimationFrame(fitTrack);
+  }).observe($("track"));
+  document.fonts?.ready.then(fitTrack);
   scheduleTick();
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {

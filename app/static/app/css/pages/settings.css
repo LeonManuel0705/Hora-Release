@@ -295,6 +295,12 @@
   100% { opacity: 0; }
 }
 
+.plan-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-bottom: 14px; padding: 16px 18px; border-radius: 22px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.plan-empty[hidden] { display: none; }
+.plan-empty-text { flex: 1 1 320px; font-size: var(--text-base); line-height: 1.45; color: var(--ink-soft); }
+.plan-empty-text b { color: var(--ink); }
+.plan-empty .btn { height: 40px; border-radius: var(--radius-pill); }
+
 .plan-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 0 2px 8px; }
 .plan-board .segmented { background: color-mix(in oklab, var(--ink) 6%, transparent); box-shadow: none; }
 .plan-weeks button { gap: 8px; padding: 0 14px; white-space: nowrap; }
@@ -402,6 +408,13 @@
 
 .plan-cell.is-free::before { display: none; }
 .plan-free { font-size: var(--text-xs); color: var(--ink-muted); transition: opacity var(--dur-hover-out) var(--ease-hover); }
+
+.cell-new { display: flex; gap: 8px; margin-top: 10px; }
+.cell-new .field-control { flex: 1; min-width: 0; min-height: 38px; }
+.cell-new .btn { height: 38px; }
+.cell-label small { font-weight: var(--weight-regular); color: var(--ink-muted); }
+.is-touch .cell-new .field-control { font-size: 16px; }
+.is-touch :is(.set-head-action[data-open-setup], .plan-empty .btn, .cell-new .btn, .cell-new .field-control) { min-height: 44px; }
 
 .plan-add {
   position: absolute;

@@ -1,7 +1,8 @@
-import { BRAND, LOCAL_KEYS, data, dayDiff, hm, isoDate, lessonsFor, minutesOf, startOfDay, storage, subject, toMin } from "./core.js";
+import { BRAND, LOCAL_KEYS, activeSubjectKeys, data, dayDiff, hasPlan, hm, isoDate, lessonsFor, minutesOf, startOfDay, storage, subject, toMin } from "./core.js";
 import { endNotice, read as readPomodoro, subscribe } from "./pomodoro-timer.js";
 
 const SHOWN_KEY = "app-reminders-shown";
+const ASKED_KEY = "app-reminders-asked";
 const TICK = 30000;
 const GRACE = 5;
 const KEEP_DAYS = 3;
@@ -35,6 +36,42 @@ export function switchRemindersOn() {
   if (saved.notify?.enabled === true) return;
   storage.set(LOCAL_KEYS.prefs, { ...saved, notify: { ...(saved.notify || {}), enabled: true } });
   document.dispatchEvent(new CustomEvent("reminders:on"));
+}
+
+const looksNew = () => !!data && !hasPlan() && !activeSubjectKeys().length && ![data.tasks, data.taskPool, data.deadlines, data.events].some((list) => list?.length);
+
+// Reminders start on for someone new. The choice is stored right away, so it does not change once their data comes in,
+// and whoever used the app before keeps reminders off until they turn them on.
+export function adoptDefault() {
+  const saved = storage.get(LOCAL_KEYS.prefs);
+  if (saved?.notify && "enabled" in saved.notify) return;
+  if (looksNew()) switchRemindersOn();
+}
+
+export const canAsk = () => "Notification" in window && Notification.permission === "default" && readPrefs().enabled;
+
+export async function askPermission() {
+  if (!("Notification" in window) || Notification.permission !== "default") return "Notification" in window ? Notification.permission : "unsupported";
+  try {
+    localStorage.setItem(ASKED_KEY, String(Date.now()));
+  } catch {}
+  let answer = "default";
+  try {
+    answer = await Notification.requestPermission();
+  } catch {}
+  document.dispatchEvent(new CustomEvent("reminders:permission", { detail: { state: answer } }));
+  return answer;
+}
+
+// Asked once, right when the first test or homework is saved, while the click still counts as the user's own.
+export function askAtFirstEntry() {
+  if (!canAsk()) return;
+  try {
+    if (localStorage.getItem(ASKED_KEY)) return;
+  } catch {
+    return;
+  }
+  askPermission();
 }
 
 export function isQuiet(minute, quiet) {
@@ -181,7 +218,11 @@ function tick() {
 }
 
 export function initReminders() {
+  adoptDefault();
   if (!("Notification" in window) || !data) return;
+  window.addEventListener("app:note", (event) => {
+    if (event.detail?.type === "homework") askAtFirstEntry();
+  });
   tick();
   setInterval(tick, TICK);
   subscribe((event) => {

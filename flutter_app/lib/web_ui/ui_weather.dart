@@ -47,6 +47,7 @@ class UiWeather {
     final times = hourly['time'] is List ? hourly['time'] as List : const [];
     final temps = hourly['temperature_2m'] is List ? hourly['temperature_2m'] as List : const [];
     final rains = hourly['precipitation_probability'] is List ? hourly['precipitation_probability'] as List : const [];
+    final codes = hourly['weather_code'] is List ? hourly['weather_code'] as List : const [];
     final hours = <Map<String, Object?>>[];
     Map<String, Object?>? morning;
     for (var index = 0; index < times.length && index < temps.length; index++) {
@@ -56,8 +57,10 @@ class UiWeather {
       final hour = int.tryParse(time.substring(11, 13));
       if (hour == null) continue;
       final rain = index < rains.length ? _round(rains[index]) ?? 0 : 0;
-      if (time.startsWith(day)) hours.add({'h': hour, 'temp': temp, 'rain': rain});
-      if (time.startsWith(nextDay) && hour == 7) morning = {'temp': temp, 'rain': rain};
+      final code = index < codes.length ? codes[index] : null;
+      final item = <String, Object?>{'h': hour, 'temp': temp, 'rain': rain, if (code is int) 'code': code};
+      if (time.startsWith(day)) hours.add(item);
+      if (time.startsWith(nextDay) && hour == 7) morning = item;
     }
     final daily = cache['daily'] is Map ? cache['daily'] as Map : const {};
     final dates = daily['time'] is List ? daily['time'] as List : const [];
@@ -75,6 +78,7 @@ class UiWeather {
       'low': dailyValue('temperature_2m_min'),
       'wind': fresh ? _round(current['wind_speed_10m']) : null,
       'hours': hours,
+      if (fresh && current['weather_code'] is int) 'code': current['weather_code'],
       if (morning != null) 'tomorrowMorning': morning,
     };
   }
@@ -94,7 +98,7 @@ class UiWeather {
       'latitude': '$lat',
       'longitude': '$lon',
       'current': 'temperature_2m,wind_speed_10m,weather_code',
-      'hourly': 'temperature_2m,precipitation_probability',
+      'hourly': 'temperature_2m,precipitation_probability,weather_code',
       'daily': 'temperature_2m_max,temperature_2m_min',
       'timezone': 'Europe/Berlin',
       'forecast_days': '2',

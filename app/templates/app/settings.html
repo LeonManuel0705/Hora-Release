@@ -44,9 +44,14 @@
                     <h2 class="section-title" id="planTitle" tabindex="-1">Stundenplan</h2>
                     <p class="section-meta" id="planMeta"></p>
                     <div class="set-head-actions">
+                        <button class="btn btn-quiet" type="button" data-open-setup="settings"><svg class="icon" aria-hidden="true"><use href="#i-table-2"/></svg>Einrichtung</button>
                         <button class="btn btn-quiet" type="button" data-plan-share><svg class="icon" aria-hidden="true"><use href="#i-share-2"/></svg>Teilen</button>
                         <button class="btn btn-quiet" type="button" data-plan-take><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Plan übernehmen</button>
                     </div>
+                </div>
+                <div class="plan-empty" id="planEmpty" hidden>
+                    <p class="plan-empty-text"><b>Noch kein Stundenplan.</b> Am schnellsten geht es mit der Einrichtung: Du tippst deine Fächer an und dann die Stunden ins Raster.</p>
+                    <button class="btn btn-primary" type="button" data-open-setup="settings"><svg class="icon" aria-hidden="true"><use href="#i-table-2"/></svg>Einrichtung starten</button>
                 </div>
                 <div class="plan-board" id="planBoard">
                     <div class="plan-top" id="planTop">

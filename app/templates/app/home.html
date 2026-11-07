@@ -9,14 +9,15 @@
             <div class="head-title">
                 <h1 class="head-date" id="headDate">Übersicht</h1>
                 <span class="head-week" id="headWeek"></span>
+                <button class="head-weather" id="headWeather" type="button" popovertarget="weatherSheet" data-open-weather hidden></button>
                 <span class="head-sync" id="headSync"></span>
             </div>
             <div class="head-actions">
                 <button class="btn btn-quiet" type="button" id="openPalette" data-open-palette>
                     <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>Suchen<span class="btn-keys" aria-hidden="true"><kbd data-key="mod">Strg</kbd><kbd>K</kbd></span>
                 </button>
-                <button class="btn btn-primary" type="button" data-open-note id="noteButton">
-                    <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Notiz
+                <button class="btn btn-primary" type="button" data-open-note id="noteButton" aria-label="Neu: Aufgabe, Hausaufgabe, Notiz oder Idee">
+                    <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Neu
                 </button>
             </div>
         </div>

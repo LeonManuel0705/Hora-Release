@@ -56,10 +56,11 @@
     </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
     <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/static/app/css/tokens.css?v=b62277033d">
-    <link rel="stylesheet" href="/static/app/css/app.css?v=b62277033d">
-    <link rel="stylesheet" href="/static/app/css/dialog.css?v=b62277033d">
-    <link rel="stylesheet" href="/static/css/tour.css?v=b62277033d">
+    <link rel="stylesheet" href="/static/app/css/tokens.css?v=056804198d">
+    <link rel="stylesheet" href="/static/app/css/app.css?v=056804198d">
+    <link rel="stylesheet" href="/static/app/css/dialog.css?v=056804198d">
+    <link rel="stylesheet" href="/static/css/tour.css?v=056804198d">
+    <link rel="stylesheet" href="/static/app/css/setup.css?v=056804198d">
     
     <script nonce="__APP_NONCE__">
         (function () {
@@ -75,7 +76,7 @@
             if (root.dataset.themeMode === "auto") root.dataset.theme = system.matches ? "dark" : "light";
         })();
     </script>
-    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=b62277033d"></script>
+    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=056804198d"></script>
 </head>
 <body data-tour-auto="__APP_TOUR__" data-server-behind="0" data-app-version="__APP_VERSION__">
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -113,6 +114,9 @@
 <symbol id="i-map-pin" viewBox="0 0 24 24"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" /> <circle cx="12" cy="10" r="3" /></symbol>
 <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /></symbol>
 <symbol id="i-cloud-sun" viewBox="0 0 24 24"><path d="M12 2v2" /> <path d="m4.93 4.93 1.41 1.41" /> <path d="M20 12h2" /> <path d="m19.07 4.93-1.41 1.41" /> <path d="M15.947 12.65a4 4 0 0 0-5.925-4.128" /> <path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z" /></symbol>
+<symbol id="i-cloud-snow" viewBox="0 0 24 24"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /> <path d="M8 15h.01" /> <path d="M8 19h.01" /> <path d="M12 17h.01" /> <path d="M12 21h.01" /> <path d="M16 15h.01" /> <path d="M16 19h.01" /></symbol>
+<symbol id="i-cloud-lightning" viewBox="0 0 24 24"><path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973" /> <path d="m13 12-3 5h4l-3 5" /></symbol>
+<symbol id="i-cloud-fog" viewBox="0 0 24 24"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /> <path d="M16 17H7" /> <path d="M17 21H9" /></symbol>
 <symbol id="i-cloud-rain" viewBox="0 0 24 24"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /> <path d="M16 14v6" /> <path d="M8 14v6" /> <path d="M12 16v6" /></symbol>
 <symbol id="i-cloud-drizzle" viewBox="0 0 24 24"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /> <path d="M8 19v1" /> <path d="M8 14v1" /> <path d="M16 19v1" /> <path d="M16 14v1" /> <path d="M12 21v1" /> <path d="M12 16v1" /></symbol>
 <symbol id="i-cloud-moon" viewBox="0 0 24 24"><path d="M13 16a3 3 0 0 1 0 6H7a5 5 0 1 1 4.9-6z" /> <path d="M18.376 14.512a6 6 0 0 0 3.461-4.127c.148-.625-.659-.97-1.248-.714a4 4 0 0 1-5.259-5.26c.255-.589-.09-1.395-.716-1.248a6 6 0 0 0-4.594 5.36" /></symbol>
@@ -205,8 +209,8 @@
         <button class="icon-button topbar-search" type="button" data-open-palette aria-label="Suchen">
             <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
         </button>
-        <button class="btn btn-primary" type="button" data-open-note>
-            <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Notiz
+        <button class="btn btn-primary" type="button" data-open-note aria-label="Neu: Aufgabe, Hausaufgabe, Notiz oder Idee">
+            <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Neu
         </button>
     </div>
 </header>
@@ -302,14 +306,15 @@
             <div class="head-title">
                 <h1 class="head-date" id="headDate">Übersicht</h1>
                 <span class="head-week" id="headWeek"></span>
+                <button class="head-weather" id="headWeather" type="button" popovertarget="weatherSheet" data-open-weather hidden></button>
                 <span class="head-sync" id="headSync"></span>
             </div>
             <div class="head-actions">
                 <button class="btn btn-quiet" type="button" id="openPalette" data-open-palette>
                     <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>Suchen<span class="btn-keys" aria-hidden="true"><kbd data-key="mod">Strg</kbd><kbd>K</kbd></span>
                 </button>
-                <button class="btn btn-primary" type="button" data-open-note id="noteButton">
-                    <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Notiz
+                <button class="btn btn-primary" type="button" data-open-note id="noteButton" aria-label="Neu: Aufgabe, Hausaufgabe, Notiz oder Idee">
+                    <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Neu
                 </button>
             </div>
         </div>
@@ -437,7 +442,7 @@
 <div class="sheet is-glass" id="noteSheet" popover role="dialog" aria-labelledby="noteTitle">
     <form id="noteForm" novalidate autocomplete="off">
         <div class="sheet-head">
-            <h2 class="sheet-title" id="noteTitle">Schnelle Notiz</h2>
+            <h2 class="sheet-title" id="noteTitle">Neu eintragen</h2>
             <button class="icon-button" type="button" popovertarget="noteSheet" popovertargetaction="hide" aria-label="Schließen">
                 <svg class="icon"><use href="#i-x"/></svg>
             </button>
@@ -520,8 +525,8 @@
 <div class="tooltip" id="tooltip" role="tooltip"></div>
 
 <script type="application/json" id="appStore">__APP_STORE__</script>
-<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=b62277033d" defer></script>
-<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=b62277033d" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=056804198d" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=056804198d" defer></script>
 
 
 <script type="application/json" id="appData">__APP_DATA__</script>

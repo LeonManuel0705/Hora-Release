@@ -1221,8 +1221,12 @@ def set_class_level():
 
 @app.route('/api/hub/school/grades', methods=['GET'])
 def get_school_grades():
+    from . import ui_data
 
-    grades = load_school_grades()
+    settings = db.get_timetable_settings() or {}
+    level = ui_data.known_grade(settings, {}) or settings.get('class_level') or 10
+    today = datetime.now().date()
+    grades = [{**grade, 'semester': ui_data.grade_term(grade.get('semester'), ui_data.grade_day(grade, today), level, today)} for grade in load_school_grades() if isinstance(grade, dict)]
     return jsonify({'grades': grades})
 
 @app.route('/api/hub/school/grades', methods=['POST'])

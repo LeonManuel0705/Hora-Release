@@ -382,7 +382,7 @@ def create_grade():
         'type': kind,
         'date': ui_data.iso_day(payload.get('date')) or date.today().isoformat(),
         'description': _text(payload.get('title'), 300),
-        'semester': _text(payload.get('semester'), 12) or 'Q1',
+        'semester': _text(payload.get('semester'), 12),
         'grade_system': 'points',
         'value': None,
         'created_at': datetime.now().isoformat(),

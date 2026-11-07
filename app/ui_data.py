@@ -22,6 +22,8 @@ HUES = {
 }
 DEFAULT_BLOCKS = [('08:00', '09:30'), ('09:50', '11:20'), ('11:30', '13:00'), ('13:30', '15:00')]
 DEFAULT_REFERENCE = '2026-01-12'
+MAX_BLOCKS = 12
+GRADES = range(5, 14)
 COURSE_TYPES = ('LK', 'GK', 'SK')
 REPEATS = ('daily', 'weekly', 'monthly')
 STATES = [
@@ -330,7 +332,7 @@ def _block_times(base, saved):
             merged.append({**block, 'start': own['start'], 'end': own['end']} if fits else dict(block))
         return merged if valid(merged) else fresh
     blocks = saved.get('blocks') if isinstance(saved, dict) and saved.get('v') == 2 else None
-    if not isinstance(blocks, list) or not blocks or len(blocks) > 8 or not all(isinstance(item, dict) and isinstance(item.get('n'), int) for item in blocks):
+    if not isinstance(blocks, list) or not blocks or len(blocks) > MAX_BLOCKS or not all(isinstance(item, dict) and isinstance(item.get('n'), int) for item in blocks):
         return fresh
     ordered = sorted(blocks, key=lambda item: item['n'])
     result = [{'n': index + 1, 'start': item.get('start'), 'end': item.get('end')} for index, item in enumerate(ordered)]
@@ -755,7 +757,7 @@ def refresh_weather(location):
             'latitude': location['lat'],
             'longitude': location['lon'],
             'current': 'temperature_2m,weather_code,wind_speed_10m',
-            'hourly': 'temperature_2m,precipitation_probability',
+            'hourly': 'temperature_2m,precipitation_probability,weather_code',
             'daily': 'temperature_2m_max,temperature_2m_min,weather_code',
             'timezone': 'Europe/Berlin',
             'forecast_days': 2,
@@ -825,6 +827,7 @@ def weather(settings, now):
     times = hourly.get('time') if isinstance(hourly.get('time'), list) else []
     temps = hourly.get('temperature_2m') if isinstance(hourly.get('temperature_2m'), list) else []
     rains = hourly.get('precipitation_probability') if isinstance(hourly.get('precipitation_probability'), list) else []
+    codes = hourly.get('weather_code') if isinstance(hourly.get('weather_code'), list) else []
     hours, morning = [], None
     for index, stamp in enumerate(times):
         stamp = str(stamp)
@@ -833,10 +836,14 @@ def weather(settings, now):
             continue
         hour = int(stamp[11:13])
         rain = (rounded(rains[index]) if index < len(rains) else None) or 0
+        item = {'h': hour, 'temp': temp, 'rain': rain}
+        code = codes[index] if index < len(codes) else None
+        if isinstance(code, int):
+            item['code'] = code
         if stamp.startswith(day):
-            hours.append({'h': hour, 'temp': temp, 'rain': rain})
+            hours.append(item)
         elif stamp.startswith(tomorrow) and hour == 7:
-            morning = {'temp': temp, 'rain': rain}
+            morning = item
     daily = cache.get('daily') if isinstance(cache.get('daily'), dict) else {}
     dates = daily.get('time') if isinstance(daily.get('time'), list) else []
 
@@ -856,6 +863,8 @@ def weather(settings, now):
         'wind': rounded(current.get('wind_speed_10m')) if fresh else None,
         'hours': hours,
     }
+    if fresh and isinstance(current.get('weather_code'), int):
+        view['code'] = current['weather_code']
     if morning:
         view['tomorrowMorning'] = morning
     return view
@@ -867,6 +876,28 @@ def iserv_account():
     return {'connected': bool(username), 'name': username, 'school': str(credentials.get('iserv_url') or '').replace('https://', '').rstrip('/'), 'features': ['Aufgaben', 'Vertretungsplan', 'E-Mail'] if username else []}
 
 
+def known_grade(settings, store):
+    """The class the student said they are in, or None while nobody asked.
+
+    Every new row starts at class 10 with points. Saving a class, here or in the older class screen, sets marks for a
+    class up to 10, so a 10 only counts together with marks.
+    """
+    saved = store.get('app-settings') if isinstance(store.get('app-settings'), dict) else {}
+    grade = (saved.get('school') if isinstance(saved.get('school'), dict) else {}).get('grade')
+    if isinstance(grade, int) and not isinstance(grade, bool) and grade in GRADES:
+        return grade
+    settings = settings or {}
+    level = settings.get('class_level')
+    if not isinstance(level, int) or isinstance(level, bool) or level not in GRADES:
+        return None
+    return level if level != 10 or settings.get('grade_system') == 'marks' else None
+
+
+def current_semester(today, grade):
+    """The term grades are filed under now, or an empty one while the class is unknown, so no class is guessed."""
+    return semester_for(today, grade) if grade else ''
+
+
 def build(active, store, now):
     today = now.date()
     settings = db.get_timetable_settings() or {}
@@ -874,7 +905,7 @@ def build(active, store, now):
     plan, pool = tasks(school['shown'], today)
     iserv = iserv_account()
     data = {
-        'user': {},
+        'user': {'state': settings.get('bundesland') or '', 'grade': known_grade(settings, store), 'iserv': 'desktop'},
         'blocks': school['blocks'],
         'subjects': school['subjects'],
         'courses': school['courses'],
@@ -938,7 +969,41 @@ def semester_for(today, level):
     return f'{level or 10}/{half}'
 
 
-def grade_view(item, subjects, semester, today):
+def school_year(day):
+    return day.year if day.month >= 8 else day.year - 1
+
+
+# The pages used to file grades under class 10 while nobody had named a class.
+GUESSED_TERM = re.compile(r'10/[12]')
+
+
+def grade_term(stored, day, grade, today):
+    """The term a grade belongs to, read without rewriting what is stored.
+
+    A grade stored without a term, or under the class 10 the pages once assumed, takes its term from its own date and
+    the class known now. While no class is known, such grades of this school year count as the current ones.
+    """
+    stored = str(stored or '')
+    if stored and not GUESSED_TERM.fullmatch(stored):
+        return stored
+    year = school_year(day)
+    if grade is None:
+        if year == school_year(today):
+            return ''
+        return stored or f'{year}/{(year + 1) % 100:02d}'
+    then = min(13, max(5, grade - (school_year(today) - year)))
+    # A class setting nobody moved on to the next year must not relabel real class 10 grades.
+    if stored and then <= 10:
+        return stored
+    return semester_for(day, then)
+
+
+def grade_day(item, today):
+    day = iso_day(item.get('date'))
+    return date.fromisoformat(day) if day else today
+
+
+def grade_view(item, subjects, grade, today):
     subject_key = str(item.get('subject_id') or '')
     points = item.get('points')
     if subject_key not in subjects or not isinstance(points, (int, float)):
@@ -948,18 +1013,18 @@ def grade_view(item, subjects, semester, today):
         'subject': subject_key,
         'points': int(round(points)),
         'type': item.get('type') if item.get('type') in GRADE_TYPES else 'sonstiges',
-        'semester': str(item.get('semester') or semester),
+        'semester': grade_term(item.get('semester'), grade_day(item, today), grade, today),
         'date': iso_day(item.get('date')) or today.isoformat(),
         'title': str(item.get('description') or ''),
     }
 
 
 def page_school(data, school, settings, today, iserv):
-    semester = semester_for(today, settings.get('class_level'))
+    semester = current_semester(today, data['user']['grade'])
     grades = []
     history = {}
     for item in load_list('grades'):
-        entry = grade_view(item, school['shown'], semester, today)
+        entry = grade_view(item, school['shown'], data['user']['grade'], today)
         if not entry:
             continue
         if entry['semester'] == semester:
@@ -1064,7 +1129,7 @@ def export_records():
     settings = db.get_timetable_settings() or {}
     school = school_setup(settings)
     today = date.today()
-    semester = semester_for(today, settings.get('class_level'))
+    grade = known_grade(settings, {})
     dated = []
     for prefix, (name, _) in DEADLINE_KINDS.items():
         dated.extend(_views(lambda item: deadline_view(prefix, item, school, today), whole_list(name)))
@@ -1078,7 +1143,7 @@ def export_records():
     return {
         'tasks': [task_view(row, school['shown']) for row in task_rows()],
         'deadlines': dated,
-        'grades': _views(lambda item: grade_view(item, school['shown'], semester, today), whole_list('grades')),
+        'grades': _views(lambda item: grade_view(item, school['shown'], grade, today), whole_list('grades')),
         'notes': [view for view in map(note_view, kept) if view['title']],
         'events': _views(event_view, whole_list('calendar')),
         'places': places,
@@ -1182,8 +1247,8 @@ def page_settings(data, school, settings, today, iserv):
             'name': iserv['school'],
             'town': city or '',
             'state': settings.get('bundesland') or '',
-            'grade': settings.get('class_level') or 10,
-            'semester': semester_for(today, settings.get('class_level')),
+            'grade': data['user']['grade'],
+            'semester': current_semester(today, data['user']['grade']),
             'birthday': iso_day(settings.get('birthday')) or '',
         },
         'states': [{'code': code, 'name': name} for code, name in STATES],
