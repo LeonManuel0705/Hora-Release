@@ -257,7 +257,8 @@ class UiTransit {
   static Map<String, Object?>? _fareView(Map<String, Object?> journey) {
     final rides = _list(journey['legs']).map(_map).where((leg) => _map(leg['line']).isNotEmpty).toList();
     if (rides.isEmpty) return null;
-    Map<String, Object?>? single, short;
+    final singles = <Map<String, Object?>>[];
+    Map<String, Object?>? short;
     String? net, zones;
     for (final raw in _list(journey['tickets'])) {
       final group = _map(raw);
@@ -265,23 +266,26 @@ class UiTransit {
       final shortTrip = _shortTrip.firstMatch(name), city = _citySingle.firstMatch(name);
       if (shortTrip != null) {
         short ??= _fareTicket(group, shortTrip[1]!);
-      } else if (city != null && single == null) {
+      } else if (city != null) {
         final area = city[2]!.replaceAll('-', '');
-        single = _fareTicket(group, '${city[1]} $area');
+        final single = net == null ? _fareTicket(group, '${city[1]} $area') : null;
         if (single != null) {
+          singles.add(single);
           net = city[1];
           zones = area;
         }
-      } else if (name.endsWith(': Einzelfahrausweis') && single == null) {
-        single = _fareTicket(group, name.substring(0, name.lastIndexOf(':')));
+      } else if (name.endsWith(': Einzelfahrausweis')) {
+        final single = _fareTicket(group, name.substring(0, name.lastIndexOf(':')));
+        if (single != null) singles.add(single);
       }
     }
-    if (single == null) return null;
+    if (singles.isEmpty) return null;
     return {
       'start': rides.first['plannedDeparture'] ?? rides.first['departure'],
       'end': rides.last['plannedArrival'] ?? rides.last['arrival'],
       'lines': [for (final leg in rides) '${_map(leg['line'])['name'] ?? ''}'],
-      'single': single,
+      'stops': ['${_map(rides.first['origin'])['name'] ?? ''}', '${_map(rides.last['destination'])['name'] ?? ''}'],
+      'single': singles.reduce((best, next) => (next['price'] as num) < (best['price'] as num) ? next : best),
       'short': short,
       'net': net,
       'zones': zones,

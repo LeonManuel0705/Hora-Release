@@ -1,4 +1,7 @@
+import { PLACES } from "./transit-zones.js";
+
 const NETS = { "Brandenburg a.d.H": "Brandenburg an der Havel" };
+const CODES = { Potsdam: "P", Berlin: "B", "Brandenburg a.d.H": "BRB", Cottbus: "CB", "Frankfurt (Oder)": "FF" };
 const euro = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
 
 export const MAPS = { apple: "Apple Karten", google: "Google Maps" };
@@ -14,24 +17,55 @@ export function ownTickets(saved) {
   return { germany: saved?.deutschlandticket === true, passes };
 }
 
+const placeKey = (name) => name.toLowerCase().replace(/[^\p{L}]/gu, "");
+const ZONES = new Map();
+for (const line of PLACES.split("\n")) {
+  const [name, district, zones] = line.split("|");
+  for (const key of [placeKey(name), `${placeKey(name)}|${district}`]) ZONES.set(key, ZONES.has(key) && ZONES.get(key) !== zones ? null : zones);
+}
+
+export function placeZones(stop) {
+  const name = String(stop || "").replace(/^(?:S\+U|S|U) /, "");
+  const district = / \(([A-Z]{2,3})\)/.exec(name)?.[1];
+  const bare = district ? name.replace(` (${district})`, "") : name;
+  const comma = bare.indexOf(", ");
+  const words = bare.replace(/ (?:Bhf|Bahnhof)$/, "").split(" ");
+  const tries = comma > 0 ? [bare, bare.slice(0, comma)] : words.map((_, index) => words.slice(0, words.length - index).join(" "));
+  for (const place of tries) {
+    const zones = ZONES.get(district ? `${placeKey(place)}|${district}` : placeKey(place));
+    if (zones !== undefined) return zones;
+  }
+  return null;
+}
+
+const reaches = (pass, zones) => (typeof zones === "string" ? [...pass.zones].includes(zones.split("/").find((part) => part.startsWith(`${CODES[pass.net]}-`))?.slice(-1)) : undefined);
+
+function within(pass, fare) {
+  const ends = Array.isArray(fare.stops) && fare.stops.length === 2 ? fare.stops.map((stop) => reaches(pass, placeZones(stop))) : [];
+  if (ends.includes(false)) return false;
+  return ends.length && ends.every(Boolean) ? true : undefined;
+}
+
+const LOCAL = /^(?:Orte mit Stadtlinienverkehr\b|bis [12] Waben?$)/;
 const berlinWithC = (pass) => pass.net === "Berlin" && pass.zones === "ABC";
+const netSingle = (fare) => fare.net && fare.single.label === `${fare.net} ${fare.zones}`;
 
 export function coveringPass(fare, passes) {
-  if (!fare?.net || !fare.zones) return null;
-  return passes.find((pass) => {
-    if (pass.net === fare.net) return [...fare.zones].every((zone) => pass.zones.includes(zone));
-    return berlinWithC(pass) && fare.net === "Potsdam" && fare.zones === "AB";
-  }) || null;
+  if (!fare) return null;
+  return passes.find((pass) =>
+    (fare.zones && pass.net === fare.net && [...fare.zones].every((zone) => pass.zones.includes(zone))) ||
+    (berlinWithC(pass) && fare.net === "Potsdam" && (fare.zones === "AB" || within(pass, fare) === true)) ||
+    (LOCAL.test(fare.single?.label || "") && within(pass, fare) === true)) || null;
 }
 
 export function doubtfulPass(fare, passes) {
   if (fare?.net !== "Potsdam" || fare.zones !== "ABC") return null;
-  return passes.find(berlinWithC) || null;
+  return passes.find((pass) => berlinWithC(pass) && within(pass, fare) === undefined) || null;
 }
 
 export function cheapest(fare) {
   if (fare.short && fare.short.price < fare.single.price) return { ...fare.short, name: `Kurzstrecke ${netName(fare.short.label)}` };
-  return { ...fare.single, name: fare.net ? `Einzelfahrausweis ${netName(fare.net)} ${fare.zones}` : `Einzelfahrausweis (${fare.single.label})` };
+  return { ...fare.single, name: netSingle(fare) ? `Einzelfahrausweis ${netName(fare.net)} ${fare.zones}` : `Einzelfahrausweis (${fare.single.label})` };
 }
 
 export function ticketState(journey, own, fare, asked) {
