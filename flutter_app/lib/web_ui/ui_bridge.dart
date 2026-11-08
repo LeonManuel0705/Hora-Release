@@ -4,6 +4,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
 
 import 'ui_api.dart';
@@ -90,7 +91,8 @@ class UiBridge {
       if (request.path.startsWith('/static/')) return await _asset(request, request.path.substring(8));
       if (request.path.startsWith('/api/')) return await _api(request);
       return const UiBridgeReply(404);
-    } catch (_) {
+    } catch (error) {
+      debugPrint('Die Anfrage ${request.method} ${request.path} ging nicht: $error');
       if (request.navigate) return _unavailable();
       return UiBridgeReply.json(500, {'success': false, 'error': 'Interner Fehler'});
     }
