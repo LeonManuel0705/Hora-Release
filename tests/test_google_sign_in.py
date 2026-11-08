@@ -236,6 +236,8 @@ def flows(monkeypatch):
         return flow
 
     monkeypatch.setattr(google_oauth, '_get_oauth_client_config', lambda: CLIENT)
+    monkeypatch.setattr(google_oauth, 'is_google_oauth_configured', lambda: True)
+    monkeypatch.setenv('GOOGLE_GMAIL', '1')
     monkeypatch.setattr(google_oauth.Flow, 'from_client_config', classmethod(make))
     monkeypatch.setattr(google_oauth, 'build', lambda api, version, credentials=None, **kwargs: FakeService(api))
     monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {key: dict(value) for key, value in saved.items()})
@@ -303,6 +305,19 @@ def test_a_gmail_opt_in_without_gmail_is_refused_and_changes_nothing(flows):
     result = google_oauth.complete_oauth_flow('code', ['gmail'])
     assert result['success'] is False and 'Gmail' in result['error']
     assert saved == {'lea@example.com': {'token': 'a', 'refresh_token': 'alt', 'scopes': [EVENTS, LISTING]}}
+
+
+def test_without_the_switch_only_an_account_that_holds_gmail_may_ask_for_it(flows, monkeypatch):
+    saved, _, made = flows
+    monkeypatch.delenv('GOOGLE_GMAIL')
+    saved['lea@example.com'] = {'token': 'a', 'refresh_token': 'alt', 'scopes': [EVENTS, LISTING]}
+    assert google_oauth.gmail_via_google() is False
+    assert google_oauth.start_oauth_flow(['gmail']) == {'success': False, 'error': google_oauth.GMAIL_OFF}
+    assert google_oauth.start_oauth_flow(['calendar', 'gmail'], another=True)['success'] is False
+    assert made == []
+    saved['post@example.com'] = {'token': 'b', 'refresh_token': 'alt', 'scopes': GMAIL}
+    assert google_oauth.gmail_via_google() is True
+    assert google_oauth.start_oauth_flow(['gmail'], another=True)['success'] is True
 
 
 def test_unknown_parts_are_refused(flows):
@@ -375,6 +390,7 @@ def renew_and_grant_what_was_asked(answer, features=('calendar',)):
 @pytest.mark.parametrize('scopes', [None, list(google_oauth.LEGACY_SCOPES), [EVENTS, LISTING, *GMAIL]], ids=['legacy-unlisted', 'legacy-listed', 'split'])
 def test_renewing_an_expired_sign_in_keeps_its_mailbox(flows, monkeypatch, scopes):
     saved, answer, _ = flows
+    monkeypatch.delenv('GOOGLE_GMAIL')
     monkeypatch.setattr(FakeService, 'getProfile', lambda self, userId: Call({'emailAddress': 'kalender@example.com'}))
     saved['kalender@example.com'] = {'token': 'a', 'refresh_token': 'alt', 'expired': True, **({'scopes': scopes} if scopes else {})}
     query, done = renew_and_grant_what_was_asked(answer)
@@ -445,7 +461,11 @@ def test_the_classic_pages_offer_google_only_where_it_is_set_up(app_window, monk
     assert 'connectGoogleAccount()">Konto verbinden' not in app_window.get('/hub/klassisch/settings').get_data(as_text=True)
     assert 'id="googleSignInBtn"' not in app_window.get('/hub/klassisch/email').get_data(as_text=True)
     monkeypatch.setattr(google_oauth, 'is_google_oauth_configured', lambda: True)
+    monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {})
+    monkeypatch.delenv('GOOGLE_GMAIL', raising=False)
     assert 'connectGoogleAccount()">Konto verbinden' in app_window.get('/hub/klassisch/settings').get_data(as_text=True)
+    assert 'id="googleSignInBtn"' not in app_window.get('/hub/klassisch/email').get_data(as_text=True), 'Gmail through Google is switched off'
+    monkeypatch.setenv('GOOGLE_GMAIL', '1')
     assert 'id="googleSignInBtn"' in app_window.get('/hub/klassisch/email').get_data(as_text=True)
 
 

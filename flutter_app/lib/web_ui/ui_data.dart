@@ -872,6 +872,7 @@ class UiData {
       'mailUnread': 0,
     };
     (data['status'] as Map<String, Object?>)['googleConfigured'] = false;
+    (data['status'] as Map<String, Object?>)['gmailViaGoogle'] = false;
     if (!setup.abWeeks) store.putIfAbsent('app-ab-weeks', () => false);
     final page = switch (active) {
       'tasks' => {'notes': await notes()},

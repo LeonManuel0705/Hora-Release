@@ -469,8 +469,8 @@ def hub_privacy():
 
 @app.route('/hub/klassisch/email')
 def hub_email():
-    from .google_oauth import is_google_oauth_configured
-    return render_template('hub/email.html', active_tab='email', google_configured=is_google_oauth_configured())
+    from .google_oauth import is_google_oauth_configured, gmail_via_google
+    return render_template('hub/email.html', active_tab='email', google_configured=is_google_oauth_configured(), gmail_via_google=gmail_via_google())
 
 @app.route('/hub/klassisch/bookmarks')
 def hub_bookmarks():

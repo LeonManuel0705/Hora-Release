@@ -28,7 +28,7 @@ def test_without_an_oauth_client_no_page_offers_google(client, configured, monke
     monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {})
     for path in ('/hub', '/hub/calendar', '/hub/settings'):
         status = page_data(client, path)['status']
-        assert status['googleConfigured'] is False and status['google'] is None, path
+        assert status['googleConfigured'] is False and status['gmailViaGoogle'] is False and status['google'] is None, path
     account = page_data(client, '/hub/settings')['page']['accounts']['google']
     assert account == {'configured': False, 'connected': False, 'account': '', 'calendars': []}
 
@@ -66,6 +66,47 @@ def test_an_expired_sign_in_is_reported_as_such(google, client, configured, monk
 def test_gmail_shows_only_when_it_was_granted(google, client, configured, monkeypatch):
     monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {google.primary: {'token': 'x', 'scopes': list(google_oauth.FEATURES['calendar'])}})
     assert page_data(client, '/hub/settings')['page']['accounts']['google']['gmail'] is False
+
+
+GMAIL_STATES = {
+    'not-configured': (False, {}, None, False),
+    'calendar-only': (True, {'lea@example.com': {'token': 'x', 'scopes': list(google_oauth.FEATURES['calendar'])}}, None, False),
+    'switched-on': (True, {}, '1', True),
+    'legacy-gmail': (True, {'lea@example.com': {'token': 'x', 'refresh_token': 'r'}}, None, True),
+    'gmail-without-client': (False, {'lea@example.com': {'token': 'x', 'scopes': list(google_oauth.FEATURES['gmail'])}}, None, True),
+}
+
+
+@pytest.mark.parametrize('state', list(GMAIL_STATES))
+def test_gmail_through_google_is_offered_only_where_switched_on_or_already_granted(client, configured, monkeypatch, state):
+    on, tokens, switch, offered = GMAIL_STATES[state]
+    configured['on'] = on
+    monkeypatch.setattr(google_oauth, 'load_tokens', lambda: dict(tokens))
+    if switch:
+        monkeypatch.setenv('GOOGLE_GMAIL', switch)
+    else:
+        monkeypatch.delenv('GOOGLE_GMAIL', raising=False)
+    for path in ('/hub', '/hub/email', '/hub/settings'):
+        assert page_data(client, path)['status']['gmailViaGoogle'] is offered, path
+    classic = client.get('/hub/klassisch/email').get_data(as_text=True)
+    assert ('id="googleSignInBtn"' in classic) is offered
+    assert ('nur für den Kalender' in classic) is (on and not offered)
+
+
+def test_without_gmail_through_google_the_sign_in_refuses_gmail_and_keeps_the_calendar(client, configured, monkeypatch):
+    monkeypatch.delenv('GOOGLE_GMAIL', raising=False)
+    monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {'lea@example.com': {'token': 'x', 'scopes': list(google_oauth.FEATURES['calendar'])}})
+    monkeypatch.setattr(google_oauth, '_get_oauth_client_config', lambda: {'web': {
+        'client_id': 'client.apps.googleusercontent.com', 'client_secret': 'secret',
+        'auth_uri': 'https://accounts.google.com/o/oauth2/auth', 'token_uri': 'https://oauth2.googleapis.com/token',
+        'redirect_uris': [google_oauth.GOOGLE_REDIRECT_URI],
+    }})
+    for another in (False, True):
+        refused = client.post('/api/email/google/auth', json={'features': ['gmail'], 'another': another}).get_json()
+        assert refused == {'success': False, 'error': google_oauth.GMAIL_OFF}
+    calendar = client.post('/api/email/google/auth', json={'features': ['calendar'], 'another': True}).get_json()
+    assert calendar['success'] is True and 'gmail' not in calendar['auth_url']
+    assert client.get('/api/email/google/status').get_json()['gmailViaGoogle'] is False
 
 
 def choose(client, target):

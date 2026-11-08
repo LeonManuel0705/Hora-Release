@@ -35,6 +35,7 @@ TOKENS_FILE = Path(DATA_DIR) / "google_tokens.json"
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:5050/api/email/google/oauth-callback')
+GMAIL_SWITCH = 'GOOGLE_GMAIL'
 HTTP_TIMEOUT = 20
 
 CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar'
@@ -68,6 +69,7 @@ REFUSED = {
     'gmail': 'Google hat Gmail nicht freigegeben. Setz bei der Anmeldung die Haken bei Gmail',
     'school': 'Google hat den Kalender für den Stundenplan nicht freigegeben. Setz bei der Anmeldung den Haken dafür',
 }
+GMAIL_OFF = 'Gmail verbindest du in dieser Version mit einem App-Passwort unter E-Mail'
 
 # Google lets people untick single permissions and adds earlier grants to the answer; oauthlib would reject either.
 os.environ.setdefault('OAUTHLIB_RELAX_TOKEN_SCOPE', '1')
@@ -77,6 +79,15 @@ def is_google_oauth_configured() -> bool:
     if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
         return GOOGLE_API_AVAILABLE
     return GOOGLE_API_AVAILABLE and CREDENTIALS_FILE.exists()
+
+
+def gmail_via_google(tokens: Dict = None) -> bool:
+    """Whether this installation offers Gmail through the Google sign-in. Google opens Gmail to a published app only after
+    a paid security assessment every year, so released apps take Gmail with an app password instead. It is on where the
+    installation is set up for it with GOOGLE_GMAIL=1, or where a connected account already holds Gmail."""
+    if accounts_for('gmail', tokens):
+        return True
+    return os.getenv(GMAIL_SWITCH, '').strip().lower() in ('1', 'true', 'yes', 'on') and is_google_oauth_configured()
 
 def get_oauth_status() -> Dict:
 
@@ -101,6 +112,7 @@ def get_oauth_status() -> Dict:
         "authenticated": bool(tokens),
         "accounts": list(tokens.keys()),
         "gmail": accounts_for('gmail', tokens),
+        "gmailViaGoogle": gmail_via_google(tokens),
         "calendar": calendar_account(tokens),
     }
 
@@ -296,6 +308,8 @@ def start_oauth_flow(features=('calendar',), another=False) -> Dict:
         return {"success": False, "error": "Google ist in dieser Installation nicht eingerichtet"}
 
     tokens = load_tokens()
+    if 'gmail' in features and not gmail_via_google(tokens):
+        return {"success": False, "error": GMAIL_OFF}
     account = calendar_account(tokens) or next(iter(tokens), None)
     entry = tokens.get(account) or {}
     working = bool(entry.get('refresh_token')) and not entry.get('expired')

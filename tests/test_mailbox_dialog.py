@@ -96,3 +96,8 @@ def test_the_mail_page_offers_the_new_dialog_instead_of_the_classic_page():
     assert '"/api/email/accounts"' in dialog
     assert not re.search(r"provider:\s*\"outlook\"", dialog)
     assert 'data?.status?.googleConfigured === true' in dialog
+    assert 'googleSignIn() && data?.status?.gmailViaGoogle === true' in dialog
+    assert re.search(r'return gmailViaGoogle\(\)\s*\?', dialog), 'only an installation with Gmail through Google sends Gmail to Settings'
+    assert re.search(r'const why = googleSignIn\(\) \?', dialog), 'where Google signs in for the calendar alone, the form says why Gmail needs an app password'
+    settings = (ROOT / 'app' / 'static' / 'app' / 'js' / 'pages' / 'settings.js').read_text(encoding='utf-8')
+    assert 'data.status?.gmailViaGoogle !== true) return "";' in settings

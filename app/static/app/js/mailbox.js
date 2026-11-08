@@ -26,6 +26,7 @@ let busy = false;
 let removing = "";
 
 const googleSignIn = () => data?.status?.googleConfigured === true;
+const gmailViaGoogle = () => googleSignIn() && data?.status?.gmailViaGoogle === true;
 const $ = (id) => document.getElementById(id);
 
 function build() {
@@ -78,7 +79,8 @@ function linkButton(href, label) {
 }
 
 function gmailForm() {
-  return `<p class="dialog-text">Gmail verbindest du hier mit einem App-Passwort. Das legst du in deinem Google-Konto an, dafür muss die Bestätigung in zwei Schritten eingeschaltet sein.</p>
+  const why = googleSignIn() ? `<p class="dialog-text">Die Anmeldung mit Google gilt in ${esc(BRAND)} nur für den Kalender, weil Google für Gmail eine kostenpflichtige Prüfung verlangt.</p>` : "";
+  return `${why}<p class="dialog-text">Gmail verbindest du hier mit einem App-Passwort. Das legst du in deinem Google-Konto an, dafür muss die Bestätigung in zwei Schritten eingeschaltet sein.</p>
     <a class="text-button mailbox-help" href="${APP_PASSWORDS}" target="_blank" rel="noopener noreferrer">${icon("arrow-up-right")}<span>App-Passwort anlegen</span></a>
     <form class="mailbox-form" id="mailboxForm" novalidate autocomplete="off">
       <div class="field">
@@ -102,7 +104,7 @@ function detailHtml() {
       : `<p class="dialog-text">Deine Schulmails kommen über dein IServ-Konto. Verbinde es einmal in den Einstellungen, danach landen sie hier.</p><div class="dialog-actions">${linkButton(SETTINGS, "IServ verbinden")}</div>`;
   }
   if (choice === "gmail") {
-    return googleSignIn()
+    return gmailViaGoogle()
       ? `<p class="dialog-text">Gmail verbindest du über dein Google-Konto. Dafür gibt es in den Einstellungen unter Konten den Knopf „Gmail hinzufügen“.</p><div class="dialog-actions">${linkButton(SETTINGS, "Zu den Einstellungen")}</div>`
       : gmailForm();
   }

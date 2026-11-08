@@ -1446,7 +1446,7 @@ function gmailRow(info) {
   if (info.gmail) {
     return row({ id: "rowGmail", label: `Gmail <span class="status is-ok">${icon("circle-check")}Verbunden</span>`, desc: "Deine Mails stehen unter E-Mail." });
   }
-  if (!info.configured || info.state === "login") return "";
+  if (!info.configured || info.state === "login" || data.status?.gmailViaGoogle !== true) return "";
   return row({
     id: "rowGmail",
     cls: "is-stack",
