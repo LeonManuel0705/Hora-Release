@@ -243,6 +243,16 @@ def _fare_ticket(group, label):
     return {"label": label, "price": price, "reduced": _price(group, "Ermäßigungstarif")} if price else None
 
 
+def _ride_stops(rides):
+    stops = []
+    for leg in rides:
+        names = [str((item.get("stop") or {}).get("name") or "") for item in leg.get("stopovers") or [] if isinstance(item, dict)]
+        if len(names) < 2 or not all(names):
+            return None
+        stops += names[1:] if stops and stops[-1] == names[0] else names
+    return stops
+
+
 def fare_view(journey):
     rides = [leg for leg in journey.get("legs") or [] if leg.get("line")]
     if not rides:
@@ -269,7 +279,7 @@ def fare_view(journey):
         "start": rides[0].get("plannedDeparture") or rides[0].get("departure"),
         "end": rides[-1].get("plannedArrival") or rides[-1].get("arrival"),
         "lines": [str((leg.get("line") or {}).get("name") or "") for leg in rides],
-        "stops": [str((rides[0].get("origin") or {}).get("name") or ""), str((rides[-1].get("destination") or {}).get("name") or "")],
+        "stops": _ride_stops(rides),
         "single": min(singles, key=lambda single: single["price"]),
         "short": short,
         "net": net,
@@ -287,7 +297,7 @@ def fares(args):
         "departure": _arg(args, "zeit", 40),
         "results": 6,
         "tickets": "true",
-        "stopovers": "false",
+        "stopovers": "true",
         "remarks": "false",
         "language": "de",
     }

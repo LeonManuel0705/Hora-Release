@@ -596,7 +596,7 @@ def test_the_fare_of_a_connection_is_its_cheapest_tickets_with_the_zones_they_ne
         return {"name": name, "tickets": [{"name": kind, "price": {"amount": amount, "currency": "EUR"}} for kind, amount in prices.items()]}
 
     def trip(line, tickets):
-        return {"legs": [{"walking": True}, {"line": {"name": line}, "origin": {"name": "S+U Alexanderplatz Bhf (Berlin)"}, "destination": {"name": "U Kochstr. (Berlin)"}, "plannedDeparture": "2026-10-12T08:00:00+02:00", "departure": "2026-10-12T08:01:00+02:00", "plannedArrival": "2026-10-12T08:20:00+02:00"}], "tickets": tickets}
+        return {"legs": [{"walking": True}, {"line": {"name": line}, "stopovers": [{"stop": {"name": "S+U Alexanderplatz Bhf (Berlin)"}}, {"stop": {"name": "U Kochstr. (Berlin)"}}], "plannedDeparture": "2026-10-12T08:00:00+02:00", "departure": "2026-10-12T08:01:00+02:00", "plannedArrival": "2026-10-12T08:20:00+02:00"}], "tickets": tickets}
 
     answer = {"journeys": [
         trip("U2", [
@@ -620,7 +620,7 @@ def test_the_fare_of_a_connection_is_its_cheapest_tickets_with_the_zones_they_ne
     monkeypatch.setattr(transit_service, "fetch_from", fetch_from)
     body, status = transit_service.handle("tarif", {"von": "900100003", "nach": "900100016", "zeit": "2026-10-12T06:00:00Z"})
     assert status == 200
-    assert [(base, path, params["from"], params["to"], params["departure"], params["tickets"]) for base, path, params in asked] == [("https://v6.vbb.transport.rest/", "journeys", "900100003", "900100016", "2026-10-12T06:00:00Z", "true")]
+    assert [(base, path, params["from"], params["to"], params["departure"], params["tickets"], params["stopovers"]) for base, path, params in asked] == [("https://v6.vbb.transport.rest/", "journeys", "900100003", "900100016", "2026-10-12T06:00:00Z", "true", "true")]
     assert body["fares"] == [
         {"start": "2026-10-12T08:00:00+02:00", "end": "2026-10-12T08:20:00+02:00", "lines": ["U2"], "stops": ["S+U Alexanderplatz Bhf (Berlin)", "U Kochstr. (Berlin)"], "single": {"label": "Berlin AB", "price": 4.0, "reduced": 2.5}, "short": {"label": "Berlin", "price": 2.8, "reduced": 2.1}, "net": "Berlin", "zones": "AB"},
         {"start": "2026-10-12T08:00:00+02:00", "end": "2026-10-12T08:20:00+02:00", "lines": ["RE1"], "stops": ["S+U Alexanderplatz Bhf (Berlin)", "U Kochstr. (Berlin)"], "single": {"label": "Regionaltarif über 25 bis 35 km", "price": 8.1, "reduced": 6.0}, "short": None, "net": None, "zones": None},
@@ -628,14 +628,17 @@ def test_the_fare_of_a_connection_is_its_cheapest_tickets_with_the_zones_they_ne
     ]
 
 
-def test_a_fare_inside_a_town_keeps_its_stops_and_the_city_fare_offered_next_to_it(monkeypatch):
+def test_a_fare_keeps_every_stop_its_ride_passes_and_the_city_fare_offered_next_to_it(monkeypatch):
     from app import transit_service
 
     def group(name, **prices):
         return {"name": name, "tickets": [{"name": kind, "price": {"amount": amount, "currency": "EUR"}} for kind, amount in prices.items()]}
 
+    def leg(line, *stops):
+        return {"line": {"name": line}, "stopovers": [{"stop": {"name": stop}} for stop in stops], "plannedDeparture": "2026-11-10T08:03:00+01:00", "plannedArrival": "2026-11-10T08:10:00+01:00"}
+
     def trip(line, origin, target, tickets):
-        return {"legs": [{"line": {"name": line}, "origin": {"name": origin}, "destination": {"name": target}, "plannedDeparture": "2026-11-10T08:03:00+01:00", "plannedArrival": "2026-11-10T08:10:00+01:00"}], "tickets": tickets}
+        return {"legs": [leg(line, origin, target)], "tickets": tickets}
 
     answer = {"journeys": [
         trip("620", "Teltow, Bahnhof", "Teltow, Rammrath-Brücke", [
@@ -648,6 +651,8 @@ def test_a_fare_inside_a_town_keeps_its_stops_and_the_city_fare_offered_next_to_
             group("Potsdam Tarifgebiet A-B-C: Einzelfahrausweis", Regeltarif=370, Ermäßigungstarif=260),
             group("Zeitkarte bis 2 Waben: Monatskarte", Schüler=4600),
         ]),
+        {"legs": [leg("RE7", "Michendorf, Bahnhof", "S Potsdam Hauptbahnhof"), {"walking": True}, leg("693", "S Potsdam Hauptbahnhof", "Potsdam, Platz der Einheit/West", "Potsdam, Nauener Tor")], "tickets": [group("Potsdam Tarifgebiet A-B-C: Einzelfahrausweis", Regeltarif=370)]},
+        {"legs": [leg("620", "Teltow, Bahnhof"), leg("621", "Teltow, Bahnhof", "Teltow, Rammrath-Brücke")], "tickets": [group("Orte mit Stadtlinienverkehr Typ I: Einzelfahrausweis", Regeltarif=200)]},
     ]}
     monkeypatch.setattr(transit_service, "fetch_from", lambda *args: answer)
     body, status = transit_service.handle("tarif", {"von": "900220001", "nach": "900220079"})
@@ -655,6 +660,8 @@ def test_a_fare_inside_a_town_keeps_its_stops_and_the_city_fare_offered_next_to_
     assert [(fare["stops"], fare["single"], fare["net"], fare["zones"]) for fare in body["fares"]] == [
         (["Teltow, Bahnhof", "Teltow, Rammrath-Brücke"], {"label": "Orte mit Stadtlinienverkehr Typ I", "price": 2.0, "reduced": 1.6}, None, None),
         (["Michendorf, Bahnhof", "Michendorf, Bahnhof/Bahnstr."], {"label": "bis 2 Waben", "price": 2.2, "reduced": 1.8}, "Potsdam", "ABC"),
+        (["Michendorf, Bahnhof", "S Potsdam Hauptbahnhof", "Potsdam, Platz der Einheit/West", "Potsdam, Nauener Tor"], {"label": "Potsdam ABC", "price": 3.7, "reduced": None}, "Potsdam", "ABC"),
+        (None, {"label": "Orte mit Stadtlinienverkehr Typ I", "price": 2.0, "reduced": None}, None, None),
     ]
 
 

@@ -30,8 +30,10 @@ Map<String, Object?> _trip(String line, List<Map<String, Object?>> tickets) => {
         {'walking': true},
         {
           'line': {'name': line},
-          'origin': {'name': 'S+U Alexanderplatz Bhf (Berlin)'},
-          'destination': {'name': 'U Kochstr. (Berlin)'},
+          'stopovers': [
+            {'stop': {'name': 'S+U Alexanderplatz Bhf (Berlin)'}},
+            {'stop': {'name': 'U Kochstr. (Berlin)'}},
+          ],
           'plannedDeparture': '2026-10-12T08:00:00+02:00',
           'departure': '2026-10-12T08:01:00+02:00',
           'plannedArrival': '2026-10-12T08:20:00+02:00',
@@ -134,6 +136,7 @@ void main() {
     expect(asked.single.queryParameters, containsPair('to', '900100016'));
     expect(asked.single.queryParameters, containsPair('departure', '2026-10-12T06:00:00Z'));
     expect(asked.single.queryParameters, containsPair('tickets', 'true'));
+    expect(asked.single.queryParameters, containsPair('stopovers', 'true'));
     expect(body['fares'], [
       {
         'start': '2026-10-12T08:00:00+02:00',
@@ -168,17 +171,17 @@ void main() {
     ]);
   });
 
-  test('a fare inside a town keeps its stops and the city fare offered next to it', () async {
-    Map<String, Object?> trip(String line, String origin, String target, List<Map<String, Object?>> tickets) => {
-          'legs': [
-            {
-              'line': {'name': line},
-              'origin': {'name': origin},
-              'destination': {'name': target},
-              'plannedDeparture': '2026-11-10T08:03:00+01:00',
-              'plannedArrival': '2026-11-10T08:10:00+01:00',
-            },
+  test('a fare keeps every stop its ride passes and the city fare offered next to it', () async {
+    Map<String, Object?> leg(String line, List<String> stops) => {
+          'line': {'name': line},
+          'stopovers': [
+            for (final stop in stops) {'stop': {'name': stop}},
           ],
+          'plannedDeparture': '2026-11-10T08:03:00+01:00',
+          'plannedArrival': '2026-11-10T08:10:00+01:00',
+        };
+    Map<String, Object?> trip(String line, String origin, String target, List<Map<String, Object?>> tickets) => {
+          'legs': [leg(line, [origin, target])],
           'tickets': tickets,
         };
     answer({
@@ -193,6 +196,25 @@ void main() {
           _group('Potsdam Tarifgebiet A-B-C: Einzelfahrausweis', {'Regeltarif': 370, 'Ermäßigungstarif': 260}),
           _group('Zeitkarte bis 2 Waben: Monatskarte', {'Schüler': 4600}),
         ]),
+        {
+          'legs': [
+            leg('RE7', ['Michendorf, Bahnhof', 'S Potsdam Hauptbahnhof']),
+            {'walking': true},
+            leg('693', ['S Potsdam Hauptbahnhof', 'Potsdam, Platz der Einheit/West', 'Potsdam, Nauener Tor']),
+          ],
+          'tickets': [
+            _group('Potsdam Tarifgebiet A-B-C: Einzelfahrausweis', {'Regeltarif': 370}),
+          ],
+        },
+        {
+          'legs': [
+            leg('620', ['Teltow, Bahnhof']),
+            leg('621', ['Teltow, Bahnhof', 'Teltow, Rammrath-Brücke']),
+          ],
+          'tickets': [
+            _group('Orte mit Stadtlinienverkehr Typ I: Einzelfahrausweis', {'Regeltarif': 200}),
+          ],
+        },
       ],
     });
     final (body, status) = await UiTransit.instance.handle('tarif', {'von': '900220001', 'nach': '900220079'});
@@ -211,6 +233,18 @@ void main() {
         {'label': 'bis 2 Waben', 'price': 2.2, 'reduced': 1.8},
         'Potsdam',
         'ABC',
+      ],
+      [
+        ['Michendorf, Bahnhof', 'S Potsdam Hauptbahnhof', 'Potsdam, Platz der Einheit/West', 'Potsdam, Nauener Tor'],
+        {'label': 'Potsdam ABC', 'price': 3.7, 'reduced': null},
+        'Potsdam',
+        'ABC',
+      ],
+      [
+        null,
+        {'label': 'Orte mit Stadtlinienverkehr Typ I', 'price': 2.0, 'reduced': null},
+        null,
+        null,
       ],
     ]);
   });
