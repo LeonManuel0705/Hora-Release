@@ -3,10 +3,11 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { resolve, dirname } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { ownTickets, coveringPass, doubtfulPass, cheapest, ticketState, matchFare, usualFare, mapsApp, walkUrl } = await import(pathToFileURL(resolve(here, "../../app/static/app/js/transit-rules.js")).href);
+const { ownTickets, placeZones, coveringPass, doubtfulPass, cheapest, ticketState, matchFare, usualFare, mapsApp, walkUrl } = await import(pathToFileURL(resolve(here, "../../app/static/app/js/transit-rules.js")).href);
 
 const fare = (net, zones, single, short = null) => ({ start: "2026-10-12T08:00:00+02:00", end: "2026-10-12T08:20:00+02:00", net, zones, single: { label: net ? `${net} ${zones}` : "Regionaltarif über 25 bis 35 km", price: single, reduced: null }, short });
 const pass = (net, zones) => ({ net, zones });
+const local = (stops, label = "Orte mit Stadtlinienverkehr Typ I") => ({ ...fare(null, null, 2), single: { label, price: 2, reduced: 1.6 }, stops });
 const none = ownTickets(undefined);
 const regional = { ticket: "deutschland", fare: { from: "900230999", to: "900100003", time: "2026-10-12T06:00:00Z" }, legs: [] };
 const abroad = { ticket: "deutschland", fare: null, legs: [] };
@@ -81,6 +82,55 @@ const tests = {
     assert.equal(ticketState(regional, both, null, true).text, "Ob deine Zeitkarten Potsdam AB und Cottbus AB hier gelten, ließ sich gerade nicht prüfen.");
     assert.equal(ticketState({ ticket: "fern" }, potsdam, undefined, true).tone, "fern");
     assert.equal(ticketState({ ticket: "fuss" }, none, undefined, true), null);
+  },
+  "a stop is placed in the zones the vbb register gives its town"() {
+    assert.equal(placeZones("Michendorf, Bahnhof"), "P-C/B-C");
+    assert.equal(placeZones("Fresdorf, Kirche"), "P-C");
+    assert.equal(placeZones("Ketzin (Havel), Am Markt"), "P-C");
+    assert.equal(placeZones("Seddin (PM), Bahnhof"), "P-C/B-C");
+    assert.equal(placeZones("S Potsdam Hauptbahnhof"), "P-A/B-C");
+    assert.equal(placeZones("S Lehnitz (Oranienburg)"), "B-C");
+    assert.equal(placeZones("Ruhlsdorf (PM), Kirche"), "P-C/B-C");
+    assert.equal(placeZones("Ruhlsdorf (TF), Kirche"), "");
+    assert.equal(placeZones("Ruhlsdorf, Dorf"), null);
+    assert.equal(placeZones("Beelitz, Bahnhof"), null);
+    assert.equal(placeZones(undefined), null);
+  },
+  "a ride inside michendorf goes with a pass for potsdam abc"() {
+    const potsdam = ownTickets({ passes: [pass("Potsdam", "ABC")] });
+    const town = local(["Michendorf, Bahnhof", "Michendorf, Am Wolkenberg"]);
+    assert.deepEqual(ticketState(regional, potsdam, town, true), { tone: "own", text: "Geht mit deiner Zeitkarte Potsdam ABC." });
+    assert.equal(ticketState(regional, ownTickets({ passes: [pass("Potsdam", "AB")] }), town, true).text, "Deine Zeitkarte Potsdam AB reicht hier nicht. Günstigstes Ticket: Einzelfahrausweis (Orte mit Stadtlinienverkehr Typ I) für 2,00 €, ermäßigt 1,60 €.");
+    assert.equal(coveringPass(local(["Fresdorf, Kirche", "Michendorf, Bahnhof"]), potsdam.passes), potsdam.passes[0]);
+    assert.equal(coveringPass(local(["Ruhlsdorf (PM), Dorf", "Michendorf, Bahnhof"]), potsdam.passes), potsdam.passes[0]);
+    assert.equal(coveringPass(local(["Michendorf, Bahnhof", "Beelitz, Bahnhof"]), potsdam.passes), null);
+    assert.equal(coveringPass(local(["Ruhlsdorf (TF), Kirche", "Ruhlsdorf (TF), Dorf"]), potsdam.passes), null);
+    assert.equal(coveringPass(local(["Ruhlsdorf, Dorf", "Michendorf, Bahnhof"]), potsdam.passes), null);
+    assert.equal(coveringPass({ ...town, stops: undefined }, potsdam.passes), null);
+    assert.equal(coveringPass({ ...fare(null, null, 8.1), stops: ["Michendorf, Bahnhof", "Teltow, Bahnhof"] }, potsdam.passes), null);
+  },
+  "a local ride in a place of berlin c goes with a pass for berlin abc"() {
+    const berlin = [pass("Berlin", "ABC")];
+    assert.equal(coveringPass(local(["S Oranienburg Bhf", "Oranienburg, Schloss"]), berlin), berlin[0]);
+    assert.equal(coveringPass(local(["Falkensee, Bahnhof", "Falkensee, Falkenhagener Anger"], "Orte mit Stadtlinienverkehr Typ II"), berlin), berlin[0]);
+    assert.equal(coveringPass(local(["Michendorf, Bahnhof", "Michendorf, Am Wolkenberg"]), berlin), berlin[0]);
+    assert.equal(coveringPass(local(["Fresdorf, Kirche", "Michendorf, Bahnhof"]), berlin), null);
+    assert.equal(coveringPass(local(["S Oranienburg Bhf", "Oranienburg, Schloss"]), [pass("Berlin", "AB"), pass("Potsdam", "ABC")]), null);
+  },
+  "a ride priced in waben still goes with the pass its other fare names"() {
+    const michendorf = { ...fare("Potsdam", "ABC", 3.7), single: { label: "bis 2 Waben", price: 2.2, reduced: 1.8 }, stops: ["Michendorf, Bahnhof", "Michendorf, Bahnhof/Bahnstr."] };
+    assert.deepEqual(ticketState(regional, ownTickets({ passes: [pass("Potsdam", "ABC")] }), michendorf, true), { tone: "own", text: "Geht mit deiner Zeitkarte Potsdam ABC." });
+    assert.equal(ticketState(regional, none, michendorf, true).text, "Günstigstes Ticket: Einzelfahrausweis (bis 2 Waben) für 2,20 €, ermäßigt 1,80 €.");
+    assert.equal(coveringPass({ ...michendorf, net: null, zones: null }, [pass("Potsdam", "ABC")]).net, "Potsdam");
+    assert.equal(coveringPass(michendorf, [pass("Potsdam", "AB")]), null);
+  },
+  "berlin abc settles potsdam c where both ends lie in berlin c"() {
+    const berlin = ownTickets({ passes: [pass("Berlin", "ABC")] });
+    const ride = (stops) => ({ ...fare("Potsdam", "ABC", 3.7), stops });
+    assert.deepEqual(ticketState(regional, berlin, ride(["Michendorf, Bahnhof", "S Potsdam Hauptbahnhof"]), true), { tone: "own", text: "Geht mit deiner Zeitkarte Berlin ABC." });
+    assert.equal(ticketState(regional, berlin, ride(["Fresdorf, Kirche", "S Potsdam Hauptbahnhof"]), true).text, "Deine Zeitkarte Berlin ABC reicht hier nicht. Günstigstes Ticket: Einzelfahrausweis Potsdam ABC für 3,70 €.");
+    assert.equal(doubtfulPass(ride(["Seehof, Dorf", "S Potsdam Hauptbahnhof"]), berlin.passes), berlin.passes[0]);
+    assert.equal(doubtfulPass(ride(["Fresdorf, Kirche", "Seehof, Dorf"]), berlin.passes), null);
   },
   "a price belongs to the ride that leaves and arrives at the same minutes"() {
     const ride = (start, end) => ({ legs: [{ category: "fuss", from: {}, to: {} }, { category: "sbahn", from: { planned: start, time: "2026-10-12T06:03:00Z" }, to: { planned: end, time: end } }] });
