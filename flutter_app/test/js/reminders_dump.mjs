@@ -38,6 +38,10 @@ globalThis.CustomEvent = class { constructor(type, init) { this.type = type; thi
 
 const engine = pathToFileURL(resolve(here, "../../assets/ui/static/app/js/reminders.js")).href;
 const { dueReminders, readPrefs } = await import(engine);
+if (fixture.prefs) {
+  process.stdout.write(JSON.stringify(fixture.prefs.map((saved) => readPrefs(saved).enabled)));
+  process.exit(0);
+}
 
 const [year, month, day] = fixture.from.split("-").map(Number);
 const prefs = readPrefs();

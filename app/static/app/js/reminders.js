@@ -20,14 +20,17 @@ export const CATEGORY_DEFAULTS = {
   pomodoro: { on: true },
 };
 
+// Only a switch flipped by hand counts as a choice. Until then a stored "enabled" came along with other settings, from a default
+// that once had reminders off, so it reads as on like for whoever never chose. NOTIFY_DEFAULTS and uiNotifyDefaults() agree.
+export const remindersOn = (notify) => (notify?.chosen === true ? notify.enabled !== false : true);
+
 export function readPrefs(saved = storage.get(LOCAL_KEYS.prefs)) {
   const notify = saved?.notify || {};
   const categories = Object.fromEntries(
     Object.entries(CATEGORY_DEFAULTS).map(([key, base]) => [key, { ...base, ...(notify.categories?.[key] || {}) }]),
   );
-  // Whoever never chose has reminders on, like NOTIFY_DEFAULTS and uiNotifyDefaults(); a stored choice stays as it is.
   return {
-    enabled: notify.enabled !== false,
+    enabled: remindersOn(notify),
     sound: notify.sound !== false,
     quiet: { from: notify.quiet?.from || "22:00", to: notify.quiet?.to || "07:00" },
     categories,
@@ -36,8 +39,8 @@ export function readPrefs(saved = storage.get(LOCAL_KEYS.prefs)) {
 
 export function switchRemindersOn() {
   const saved = storage.get(LOCAL_KEYS.prefs) || {};
-  if (saved.notify?.enabled === true) return;
-  storage.set(LOCAL_KEYS.prefs, { ...saved, notify: { ...(saved.notify || {}), enabled: true } });
+  if (saved.notify?.enabled === true && saved.notify.chosen === true) return;
+  storage.set(LOCAL_KEYS.prefs, { ...saved, notify: { ...(saved.notify || {}), enabled: true, chosen: true } });
   document.dispatchEvent(new CustomEvent("reminders:on"));
 }
 

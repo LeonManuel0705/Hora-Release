@@ -49,6 +49,7 @@ class UiReminderCategory {
 class UiReminderPrefs {
   const UiReminderPrefs({required this.enabled, required this.sound, required this.quietFrom, required this.quietTo, required this.categories});
 
+  // remindersOn() in reminders.js: only a switch flipped by hand ("chosen") keeps a stored "enabled" of false.
   factory UiReminderPrefs.read(Object? saved) {
     final notify = _map(_map(saved)['notify']);
     final chosen = _map(notify['categories']);
@@ -60,7 +61,7 @@ class UiReminderPrefs {
     }
 
     return UiReminderPrefs(
-      enabled: notify['enabled'] is bool ? notify['enabled'] as bool : defaults['enabled'] == true,
+      enabled: notify['chosen'] == true ? notify['enabled'] != false : defaults['enabled'] == true,
       sound: notify['sound'] != false,
       quietFrom: _minuteOf(quiet['from']) ?? 22 * 60,
       quietTo: _minuteOf(quiet['to']) ?? 7 * 60,

@@ -369,5 +369,25 @@ void main() {
       final chor = planned.firstWhere((item) => item.key.startsWith('event:'));
       expect([chor.at.hour, chor.at.minute], [15, 45]);
     });
+
+    test('a stored off from the old default plans reminders, one switched off by hand stays off after a restart', () async {
+      SharedPreferences.setMockInitialValues({'user_bundesland': 'Brandenburg'});
+      final host = _Host();
+      final today = DateTime.now();
+      final later = DateTime(today.year, today.month, today.day + 2);
+      final iso = '${later.year}-${later.month.toString().padLeft(2, '0')}-${later.day.toString().padLeft(2, '0')}';
+      final start = DateTime(today.year, today.month, today.day, 0, 1);
+      expect((await send(UiApi(host), 'POST', '/api/ui/deadlines', {'kind': 'Test', 'title': 'Lateintest', 'date': iso})).status, 200);
+      Future<bool> plansTests(Map<String, Object?> notify) async {
+        expect((await send(UiApi(host), 'PUT', '/api/ui/store/app-settings', {'notify': notify, 'school': {'grade': 12}})).status, 200);
+        return (await ReminderScheduler.planFromDevice(start)).any((item) => item.title == 'Test: Lateintest');
+      }
+
+      expect(await plansTests({'enabled': false, 'sound': true}), isTrue);
+      expect(await plansTests({'enabled': true}), isTrue);
+      expect(await plansTests({'enabled': false, 'chosen': true}), isFalse);
+      expect((await ReminderScheduler.planFromDevice(start)).any((item) => item.title == 'Test: Lateintest'), isFalse, reason: 'read again from the database');
+      expect(await plansTests({'enabled': true, 'chosen': true}), isTrue);
+    });
   });
 }

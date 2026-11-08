@@ -65,14 +65,17 @@ String _clock(DateTime at) => '${at.year}-${at.month.toString().padLeft(2, '0')}
 void main() {
   final sunday = DateTime(2026, 11, 8, 12);
 
-  test('nothing is planned while reminders are switched off, and whoever never chose has them on', () {
-    expect(_plan(_data(), {'app-settings': {'notify': {'enabled': false}}}, sunday), isEmpty);
+  test('nothing is planned while reminders are switched off by hand, and whoever never chose has them on', () {
+    expect(_plan(_data(), {'app-settings': {'notify': {'enabled': false, 'chosen': true}}}, sunday), isEmpty);
     final keys = [for (final item in _plan(_data(), _store(), sunday)) item.key];
     expect(keys, isNotEmpty);
     for (final store in <Map<String, Object?>>[
       const {},
       {'app-settings': {'school': {'grade': 12}}},
       {'app-settings': {'notify': {'sound': true, 'enabled': null}}},
+      {'app-settings': {'notify': {'enabled': false}, 'school': {'grade': 12}}},
+      {'app-settings': {'notify': {'enabled': false, 'chosen': 'true'}}},
+      {'app-settings': {'notify': {'enabled': true, 'chosen': true}}},
     ]) {
       expect([for (final item in _plan(_data(), store, sunday)) item.key], keys, reason: '$store');
     }
@@ -392,6 +395,37 @@ void main() {
     for (final quiet in [null, {'from': '17:30', 'to': '07:00'}]) {
       await _compareWithPage(quiet, leads: {'tests': {'on': true, 'lead': 3}, 'homework': {'on': true, 'lead': 2}});
     }
+  });
+
+  test('the phone reads a stored off like the page, counting it only when it was switched by hand', () async {
+    final node = await Process.run('node', ['--version']).then((result) => result.exitCode == 0).catchError((Object _) => false);
+    if (!node) {
+      markTestSkipped('node is not installed');
+      return;
+    }
+    final saved = <Object?>[
+      null,
+      const {},
+      {'notify': null},
+      {'notify': {'enabled': false}},
+      {'notify': {'enabled': true}},
+      {'notify': {'enabled': null}},
+      {'notify': {'enabled': 'false', 'chosen': true}},
+      {'notify': {'enabled': 0, 'chosen': true}},
+      {'notify': {'enabled': false, 'chosen': true}},
+      {'notify': {'enabled': true, 'chosen': true}},
+      {'notify': {'enabled': false, 'chosen': 'true'}},
+      {'notify': {'enabled': false, 'chosen': 1}},
+      {'notify': {'chosen': true}},
+    ];
+    final folder = await Directory.systemTemp.createTemp('reminder-prefs-');
+    addTearDown(() => folder.delete(recursive: true));
+    final fixture = File('${folder.path}/fixture.json')..writeAsStringSync(jsonEncode({'brand': Brand.name, 'prefs': saved, 'data': _data(), 'store': const {}}));
+    final run = await Process.run('node', ['test/js/reminders_dump.mjs', fixture.path], stdoutEncoding: utf8, stderrEncoding: utf8);
+    expect(run.exitCode, 0, reason: '${run.stderr}');
+    final page = (jsonDecode('${run.stdout}') as List).cast<bool>();
+    expect([for (final item in saved) UiReminderPrefs.read(item).enabled], page);
+    expect(page, [true, true, true, true, true, true, true, true, false, true, true, true, true]);
   });
 }
 

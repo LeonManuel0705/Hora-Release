@@ -141,13 +141,31 @@ const tests = {
     assert.equal(reminders.readPrefs({ school: { grade: 12 }, notify: { sound: false } }).enabled, true);
     core.data.tasks.length = 0;
   },
-  "a stored choice stays as it is, on or off"() {
-    for (const enabled of [false, true]) {
-      core.storage.set("app-settings", { notify: { enabled } });
+  "a stored off counts only when it was switched by hand, and then it stays off"() {
+    const cases = [
+      [{ notify: { enabled: false } }, true],
+      [{ notify: { enabled: false, sound: true, quiet: { from: "22:00", to: "07:00" } }, school: { grade: 12 } }, true],
+      [{ notify: { enabled: true } }, true],
+      [{ notify: { enabled: false, chosen: true } }, false],
+      [{ notify: { enabled: true, chosen: true } }, true],
+      [{ notify: { enabled: false, chosen: "true" } }, true],
+    ];
+    for (const [saved, on] of cases) {
+      core.storage.set("app-settings", saved);
       reminders.initReminders();
-      assert.equal(core.storage.get("app-settings").notify.enabled, enabled);
-      assert.equal(reminders.readPrefs().enabled, enabled);
+      assert.deepEqual(core.storage.get("app-settings"), saved, "reading never rewrites the choice");
+      assert.equal(reminders.readPrefs().enabled, on, JSON.stringify(saved));
+      assert.equal(reminders.readPrefs(JSON.parse(JSON.stringify(saved))).enabled, on, "the same after a reload");
     }
+    core.storage.remove("app-settings");
+  },
+  "switching reminders on from the setup or the menu marks it as a choice"() {
+    core.storage.set("app-settings", { notify: { enabled: false }, school: { grade: 12 } });
+    reminders.switchRemindersOn();
+    assert.deepEqual(core.storage.get("app-settings"), { notify: { enabled: true, chosen: true }, school: { grade: 12 } });
+    core.storage.set("app-settings", { notify: { enabled: false, chosen: true } });
+    reminders.switchRemindersOn();
+    assert.deepEqual(core.storage.get("app-settings").notify, { enabled: true, chosen: true });
     core.storage.remove("app-settings");
   },
   "a choice of single periods gives the classic school day"() {

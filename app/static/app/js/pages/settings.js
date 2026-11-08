@@ -9,6 +9,7 @@ import { askBackup, importFlow } from "../plan-share.js";
 import { platformName } from "../feedback.js";
 import { suggestShort, pickHue } from "../setup-data.js";
 import { storageNote, safariOnMac } from "../persistence.js";
+import { remindersOn } from "../reminders.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -111,7 +112,7 @@ function loadPrefs() {
     school: { ...base.school, ...(saved.school || {}) },
     iserv: { ...base.iserv, ...(saved.iserv || {}) },
     google: { ...base.google, ...(saved.google || {}), calendars: { ...base.google.calendars, ...(saved.google?.calendars || {}) } },
-    notify: { ...base.notify, ...(saved.notify || {}), quiet: { ...base.notify.quiet, ...(saved.notify?.quiet || {}) }, categories },
+    notify: { ...base.notify, ...(saved.notify || {}), enabled: remindersOn(saved.notify), quiet: { ...base.notify.quiet, ...(saved.notify?.quiet || {}) }, categories },
     places: { ...base.places, ...(saved.places || {}) },
     transit: { ...base.transit, ...(saved.transit || {}), passes: (Array.isArray(saved.transit?.passes) ? saved.transit.passes : []).filter(knownPass) },
   };
@@ -1930,7 +1931,7 @@ async function allowNotifications() {
     await Notification.requestPermission();
   } catch {}
   if (permission() === "granted" && !prefs.notify.enabled) {
-    prefs.notify.enabled = true;
+    Object.assign(prefs.notify, { enabled: true, chosen: true });
     savePrefs();
   }
   renderNotify();
@@ -1976,7 +1977,7 @@ function changeQuiet() {
 
 function bindNotify() {
   document.addEventListener("reminders:on", () => {
-    prefs.notify.enabled = true;
+    Object.assign(prefs.notify, { enabled: true, chosen: true });
     renderNotify();
   });
   const card = $("notifyCard");
@@ -1984,7 +1985,7 @@ function bindNotify() {
     if (event.target.closest("#notifyAllow")) allowNotifications();
     else if (event.target.closest("#notifyTest")) sendTest();
     else if (event.target.closest("#notifyEnabled")) {
-      prefs.notify.enabled = !prefs.notify.enabled;
+      Object.assign(prefs.notify, { enabled: !prefs.notify.enabled, chosen: true });
       savePrefs();
       renderNotify();
       say(prefs.notify.enabled ? "Erinnerungen an" : "Erinnerungen aus");
