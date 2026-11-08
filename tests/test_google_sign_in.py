@@ -1,14 +1,20 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import base64
+import hashlib
+import importlib.util
+import subprocess
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
 from app import google_oauth
 
+ROOT = Path(__file__).resolve().parent.parent
 CALENDAR = google_oauth.CALENDAR_SCOPE
 GMAIL_READ = google_oauth.GMAIL_READ_SCOPE
 EVENTS = google_oauth.EVENTS_SCOPE
@@ -52,7 +58,7 @@ def google(monkeypatch):
         state = next(states)
         return {'success': True, 'auth_url': f'https://accounts.google.com/o/oauth2/auth?state={state}', 'state': state}
 
-    def complete(code, features=('calendar',)):
+    def complete(code, features=('calendar',), verifier=None):
         calls.append(code)
         return {'success': True, 'email': 'lea@example.com'}
 
@@ -320,6 +326,56 @@ def test_without_the_switch_only_an_account_that_holds_gmail_may_ask_for_it(flow
     assert google_oauth.start_oauth_flow(['gmail'], another=True)['success'] is True
 
 
+def test_the_sign_in_ends_with_the_verifier_of_its_challenge_which_stays_on_the_server(app_window, browser, flows, monkeypatch):
+    made = google_oauth.Flow.from_client_config
+    verifiers = []
+
+    def record(cls, config, scopes, **kwargs):
+        verifiers.append(kwargs.get('code_verifier'))
+        return made(config, scopes, **kwargs)
+    monkeypatch.setattr(google_oauth.Flow, 'from_client_config', classmethod(record))
+    started = app_window.post('/api/email/google/auth', json={'features': ['calendar'], 'another': True}).get_json()
+    assert started['success'] is True and 'code_verifier' not in started
+    query = asked(started)
+    assert query['code_challenge_method'] == 'S256'
+    assert browser.get(f"/api/email/google/oauth-callback?state={started['state']}&code=abc").status_code == 200
+    verifier = verifiers[-1]
+    digest = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
+    assert digest == query['code_challenge']
+
+
+def test_a_release_carries_a_desktop_client_written_from_the_secrets(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location('write_google_client', ROOT / 'scripts' / 'write_google_client.py')
+    write_google_client = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(write_google_client)
+    target = tmp_path / 'google_client.json'
+    monkeypatch.setattr(google_oauth, 'GOOGLE_CLIENT_ID', None)
+    monkeypatch.setattr(google_oauth, 'CREDENTIALS_FILE', tmp_path / 'missing.json')
+    monkeypatch.setattr(google_oauth, 'BUNDLED_CLIENT_FILE', target)
+    monkeypatch.setenv('GOOGLE_OAUTH_CLIENT_ID', 'desktop.apps.googleusercontent.com')
+    monkeypatch.setenv('GOOGLE_OAUTH_CLIENT_SECRET', 'GOCSPX-test')
+    assert write_google_client.write(target) is True
+    assert google_oauth.is_google_oauth_configured() is True
+    client = google_oauth._get_oauth_client_config()['web']
+    assert client['client_id'] == 'desktop.apps.googleusercontent.com' and client['client_secret'] == 'GOCSPX-test'
+    assert urlparse(client['redirect_uris'][0]).hostname == 'localhost', 'a Desktop app client signs in through the loopback'
+    monkeypatch.delenv('GOOGLE_OAUTH_CLIENT_SECRET')
+    assert write_google_client.write(target) is False and not target.exists()
+    assert google_oauth.is_google_oauth_configured() is False and google_oauth._get_oauth_client_config() is None
+
+
+def test_the_client_file_of_a_release_stays_out_of_the_repository():
+    ignored = subprocess.run(['git', 'check-ignore', '-q', 'app/google_client.json'], cwd=ROOT)
+    assert ignored.returncode == 0
+    spec = (ROOT / 'server.spec').read_text(encoding='utf-8')
+    assert "GOOGLE_CLIENT = 'app/google_client.json'" in spec and 'datas.append((GOOGLE_CLIENT, ' in spec
+    workflow = (ROOT / '.github' / 'workflows' / 'release.yml').read_text(encoding='utf-8')
+    assert 'GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}' in workflow
+    assert 'GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}' in workflow
+    assert 'scripts/write_google_client.py' in (ROOT / 'scripts' / 'build_backend.sh').read_text(encoding='utf-8')
+    assert 'scripts/write_google_client.py' in (ROOT / 'flutter_app' / 'scripts' / 'build_macos.sh').read_text(encoding='utf-8')
+
+
 def test_unknown_parts_are_refused(flows):
     assert google_oauth.start_oauth_flow(['drive'])['success'] is False
     assert google_oauth.complete_oauth_flow('code', ['calendar', 'drive'])['success'] is False
@@ -349,7 +405,7 @@ def test_only_accounts_with_gmail_count_as_mailboxes_and_the_calendar_uses_one_t
 def test_a_sign_in_started_for_gmail_is_finished_for_gmail(app_window, browser, monkeypatch):
     finished = []
     monkeypatch.setattr(google_oauth, 'start_oauth_flow', lambda features, another=False: {'success': True, 'auth_url': 'https://accounts.google.com/x', 'state': 'gmail-state', 'features': list(features)})
-    monkeypatch.setattr(google_oauth, 'complete_oauth_flow', lambda code, features=('calendar',): finished.append(list(features)) or {'success': True, 'email': 'lea@example.com'})
+    monkeypatch.setattr(google_oauth, 'complete_oauth_flow', lambda code, features=('calendar',), verifier=None: finished.append(list(features)) or {'success': True, 'email': 'lea@example.com'})
     started = app_window.post('/api/email/google/auth', json={'features': ['gmail']}).get_json()
     assert started['features'] == ['gmail']
     assert browser.get('/api/email/google/oauth-callback?state=gmail-state&code=abc').status_code == 200

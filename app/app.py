@@ -2333,7 +2333,7 @@ _google_states = {}
 _google_states_lock = threading.Lock()
 
 
-def _remember_google_state(state, features=('calendar',)):
+def _remember_google_state(state, features=('calendar',), verifier=None):
     now = time.monotonic()
     with _google_states_lock:
         for known, entry in list(_google_states.items()):
@@ -2341,13 +2341,18 @@ def _remember_google_state(state, features=('calendar',)):
                 del _google_states[known]
         while len(_google_states) >= GOOGLE_STATE_LIMIT:
             del _google_states[next(iter(_google_states))]
-        _google_states[state] = {'expires': now + GOOGLE_STATE_TTL, 'result': None, 'features': list(features)}
+        _google_states[state] = {'expires': now + GOOGLE_STATE_TTL, 'result': None, 'features': list(features), 'verifier': verifier}
 
 
 def _google_features(state):
     with _google_states_lock:
         entry = _google_states.get(state) or {}
         return entry.get('features') or ['calendar']
+
+
+def _google_verifier(state):
+    with _google_states_lock:
+        return (_google_states.get(state) or {}).get('verifier')
 
 
 def _google_entry(state):
@@ -2395,8 +2400,9 @@ def start_google_auth():
     data = request.get_json(silent=True) if request.is_json else None
     data = data if isinstance(data, dict) else {}
     result = start_oauth_flow(data.get('features') or ['calendar'], another=data.get('another') is True)
+    verifier = result.pop('code_verifier', None)
     if result.get('success') and result.get('state'):
-        _remember_google_state(result['state'], result.get('features') or ['calendar'])
+        _remember_google_state(result['state'], result.get('features') or ['calendar'], verifier)
     return jsonify(result)
 
 @app.route('/api/email/google/callback', methods=['POST'])
@@ -2409,7 +2415,7 @@ def complete_google_auth():
     state = _claim_google_state(data.get('state', ''))
     if not state:
         return jsonify({'success': False, 'error': 'Diese Anmeldung gehört zu keiner offenen Anfrage'}), 403
-    result = complete_oauth_flow(data['code'], _google_features(state))
+    result = complete_oauth_flow(data['code'], _google_features(state), _google_verifier(state))
     _finish_google_state(state, bool(result.get('success')), result.get('email', ''), result.get('error', ''))
     return jsonify(result)
 
@@ -2449,7 +2455,7 @@ def google_oauth_redirect_callback():
     <p>Google hat keinen Anmeldecode geschickt.</p>
     <p>Schließ dieses Fenster und versuch es noch einmal.</p>''')
 
-    result = complete_oauth_flow(code, _google_features(state))
+    result = complete_oauth_flow(code, _google_features(state), _google_verifier(state))
     _finish_google_state(state, bool(result.get('success')), result.get('email', ''), result.get('error', ''))
 
     if result.get('success'):

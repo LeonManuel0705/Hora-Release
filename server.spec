@@ -16,6 +16,10 @@ datas = [
     ('app/curriculum', 'app/curriculum'),
     ('flutter_app/lib/build_info.dart', 'flutter_app/lib'),
 ]
+# The Google OAuth client of a release, written by scripts/write_google_client.py from the repository's secrets.
+GOOGLE_CLIENT = 'app/google_client.json'
+if os.path.exists(GOOGLE_CLIENT):
+    datas.append((GOOGLE_CLIENT, 'app'))
 binaries = []
 if sys.platform == 'win32':
     # llama-server needs the Visual C++ runtime; app/local_ai.py places these next to it

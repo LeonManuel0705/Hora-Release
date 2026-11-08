@@ -38,6 +38,8 @@ else
   "$PY" -m pip install --quiet -r requirements.txt
 fi
 
+"$PY" scripts/write_google_client.py
+
 echo "=== Freezing backend with PyInstaller ==="
 "$PY" -m PyInstaller server.spec --noconfirm --clean
 

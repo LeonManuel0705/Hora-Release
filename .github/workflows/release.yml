@@ -101,7 +101,12 @@ jobs:
         with:
           node-version: "22"
 
+      # A Google "Desktop app" OAuth client for the calendar sign-in. Without
+      # these secrets the build works as before, without Google.
       - run: bash scripts/build_backend.sh
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
 
       - run: npm ci
         working-directory: desktop

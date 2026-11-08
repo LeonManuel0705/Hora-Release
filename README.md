@@ -162,13 +162,17 @@ npm run build      # builds into dist/, copy it to ../site/ to publish
 
 ### Environment variables
 
-Copy `.env.example` to `.env`. For Google Calendar and Gmail fill in:
+Copy `.env.example` to `.env`. For Google Calendar fill in:
 
 ```
 GOOGLE_CLIENT_ID=<client id>
 GOOGLE_CLIENT_SECRET=<client secret>
 GOOGLE_PROJECT_ID=<project id>
 ```
+
+Gmail through the Google sign-in is a restricted scope that Google opens to a published app only after a paid yearly security assessment, so it is off by default and Gmail connects with an app password. Set `GOOGLE_GMAIL=1` to offer it in an installation whose OAuth project may use it. An account that already holds Gmail keeps it either way.
+
+Release builds take a Google OAuth client of the type "Desktop app" from the repository secrets `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`. `scripts/write_google_client.py` writes it to `app/google_client.json`, which git ignores, and the desktop builds carry it. A local `flutter_app/scripts/build_macos.sh` reads the same two variables from the environment. Without them a build has no Google sign-in.
 
 Leave `SECRET_KEY` unset. Hora then generates a random key in `data/.secret_key` on the first start. Set it only to share one key across machines, and then use a real random value. Setting `DATABASE_URL` switches the backend from SQLite to PostgreSQL.
 
