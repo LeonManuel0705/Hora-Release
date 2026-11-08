@@ -1,4 +1,4 @@
-import { PLACES } from "./transit-zones.js";
+import { PLACES, OUTSIDE } from "./transit-zones.js";
 
 const NETS = { "Brandenburg a.d.H": "Brandenburg an der Havel" };
 const CODES = { Potsdam: "P", Berlin: "B", "Brandenburg a.d.H": "BRB", Cottbus: "CB", "Frankfurt (Oder)": "FF" };
@@ -23,44 +23,63 @@ for (const line of PLACES.split("\n")) {
   const [name, district, zones] = line.split("|");
   for (const key of [placeKey(name), `${placeKey(name)}|${district}`]) ZONES.set(key, ZONES.has(key) && ZONES.get(key) !== zones ? null : zones);
 }
+for (const name of OUTSIDE.split("\n")) if (!ZONES.has(placeKey(name))) ZONES.set(placeKey(name), "");
+
+const stationName = (stop) => String(stop || "").replace(/^(?:S\+U|S|U) /, "");
+const districtOf = (name) => (name.endsWith(" (Berlin)") ? "B" : / \(([A-Z]{2,3})\)/.exec(name)?.[1]);
 
 export function placeZones(stop) {
-  const name = String(stop || "").replace(/^(?:S\+U|S|U) /, "");
-  const district = / \(([A-Z]{2,3})\)/.exec(name)?.[1];
-  const bare = district ? name.replace(` (${district})`, "") : name;
+  const name = stationName(stop);
+  const district = districtOf(name);
+  const bare = district ? name.replace(district === "B" ? / \(Berlin\)$/ : ` (${district})`, "") : name;
   const comma = bare.indexOf(", ");
   const words = bare.replace(/ (?:Bhf|Bahnhof)$/, "").split(" ");
   const tries = comma > 0 ? [bare, bare.slice(0, comma)] : words.map((_, index) => words.slice(0, words.length - index).join(" "));
   for (const place of tries) {
-    const zones = ZONES.get(district ? `${placeKey(place)}|${district}` : placeKey(place));
+    const zones = (district && ZONES.get(`${placeKey(place)}|${district}`)) ?? ZONES.get(placeKey(place));
     if (zones !== undefined) return zones;
   }
-  return null;
+  return district === "B" ? "B-B" : null;
+}
+
+export function placeName(stop) {
+  const name = stationName(stop);
+  const district = districtOf(name);
+  const bare = district ? name.replace(district === "B" ? / \(Berlin\)$/ : ` (${district})`, "") : name;
+  return bare.includes(", ") ? bare.slice(0, bare.indexOf(", ")) : bare.replace(/ (?:Bhf|Bahnhof)$/, "");
 }
 
 const reaches = (pass, zones) => (typeof zones === "string" ? [...pass.zones].includes(zones.split("/").find((part) => part.startsWith(`${CODES[pass.net]}-`))?.slice(-1)) : undefined);
 
-function within(pass, fare) {
-  const ends = Array.isArray(fare.stops) && fare.stops.length === 2 ? fare.stops.map((stop) => reaches(pass, placeZones(stop))) : [];
-  if (ends.includes(false)) return false;
-  return ends.length && ends.every(Boolean) ? true : undefined;
+function route(pass, fare) {
+  const stops = Array.isArray(fare.stops) && fare.stops.length >= 2 ? fare.stops : null;
+  if (!stops) return { unsure: true };
+  let unknown = null;
+  for (const [index, stop] of stops.entries()) {
+    const inside = reaches(pass, placeZones(stop));
+    if (inside === false) return { ok: false, place: placeName(stop), at: index === 0 ? "start" : index === stops.length - 1 ? "end" : "through" };
+    if (inside === undefined) unknown ??= placeName(stop);
+  }
+  return unknown ? { unsure: true, place: unknown } : { ok: true };
 }
 
 const LOCAL = /^(?:Orte mit Stadtlinienverkehr\b|bis [12] Waben?$)/;
 const berlinWithC = (pass) => pass.net === "Berlin" && pass.zones === "ABC";
 const netSingle = (fare) => fare.net && fare.single.label === `${fare.net} ${fare.zones}`;
 
+export function passCheck(pass, fare) {
+  if (fare.zones && pass.net === fare.net && [...fare.zones].every((zone) => pass.zones.includes(zone))) return { ok: true };
+  if (berlinWithC(pass) && fare.net === "Potsdam" && fare.zones === "AB") return { ok: true };
+  if ((berlinWithC(pass) && fare.net === "Potsdam" && fare.zones === "ABC") || LOCAL.test(fare.single?.label || "")) return route(pass, fare);
+  return { ok: false };
+}
+
 export function coveringPass(fare, passes) {
-  if (!fare) return null;
-  return passes.find((pass) =>
-    (fare.zones && pass.net === fare.net && [...fare.zones].every((zone) => pass.zones.includes(zone))) ||
-    (berlinWithC(pass) && fare.net === "Potsdam" && (fare.zones === "AB" || within(pass, fare) === true)) ||
-    (LOCAL.test(fare.single?.label || "") && within(pass, fare) === true)) || null;
+  return (fare && passes.find((pass) => passCheck(pass, fare).ok)) || null;
 }
 
 export function doubtfulPass(fare, passes) {
-  if (fare?.net !== "Potsdam" || fare.zones !== "ABC") return null;
-  return passes.find((pass) => berlinWithC(pass) && within(pass, fare) === undefined) || null;
+  return (fare && passes.find((pass) => passCheck(pass, fare).unsure)) || null;
 }
 
 export function cheapest(fare) {
@@ -79,9 +98,16 @@ export function ticketState(journey, own, fare, asked) {
   if (fare) {
     const best = cheapest(fare);
     const costs = `Günstigstes Ticket: ${best.name} für ${price(best.price)}${best.reduced ? `, ermäßigt ${price(best.reduced)}` : ""}.`;
-    const unsure = doubtfulPass(fare, own.passes);
-    if (unsure) return { tone: "pay", price: best.price, text: `Ob deine Zeitkarte ${passName(unsure)} hier reicht, ist nicht sicher, denn Potsdam C liegt nur zum Teil in Berlin C. ${costs}` };
-    const mine = names ? `${many ? "Deine Zeitkarten" : "Deine Zeitkarte"} ${names} ${many ? "reichen" : "reicht"} hier nicht. ` : "";
+    const checks = own.passes.map((pass) => ({ pass, ...passCheck(pass, fare) }));
+    const unsure = checks.find((check) => check.unsure);
+    if (unsure) {
+      const why = !unsure.place && berlinWithC(unsure.pass) && fare.net === "Potsdam" ? ", denn Potsdam C liegt nur zum Teil in Berlin C" : "";
+      const where = unsure.place ? `in ${unsure.place} gilt` : "hier reicht";
+      return { tone: "pay", price: best.price, text: `Ob deine Zeitkarte ${passName(unsure.pass)} ${where}, ist nicht sicher${why}. ${costs}` };
+    }
+    const place = !many && checks[0]?.place;
+    const why = place ? `, die Fahrt ${{ start: "beginnt in", end: "endet in", through: "führt durch" }[checks[0].at]} ${place}` : "";
+    const mine = names ? `${many ? "Deine Zeitkarten" : "Deine Zeitkarte"} ${names} ${many ? "reichen" : "reicht"} hier nicht${why}. ` : "";
     return { tone: "pay", price: best.price, text: `${mine}${costs}`, hint: !names };
   }
   if (!names) return { tone: "any", text: "Geht mit dem Deutschlandticket.", hint: asked };

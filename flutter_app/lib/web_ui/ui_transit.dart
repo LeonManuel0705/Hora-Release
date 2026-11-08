@@ -254,6 +254,19 @@ class UiTransit {
     return price == null ? null : {'label': label, 'price': price, 'reduced': _price(group, 'Ermäßigungstarif')};
   }
 
+  static List<String>? _rideStops(List<Map<String, Object?>> rides) {
+    final stops = <String>[];
+    for (final leg in rides) {
+      final names = [
+        for (final item in _list(leg['stopovers']))
+          if (item is Map) '${_map(_map(item)['stop'])['name'] ?? ''}',
+      ];
+      if (names.length < 2 || names.any((name) => name.isEmpty)) return null;
+      stops.addAll(stops.isNotEmpty && stops.last == names.first ? names.skip(1) : names);
+    }
+    return stops;
+  }
+
   static Map<String, Object?>? _fareView(Map<String, Object?> journey) {
     final rides = _list(journey['legs']).map(_map).where((leg) => _map(leg['line']).isNotEmpty).toList();
     if (rides.isEmpty) return null;
@@ -284,7 +297,7 @@ class UiTransit {
       'start': rides.first['plannedDeparture'] ?? rides.first['departure'],
       'end': rides.last['plannedArrival'] ?? rides.last['arrival'],
       'lines': [for (final leg in rides) '${_map(leg['line'])['name'] ?? ''}'],
-      'stops': ['${_map(rides.first['origin'])['name'] ?? ''}', '${_map(rides.last['destination'])['name'] ?? ''}'],
+      'stops': _rideStops(rides),
       'single': singles.reduce((best, next) => (next['price'] as num) < (best['price'] as num) ? next : best),
       'short': short,
       'net': net,
@@ -304,7 +317,7 @@ class UiTransit {
         'departure': _arg(args, 'zeit', 40),
         'results': 6,
         'tickets': 'true',
-        'stopovers': 'false',
+        'stopovers': 'true',
         'remarks': 'false',
         'language': 'de',
       })),
