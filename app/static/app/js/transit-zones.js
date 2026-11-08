@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-// From the VBB register "Alle Zielorte" (Gemeinde- und Bahnhofsverzeichnis, 25. Ausgabe, Stand 9.12.2025): every place with a zone of a city tariff area, plus the places of the same name without one, as place|district|zones.
+// From the VBB register "Alle Zielorte" (Anlage 1.1 of the VBB-Tarif, 25. Ausgabe, Stand 9.12.2025): every place with a zone of a city tariff area, plus the places of the same name without one, as place|district|zones.
 export const PLACES = `Ahrensdorf b. Ludwigsfelde|TF|B-C
 Ahrensfelde|BAR|B-C
 Ahrensfelde Friedhof|BAR|B-C
@@ -845,3 +845,2634 @@ Ziegenhals|LDS|B-C
 Zitz|PM|BRB-C
 Zühlsdorf|OHV|B-C
 Zühlslake|OHV|B-C`;
+
+// The register's other places, which lie in no city tariff area.
+export const OUTSIDE = `Aalkasten
+Abbendorf
+Abzw. Groß See
+Abzw. Klein See
+Achimswalde
+Ackerfelde
+Ackermannshof
+Ahlimbsmühle
+Ahlimbswalde
+Ahlsdorf/Hohenkuhnsdorf
+Ahrensdorf
+Ahrensdorf b. Trebbin
+Albertinenaue
+Albertinenhof
+Albertsheim
+Alexanderdorf
+Alexanderhof
+Alexanderhöhe
+Allmosen
+Alsenhof
+Alt Bork
+Alt Daber
+Alt Golm
+Alt Hüttendorf
+Alt Krüssow
+Alt Langsow
+Alt Lutterow
+Alt Madlitz
+Alt Mahlisch
+Alt Pinnow
+Alt Pröttlin
+Alt Rosenthal
+Alt Ruppin
+Alt Stahnsdorf
+Alt Tucheband
+Alt Töplitz
+Alt Zauche
+Alt-Galow
+Alt-Ruhlsdorf
+Alt-Schadow
+Alt-Temmen
+Altbarnim
+Altbelgern
+Altdöbern
+Altenau
+Altenhof
+Alteno
+Altes Lager
+Altfriedland
+Altfriesack
+Altgarz
+Altgaul
+Altglietzen
+Altglobsow
+Altgolßen
+Althüttendorf
+Altkünkendorf
+Altlewin
+Altlüdersdorf
+Altmädewitz
+Altranft
+Altreetz
+Altruppin
+Altthymen
+Alttrebbin
+Altwriezen
+Altwriezen/Beauregard
+Altwustrow
+Am Bahnhof
+Amalienfelde
+Amalienhof
+Amandusdorf
+Angermünde
+Annahütte
+Annenwalde
+Arendsee
+Arensdorf
+Arenzhain
+Arenzhain Abzw.
+Arnsdorf
+Arnsnesta
+Atterwasch
+Augustenfelde
+Augustenhof
+Augustfelde
+Ausbau
+Ausbau Casekower Straße
+Ausbau Mürower Straße
+Ausbau West
+Baarz
+Babben
+Babe
+Babekuhl
+Babitz
+Bad Belzig
+Bad Erna Abzw.
+Bad Freienwalde (Oder)
+Bad Liebenwerda
+Bad Saarow
+Bad Saarow Klinikum
+Bad Saarow Strand
+Bad Saarow Süd
+Bad Saarow-Pieskow
+Bad Wilsnack
+Badingen
+Baek
+Baek, Abzweig
+Bagemühl
+Bagow
+Bahnhof
+Bahnhof Zernitz
+Bahnsdorf
+Bahren
+Bahro
+Baitz
+Bamme
+Bandelow
+Bandelow Ausbau
+Bantikow
+Banzendorf
+Bardenitz
+Barenthin
+Barnewitz
+Barsdorf
+Barsikow
+Bartelshof
+Bartschendorf
+Baruth (Mark)
+Baruth/Mark
+Barzig
+Basdorf, Abzweig
+Basedow
+Bathow
+Battin
+Batzlow
+Bauer
+Baumgarten
+Bebersee
+Bechlin
+Beckenthin
+Beelitz
+Beelitz Heilstätten
+Beelitz Stadt
+Beelitz-Heilstätten
+Beenz b. Lychen
+Beenz b. Prenzlau
+Beerbaum
+Beerfelde
+Beesdau
+Beeskow
+Beetz
+Beetz-Sommerfeld
+Behlendorf
+Behrensdorf
+Beiersdorf
+Belten
+Bendelin
+Benken
+Bentwisch
+Berge
+Bergen
+Bergerdamm
+Bergerdamm-Lager
+Bergholz bei Bad Belzig
+Bergschäferei
+Bergsdorf
+Bergsoll
+Berkenbrück
+Berkenlatten
+Berkholz b. Boitzenburg
+Berlinchen
+Berlitt
+Bernheide
+Bernsdorf
+Bertikow
+Besandten
+Bestensee
+Betten
+Betzin
+Beutel
+Beutersitz
+Beveringen
+Beyern
+Bicking
+Biebersdorf
+Biehlen
+Bienenwerder b. Hoppegarten
+Biesen
+Biesenbrow
+Biesendahlshof
+Biesenthal
+Bietikow
+Bindow
+Binenwalde
+Birkenfelde
+Birkenhainchen
+Birkenhof
+Birkenreismühle
+Birkhorst
+Birkwalde
+Bischdorf
+Bischofswerder
+Blandikow
+Blankenberg
+Blankenburg
+Blankensee
+Blasdorf
+Blechern Hahn
+Blesendorf
+Bleyen
+Bliesdorf
+Blindow
+Bloischdorf
+Bloischdorf-Kolonie
+Blossin
+Blumberger Mühle
+Blumenhagen
+Blumenow
+Blumenthal (Mark)
+Blönsdorf
+Blüthen
+Boberow
+Boblitz
+Bochow
+Bochow Bruch
+Bochows-Loos
+Boddin
+Boddin-Langnow
+Bodens Eichen
+Boecke
+Bogensee
+Bohrau
+Bohsdorf
+Bohsdorf-Vorwerk
+Boisterfelde
+Boitzenburg
+Bollensdorf
+Bollersdorf
+Bollersdorfer Höhe
+Bollmannsruh
+Bolschwitz
+Boltenhof
+Bomsdorf
+Bomsdorf-Kolonie
+Bootz
+Borgisdorf
+Bork
+Borken
+Borkheide
+Borkwalde
+Borne
+Bornow
+Bornsdorf
+Borschütz
+Brachwitz
+Bralitz
+Brand (Nl)
+Brand Tropical Islands
+Brandenburgisches Viertel
+Brandis/Horst
+Brandmühle
+Branitzer Siedlung
+Braunsberg
+Braunsdorf
+Breddin
+Bredereiche
+Breese
+Breetz
+Breitenau
+Breitenfeld
+Bremsdorf
+Bremsdorfer Mühle
+Brenitz
+Bresch
+Bresinchen
+Breslack
+Briescht
+Briesen (Mark)
+Briesener Zootzen
+Briesensee
+Briesensee, Kreuzung
+Brieske
+Brieske Dorf
+Briesnig
+Britz
+Brodowin
+Bronkow
+Brottewitz
+Bruchhagen
+Brunn
+Brunne
+Brunow
+Brädikow
+Bröddin
+Brück
+Brück (Mark)
+Brügge
+Brügge (Prignitz)
+Brünkendorf
+Brüsenhagen
+Brüsenwalde
+Brüssow
+Buberow
+Buchenhain
+Buchhain
+Buchheide
+Buchholz (Zauche)
+Buchholz b. Beelitz
+Buchholz b. Niemegk
+Buchwalde
+Buchwäldchen
+Buckau
+Buckow
+Buckow (Beeskow)
+Buckow (Märkische Schweiz)
+Buckow b. Nennhausen
+Buckow b. Wudicke
+Buddenhagen
+Bugk
+Bukoitza
+Bullendorf
+Burg
+Burg-Kauper
+Burg-Kolonie
+Burghagen
+Burglehn
+Burgwall
+Burkersdorf
+Burow
+Burxdorf
+Buschdorf
+Buschhof
+Buschmühle
+Buschow
+Busendorf
+Buskow
+Butterholz
+Butzen
+Byhleguhre
+Byhleguhre-Mühlendorf
+Byhlen
+Bäckern
+Bäckern Abzw.
+Bälow
+Bärenbrück
+Bärensprung
+Bärwalde
+Bärwinkel
+Böckenberg
+Böhmerheide
+Böhne
+Bölkendorf
+Bölzke
+Bönitz
+Börnecke
+Börnichen
+Bückchen
+Bücknitz
+Bückwitz
+Bündigershof
+Bütow
+Bützer
+Cabel
+Cahnsdorf
+Calau
+Calau (NL)
+Caminchen
+Cammer
+Carmzow
+Casekow
+Caule
+Charlottenau
+Charlottenfelde
+Charlottenhof
+Chorin
+Chossewitz
+Chransdorf
+Christdorf
+Christianenhof
+Christianshof
+Christinendorf
+Clara-Zetkin-Siedlung
+Coschen
+Craupe
+Cremzow
+Criewen
+Criewen Weg
+Crinitz
+Croustillier
+Crussow
+Cumlosen
+Cöthen
+Dabendorf
+Dabergotz
+Dabern
+Dagow
+Dahlen
+Dahlhausen
+Dahme/Mark
+Dahmsdorf
+Dahnsdorf
+Dalichow
+Dallmin
+Damelack
+Damelang
+Damelang-Freienthal
+Dameswalde
+Damitzow
+Damm
+Damme
+Dammendorf
+Dammkrug
+Damsdorf
+Dangelsdorf
+Danna
+Dannenberg/Mark
+Dannenfeld
+Dannenreich
+Dannenwalde
+Dannenwalde (Gransee)
+Dannhof
+Dargardt
+Dargersdorf
+Darritz-Wahlendorf
+Dauer
+Dauerthal
+Dechtow
+Dedelow
+Deetz
+Demerthin
+Demnitz
+Demnitzer Mühle
+Dennewitz
+Densow
+Dergenthin
+Derwitz
+Dessow
+Deulowitz
+Deutsch Bork
+Deutschhof
+Dewinsee-Siedlung
+Dickte
+Diehlo
+Diensdorf
+Diensdorf-Radlow
+Dierberg
+Dietersdorf
+Dippmannsdorf
+Dobberzin
+Dobbrikow
+Doberburg
+Doberlug
+Doberlug-Kirchhain
+Dobra
+Dolgelin
+Dolgen
+Dolgenbrodt
+Dolgenhorst
+Dollenchen
+Dollgen
+Dollgow
+Domsdorf
+Dorettenhof
+Dorf Saarow
+Dorf Zechlin
+Dornswalde
+Dossow
+Dossow (Prign)
+Drachhausen
+Drahendorf
+Drahnsdorf
+Dranse
+Drasdo
+Dreesch
+Dreetz
+Drei Häuser
+Dreibrück
+Drense
+Dreska
+Dretzen
+Drewen
+Drewitz
+Drieschnitz
+Drieschnitz-Vorwerk
+Drochow
+Drögen
+Drößig
+Duben
+Dubrau
+Dubro
+Döberitz
+Döbern
+Döllen
+Döllingen
+Dölln Krug
+Dölln-See
+Dörrwalde
+Dörrwalde Abzw.
+Dübrichen
+Dümde
+Düpow
+Dürrenhofe
+Ebereschenhof
+Eberswalde
+Eberswalde Hbf
+Eckmannsdorf
+Egarsee
+Egelinde
+Eggersdorf b. Müncheberg
+Eggersdorf-Siedlung
+Egsdorf
+Egsdorf b. Teupitz
+Eichenfelde
+Eichenhof
+Eichhof
+Eichholz
+Eichhorst
+Eichwege
+Eickstedt
+Eickstedt Ausbau
+Eisdorf
+Eisenhüttenstadt
+Eldenburg
+Elisenhof b. Müncheberg
+Ellerborn
+Ellershagen
+Ellingen
+Elsholz
+Elslaake
+Elsterwerda
+Elsterwerda-Biehla
+Emilienhof
+Emstal
+Ernst-Thälmann-Siedlung
+Ernstenswille
+Ernsthof
+Eselshütte
+Etzin
+Fahrenholz
+Falkenberg
+Falkenberg (Elster)
+Falkenberg b. Beeskow
+Falkenberg b. Fürstenwalde
+Falkenberg(Mark)
+Falkenberg/Elster
+Falkenberg/Mark
+Falkenh. Gewerbep. Prign. (PR)
+Falkenhagen (Mark)
+Falkenhagen (Prignitz)
+Falkenhain
+Falkenthal
+Falkenwalde
+Fehrbellin
+Felchow
+Felgentreu
+Felsenhagen
+Ferbitz
+Ferchesar
+Ferdinandshof
+Ferdinandshorst
+Fergitz
+Feriendorf, Groß Väter
+Fermerswalde
+Fernneuendorf
+Fichtenberg
+Fichtengrund
+Fichtenwalde
+Fichtesportplatz
+Fiebigershof
+Finow
+Finowfurt
+Finsterwalde
+Finsterwalde (Nl)
+Finsterwalde-Ausbau
+Finsterwalde-Flugplatz
+Fischwasser
+Flatow
+Flecken Zechlin
+Fleißdorf
+Flemsdorf
+Fliederhorst
+Flieth
+Forst (Lausitz)
+Forstacker
+Forsthaus
+Frankena
+Frankendorf
+Frankenfelde
+Frankenförde
+Frankenhain
+Frauenhagen b. Brüssow
+Frauenhagen b. Pinnow
+Frauenhorst
+Frauwalde
+Frauwalde Abzw.
+Fredenhorst
+Fredersdorf
+Freesdorf
+Frehne
+Freidorf
+Freienbrink
+Freienhagen
+Freienhufen
+Freienthal
+Freiimfelde
+Freileben
+Freiwalde
+Fretzdorf
+Freudenberg
+Freyenstein
+Freywalde
+Friedenfelde
+Friedenshof
+Friedersdorf
+Friedersdorf (Königs Wusterh.)
+Friedersdorf b. Brenitz
+Friedersdorf b. Herzberg
+Friedheim
+Friedland
+Friedrichsaue
+Friedrichsbauhof
+Friedrichsbruch
+Friedrichsfelde
+Friedrichshain
+Friedrichshof
+Friedrichshof b. Brand
+Friedrichshof b. Dannenreich
+Friedrichsluga
+Friedrichsthal
+Friedrichswalde
+Friesack
+Friesack (Mark)
+Friesacker Zootzen
+Frohnsdorf
+Fröhden
+Fuhrmannsruh
+Funkenhagen
+Funkenmühle
+Fährkrug
+Fünfeichen
+Fünfeichen Abzw.
+Fürstenau
+Fürstenberg (Havel)
+Fürstenberg (Oder)
+Fürstenberg/Havel
+Fürstenwalde (Spree)
+Fürstenwalde (Spree) Süd
+Fürstenwalde/Spree
+Fürstenwerder
+Fürstlich Drehna
+Gaarz
+Gabow
+Gadow
+Gadsdorf
+Gahlen
+Gahlen Abzw.
+Gahro
+Gahry
+Gallun
+Galm
+Gandenitz
+Gandow
+Gantikow
+Ganz
+Ganzer
+Gapel
+Garlin
+Garlitz
+Garrenchen
+Garrey
+Gartow
+Gartz (Oder)
+Garz
+Garz, Schäferei
+Garzau
+Garzin
+Gatow
+Gebersdorf
+Geesow
+Geesow b. Freudenfeld
+Gehegemühle
+Gehren
+Gellmersdorf
+Genschmar
+Gerdshagen
+Gersdorf
+Gerswalde
+Gerswalder Siedlung
+Giesenhagen
+Giesenhorst
+Giesensdorf
+Giesensdorf Melioration
+Gieshof
+Gieshof-Zelliner Loose
+Gießmannsdorf
+Gildenhall
+Gladowshöhe
+Glambeck
+Glashütte
+Glau
+Gleuenhof
+Glienecke
+Glienicke
+Glienig
+Glietz
+Glowe
+Glövzin
+Glöwen
+Glöwen (Mark)
+Gneisenau
+Gnevsdorf
+Gnewikow
+Gohlitz
+Goldbeck
+Goldbeck (Ky.)
+Gollin
+Gollmitz
+Gollmitz (NL)
+Gollwitz
+Golßen
+Golßen (NL)
+Golzow
+Golzow (b. Eberswalde)
+Golzow (Oderbruch)
+Gorden
+Gorgast
+Goschen
+Gosda
+Gosda b. Preschen
+Goßmar
+Gottberg
+Gottberg Abzw.
+Gottesgabe
+Gottow
+Gottsdorf
+Goyatz
+Grabko
+Grabow
+Grabow b. Blumenthal
+Grabow b. Niemegk
+Gramzow
+Gramzow Mühle Abzw.
+Grano
+Gransee
+Granzow
+Grassau
+Gratze
+Graustein
+Grauwinkel
+Grebs b. Ziesar
+Greifenhain
+Greiffenberg Siedlung
+Grenz
+Grenzheim
+Grieben
+Griebsee
+Grießen
+Griffenhagen
+Grimme
+Groß Bademeusel
+Groß Behnitz
+Groß Beuchow
+Groß Breese
+Groß Breesen
+Groß Briesen
+Groß Buchholz
+Groß Drewitz
+Groß Dölln
+Groß Eichholz
+Groß Fredenwalde
+Groß Gastrose
+Groß Gottschow
+Groß Haßlow
+Groß Jamno
+Groß Jehser
+Groß Klessow
+Groß Kreutz
+Groß Kölpin
+Groß Kölzig
+Groß Köris
+Groß Langerwisch
+Groß Leine
+Groß Leppin
+Groß Leuthen
+Groß Liebitz
+Groß Linde
+Groß Lubolz
+Groß Luja
+Groß Lübbenau
+Groß Lüben
+Groß Marzehns
+Groß Mehßow
+Groß Muckrow
+Groß Neuendorf
+Groß Pankow
+Groß Pinnow
+Groß Pinnow Abzw.
+Groß Radden
+Groß Rietz
+Groß Schacksdorf
+Groß Schauen
+Groß Schönebeck
+Groß Schönebeck (Schorfh)
+Groß See
+Groß Sperrenwalde
+Groß Väter
+Groß Warnow
+Groß Wasserburg
+Groß Welle
+Groß Werzin
+Groß Woltersdorf
+Groß Ziescht
+Groß-Ziethen
+Großbahren
+Großderschau
+Großkmehlen
+Großkoschen
+Großkrausnik
+Großmutz
+Großräschen
+Großrössen
+Großthiemig
+Großwoltersdorf
+Großwudicke
+Großzerlang
+Grubo
+Gruhno
+Grumsin
+Grunewald
+Grunow
+Grunow (Nl)
+Gräben
+Gräbendorf
+Gräfendorf
+Gräningen
+Gröbitz
+Gröden
+Gröditsch
+Grötsch
+Grüna
+Grünaue
+Grünberg
+Grüneberg
+Grüneiche
+Grünewald
+Grünewalde
+Grünfelde
+Grünow b. Prenzlau
+Grünow b. Schwedt
+Grünplan
+Grüntal
+Grütz
+Guben
+Guben Am Weinberg
+Guhlen
+Guhlsdorf
+Gulow
+Gumtow
+Gusow
+Gussow
+Gustavsruh
+Gustavsruh (b. Gersw.)
+Gut Gollin
+Guteborn
+Gutengermendorf
+Gutenpaaren
+Göhlen
+Göhlsdorf
+Göllmitz
+Göllnitz
+Gölsdorf
+Gömnigk
+Görike
+Göritz
+Görlsdorf
+Görlsdorf, Abzw.
+Görne
+Görsdorf
+Görsdorf b. Storkow
+Görzig
+Görzke
+Götschendorf
+Göttlin
+Gühlen
+Gühlen Glienicke
+Güldenhof
+Gülitz
+Gülpe
+Günterberg
+Günthersdorf
+Güstebieser Loose
+Güstow
+Güterberg
+Haage
+Haaren
+Hackenhausen
+Hackenow
+Hagelberg
+Haida
+Hakenberg
+Halbe
+Halenbeck
+Hammelspring
+Hammelstall
+Hammer
+Hangelsberg
+Hansfelde
+Hardenbeck
+Harnekop
+Hartensdorf
+Hartmannsdorf
+Haselberg
+Haseloff
+Hasenfelde
+Hasenholz
+Hasenwinkel
+Haßleben
+Haßlebener Siedlung
+Hathenow
+Haus Feldeck
+Heckelberg
+Hedwigshof
+Heidehof
+Heidekrug
+Heideland
+Heidelberg
+Heilbrunn
+Heiligengrabe
+Heimland
+Heinersbrück
+Heinrichsdorf
+Heinrichsdorf (Np.)
+Heinrichsfelde
+Heinrichsfelde ( b. Kyritz)
+Heinrichshof
+Heinrichshofer Ausbau
+Heinzhof
+Helenenhof
+Hellburg
+Helle
+Henkinshain
+Hennersdorf
+Henriette
+Henriettenhof
+Henzendorf
+Herbersdorf
+Hermannshof
+Hermersdorf
+Hermsdorf
+Hermsdorf b. Ruhland
+Herrenhof
+Herrenmühle
+Herrensee
+Herrenstein
+Herrnhof
+Hertefeld
+Herzberg
+Herzberg (Elster)
+Herzberg (Mark)
+Herzershof
+Herzhorn
+Herzsprung
+Hessenhagen
+Hessenhöhe
+Hetzdorf
+Hillmersdorf
+Himmelpfort
+Hindenberg
+Hindenburg
+Hinzdorf
+Hirschfeld
+Hirschfelde
+Hof Sternhagen
+Hohenahlsdorf
+Hohenbocka
+Hohenbruch
+Hohenbrück
+Hohenbucko
+Hohendorf
+Hohenelse
+Hohenfelde b. Schwedt
+Hohenfinow
+Hohengörsdorf
+Hohengüstow
+Hohenkuhnsdorf
+Hohenlandin
+Hohenleipisch
+Hohenlobbese
+Hohenlychen
+Hohennauen
+Hohenofen
+Hohenreinkendorf
+Hohensaaten
+Hohenseefeld
+Hohenselchow
+Hohenspringe
+Hohenstein
+Hohenvier
+Hohenwalde, Abzw.
+Hohenwerbig
+Hohenwutzen
+Holbeck
+Holbeck West
+Hollbrunn
+Holzendorf
+Holzhausen
+Hoppegarten b. Müncheberg
+Horlitza
+Hornow
+Hornow-Vorwerk
+Horst
+Horst b. Wolfshagen
+Horstfelde
+Horstwalde
+Hosena
+Hubertushöhe
+Hubertusstock
+Häsen
+Höfgen
+Höllenberg, Tiergehege
+Hölzerner See
+Höpen
+Hörlitz
+Hülsebeck
+Ihlow
+Jabel
+Jagel
+Jagow
+Jagsal
+Jahnberge
+Jahnkeshof
+Jahnsfelde
+Jakobsdorf
+Jakobshagen
+Jamikow
+Jamlitz
+Jannowitz
+Jerischke
+Jeserig b. Brandenburg
+Jeserig b. Niederwerbig
+Jeserig Dorf
+Jeserig/Fläming
+Jeserigerhütten
+Jessern
+Jeßnigk
+Jethe
+Jetsch
+Jetsch, Abzw.
+Joachimshof
+Joachimsthal
+Joachimsthal Kaiserbahnhof
+Jocksdorf
+Johannisthal
+Julianenhof
+Jungfernkrug
+Jämlitz
+Jämlitz Hütte
+Jänickendorf
+Jännersdorf
+Jänschwalde
+Jänschwalde Kraftwerk
+Jänschwalde Ost
+Jülitz
+Jüterbog
+Kaakstedt
+Kaden
+Kagar
+Kagel
+Kagel-Finkenstein
+Kagel-Möllensee
+Kahla
+Kahsel
+Kalkwitz
+Kallinchen
+Kallinenberge
+Kaltenborn
+Kammermark
+Kampehl
+Kanin
+Kantow
+Kappe
+Karche
+Karche-Zaacko
+Karl-Friedrichs-Hof
+Karl-Marx-Hof
+Karlsberg
+Karlsbiese
+Karlsburg
+Karlsdorf
+Karlsfeld
+Karlshof b. Schönfeld b. Prenzlau
+Karlstein
+Karnzow
+Karras
+Karstedtshof
+Karstädt
+Karthan
+Karwe
+Karwe Abzw.
+Karwesee
+Kasel-Golzig
+Kasel-Golzig, Abzw.
+Kastaven
+Katerbow
+Katharinenhof
+Kauxdorf
+Keesow
+Kehrberg
+Kehrigk
+Keller
+Kemlitz
+Kemlitz b. Dahme/Mark
+Kemmen
+Kerkow
+Kerkwitz
+Kerstenbruch
+Kerzlin
+Keune
+Kieck
+Kiehnwerder
+Kienbaum
+Kienberg
+Kienitz
+Kienitz/Nord
+Kieselwitz
+Kietz
+Kirchhain
+Kittlitz
+Klaistow
+Klandorf
+Klasdorf
+Klasdorf-Glashütte
+Klausdorf
+Klaushagen
+Kleeste
+Klein Bademeusel
+Klein Behnitz
+Klein Beuchow
+Klein Breese
+Klein Briesen
+Klein Dölln
+Klein Gastrose
+Klein Glien
+Klein Gottschow
+Klein Haßlow
+Klein Jamno
+Klein Klessow
+Klein Kölzig
+Klein Köris
+Klein Langerwisch
+Klein Leine
+Klein Leppin
+Klein Leuthen
+Klein Liebitz
+Klein Linde
+Klein Loitz
+Klein Loitz Vorwerk
+Klein Lubolz
+Klein Lüben
+Klein Marzehns
+Klein Mehßow
+Klein Muckrow
+Klein Neuendorf
+Klein Radden
+Klein Schauen
+Klein Schulzendorf
+Klein Schönhagen
+Klein Sperrenwalde
+Klein Ströbitz
+Klein Warnow
+Klein Wasserburg
+Klein Woltersdorf
+Klein Ziescht
+Klein Ziethen
+Klein-Eichholz
+Klein-Fredenwalde
+Klein-Mutz
+Klein-Ziethen
+Kleinbahren
+Kleinbarnim
+Kleinbuckow
+Kleine Heide
+Kleinkmehlen
+Kleinkoschen
+Kleinkrausnik
+Kleinleipisch
+Kleinmenow
+Kleinow
+Kleinower Ziegelei
+Kleinrössen
+Kleinwudicke
+Kleinzerlang
+Kleisthöhe
+Klenzenhof
+Kleptow
+Klepzig
+Kleßen
+Klessener Zootzen
+Klettwitz
+Kletzke
+Klevesche Häuser
+Klingmühl
+Klinkow
+Klobbicke
+Klockow
+Kloster Zinna
+Klosterdorf
+Klosterfelde
+Klosterheide
+Klosterhof
+Klosterwalde
+Knehden
+Knippelsdorf
+Knissen
+Knoblauch
+Kobbeln
+Koboltenhof
+Kohlsdorf
+Kolbatzer Mühle
+Kolberg
+Kolochau
+Kolonie Britz
+Kolpin
+Kolrep
+Kolzenburg
+Koppenbrück
+Kosilenzien
+Koßdorf
+Kossenblatt
+Kossin
+Koßwig
+Kostebrau
+Kotzen
+Kraatz
+Krachtsheide
+Krampfer
+Krams
+Kranepuhl
+Krangen
+Krassig
+Kraupa
+Krausnick
+Krayne
+Kreblitz
+Kremmen
+Krempendorf
+Kreuzbruch
+Kreuzburg
+Kreuzkrug
+Krewelin
+Krewitz
+Kribbe
+Kriele
+Krielow
+Krimnitz
+Krohnhorst
+Kroppen
+Krossen
+Krugau
+Kruge
+Krumbeck
+Krummenpfahl
+Kränzlin
+Kröbeln
+Kröchlendorff
+Krügersdorf
+Krüllenkempe
+Kuckuk
+Kuhbier
+Kuhblank
+Kuhbrücke
+Kuhburgsberg
+Kuhhorst
+Kuhlmühle
+Kuhlowitz
+Kuhnshof
+Kuhsdorf
+Kuhz
+Kummerow
+Kummerow b. Beeskow
+Kummersdorf
+Kummersdorf (b. Storkow)
+Kummersdorf Ort
+Kummersdorf-Alexanderdorf
+Kummersdorf-Gut
+Kummro
+Kunow
+Kunsterspring
+Kupferhammer
+Kurtschlag
+Kurzlipsdorf
+Kuschkow
+Kutzerow
+Kyritz
+Kyritz, Am Bürgerpark
+Köhnsbau
+Köhnshof
+Köllnitz
+Kölsa
+Königsberg
+Königshorst
+Könkendorf
+Köpernitz
+Körba
+Körbitz
+Köritz
+Körzin
+Köthen
+Köttlitz
+Kötzlin
+Küdow
+Kümmernitz
+Kümmritz
+Küstrin-Kietz
+Küstrinchen
+Laaske
+Laaske Abzw.
+Laaslich
+Laasow
+Laatz Forsthaus
+Lamitsch
+Lamsfeld
+Lamsfeld, Kreuzung
+Landin
+Landwehr
+Langen
+Langengrassau
+Langenlipsdorf
+Langennaundorf
+Langenrieth
+Langewahl
+Langnow
+Lanke
+Lanz
+Latzwall
+Lauchhammer
+Lauchhammer-Mitte
+Lauchhammer-Nord
+Lauchhammer-Ost
+Lauchhammer-Süd
+Lauchhammer-West
+Lauschütz
+Lausitz
+Lawitz
+Lebusa
+Leddin
+Leeskow
+Legde
+Lehde
+Lehnin
+Lehnsdorf
+Leibchel
+Leibsch
+Leipe
+Leißnitz
+Leistenhof
+Lellichow
+Lemmersdorf
+Lennewitz
+Lentzke
+Lenzen (Elbe)
+Lenzersilge
+Letschin
+Leuenberg
+Libbenichen
+Lichtena
+Lichtenau
+Lichtenhain
+Lichtenow
+Lichterfeld
+Lichterfelde
+Liebenberg
+Liebenhof
+Liebenthal
+Liebenthal (Prign)
+Liebenwalde
+Lieberose
+Liebsdorf
+Liebätz
+Liedekahle
+Liepe
+Lieskau
+Lieske
+Ließen
+Lietzen
+Lietzen Nord
+Lietzen Vorwerk
+Lietzow
+Limsdorf
+Lindchen
+Linde
+Lindena
+Lindenau
+Lindenberg ( Wittenberge)
+Lindenberg (Mark)
+Lindenberg WS
+Lindenbrück
+Lindenhagen
+Lindenhof Abzw.
+Lindensee
+Lindhorst
+Lindow (Mark)
+Lindthal
+Linow
+Linowsee
+Linthe
+Linum
+Linumhorst
+Lipsa
+Lipten
+Lobbese
+Lobeofsund
+Lochow
+Lockstädt
+Locktow
+Lohm
+Lottschesee
+Louisenhof
+Louisfelde
+Lubochow
+Lubolz
+Luchsiedlung
+Luckaitz
+Luckaitztal
+Luckau
+Luckau-Uckro
+Luckenwalde
+Luckow
+Luckow-Petershagen
+Ludwigsaue
+Ludwigsburg
+Lug
+Lugau
+Luggendorf
+Luhme
+Luisenau
+Luisenfelde
+Luisenhof
+Lunow
+Lychen
+Lynow
+Läsikow
+Löcknitz
+Lögow
+Löhsten
+Lönnewitz
+Löpten
+Löwenberg
+Löwenberg (Mark)
+Löwendorf
+Lübben (Spreewald)
+Lübbenau (Spreewald)
+Lübbenow
+Lübbinchen
+Lübbinchen Abzw.
+Lübnitz
+Lübzow
+Lüchfeld
+Lüdendorf
+Lüdersdorf
+Lühnsdorf
+Lühsdorf
+Lüsse
+Lütkendorf
+Lütkenwisch
+Lütte
+Lützlow
+Maasdorf
+Mahdel
+Mahlendorf
+Mahlendorf Abzw.
+Mahlsdorf
+Malitschkendorf
+Mallenchen
+Malterhausen
+Malz
+Mangelshorst
+Manker
+Mankmuß
+Manschnow
+Mansfeld
+Margaretenhof
+Marienberg
+Marienfeld
+Marienheim
+Marienthal
+Marienwerder
+Markau
+Markee
+Markgrafpieske
+Martinskirchen
+Marxdorf
+Marzahna
+Massen
+Massow
+Mattendorf
+Maulbeerwalde
+Mechow
+Medewitz
+Medewitz (Mark)
+Medewitzerhütten
+Mehlsdorf
+Meichow
+Meinsdorf
+Melchow
+Mellen
+Mellenau
+Mellensee
+Mellnsdorf
+Melzow
+Menkin
+Menz
+Mertensdorf
+Merz
+Merzdorf
+Mescherin
+Meseberg
+Mesekow
+Mesendorf
+Metzdorf
+Metzelthin
+Meuro
+Meyenburg
+Michaelisbruch
+Michelsdorf
+Mildenberg
+Milmersdorf
+Milow
+Missen
+Mittweide
+Mixdorf
+Mlode
+Mochlitz
+Mochow
+Molchow
+Moldenhütten
+Molkenberg
+Mollnitz
+Moor
+Motrich
+Motzen
+Muckwar
+Muggerkuhl
+Mulknitz
+Mädewitz
+Märkisch Buchholz
+Märkisch Wilmersdorf
+Märtensmühle
+Möbiskruge
+Möckern
+Mödlich
+Mögelin
+Möglenz
+Möglin
+Möllen
+Möllendorf
+Mönchwinkel
+Mörz
+Möthlow
+Mückendorf
+Müggenburg
+Müggendorf
+Mühlberg-Weinberge
+Mühlberg/Elbe
+Mühlhof
+Müncheberg
+Müncheberg (Mark)
+Münchehofe
+München
+Münchhausen-Ossak
+Münchhofe
+Mürow
+Mürow-Oberdorf
+Müschen
+Mützdorf
+Mützlitz
+Nackel
+Nassenheide
+Nauen
+Naugarten
+Naundorf
+Nausdorf
+Nausdorf See
+Nebelin
+Nechlin
+Nennhausen
+Neschholz
+Nettelbeck
+Nettgendorf
+Netzeband
+Netzow
+Neu Biesen
+Neu Bochow
+Neu Boston
+Neu Byhleguhre
+Neu Cölln
+Neu Dessau
+Neu Golm
+Neu Haidemühl
+Neu Hartmannsdorf
+Neu Kemnitz
+Neu Krüssow
+Neu Lutterow
+Neu Lübbenau
+Neu Madlitz
+Neu Mahlisch
+Neu Mönchwinkel
+Neu Pinnow
+Neu Placht
+Neu Premslin
+Neu Pröttlin
+Neu Redlin
+Neu Reichenwalde
+Neu Rosenthal
+Neu Sagast
+Neu Schadow
+Neu Schrepkow
+Neu Silmersdorf
+Neu Stahnsdorf
+Neu Tucheband
+Neu Zauche
+Neu-Galow
+Neu-Horno
+Neu-Kleinow
+Neu-Rietz
+Neu-Rosow
+Neu-Schwante
+Neu-Temmen
+Neubarnim
+Neubau
+Neubrück
+Neubrück b. Goyatz
+Neuburxdorf
+Neudeck
+Neudorf
+Neudöbern
+Neudörfchen
+Neuehütte
+Neuehütten
+Neuendorf (WK)
+Neuendorf am See
+Neuendorf b. Brück
+Neuendorf b. Lübben
+Neuendorf b. Niemegk
+Neuendorf b. Teupitz
+Neuendorf im Sande
+Neuenfeld
+Neuenhagen (Bad Frw)
+Neuentempel
+Neues Lager
+Neufeld
+Neufriedland
+Neugarten
+Neugaul
+Neugersdorf
+Neuglienicke
+Neuglobsow
+Neugrimnitz
+Neugünterberg
+Neuhardenberg
+Neuhaus
+Neuhausen b. Berge
+Neuheim
+Neuhof
+Neuhof (b. Zossen)
+Neuhof b. Dobberzin
+Neuhof b. Greiffenberg
+Neuhof b. Jüterbog
+Neuhof b. Karstädt
+Neuhof b. Wilsickow
+Neuholland
+Neuhäsen
+Neukammer
+Neukietz
+Neukietz b. Mädewitz
+Neukünkendorf
+Neuküstrinchen
+Neulangsow
+Neulewin
+Neulietzegöricke
+Neulögow
+Neulöwenberg
+Neulüdersdorf
+Neumannshof
+Neumeichow
+Neumädewitz
+Neunaundorf
+Neupetershain
+Neupetershain-Nord
+Neuranft
+Neureetz
+Neurochlitz
+Neuroofen
+Neuruppin
+Neuruppin Rheinsberger Tor
+Neuruppin West
+Neurüdnitz
+Neustadt (Dosse)
+Neuthymen
+Neutornow
+Neutrebbin
+Neutrebbin-Siedlung
+Neuwerder
+Neuwustrow
+Neuzelle
+Nexdorf
+Nichel
+Niebede
+Niebel
+Niebelhorst
+Niebendorf-Heinsdorf
+Nieden
+Niederfelde
+Niederfinow
+Niedergörsdorf
+Niedergörsdorf, Bahnhof
+Niedergörsdorf, Flugplatz
+Niederlandin
+Niederwerbig
+Niemegk
+Niemerlang
+Niemtsch
+Niendorf
+Nietwerder
+Niewisch
+Niewitz
+Nonnendorf
+Nordhof
+Noßdorf
+Nunsdorf
+Nächst Neuendorf
+Oberjünne
+Obersdorf
+Oderberg
+Oderberg-Neuendorf
+Oderin
+Oegeln
+Oehna
+Oelsen
+Oelsig
+Ogrosen
+Ogrosen Abzw.
+Ohnewitz
+Oppelhain
+Ortrand
+Ortwig
+Oschätzchen
+Ossak
+Ossendorf
+Osterne
+Osteroda
+Ottenhagen
+Paalzow
+Pahlsdorf
+Palmnicken
+Papenbruch
+Papierfabrik
+Paplitz
+Papproth
+Parey
+Parlow
+Parlow-Glambeck
+Parmen
+Parstein
+Paserin
+Passow
+Passow (Uckermark)
+Passow/Wendemark
+Paulinenaue
+Paulinenhof
+Pechhütte
+Pechüle
+Peetzig
+Pehlitz
+Peickwitz
+Peitz Ost
+Peitzendorf
+Pelkwitz
+Penzlin
+Penzlin-Süd
+Perleberg
+Pessin
+Petersdorf
+Petersdorf b. Saarow
+Petershagen (Uckermark)
+Petershof
+Petersruh
+Petkus
+Petznick
+Pfaffendorf
+Pfaffendorf (Mark)
+Pfalzheim
+Pfingstberg
+Pflügkuff
+Philadelphia
+Philippinenhof
+Pieskow
+Pieskow b. Schadow
+Pießig
+Pinnow (Uckermark)
+Pinnow b. Gerswalde
+Pirow
+Pitschen-Pickel
+Placht-Weiler
+Platkow
+Plattenburg
+Plattkow
+Platzfelde
+Plessa
+Plessa-Süd
+Plieskendorf
+Plänitz
+Plötzin
+Pohlitz
+Pohlitzer Mühle
+Poley
+Polßen
+Polzen
+Ponitz
+Ponnsdorf
+Poratz
+Porep
+Posedin
+Postlin
+Potzlow
+Prebelow
+Preddöhl
+Preilack
+Premnitz
+Premnitz Nord
+Premnitz Zentrum
+Premsdorf
+Premslin
+Prenden
+Prensdorf
+Prenzlau
+Preschen
+Prestewitz
+Pretschen
+Preußnitz
+Priedel
+Prieros
+Prierosbrück
+Prierow
+Prieschka
+Prießen
+Prietzen
+Pritzen
+Pritzhagen
+Pritzwalk
+Pritzwalk Voßberg
+Pritzwalk West
+Pritzwalk-Hainholz
+Proschim
+Proßmarke
+Protzen
+Prädikow
+Prösen
+Prösen Ost
+Prösen West
+Pröttlin
+Prötzel
+Pudel/Storkower Str.
+Putlitz
+Pätz
+Pätz, Chausseehaus
+Päwesin
+Qualzow
+Quappendorf
+Quast
+Quermathen
+Quitzow
+Quitzöbel
+Raakow
+Raben
+Raddusch
+Raden
+Radensdorf
+Radensdorf b. Calau
+Radensdorf b. Cottbus
+Radensleben
+Radewiese
+Radinkendorf
+Radlow
+Ragow Försterei
+Ragow-Merz
+Ragösen
+Rahnisdorf
+Rambow b. Kleinow
+Rambow b. Mellen
+Raminshof
+Randow
+Ranzig
+Ranzow
+Rapshagen
+Raßmannsdorf
+Rathenow
+Rathenow Nord
+Rathsdorf
+Rathstock
+Ratzdorf
+Rauen
+Rauschendorf
+Ravensbrück
+Reckenthin
+Reckenzin
+Reckenzin, Abzweig
+Reddern
+Redlin
+Redlitz
+Reesdorf
+Reetz
+Reetz, Dorf
+Reetzerhütten
+Regenmantel
+Reglingsruh
+Rehagen
+Rehain
+Rehfeld
+Rehfeld (b. Falkenberg)
+Rehfelde
+Rehfelde-Dorf
+Rehnsdorf
+Reichenberg
+Reichenhain
+Reichenow
+Reichenwalde
+Reicherskreuz
+Reichwalde
+Reiersdorf
+Reinsdorf
+Reißdamm
+Reitwein
+Repente
+Reppinichen
+Reppist Abzw.
+Repten
+Ressen
+Rettchensdorf
+Retzin
+Retzow
+Reuden
+Reudnitz
+Reuthen
+Rheinsberg
+Rheinsberg (Mark)
+Rheinsberg-Glienicke
+Rhinow
+Rhinsmühlen
+Ribbeck
+Ribbeckshorst
+Rickshausen
+Rieben
+Riedebeck
+Rieplos
+Riesdorf
+Rießen
+Rietdorf
+Rietz b. Treuenbrietzen
+Rietz-Bucht
+Rietz-Neuendorf
+Rietzneuendorf
+Riewend
+Ringenwalde
+Ringofen
+Ringsleben
+Rinow
+Rittgarten
+Rochusthal
+Roddahn
+Roddan
+Rohlsdorf b. Retzin
+Rohlsdorf Gem. Halenb.-Rohlsd.
+Rohrbeck
+Rohrlack
+Rollberg
+Rosenbeck
+Rosenhagen
+Rosenow
+Rosenthal
+Rosenwinkel
+Rosinthal
+Rosow
+Rossow
+Rote Mühle
+Rothstein
+Rottstock
+Ruhhof
+Ruhland
+Ruhlsdorf-Zerpenschleuse
+Rutenberg
+Rutzkau
+Rädigke
+Rädikow
+Rägelin
+Röddelin
+Rönnebeck
+Röpersdorf
+Rübehorst
+Rückersdorf
+Rückersdorf-Oppelh.
+Rüdingsdorf
+Rüdow
+Rühstädt
+Rüthnick
+Saadow
+Saalhausen
+Saalow
+Saathain
+Sabrodt
+Saccasne, Abzw.
+Sacro
+Sacrow-Waldow
+Sadenbeck
+Sagast
+Sagritz
+Sallgast
+Salzbrunn
+Sandhorst
+Sandkrug
+Sargleben
+Sarkow
+Sarnow
+Saßleben
+Sauberg
+Sauen
+Sawall
+Saxdorf
+Schabernack
+Schacksdorf
+Schadewitz
+Schadow
+Schapow
+Scharfenberg
+Scharfenbrück
+Scharleuk
+Schenkendorf b. Dahme / Mark
+Schenkendöbern
+Schernsdorf
+Schervenzsee
+Schieben
+Schiebsdorf
+Schifferhof
+Schiffmühle
+Schilda
+Schilde
+Schipkau
+Schlabendorf
+Schlabendorf Süd
+Schlaborn
+Schlagsdorf
+Schlalach
+Schlamau
+Schlaubemühle
+Schlenzer
+Schlepkow
+Schlepzig
+Schlieben
+Schlieben Berga
+Schließkenberg
+Schluft
+Schlunkendorf
+Schlüßhof
+Schmargendorf
+Schmarsow
+Schmergow
+Schmerkendorf
+Schmerwitz
+Schmiedeberg
+Schmielsdorf
+Schmolde
+Schmögelsdorf
+Schmölln
+Schneeberg
+Schneeberg (Mark)
+Schollen
+Schrabischmühle
+Schraden
+Schrakau
+Schreibermühle
+Schrepkow
+Schuhlen
+Schulenburgslust
+Schulzenhof
+Schwabeck
+Schwanebeck
+Schwanebeck (Nauen)
+Schwaneberg
+Schwanow
+Schwante
+Schwarzbach
+Schwarze Pumpe
+Schwarzenburg
+Schwarzes Luch
+Schwarzheide
+Schwarzheide Ost
+Schwarzheide-Ost
+Schwebendorf
+Schwedt (Oder)
+Schwedt (Oder) Mitte
+Schwedt/Oder
+Schweinrich
+Schwenow
+Schwerin
+Schwerzko
+Schäcksdorf
+Schäferei
+Schäpe
+Schöbendorf
+Schöllnitz
+Schöna-Kolpien
+Schönberg (Mark)
+Schönberg b. Kyritz
+Schönborn
+Schönborn (b. Doberlug)
+Schönebeck
+Schönebeck-Wildpark
+Schönefeld b. Beelitz
+Schönefeld b. Luckenwalde
+Schönefeld b. Niederg.
+Schöneiche
+Schöneiche b. Dahme/Mark
+Schönermark
+Schönermark b. Passow
+Schönermark b. Prenzlau
+Schönewalde b. Finsterwalde
+Schönewalde b. Herzberg
+Schöneweide b. Luckenwalde
+Schönfeld
+Schönfeld b. Klockow
+Schönfeld b. Tantow
+Schönfelde
+Schönhagen
+Schönhagen b. Gumtow
+Schönhagen b. Pritzwalk
+Schönheide
+Schönholz
+Schönholz-Neuwerder
+Schönhöhe
+Schönow (Uckermark)
+Schönwalde (Spreewald)
+Schönwerder
+Schünow
+Sechzehneichen
+Seddin
+Sedlitz
+Sedlitz Ost
+Seebadsiedlung
+Seebeck
+Seedorf
+Seefeld
+Seehausen
+Seehausen (Uckermark)
+Seelenhorst
+Seelow
+Seelow (Mark)
+Seelow-Gusow
+Seelübbe
+Seese Ost
+Seetz
+Segeletz
+Segeluch
+Seilershof
+Selbelang
+Sella
+Sellendorf
+Sellendorf, Försterei
+Sembten
+Semlin
+Semlin Ausbau
+Senftenberg
+Senftenhütte
+Senzke
+Sernow
+Serwest
+Settinchen
+Sewekow
+Sibirien
+Sieb
+Siebmannshorst
+Siedlung b. Hohensaaten
+Siedlung b. Tempelfelde
+Siedlung Döberitz
+Siedlung Horstfelde
+Siedlung Poley
+Siedlung Rotes Luch
+Siegadel
+Siegrothsbruch
+Sietzing
+Sigrön
+Silberberg
+Silmersdorf
+Simmersdorf
+Simonshagen
+Simonshof
+Solikante
+Sommerfeld
+Sommerfelde
+Sommerswalde
+Sonnenberg
+Sonnewalde
+Sophiendorf
+Sophienhof
+Sophienstädt
+Sophienthal
+Sorge
+Sorno
+Spaatz
+Spechthausen
+Speichrow
+Sperenberg
+Spiegelhagen
+Spielhagen
+Spitz
+Spolierenberg
+Spreeau
+Spreenhagen
+Spreetal
+Spreewerder
+Spremberg
+Spring
+Staakmühle
+Staakow
+Stabeshorst
+Stabeshorst Abzw.
+Staffelde
+Stangenhagen
+Staupitz
+Stavenow
+Stechau
+Stecherschleuse
+Stechow
+Steckelsdorf
+Steffenshagen
+Stegelitz
+Stegemannshof
+Steinbeck
+Steinberg
+Steinberg b. Baek
+Steinberge
+Steindorf
+Steinfurth
+Steinförde
+Steinhavelmühle
+Steinhöfel
+Steinitz
+Steinkirchen
+Steinrode
+Steinsdorf
+Steintoch
+Stendell
+Stepenitz
+Sternebeck
+Sternfelde
+Sternhagen Dorf
+Sternthal
+Stiern
+Stolzenhagen b. Angermünde
+Stolzenhain an der Röder
+Stolzenhain/Hartmannsdorf
+Storbeck
+Storbeckshof
+Storkow
+Storkow (Mark)
+Stradow
+Stramehl
+Straupitz/Spreewald
+Streckenthin
+Streesow
+Streganz
+Strehlen
+Strehlow
+Streichwitz
+Stremmen
+Striesa
+Strigleben
+Strodehne
+Stromtal
+Strubensee
+Struck
+Struvenberg Abzw.
+Struwenberg
+Stöffin
+Stöffiner Berg
+Stölln
+Störitzsee
+Stüdenitz
+Stülpe
+Stützkow
+Suckow
+Suschow
+Sydow
+Sydowswiese
+Sähle
+Säritz
+Söllenthin
+Sükow
+Sükow Platenhof
+Tacken
+Tangendorf
+Tangersdorf
+Tanneberg
+Tannendreieck
+Tannenhof
+Tantow
+Tantow Vorwerk
+Tarmow
+Taschenberg
+Taschenberg Ausbau
+Taubendorf
+Tauche
+Tauer
+Teerofen
+Teetz/Ganz
+Telschow
+Telschow-Weitgendorf
+Temmen
+Temmen-Ringenwalde
+Tempelberg
+Tempelfelde
+Templin
+Templin Stadt
+Terpe
+Terpt
+Teschendorf
+Tetschendorf
+Tettau
+Teupitz
+Teurow
+Thalberg
+Theisa
+Thomsdorf
+Thöringswerder
+Tiefenbrunn
+Tiefenbrunnen
+Tiefensee
+Tiefental
+Tietzow
+Torgelow
+Tornitz
+Tornow
+Tramnitz
+Trampe
+Trebatsch
+Trebbin
+Trebbinchen
+Trebbus
+Trebendorf
+Trebenow
+Trebitz
+Trebnitz
+Trebnitz (Mark)
+Trebus
+Tremmen
+Tremsdorf
+Treppeln
+Treppendorf
+Treuenbrietzen
+Treuenbrietzen Süd
+Trieplatz
+Triglitz
+Tröbitz
+Tschernitz
+Tuchen
+Tuchen-Klobbicke
+Tugam
+Tugam Abzw. Wendeschleife
+Töpchin
+Tüchen
+Türkendorf
+Türkshof
+Uckro
+Uebigau
+Uenze
+Ullersdorf
+Unbesandten
+Utershorst
+Vahrnow
+Vehlin
+Vehlow
+Verlorenwasser
+Vetschau
+Vetschau/Spreewald
+Vettin
+Vevais
+Vichel
+Vielitz
+Vieritz
+Vierraden
+Viesecke
+Vietmannsdorf
+Vietznitz
+Vogelsang
+Vogelsang (Kr. Oberhavel)
+Vogelsangsruh
+Vogelsiedlung
+Voigtsbrügge
+Volkwig
+Vollmersdorf
+Vor Ketzinw
+Vorwerk b. Steinhöfel
+Vorwerk Wilmersdorf
+Voßberg
+Wachow
+Wackerberge
+Wadelsdorf
+Wagenitz
+Wahlendorf
+Wahlsdorf
+Wahrenbrück
+Wainsdorf
+Waisenkrug
+Walchow
+Walddrehna
+Waldeck
+Waldhof
+Waldow/Brand
+Waldschule Börnichen
+Waldsieversdorf
+Waldstadt
+Walkmühle
+Wall
+Wallitz
+Wallmow
+Walsleben
+Waltersdorf b. Luckau
+Warbende
+Warnitz
+Warnitz (Uckermark)
+Warnsdorf
+Warsow
+Warthe
+Wartin
+Wartin Eschenweg
+Wassersuppe
+Waterloo
+Weggun
+Weggun Waldsiedlung
+Wehnsdorf
+Wehrhain
+Weichensdorf
+Weinberge
+Weisen
+Weißack
+Weißag
+Weißen
+Weißensee
+Weitgendorf
+Wellmitz
+Welsickendorf
+Welsigke
+Welsow
+Welzow
+Welzow Tagebau
+Wendefeld
+Wendemark
+Wendisch Rietz
+Wendisch Rietz/Siedlung
+Wendisch-Rietz
+Wendtshof
+Wentdorf
+Wentow
+Werbellin
+Werbelow
+Werbig
+Werchau
+Werchow
+Werder
+Werder/Spree
+Werdermühle
+Werenzhain
+Werftpfuhl
+Wergzahna
+Wernikow
+Weselitz
+Wesendorf
+Wichmannsdorf
+Wiederau
+Wiepersdorf
+Wierigsdorf
+Wiese
+Wiesenburg
+Wiesenburg (Mark)
+Wiesengrund b. Prieros
+Wiesenhagen
+Wildau-Wentdorf
+Wildberg
+Wildenau
+Wildgrube
+Wilhelminenhofer Weg
+Wilhelminenthal
+Wilhelmsaue
+Wilhelmsgrille
+Wilhelmshayn
+Wilhelmshof
+Willmersdorf-Stöbritz
+Willmine
+Willy Brandt Flughafen
+Wilmersdorf
+Wilmersdorf (Angermünde)
+Wilmersdorf b. Briesen
+Wilmersdorf b. Glienicke
+Wilschwitz
+Wilsickow
+Winkel
+Wirchensee
+Wismar
+Wittbrietzen
+Wittenberge
+Wittenhof
+Wittmannsdorf
+Wittmannsdorf b. Luckau
+Wittmannsdorf-Bückchen
+Wittmoor
+Wittstock
+Wittstock (Dosse)
+Wittstock Abzw.
+Wittstock/Dosse
+Witzke
+Wochowsee
+Woddow
+Wolfshagen
+Wolfshain
+Wolfsruh
+Wolfswinkel
+Wollenberg
+Wollenthin
+Wolletz
+Wollschow
+Wollup
+Wolsier
+Woltersdorf/Nu.-Urstromtal
+Wolzig
+Wootz
+Worin
+Wormlage
+Woschkow
+Wriezen
+Wulfersdorf
+Wulkow
+Wulkow b. Kyritz
+Wulkow b. Neuruppin
+Wulkow b. Trebnitz
+Wullwinkel
+Wurlgrund
+Wuschewier
+Wußwerk
+Wusterhausen (Dosse)
+Wusterhausen/Dosse
+Wustrau-Altfriesack
+Wustrau-Radensleben
+Wustrow
+Wuthenow
+Wutike
+Wutzetz
+Wutzow
+Wölmsdorf
+Wölsickendorf
+Wünsdorf
+Wünsdorf-Waldstadt
+Würdenhain
+Wüsten Vahrnow
+Wüsten-Buchholz
+Wüstenhain
+Wüstermarke
+Zaacko
+Zaatzke
+Zabelsdorf
+Zachow
+Zagelsdorf
+Zapel
+Zarenthin
+Zauche
+Zauchwitz
+Zaue
+Zechin
+Zechlinerhütte
+Zechow
+Zeckerin
+Zehdenick
+Zehdenick (Mark)
+Zehdenick-Neuhof
+Zehlendorf
+Zehnebeck
+Zeischa
+Zellendorf
+Zelz
+Zempow
+Zerkwitz
+Zermützel
+Zernikow
+Zernitz
+Zerpenschleuse
+Zerwelin
+Zesch am See
+Zeuden
+Zeust
+Zichow
+Zichow-Lindenwegsiedlung
+Zichtow
+Zichtow, Abzweig I
+Zieckau
+Ziegelhäuser
+Ziemkendorf
+Ziesar
+Zietenhorst
+Ziethenmühle
+Ziezow
+Ziltendorf
+Zinndorf
+Zinnitz
+Zinsdorf
+Zippelsförde
+Zixdorf
+Zobersdorf
+Zollchow
+Zootzen
+Zossen
+Zuchenberg
+Zwietow
+Zäckericker Loose
+Zöllmersdorf
+Zühlen
+Zülichendorf
+Züllsdorf
+Zürchel
+Zürchel Abzw.
+Zützen
+Ützdorf`;
