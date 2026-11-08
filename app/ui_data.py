@@ -1256,9 +1256,9 @@ def google_status():
     """What the pages need to know about Google before they ask: whether it can be connected here, and how the copy stands."""
     from . import calendar_cache
     try:
-        return {'googleConfigured': calendar_cache.configured(), 'google': calendar_cache.page_state()['google']}
+        return {'googleConfigured': calendar_cache.configured(), 'gmailViaGoogle': calendar_cache.gmail_offered(), 'google': calendar_cache.page_state()['google']}
     except Exception:
-        return {'googleConfigured': False, 'google': None}
+        return {'googleConfigured': False, 'gmailViaGoogle': False, 'google': None}
 
 
 def page_assistant(data, school, settings, today, iserv):

@@ -3,6 +3,7 @@
 
 import os
 import base64
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -34,7 +35,13 @@ TOKENS_FILE = Path(DATA_DIR) / "google_tokens.json"
 
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
-GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:5050/api/email/google/oauth-callback')
+# A release build carries the client of a Google "Desktop app", written at build time by scripts/write_google_client.py.
+BUNDLED_CLIENT_FILE = Path(__file__).resolve().parent / "google_client.json"
+# A Desktop app client accepts any loopback port, so the sign-in comes back to the port this backend listens on.
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI') or f"http://localhost:{env('PORT', '5050')}/api/email/google/oauth-callback"
+GMAIL_SWITCH = 'GOOGLE_GMAIL'
+AUTH_URI = 'https://accounts.google.com/o/oauth2/auth'
+TOKEN_URI = 'https://oauth2.googleapis.com/token'
 HTTP_TIMEOUT = 20
 
 CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar'
@@ -68,6 +75,7 @@ REFUSED = {
     'gmail': 'Google hat Gmail nicht freigegeben. Setz bei der Anmeldung die Haken bei Gmail',
     'school': 'Google hat den Kalender für den Stundenplan nicht freigegeben. Setz bei der Anmeldung den Haken dafür',
 }
+GMAIL_OFF = 'Gmail verbindest du in dieser Version mit einem App-Passwort unter E-Mail'
 
 # Google lets people untick single permissions and adds earlier grants to the answer; oauthlib would reject either.
 os.environ.setdefault('OAUTHLIB_RELAX_TOKEN_SCOPE', '1')
@@ -76,7 +84,16 @@ def is_google_oauth_configured() -> bool:
 
     if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
         return GOOGLE_API_AVAILABLE
-    return GOOGLE_API_AVAILABLE and CREDENTIALS_FILE.exists()
+    return GOOGLE_API_AVAILABLE and (CREDENTIALS_FILE.exists() or BUNDLED_CLIENT_FILE.exists())
+
+
+def gmail_via_google(tokens: Dict = None) -> bool:
+    """Whether this installation offers Gmail through the Google sign-in. Google opens Gmail to a published app only after
+    a paid security assessment every year, so released apps take Gmail with an app password instead. It is on where the
+    installation is set up for it with GOOGLE_GMAIL=1, or where a connected account already holds Gmail."""
+    if accounts_for('gmail', tokens):
+        return True
+    return os.getenv(GMAIL_SWITCH, '').strip().lower() in ('1', 'true', 'yes', 'on') and is_google_oauth_configured()
 
 def get_oauth_status() -> Dict:
 
@@ -101,6 +118,7 @@ def get_oauth_status() -> Dict:
         "authenticated": bool(tokens),
         "accounts": list(tokens.keys()),
         "gmail": accounts_for('gmail', tokens),
+        "gmailViaGoogle": gmail_via_google(tokens),
         "calendar": calendar_account(tokens),
     }
 
@@ -229,35 +247,38 @@ def get_credentials(email: str) -> Optional[Credentials]:
 
     return creds
 
+def _web_client(client: Dict) -> Dict:
+    return {
+        "web": {
+            "client_id": client["client_id"],
+            "client_secret": client["client_secret"],
+            "auth_uri": client.get("auth_uri", AUTH_URI),
+            "token_uri": client.get("token_uri", TOKEN_URI),
+            "redirect_uris": [GOOGLE_REDIRECT_URI]
+        }
+    }
+
+
+def _bundled_client() -> Optional[Dict]:
+    try:
+        client = json.loads(BUNDLED_CLIENT_FILE.read_text(encoding='utf-8'))['installed']
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return client if client.get('client_id') and client.get('client_secret') else None
+
+
 def _get_oauth_client_config() -> Dict:
+    """The client of the environment, else the one stored in the data folder, else the one a release build carries."""
 
     if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
-        return {
-            "web": {
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [GOOGLE_REDIRECT_URI]
-            }
-        }
+        return _web_client({"client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET})
 
     creds_data = decrypt_file(CREDENTIALS_FILE)
     if creds_data:
-        if "installed" in creds_data:
-            installed = creds_data["installed"]
-            return {
-                "web": {
-                    "client_id": installed["client_id"],
-                    "client_secret": installed["client_secret"],
-                    "auth_uri": installed.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
-                    "token_uri": installed.get("token_uri", "https://oauth2.googleapis.com/token"),
-                    "redirect_uris": [GOOGLE_REDIRECT_URI]
-                }
-            }
-        return creds_data
+        return _web_client(creds_data["installed"]) if "installed" in creds_data else creds_data
 
-    return None
+    bundled = _bundled_client()
+    return _web_client(bundled) if bundled else None
 
 def features_of(names) -> List[str]:
     """The parts of the app a sign-in is for, in a fixed order. Unknown names make the whole request invalid."""
@@ -296,6 +317,8 @@ def start_oauth_flow(features=('calendar',), another=False) -> Dict:
         return {"success": False, "error": "Google ist in dieser Installation nicht eingerichtet"}
 
     tokens = load_tokens()
+    if 'gmail' in features and not gmail_via_google(tokens):
+        return {"success": False, "error": GMAIL_OFF}
     account = calendar_account(tokens) or next(iter(tokens), None)
     entry = tokens.get(account) or {}
     working = bool(entry.get('refresh_token')) and not entry.get('expired')
@@ -328,6 +351,8 @@ def start_oauth_flow(features=('calendar',), another=False) -> Dict:
             "success": True,
             "auth_url": auth_url,
             "state": state,
+            # The URL carries the PKCE challenge, so finishing the sign-in needs this verifier, which never leaves the server.
+            "code_verifier": flow.code_verifier,
             "features": features,
             "asked": asked,
             "message": "Melde dich im Browser bei Google an"
@@ -336,7 +361,7 @@ def start_oauth_flow(features=('calendar',), another=False) -> Dict:
         logging.error(f"Google OAuth flow error: {e}")
         return {"success": False, "error": "Die Anmeldung ließ sich nicht vorbereiten"}
 
-def complete_oauth_flow(auth_code: str, features=('calendar',)) -> Dict:
+def complete_oauth_flow(auth_code: str, features=('calendar',), code_verifier: str = None) -> Dict:
 
     if not GOOGLE_API_AVAILABLE:
         return {"success": False, "error": "Die Google-Bibliotheken fehlen"}
@@ -354,7 +379,9 @@ def complete_oauth_flow(auth_code: str, features=('calendar',)) -> Dict:
         flow = Flow.from_client_config(
             client_config,
             scopes=requested,
-            redirect_uri=GOOGLE_REDIRECT_URI
+            redirect_uri=GOOGLE_REDIRECT_URI,
+            code_verifier=code_verifier,
+            autogenerate_code_verifier=False,
         )
 
         flow.fetch_token(code=auth_code, timeout=30)

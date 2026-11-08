@@ -73,7 +73,7 @@
             <button class="modal-close" id="addAccountModalClose">&times;</button>
         </div>
 
-        {% if google_configured %}
+        {% if gmail_via_google %}
         <div class="google-signin-section">
             <button type="button" class="btn-google" id="googleSignInBtn">
                 <svg width="18" height="18" viewBox="0 0 24 24">
@@ -110,6 +110,9 @@
             <p class="form-hint" data-i18n="imap_hint">
                 Für IServ nutze dein Schulpasswort. Für Gmail brauchst du ein App-Passwort.
             </p>
+            {% if google_configured and not gmail_via_google %}
+            <p class="form-hint">Die Anmeldung mit Google gilt hier nur für den Kalender, weil Google für Gmail eine kostenpflichtige Prüfung verlangt. Das App-Passwort legst du unter <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer">App-Passwörter</a> in deinem Google-Konto an.</p>
+            {% endif %}
             <div class="form-actions">
                 <button type="submit" class="btn-primary" data-i18n="add_account">Add Account</button>
             </div>

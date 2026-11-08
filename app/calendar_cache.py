@@ -955,6 +955,14 @@ def configured():
         return False
 
 
+def gmail_offered():
+    """True where Gmail may be connected through the Google sign-in here, see google_oauth.gmail_via_google."""
+    try:
+        return bool(_google().gmail_via_google())
+    except Exception:
+        return False
+
+
 def settings_view():
     """What Settings shows about Google, read from the copy so the page never waits for Google."""
     google = _google()

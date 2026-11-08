@@ -535,6 +535,13 @@
         "tone": "ok"
       },
       {
+        "icon": "calendar",
+        "to": "Google",
+        "what": "Kalendereinträge und die Liste deiner Kalender, dazu ein eigener Kalender für den Stundenplan, wenn du ihn einschaltest. Gmail nur in Installationen, die dafür eingerichtet sind",
+        "when": "wenn du dein Google-Konto verbindest (Computer)",
+        "tone": "ok"
+      },
+      {
         "icon": "book-check",
         "to": "Wikipedia",
         "what": "der Begriff, nach dem du den Assistenten fragst",
@@ -742,7 +749,7 @@
   "privacy_policy": {
     "nav_title": "Datenschutzerklärung",
     "hero_title": "Datenschutzerklärung",
-    "hero_date": "Stand: 7. November 2026",
+    "hero_date": "Stand: 8. November 2026",
     "s1_title": "§ 1 Verantwortlicher",
     "s1_p1": "Verantwortlicher im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:",
     "s1_name": "Leon Manuel Töpper",
@@ -771,6 +778,12 @@
     "s3_list9": "Diese Website: die Frage nach der neuesten Version, beim Start und danach alle zwei Stunden (von selbst, Apps für Computer und Android)",
     "s3_list11": "Die Websites deiner Lesezeichen: ein Abruf der Seite, um ihr Logo neben dem Lesezeichen zu zeigen",
     "s3_list12": "Diese Website oder GitHub: der Abruf der neuen Version der App, wenn du in der App „Aktualisieren“ antippst (Android)",
+    "s3_list13": "Google: dein Kalender und, wo eingerichtet, Gmail, wenn du dein Google-Konto verbindest (Apps für Computer). Mehr dazu in e)",
+    "s3_sub5_title": "e) Google-Konto",
+    "s3_sub5_p1": "In den Apps für Computer kannst du dein Google-Konto verbinden. {{BRAND_NAME}} liest dann über die Schnittstellen von Google deine Kalendereinträge und die Liste deiner Kalender und trägt Termine ein, die du in der App anlegst oder änderst. Schaltest du „Stundenplan und Tests in Google eintragen“ ein, legt die App dafür einen eigenen Kalender an und bearbeitet nur diesen. Auf Gmail greift die App über die Anmeldung mit Google nur in Installationen zu, die dafür eingerichtet sind. Dort kann sie deine Mails lesen, in deinem Namen senden und löschen. Sonst verbindest du Gmail mit einem App-Passwort über deinen E-Mail-Anbieter, wie in d) beschrieben.",
+    "s3_sub5_p2": "Diese Daten nutzt die App nur, um sie dir auf deinem Gerät zu zeigen und dort zu bearbeiten. Was du änderst, schreibt sie in dein Google-Konto zurück. Eine Kopie der Kalendereinträge und die Anmeldung bei Google speichert sie verschlüsselt auf deinem Gerät. An Server des Anbieters oder an Dritte gibt die App diese Daten nicht weiter, und sie nutzt sie nicht für Werbung.",
+    "s3_sub5_p3": "Trennst du dein Google-Konto in der App unter Einstellungen, Konten, löscht sie die Anmeldung und die Kopie auf deinem Gerät. Die Freigabe selbst widerrufst du jederzeit unter [myaccount.google.com/permissions](https://myaccount.google.com/permissions).",
+    "s3_sub5_p4": "Die Nutzung und Übertragung von Informationen, die {{BRAND_NAME}} über Google-APIs erhält, an andere Apps hält sich an die [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), einschließlich der Anforderungen zur eingeschränkten Nutzung (Limited Use requirements).",
     "s4_title": "§ 4 Datenverarbeitung auf der Website",
     "s4_p1": "Beim Besuch unserer Website werden durch den Hosting-Anbieter automatisch technische Zugriffsdaten erfasst (sog. Server-Logfiles). Diese können umfassen:",
     "s4_list1": "IP-Adresse (anonymisiert)",

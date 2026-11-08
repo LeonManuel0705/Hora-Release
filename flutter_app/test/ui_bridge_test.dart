@@ -95,6 +95,7 @@ void main() {
     for (final path in ['/hub', '/hub/calendar', '/hub/settings']) {
       final data = pageData((await bridge().handle(UiBridgeRequest(method: 'GET', path: path, navigate: true))).body as String);
       expect((data['status'] as Map)['googleConfigured'], isFalse, reason: path);
+      expect((data['status'] as Map)['gmailViaGoogle'], isFalse, reason: path);
     }
     final settings = pageData((await bridge().handle(const UiBridgeRequest(method: 'GET', path: '/hub/settings', navigate: true))).body as String);
     expect(((settings['page'] as Map)['accounts'] as Map)['google'], containsPair('unavailable', true));

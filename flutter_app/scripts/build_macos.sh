@@ -6,6 +6,10 @@ source "$(dirname "$0")/build_common.sh"
 BUILD_MODE="${1:---release}"
 REPO_ROOT="$(dirname "$PROJECT_DIR")"
 
+# GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in the environment give
+# the build a Google sign-in for the calendar. Without them it has none.
+python3 "$REPO_ROOT/scripts/write_google_client.py"
+
 # Apple silicon Macs start this frozen server and need no Python. Intel Macs
 # keep the Python fallback bundled below. MACOS_FROZEN_BACKEND=0 skips the
 # freeze for a quicker local build. It runs first, so a failed freeze leaves
