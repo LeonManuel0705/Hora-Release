@@ -247,25 +247,30 @@ def fare_view(journey):
     rides = [leg for leg in journey.get("legs") or [] if leg.get("line")]
     if not rides:
         return None
-    single = short = net = zones = None
+    singles, short, net, zones = [], None, None, None
     for group in journey.get("tickets") or []:
         name = str(group.get("name") or "")
         short_trip, city = SHORT_TRIP.fullmatch(name), CITY_SINGLE.fullmatch(name)
         if short_trip:
             short = short or _fare_ticket(group, short_trip.group(1))
-        elif city and not single:
-            single = _fare_ticket(group, f"{city.group(1)} {city.group(2).replace('-', '')}")
+        elif city:
+            area = city.group(2).replace("-", "")
+            single = None if net else _fare_ticket(group, f"{city.group(1)} {area}")
             if single:
-                net, zones = city.group(1), city.group(2).replace("-", "")
-        elif name.endswith(": Einzelfahrausweis") and not single:
+                singles.append(single)
+                net, zones = city.group(1), area
+        elif name.endswith(": Einzelfahrausweis"):
             single = _fare_ticket(group, name[: name.rfind(":")])
-    if not single:
+            if single:
+                singles.append(single)
+    if not singles:
         return None
     return {
         "start": rides[0].get("plannedDeparture") or rides[0].get("departure"),
         "end": rides[-1].get("plannedArrival") or rides[-1].get("arrival"),
         "lines": [str((leg.get("line") or {}).get("name") or "") for leg in rides],
-        "single": single,
+        "stops": [str((rides[0].get("origin") or {}).get("name") or ""), str((rides[-1].get("destination") or {}).get("name") or "")],
+        "single": min(singles, key=lambda single: single["price"]),
         "short": short,
         "net": net,
         "zones": zones,
