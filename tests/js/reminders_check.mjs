@@ -55,6 +55,8 @@ const { data } = await import(pathToFileURL(resolve(here, "../../app/static/app/
 
 const prefs = { ...readPrefs({ notify: { enabled: true, quiet: { from: "22:00", to: "07:00" } } }) };
 const task = (id, title, date, extra = {}) => ({ id, title, date, done: false, minutes: 20, ...extra });
+const deadline = (id, kind, date) => ({ id, kind, title: "Analysis", subject: null, date, detail: "", status: "offen" });
+const deadlines = (at, given = prefs) => dueReminders(given, new Date(`${at}:00`)).filter((item) => item.key.startsWith("deadline:")).map((item) => [item.key, item.body]);
 const morning = (time = "07:00") => dueReminders(prefs, new Date(`2026-11-06T${time}:00`)).filter((item) => item.key.startsWith("tasks:"));
 
 const tests = {
@@ -84,6 +86,35 @@ const tests = {
     data.tasks = [task("3", "Referat", "2026-11-05", { dueTime: "18:00" }), task("4", "Abgabe", "2026-11-06", { dueTime: "18:00" })];
     const at = dueReminders(prefs, new Date("2026-11-06T18:01:00")).filter((item) => item.key.startsWith("task:"));
     assert.deepEqual(at.map((item) => item.title), ["Abgabe"]);
+  },
+  "a test reminds at six the evening before and in the morning of its day, under the same keys"() {
+    data.deadlines = [deadline("t1", "Test", "2026-11-10")];
+    for (const time of ["07:00", "12:00", "17:59"]) assert.deepEqual(deadlines(`2026-11-09T${time}`), [], time);
+    assert.deepEqual(deadlines("2026-11-09T18:00"), [["deadline:t1:2026-11-09", "Morgen"]]);
+    assert.deepEqual(deadlines("2026-11-09T21:30"), [["deadline:t1:2026-11-09", "Morgen"]], "an open page still names a missed evening");
+    assert.deepEqual(deadlines("2026-11-09T22:00"), []);
+    assert.deepEqual(deadlines("2026-11-10T06:59"), []);
+    assert.deepEqual(deadlines("2026-11-10T07:00"), [["deadline:t1:2026-11-10", "Heute"]]);
+  },
+  "homework and a longer lead remind every evening before the day"() {
+    data.deadlines = [deadline("h1", "Hausaufgabe", "2026-11-10"), deadline("k1", "Klausur", "2026-11-12")];
+    const longer = readPrefs({ notify: { enabled: true, categories: { tests: { on: true, lead: 3 } } } });
+    assert.deepEqual(deadlines("2026-11-09T07:00", longer), []);
+    assert.deepEqual(deadlines("2026-11-09T18:00", longer), [["deadline:h1:2026-11-09", "Fällig morgen"], ["deadline:k1:2026-11-09", "In 3 Tagen"]]);
+    assert.deepEqual(deadlines("2026-11-10T07:00", longer), [["deadline:h1:2026-11-10", "Fällig heute"]]);
+    assert.deepEqual(deadlines("2026-11-11T18:00", longer), [["deadline:k1:2026-11-11", "Morgen"]]);
+    assert.deepEqual(deadlines("2026-11-12T07:00", longer), [["deadline:k1:2026-11-12", "Heute"]]);
+  },
+  "with six in the quiet hours the days before remind in the morning as before"() {
+    data.deadlines = [deadline("t1", "Test", "2026-11-10"), deadline("h1", "Hausaufgabe", "2026-11-10")];
+    const early = readPrefs({ notify: { enabled: true, quiet: { from: "17:30", to: "07:30" } } });
+    assert.deepEqual(deadlines("2026-11-09T07:29", early), []);
+    assert.deepEqual(deadlines("2026-11-09T07:30", early), [["deadline:t1:2026-11-09", "Morgen"], ["deadline:h1:2026-11-09", "Fällig morgen"]]);
+    const fromSix = readPrefs({ notify: { enabled: true, quiet: { from: "18:00", to: "19:00" } } });
+    assert.equal(deadlines("2026-11-09T00:00", fromSix).length, 2);
+    const untilSix = readPrefs({ notify: { enabled: true, quiet: { from: "17:00", to: "18:00" } } });
+    assert.deepEqual(deadlines("2026-11-09T12:00", untilSix), []);
+    assert.equal(deadlines("2026-11-09T18:00", untilSix).length, 2);
   },
 };
 

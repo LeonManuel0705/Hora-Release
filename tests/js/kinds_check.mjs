@@ -58,7 +58,7 @@ const { ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, assessmentCoun
 const { dueReminders, readPrefs } = await import(script("reminders.js"));
 
 const kinds = (...names) => names.map((kind) => ({ kind }));
-const monday = new Date("2026-10-12T12:00:00");
+const monday = new Date("2026-10-12T18:00:00");
 const reminded = (notify) => dueReminders(readPrefs({ notify: { enabled: true, ...notify } }), monday).map((reminder) => [reminder.title, reminder.body]);
 
 const tests = {

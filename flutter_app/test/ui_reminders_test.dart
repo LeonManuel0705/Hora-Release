@@ -155,7 +155,7 @@ void main() {
     expect(_clock(open.at), '2026-11-09 06:58');
   });
 
-  test('a test is announced the day before and on the day, at the first minute after the quiet hours, homework the same', () {
+  test('a test is announced at six the evening before and on its day at the first minute after the quiet hours, homework the same', () {
     final data = _data(deadlines: [
       {'id': 'test-1', 'kind': 'Test', 'title': 'Analysis', 'subject': '1', 'date': '2026-11-11', 'time': '08:00', 'detail': '- Ableitungen\n- Kurvendiskussion;', 'status': 'offen'},
       {'id': 'hw-1', 'kind': 'Hausaufgabe', 'title': 'Gedichtanalyse', 'subject': '2', 'date': '2026-11-10', 'detail': '', 'status': 'offen'},
@@ -163,9 +163,9 @@ void main() {
     ]);
     final plan = _plan(data, _store(), sunday, days: 4).where((item) => item.key.startsWith('deadline:')).toList();
     expect([for (final item in plan) '${_clock(item.at)} ${item.key}'], [
-      '2026-11-09 07:00 deadline:hw-1:2026-11-09',
+      '2026-11-09 18:00 deadline:hw-1:2026-11-09',
       '2026-11-10 07:00 deadline:hw-1:2026-11-10',
-      '2026-11-10 07:00 deadline:test-1:2026-11-10',
+      '2026-11-10 18:00 deadline:test-1:2026-11-10',
       '2026-11-11 07:00 deadline:test-1:2026-11-11',
     ]);
     expect(plan[0].title, 'Hausaufgabe: Gedichtanalyse');
@@ -176,7 +176,7 @@ void main() {
     expect(plan[3].body, 'Heute um 8:00, Mathe\nLernstoff: Ableitungen, Kurvendiskussion');
   });
 
-  test('a longer lead reminds every day up to the date, and the time follows the quiet hours like the page', () {
+  test('a longer lead reminds every evening up to the date, and six inside the quiet hours moves those to the morning', () {
     final data = _data(deadlines: [
       {'id': 'exam-1', 'kind': 'Klausur', 'title': 'Klausur', 'subject': null, 'date': '2026-11-12', 'detail': '', 'status': 'offen'},
     ]);
@@ -185,18 +185,23 @@ void main() {
     });
     final plan = _plan(data, store, sunday, days: 5).where((item) => item.kind == 'tests').toList();
     expect([for (final item in plan) '${_clock(item.at)} ${item.body}'], [
-      '2026-11-09 07:00 In 3 Tagen',
-      '2026-11-10 07:00 In 2 Tagen',
-      '2026-11-11 07:00 Morgen',
+      '2026-11-09 18:00 In 3 Tagen',
+      '2026-11-10 18:00 In 2 Tagen',
+      '2026-11-11 18:00 Morgen',
       '2026-11-12 07:00 Heute',
     ]);
-    List<String> times(Map<String, Object?> quiet) => [
-          for (final item in _plan(data, _store(notify: {'quiet': quiet}), sunday, days: 5).where((item) => item.kind == 'tests')) _clock(item.at),
+    List<String> times(Map<String, Object?> quiet, {int lead = 1}) => [
+          for (final item in _plan(data, _store(notify: {'quiet': quiet, 'categories': {'tests': {'on': true, 'lead': lead}}}), sunday, days: 5)
+            .where((item) => item.kind == 'tests'))
+            _clock(item.at),
         ];
     expect(times({'from': '17:00', 'to': '07:30'}), ['2026-11-11 07:30', '2026-11-12 07:30']);
-    expect(times({'from': '23:00', 'to': '06:00'}), ['2026-11-11 06:00', '2026-11-12 06:00']);
-    expect(times({'from': '13:00', 'to': '14:00'}), ['2026-11-11 00:00', '2026-11-12 00:00']);
-    expect(times({'from': '08:00', 'to': '08:00'}), ['2026-11-11 00:00', '2026-11-12 00:00'], reason: 'equal times mean no quiet hours');
+    expect(times({'from': '17:00', 'to': '07:30'}, lead: 3), ['2026-11-09 07:30', '2026-11-10 07:30', '2026-11-11 07:30', '2026-11-12 07:30']);
+    expect(times({'from': '18:00', 'to': '19:00'}), ['2026-11-11 00:00', '2026-11-12 00:00'], reason: 'quiet hours from six on cover six');
+    expect(times({'from': '17:00', 'to': '18:00'}), ['2026-11-11 18:00', '2026-11-12 00:00'], reason: 'quiet hours until six leave six free');
+    expect(times({'from': '23:00', 'to': '06:00'}), ['2026-11-11 18:00', '2026-11-12 06:00']);
+    expect(times({'from': '13:00', 'to': '14:00'}), ['2026-11-11 18:00', '2026-11-12 00:00']);
+    expect(times({'from': '08:00', 'to': '08:00'}), ['2026-11-11 18:00', '2026-11-12 00:00'], reason: 'equal times mean no quiet hours');
   });
 
   test('an event uses its own minutes when it has them, the category lead otherwise', () {
@@ -380,19 +385,24 @@ void main() {
       markTestSkipped('node is not installed');
       return;
     }
-    for (final quiet in [null, {'from': '08:00', 'to': '08:00'}, {'from': '23:00', 'to': '06:00'}]) {
+    for (final quiet in [null, {'from': '08:00', 'to': '08:00'}, {'from': '23:00', 'to': '06:00'}, {'from': '17:30', 'to': '07:00'}, {'from': '18:00', 'to': '06:30'}]) {
       await _compareWithPage(quiet);
     }
     await _compareWithPage(null, eventsOn: false);
+    for (final quiet in [null, {'from': '17:30', 'to': '07:00'}]) {
+      await _compareWithPage(quiet, leads: {'tests': {'on': true, 'lead': 3}, 'homework': {'on': true, 'lead': 2}});
+    }
   });
 }
 
-Future<void> _compareWithPage(Map<String, String>? quiet, {bool eventsOn = true}) async {
+Future<void> _compareWithPage(Map<String, String>? quiet, {bool eventsOn = true, Map<String, Object?> leads = const {}}) async {
   final data = _data(
     deadlines: [
       {'id': 'test-1', 'kind': 'Test', 'title': 'Analysis', 'subject': '1', 'date': '2026-11-11', 'time': '08:00', 'detail': '- Ableitungen\n- Kurven', 'status': 'offen'},
       {'id': 'hw-1', 'kind': 'Hausaufgabe', 'title': 'Gedicht', 'subject': '2', 'date': '2026-11-10', 'detail': '', 'status': 'offen'},
       {'id': 'hw-2', 'kind': 'Hausaufgabe', 'title': 'Abgegeben', 'subject': '2', 'date': '2026-11-10', 'detail': '', 'status': 'abgegeben'},
+      {'id': 'exam-1', 'kind': 'Klausur', 'title': 'Erörterung', 'subject': '2', 'date': '2026-11-16', 'time': '09:50', 'detail': 'Lyrik', 'status': 'offen'},
+      {'id': 'hw-3', 'kind': 'Hausaufgabe', 'title': 'Lesen', 'subject': null, 'date': '2026-11-13', 'detail': '', 'status': 'offen'},
     ],
     events: [
       {'id': 'loc-a', 'date': '2026-11-09', 'start': '15:00', 'end': '16:30', 'title': 'Zahnarzt', 'place': 'Praxis', 'kind': 'private'},
@@ -421,7 +431,7 @@ Future<void> _compareWithPage(Map<String, String>? quiet, {bool eventsOn = true}
   );
   final store = _store(notify: {
     if (quiet != null) 'quiet': quiet,
-    if (!eventsOn) 'categories': {'events': {'on': false, 'lead': 15}},
+    'categories': {...leads, if (!eventsOn) 'events': {'on': false, 'lead': 15}},
   }, extra: {
     'app-subjects': {
       'items': {'1': {'name': 'Mathematik'}},
@@ -439,14 +449,17 @@ Future<void> _compareWithPage(Map<String, String>? quiet, {bool eventsOn = true}
   final phone = _byKey(_plan(data, store, DateTime(2026, 11, 8, 23, 59), days: 10));
   expect(page.keys.map((key) => key.split(':').first).toSet(), {'lesson', 'deadline', 'event', 'task', 'tasks'});
   if (eventsOn) expect(page.keys, containsAll(['event:loc-w~2026-11-09:2026-11-09', 'event:loc-j~2026-11-12:2026-11-12']));
-  expect(page.keys, contains('event:loc-r:2026-11-11'));
+  final sixQuiet = quiet != null && ['17:30', '18:00'].contains(quiet['from']);
+  if (!sixQuiet) expect(page.keys, contains('event:loc-r:2026-11-11'));
   expect(page.keys.where((key) => key.contains('loc-w~2026-11-16') || key.contains('loc-n') || key.contains('loc-d')), isEmpty);
   expect(phone.keys.toSet(), page.keys.toSet());
+  expect(page['deadline:test-1:2026-11-10']?['minute'], sixQuiet ? isNot(18 * 60) : 18 * 60, reason: '$quiet');
+  expect(page['deadline:test-1:2026-11-11']?['minute'], isNot(18 * 60), reason: '$quiet');
   for (final MapEntry(:key, value: shown) in page.entries) {
     final planned = phone[key]!;
     expect(planned.title, shown['title'], reason: '$key $quiet $eventsOn');
     expect(planned.body, shown['body'], reason: '$key $quiet $eventsOn');
     final day = DateTime.parse(shown['day'] as String);
-    expect(planned.at, DateTime(day.year, day.month, day.day, 0, shown['minute'] as int), reason: '$key $quiet');
+    expect(planned.at, DateTime(day.year, day.month, day.day, 0, shown['minute'] as int), reason: '$key $quiet $leads');
   }
 }

@@ -8,6 +8,7 @@ const TICK = 30000;
 const GRACE = 5;
 const KEEP_DAYS = 3;
 const MORNING = 7 * 60;
+const EVENING = 18 * 60;
 const NOTE_LIMIT = 160;
 
 export const CATEGORY_DEFAULTS = {
@@ -99,7 +100,10 @@ function lessonReminders(prefs, day, minute) {
     }));
 }
 
-function deadlineReminders(prefs, day) {
+// The days before a test or a homework remind at six in the evening and the day itself in the morning. When six falls into
+// the quiet hours, every day reminds in the morning, and an open page still names a missed evening until the quiet hours.
+function deadlineReminders(prefs, day, minute) {
+  const evening = !isQuiet(EVENING, prefs.quiet);
   const reminders = [];
   for (const item of data.deadlines || []) {
     const homework = item.kind === "Hausaufgabe";
@@ -107,6 +111,7 @@ function deadlineReminders(prefs, day) {
     const days = dayDiff(day, item.date);
     if (!category.on || days < 0 || days > (Number(category.lead) || 1)) continue;
     if (homework && item.status === "abgegeben") continue;
+    if (days > 0 && evening && minute < EVENING) continue;
     reminders.push({
       key: `deadline:${item.id}:${isoDate(day)}`,
       title: `${item.kind}: ${item.title}`,
@@ -182,7 +187,7 @@ export function dueReminders(prefs, date) {
   if (isQuiet(minute, prefs.quiet)) return timer;
   return [
     ...(prefs.categories.lessons.on ? lessonReminders(prefs, day, minute) : []),
-    ...deadlineReminders(prefs, day),
+    ...deadlineReminders(prefs, day, minute),
     ...eventReminders(prefs, day, minute),
     ...(prefs.categories.tasks.on ? taskReminders(day, minute) : []),
     ...timer,

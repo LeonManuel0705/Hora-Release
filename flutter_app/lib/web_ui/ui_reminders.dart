@@ -10,6 +10,7 @@ import 'ui_recurrence.dart';
 // what to remind of. Keys are the page's keys, which lets the bridge drop the page's copy.
 
 const uiReminderMorning = 7 * 60;
+const uiReminderEvening = 18 * 60;
 const _noteLimit = 160;
 
 class UiReminder {
@@ -91,6 +92,9 @@ class UiReminderPrefs {
   int? get earliest => _awakeFrom(0);
 
   int? get morning => _awakeFrom(uiReminderMorning);
+
+  /// The days before a test or a homework remind at six in the evening, or at [earliest] when six is quiet.
+  int? get evening => quiet(uiReminderEvening) ? earliest : uiReminderEvening;
 }
 
 Map<String, Object?> _map(Object? value) => value is Map ? value.cast<String, Object?>() : const {};
@@ -353,7 +357,7 @@ class _Planner {
       final body = homework
           ? 'Fällig ${_whenText(days)}$course'
           : '${_capitalized(_whenText(days))}${time.isEmpty ? '' : ' um ${_hm(time)}'}$course${_noteOf(item)}';
-      _add('deadline:${item['id']}:${isoOf(day)}', day, prefs.earliest, '${_text(item['kind'])}: ${_text(item['title'])}', body, homework ? 'homework' : 'tests');
+      _add('deadline:${item['id']}:${isoOf(day)}', day, days > 0 ? prefs.evening : prefs.earliest, '${_text(item['kind'])}: ${_text(item['title'])}', body, homework ? 'homework' : 'tests');
     }
   }
 
