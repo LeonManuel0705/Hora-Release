@@ -3,6 +3,7 @@ import { icon } from "../lib/icons.js";
 import { reveals } from "../lib/motion.js";
 
 const mailLink = `<a class="prose-link" href="mailto:${contactMail}">${contactMail}</a>`;
+const linked = (text) => escapeHtml(text).replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a class="prose-link" href="$2" target="_blank" rel="noopener">$1</a>');
 
 function sections(ns) {
   const data = raw(ns) || {};
@@ -41,7 +42,7 @@ function renderSection(ns, id, entries) {
       if (link && key === "p1" && ns === "terms" && id === "s6") {
         html += `<p>${escapeHtml(value)} <a class="prose-link" href="/datenschutz">${escapeHtml(link[1])}</a>.</p>`;
       } else {
-        html += `<p>${escapeHtml(value)}</p>`;
+        html += `<p>${linked(value)}</p>`;
       }
       if (ns === "terms" && id === "s8" && key === "p1") html += `<p>${mailLink}</p>`;
       if (ns === "privacy_policy" && id === "s7" && key === "p1") html += `<p class="legal-name"><strong>${escapeHtml(t("privacy_policy.s1_name"))}</strong></p><p>${mailLink}</p>`;

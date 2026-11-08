@@ -535,6 +535,13 @@
         "tone": "ok"
       },
       {
+        "icon": "calendar",
+        "to": "Google",
+        "what": "calendar events and the list of your calendars, plus a calendar of its own for the timetable when you switch it on. Gmail only in installations set up for it",
+        "when": "when you connect your Google account (computer)",
+        "tone": "ok"
+      },
+      {
         "icon": "book-check",
         "to": "Wikipedia",
         "what": "the term you ask the assistant about",
@@ -742,7 +749,7 @@
   "privacy_policy": {
     "nav_title": "Privacy Policy",
     "hero_title": "Privacy Policy",
-    "hero_date": "Effective: November 7, 2026",
+    "hero_date": "Effective: November 8, 2026",
     "s1_title": "§ 1 Data Controller",
     "s1_p1": "The data controller within the meaning of the General Data Protection Regulation (GDPR) is:",
     "s1_name": "Leon Manuel Töpper",
@@ -771,6 +778,12 @@
     "s3_list9": "This website: the request for the latest version, at start and then every two hours (by itself, apps for computers and Android)",
     "s3_list11": "The websites of your bookmarks: a request to the page, to show its logo next to the bookmark",
     "s3_list12": "This website or GitHub: the download of the new version of the App when you tap “Aktualisieren” (update) in the App (Android)",
+    "s3_list13": "Google: your calendar and, where set up, Gmail, when you connect your Google account (apps for computers), see e)",
+    "s3_sub5_title": "e) Google Account",
+    "s3_sub5_p1": "In the apps for computers you can connect your Google account. {{BRAND_NAME}} then reads your calendar events and the list of your calendars through Google's APIs and adds the events you create or change in the App. If you switch on “Stundenplan und Tests in Google eintragen” (add timetable and tests to Google), the App creates a calendar of its own for this and edits only that one. The App reaches Gmail through the Google sign-in only in installations set up for it. There it can read your mail, send mail on your behalf and delete it. Otherwise you connect Gmail with an app password through your email provider, as described in d).",
+    "s3_sub5_p2": "The App uses this data only to show it to you on your device and to let you edit it there. What you change, it writes back to your Google account. It stores a copy of the calendar events and the Google sign-in encrypted on your device. The App does not pass this data on to the provider's servers or to third parties, and it does not use it for advertising.",
+    "s3_sub5_p3": "If you disconnect your Google account in the App under Einstellungen, Konten (Settings, Accounts), it deletes the sign-in and the copy on your device. You can revoke the access itself at any time at [myaccount.google.com/permissions](https://myaccount.google.com/permissions).",
+    "s3_sub5_p4": "{{BRAND_NAME}}'s use and transfer of information received from Google APIs to any other app will adhere to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.",
     "s4_title": "§ 4 Data Processing on the Website",
     "s4_p1": "When visiting our Website, the hosting provider automatically collects technical access data (server log files). These may include:",
     "s4_list1": "IP address (anonymized)",
