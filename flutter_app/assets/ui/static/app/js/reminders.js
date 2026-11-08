@@ -1,4 +1,4 @@
-import { BRAND, LOCAL_KEYS, activeSubjectKeys, addDays, data, dayDiff, hasPlan, hm, isoDate, lessonsFor, minutesOf, startOfDay, storage, subject, toMin } from "./core.js";
+import { BRAND, LOCAL_KEYS, addDays, data, dayDiff, hm, isoDate, lessonsFor, minutesOf, startOfDay, storage, subject, toMin } from "./core.js";
 import { expandEvents } from "./recurrence.js";
 import { endNotice, read as readPomodoro, subscribe } from "./pomodoro-timer.js";
 
@@ -24,8 +24,9 @@ export function readPrefs(saved = storage.get(LOCAL_KEYS.prefs)) {
   const categories = Object.fromEntries(
     Object.entries(CATEGORY_DEFAULTS).map(([key, base]) => [key, { ...base, ...(notify.categories?.[key] || {}) }]),
   );
+  // Whoever never chose has reminders on, like NOTIFY_DEFAULTS and uiNotifyDefaults(); a stored choice stays as it is.
   return {
-    enabled: notify.enabled === true,
+    enabled: notify.enabled !== false,
     sound: notify.sound !== false,
     quiet: { from: notify.quiet?.from || "22:00", to: notify.quiet?.to || "07:00" },
     categories,
@@ -39,15 +40,7 @@ export function switchRemindersOn() {
   document.dispatchEvent(new CustomEvent("reminders:on"));
 }
 
-const looksNew = () => !!data && !hasPlan() && !activeSubjectKeys().length && ![data.tasks, data.taskPool, data.deadlines, data.events].some((list) => list?.length);
-
-// Reminders start on for someone new. The choice is stored right away, so it does not change once their data comes in,
-// and whoever used the app before keeps reminders off until they turn them on.
-export function adoptDefault() {
-  const saved = storage.get(LOCAL_KEYS.prefs);
-  if (saved?.notify && "enabled" in saved.notify) return;
-  if (looksNew()) switchRemindersOn();
-}
+export const permissionState = () => ("Notification" in window ? Notification.permission : "unsupported");
 
 export const canAsk = () => "Notification" in window && Notification.permission === "default" && readPrefs().enabled;
 
@@ -236,7 +229,6 @@ function tick() {
 }
 
 export function initReminders() {
-  adoptDefault();
   if (!("Notification" in window) || !data) return;
   window.addEventListener("app:note", (event) => {
     if (event.detail?.type === "homework") askAtFirstEntry();

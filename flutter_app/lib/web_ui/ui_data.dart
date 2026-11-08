@@ -41,7 +41,7 @@ const uiMarks = [6.0, 5.3, 5.0, 4.7, 4.3, 4.0, 3.7, 3.3, 3.0, 2.7, 2.3, 2.0, 1.7
 const iservPrefix = 'iserv.';
 
 Map<String, Object?> uiNotifyDefaults() => {
-      'enabled': false,
+      'enabled': true,
       'sound': true,
       'quiet': {'from': '22:00', 'to': '07:00'},
       'categories': [

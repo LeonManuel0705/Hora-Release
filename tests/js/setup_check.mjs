@@ -131,21 +131,24 @@ const tests = {
     assert.equal((await coreWith({ user: { state: "", grade: 12, iserv: "" } }, { "app-settings": { school: { grade: 8 } } })).gradeScale(), "grades");
     assert.equal((await coreWith({})).gradeScale(), "points");
   },
-  "reminders start on for someone new and the choice is stored"() {
-    reminders.adoptDefault();
-    assert.equal(core.storage.get("app-settings")?.notify?.enabled, true);
-    assert.equal(reminders.readPrefs().enabled, true);
-  },
-  "whoever used the app before keeps reminders off until they turn them on"() {
+  "reminders are on for whoever never chose, new or with data, and nothing is stored for them"() {
     core.storage.remove("app-settings");
+    assert.equal(reminders.readPrefs().enabled, true);
     core.data.tasks.push({ id: "t1", title: "Vokabeln", done: false });
-    reminders.adoptDefault();
+    reminders.initReminders();
     assert.equal(core.storage.get("app-settings"), null);
-    assert.equal(reminders.readPrefs().enabled, false);
-    core.storage.set("app-settings", { notify: { enabled: false } });
+    assert.equal(reminders.readPrefs().enabled, true);
+    assert.equal(reminders.readPrefs({ school: { grade: 12 }, notify: { sound: false } }).enabled, true);
     core.data.tasks.length = 0;
-    reminders.adoptDefault();
-    assert.equal(core.storage.get("app-settings").notify.enabled, false);
+  },
+  "a stored choice stays as it is, on or off"() {
+    for (const enabled of [false, true]) {
+      core.storage.set("app-settings", { notify: { enabled } });
+      reminders.initReminders();
+      assert.equal(core.storage.get("app-settings").notify.enabled, enabled);
+      assert.equal(reminders.readPrefs().enabled, enabled);
+    }
+    core.storage.remove("app-settings");
   },
   "a choice of single periods gives the classic school day"() {
     const day = plan.blockTimes({ length: 45, start: "08:00", count: 8, small: 5, big: 20 });

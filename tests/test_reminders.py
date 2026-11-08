@@ -36,3 +36,10 @@ def test_every_page_starts_the_reminders():
 def test_the_phone_app_ships_the_same_reminders():
     copy = ROOT / 'flutter_app' / 'assets' / 'ui' / 'static' / 'app' / 'js' / 'reminders.js'
     assert copy.read_text(encoding='utf-8') == SOURCE.read_text(encoding='utf-8')
+
+
+def test_reminders_are_on_for_whoever_never_chose_on_every_backend():
+    assert ui_data.NOTIFY_DEFAULTS['enabled'] is True
+    dart = (ROOT / 'flutter_app' / 'lib' / 'web_ui' / 'ui_data.dart').read_text(encoding='utf-8')
+    assert re.search(r"uiNotifyDefaults\(\) => \{\s*'enabled': true,", dart)
+    assert 'enabled: notify.enabled !== false,' in SOURCE.read_text(encoding='utf-8')

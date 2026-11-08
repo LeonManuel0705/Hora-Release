@@ -65,9 +65,17 @@ String _clock(DateTime at) => '${at.year}-${at.month.toString().padLeft(2, '0')}
 void main() {
   final sunday = DateTime(2026, 11, 8, 12);
 
-  test('nothing is planned while reminders are off', () {
+  test('nothing is planned while reminders are switched off, and whoever never chose has them on', () {
     expect(_plan(_data(), {'app-settings': {'notify': {'enabled': false}}}, sunday), isEmpty);
-    expect(_plan(_data(), const {}, sunday), isEmpty);
+    final keys = [for (final item in _plan(_data(), _store(), sunday)) item.key];
+    expect(keys, isNotEmpty);
+    for (final store in <Map<String, Object?>>[
+      const {},
+      {'app-settings': {'school': {'grade': 12}}},
+      {'app-settings': {'notify': {'sound': true, 'enabled': null}}},
+    ]) {
+      expect([for (final item in _plan(_data(), store, sunday)) item.key], keys, reason: '$store');
+    }
   });
 
   test('a lesson is announced its lead minutes before, in the words of the page', () {

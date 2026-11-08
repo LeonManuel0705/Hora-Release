@@ -6,7 +6,7 @@ import { animates, travels, flipKeyed, exitInPlace, crossfade, token, ms } from 
 import { toast, parseNote, cleanTitle, phraseAt, typing, shortcutsEnabled, overlayOpen, registerSearch, pageUrl, placeNear, clampSheet } from "../shell.js";
 import { events as eventApi, debounced, serverId } from "../api.js";
 import { expandEvents, normalizeRecurrence, splitOccurrence, occurrenceId, ruleText } from "../recurrence.js";
-import { readPrefs, eventMinutes } from "../reminders.js";
+import { readPrefs, eventMinutes, permissionState } from "../reminders.js";
 
 const typedBefore = new Map();
 const saveText = debounced(700, (key, id, changes) => {
@@ -929,13 +929,21 @@ function repeatHtml(item) {
   return `<div class="field"><label class="field-label" for="calPanelRepeat">Wiederholen</label><div class="cal-row"><select class="field-control cal-select" id="calPanelRepeat">${options}</select>${endControls}</div></div>`;
 }
 
+const PERMISSION_NOTES = {
+  default: "Damit sie kommt, erlaub Erinnerungen in den Einstellungen.",
+  denied: "Erinnerungen sind blockiert. Freigeben kannst du sie in den Einstellungen des Geräts oder Browsers.",
+  unsupported: "Dieser Browser kann keine Erinnerungen zeigen.",
+};
+const reminds = (prefs) => prefs.enabled && !["denied", "unsupported"].includes(permissionState());
+
 function reminderHtml(item) {
   const prefs = readPrefs();
   const fallback = prefs.categories.events.on ? reminderText(Number(prefs.categories.events.lead) || 15) : "aus";
   const value = item.reminderMinutes ?? "";
   const known = value === "" || REMINDERS.some(([minutes]) => minutes === value);
   const options = [`<option value=""${value === "" ? " selected" : ""}>Standard (${fallback})</option>`, ...REMINDERS.map(([minutes, label]) => `<option value="${minutes}"${minutes === value ? " selected" : ""}>${label}</option>`), known ? "" : `<option value="${value}" selected>${reminderText(value)}</option>`].join("");
-  const note = prefs.enabled ? "" : `<p class="cal-hint">Erinnerungen sind in den Einstellungen aus.</p>`;
+  const text = prefs.enabled ? PERMISSION_NOTES[permissionState()] : "Erinnerungen sind in den Einstellungen aus.";
+  const note = text ? `<p class="cal-hint">${text}</p>` : "";
   return `<div class="field"><label class="field-label" for="calPanelReminder">Erinnerung</label><select class="field-control cal-select" id="calPanelReminder">${options}</select>${note}</div>`;
 }
 
@@ -996,7 +1004,7 @@ function panelRead(item) {
     item.calendarName ? ["Kalender", calendarLine(item)] : null,
     item.place ? ["Ort", `${esc(item.place)}${routeLink(item.place) ? `<div class="cal-route-slot">${routeLink(item.place)}</div>` : ""}`] : null,
     item.notes ? ["Beschreibung", `<span class="cal-notes-text">${linked(plainText(item.notes))}</span>`] : null,
-    item.start ? ["Erinnerung", esc(reminderText(readPrefs().enabled ? eventMinutes(item, readPrefs().categories.events) : -1))] : null,
+    item.start ? ["Erinnerung", esc(reminderText(reminds(readPrefs()) ? eventMinutes(item, readPrefs().categories.events) : -1))] : null,
   ];
   return `${panelHead("is-event", "calendar-days", item.title, { style: ` style="--k:${esc(colorOf(item))}"` })}
     ${factsHtml(facts)}${guestsHtml(item)}${linksHtml(item)}

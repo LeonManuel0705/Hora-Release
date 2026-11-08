@@ -38,7 +38,7 @@ GRADE_TYPES = ('klausur', 'test', 'muendlich', 'vortrag', 'sonstiges')
 WRITTEN_DAYS = 183
 EVENT_KINDS = {'school': 'school', 'training': 'training'}
 NOTIFY_DEFAULTS = {
-    'enabled': False,
+    'enabled': True,
     'sound': True,
     'quiet': {'from': '22:00', 'to': '07:00'},
     'categories': [
