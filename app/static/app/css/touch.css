@@ -12,8 +12,10 @@
 
 /* The title of a row stands for the whole row, as the row link already does. */
 .is-touch .row.is-interactive .row-open::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+/* The subject link under a title reaches from the title down into the gap to the next row, so neither takes from the other. */
+.is-touch .row-meta:has(> .subject-filter) { margin-top: 6px; }
 .is-touch .row-meta .subject-filter { position: relative; z-index: 1; }
-.is-touch .row-meta .subject-filter::after { content: ""; position: absolute; inset: -3px -6px -9px; }
+.is-touch .row-meta .subject-filter::after { content: ""; position: absolute; inset: -6px -8px -20px; }
 
 /* A hit area of 44 by 44 px around the middle of a smaller control. A side that is long enough keeps its edge. */
 .is-touch :is(.btn, .segmented button, .text-button, .pill, .empty-action, .section-link, .switch[role="switch"], .brand, .chip-x, button.chip) { position: relative; }
@@ -24,8 +26,24 @@
 }
 .is-touch .section-head { margin-bottom: 10px; }
 /* Wrapped rows of pills and chips get room for those hit areas. */
-.is-touch :is(.about-links, .room-chips) { row-gap: 12px; }
+.is-touch :is(.about-links, .room-chips, .field-body) { row-gap: 12px; }
 .is-touch .chips { row-gap: 16px; }
+.is-touch .segmented label::after { content: ""; position: absolute; inset: min(0px, calc((100% - 44px) / 2)) 0; }
+.is-touch .stepper-button { position: relative; }
+.is-touch .stepper-button::after { content: ""; position: absolute; inset: min(0px, calc((100% - 44px) / 2)); }
+.is-touch .stepper-input { padding-block: 7px; margin-block: -7px; }
+
+/* Icon buttons that a narrow page draws at 40 px. */
+.is-touch :is(.cal-nav .icon-button, .email-page .head-actions .icon-button, .email-page #mailCompose) { width: 44px; height: 44px; }
+
+/* Calendar: a day chip keeps its look in a 44 px box, and the list next to the day grid takes a finger on every line.
+   An event inside the day grid stays as long as its time; the list beside it carries every event of the day. */
+.is-touch .cw-allday { grid-auto-rows: 44px; row-gap: 0; padding-block: 4px; }
+.is-touch .cw-chip { height: 44px; border-block: 4px solid transparent; border-radius: 14px; background-clip: padding-box; }
+.is-touch .cal-agenda-item { min-height: 44px; align-content: center; }
+.is-touch .cal-next-prep { position: relative; }
+.is-touch .cal-next-prep::after { content: ""; position: absolute; inset: -13px -6px; }
+.is-touch .panel-title:not(.is-static) { min-height: 44px; padding-block: 10px; }
 
 .is-touch :is(.done-toggle, .day, .set-nav-item) { min-height: 44px; }
 .is-touch .set-nav-item { height: 44px; }
