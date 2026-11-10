@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:app/services/iserv_plan.dart';
+import 'package:app/services/iserv_service.dart';
 import 'package:app/services/iserv_session.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
@@ -35,6 +36,8 @@ class _School {
   String codeForm = '<form method="post"><input type="hidden" name="_token" value="t2">'
       '<input name="_auth_code" autocomplete="one-time-code" inputmode="numeric"><button>Bestätigen</button></form>';
   String? sso;
+  String dashboard = '<html><head><title>Startseite</title><link rel="stylesheet" href="/iserv/assets/app.css"></head>'
+      '<body><a href="/iserv/exercise">Aufgaben</a><h1>Start</h1></body></html>';
   String show = '<img src="/iserv/assets/infodisplay/img/infodisplay.svg">'
       '<img src="/iserv/infodisplay/pdf/17/1/0?1&amp;x=2"><img src="/iserv/infodisplay/pdf/17/2/0"><img src="/iserv/infodisplay/pdf/17/3/0">';
 
@@ -108,7 +111,7 @@ class _School {
       wanted = request.uri.toString();
       _redirect(request, '/iserv/auth/auth?state=abc');
     } else if (path == '/iserv/') {
-      _html(request, '<h1>Start</h1>');
+      _html(request, dashboard);
     } else if (path == '/iserv/exercise/api/exercises') {
       request.response
         ..headers.set('Content-Type', 'application/json')
@@ -130,6 +133,19 @@ class _School {
     await request.response.close();
   }
 }
+
+Future<HttpServer> _host(Future<void> Function(HttpRequest request) answer) async {
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  server.listen((request) async {
+    await answer(request);
+    await request.response.close();
+  });
+  addTearDown(() => server.close(force: true));
+  return server;
+}
+
+const _homepage = '<html><head><title>Gymnasium am See</title></head><body><h1>Willkommen</h1>'
+    '<a href="https://iserv.gymnasium-am-see.de/iserv/">Zum IServ</a><a href="/termine">Termine</a></body></html>';
 
 IServSession _session(Uri origin) {
   final dio = Dio(BaseOptions(baseUrl: origin.toString(), followRedirects: false, validateStatus: (status) => status != null && status < 500));
@@ -392,5 +408,112 @@ void main() {
     expect(IServSession.expired(answer(200, data: {'data': []})), isFalse);
     expect(IServSession.expired(answer(404, data: {'error': 'Nicht gefunden'})), isFalse);
     expect(IServSession.expired(answer(302, location: '/iserv/exercise/show/7')), isFalse);
+  });
+
+  group('a sign-in at an address where no IServ answers', () {
+    Future<(IServSignIn, List<String>)> signInAt(Future<void> Function(HttpRequest request) answer) async {
+      final asked = <String>[];
+      final server = await _host((request) async {
+        asked.add('${request.method} ${request.uri.path}');
+        await answer(request);
+      });
+      final outcome = await _session(Uri.parse('http://127.0.0.1:${server.port}')).signIn('lea', 'geheim');
+      return (outcome, asked);
+    }
+
+    void html(HttpRequest request, String body, [int status = HttpStatus.ok]) => request.response
+      ..statusCode = status
+      ..headers.set('Content-Type', 'text/html; charset=UTF-8')
+      ..write(body);
+
+    test('the school homepage that answers every address is not taken for IServ and never gets the password', () async {
+      final (outcome, asked) = await signInAt((request) async => html(request, _homepage));
+      expect(outcome, IServSignIn.notIServ);
+      expect(asked.where((line) => line.startsWith('POST')), isEmpty);
+    });
+
+    test('a homepage that sends every address to its start page is not taken for IServ', () async {
+      final (outcome, asked) = await signInAt((request) async {
+        if (request.uri.path == '/') return html(request, _homepage);
+        request.response
+          ..statusCode = HttpStatus.movedPermanently
+          ..headers.set('Location', '/');
+      });
+      expect(outcome, IServSignIn.notIServ);
+      expect(asked, ['GET /iserv/auth/login', 'GET /']);
+    });
+
+    test('a 404 page is not taken for IServ', () async {
+      final (outcome, asked) = await signInAt((request) async => html(request, '<h1>Seite nicht gefunden</h1><p>IServ? Hier nicht.</p>', HttpStatus.notFound));
+      expect(outcome, IServSignIn.notIServ);
+      expect(asked.where((line) => line.startsWith('POST')), isEmpty);
+    });
+
+    test('a server with a form of the same names but no IServ behind it is not taken for IServ', () async {
+      for (final start in [
+        ('<h1>Seite nicht gefunden</h1>', HttpStatus.notFound),
+        ('<h1>Willkommen zurück</h1>', HttpStatus.ok),
+      ]) {
+        final (outcome, asked) = await signInAt((request) async {
+          if (request.uri.path == '/iserv/auth/login' && request.method == 'GET') {
+            return html(request, '<form method="post"><input name="_username"><input type="password" name="_password"></form>');
+          }
+          if (request.method == 'POST') {
+            await request.drain<void>();
+            request.response
+              ..statusCode = HttpStatus.found
+              ..headers.set('Location', '/iserv/');
+            return;
+          }
+          html(request, start.$1, start.$2);
+        });
+        expect(outcome, IServSignIn.notIServ, reason: start.$1);
+        expect(asked, contains('GET /iserv/'));
+      }
+    });
+
+    test('a homepage that moves to another host keeping the address is no IServ, not a sign-in through another service', () async {
+      for (final target in ['/iserv/auth/login', '/']) {
+        final (outcome, _) = await signInAt((request) async {
+          request.response
+            ..statusCode = HttpStatus.movedPermanently
+            ..headers.set('Location', 'http://localhost:${request.connectionInfo!.localPort}$target');
+        });
+        expect(outcome, IServSignIn.notIServ, reason: target);
+      }
+    });
+
+    test('an IServ that is down for maintenance is asked again later, not called the wrong address', () async {
+      final (outcome, _) = await signInAt((request) async => html(request, '<h1>Wartungsarbeiten</h1>', HttpStatus.serviceUnavailable));
+      expect(outcome, IServSignIn.stuck);
+    });
+
+    test('the right IServ still signs in, and a wrong password there is still refused', () async {
+      expect(await _session(school.origin).signIn('lea', 'geheim'), IServSignIn.entered);
+      expect(await _session(school.origin).signIn('lea', 'falsch'), IServSignIn.refused);
+      school.dashboard = '<html><head><title>IServ - Gymnasium am See</title></head><body><h1>Start</h1></body></html>';
+      expect(await _session(school.origin).signIn('lea', 'geheim'), IServSignIn.entered, reason: 'the name in the title is enough');
+    });
+
+    test('the person reads that no IServ answers there, and nothing is kept', () {
+      final problem = iservSignInProblem(IServSignIn.notIServ)!;
+      expect(problem.error, startsWith('Unter dieser Adresse antwortet kein IServ.'));
+      expect(problem.cause, 'login');
+      expect(iservSignInProblem(IServSignIn.entered), isNull);
+      for (final outcome in IServSignIn.values) {
+        expect(iservSignInProblem(outcome)?.error ?? '', isNot(matches(RegExp('[—–]'))), reason: outcome.name);
+      }
+    });
+  });
+
+  test('an IServ page is told by its address, its status and a mark of IServ in it', () {
+    expect(_page('/iserv/', '<title>IServ</title>').showsIServ, isTrue);
+    expect(_page('/iserv/', '<link href="/iserv/assets/app.css">').showsIServ, isTrue);
+    expect(_page('/iserv/', '<a href="https://iserv.schule.de/iserv/mail">').showsIServ, isTrue);
+    expect(_page('/iserv/', '<a href="https://andere.schule.de/iserv/mail">Mail</a>').showsIServ, isFalse);
+    expect(_page('/iserv/', '<h1>Willkommen</h1>').showsIServ, isFalse);
+    expect(_page('/', '<title>IServ</title>').showsIServ, isFalse);
+    expect(_page('/iserv/', '<title>IServ</title>', status: 404).showsIServ, isFalse);
+    expect(_page('/iserv/', '{"IServ": true}', type: 'application/json').showsIServ, isFalse);
   });
 }
