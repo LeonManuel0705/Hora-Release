@@ -23,6 +23,7 @@ const uiHues = <String, String>{
   'lake': '#0C7491', 'slate': '#5188CD', 'iris': '#635DAB', 'orchid': '#984979', 'brick': '#A34943', 'plum': '#A16FB8',
 };
 const uiDefaultBlocks = [('08:00', '09:30'), ('09:50', '11:20'), ('11:30', '13:00'), ('13:30', '15:00')];
+const uiMaxBlocks = 12;
 const uiCourseTypes = {'LK', 'GK', 'SK'};
 const uiRepeats = {'daily', 'weekly', 'monthly'};
 const uiStates = [
@@ -306,7 +307,8 @@ class School {
     required this.abWeeks,
     required this.names,
     this.abSwapped = false,
-  });
+    Map<String, Map<String, List<Map<String, Object?>>>>? plan,
+  }) : plan = plan ?? timetable;
 
   final Map<String, Map<String, Object?>> subjects;
   final Map<String, Map<String, Object?>> known;
@@ -318,6 +320,8 @@ class School {
   final Map<String, String> names;
   // The page applies the swap to abReference itself, as on the desktop. Weeks counted here include it.
   final bool abSwapped;
+  // The plan as the pages show it. One made in the setup or the settings lives only in the edits, not in the stored timetable.
+  final Map<String, Map<String, List<Map<String, Object?>>>> plan;
 
   String weekOf(DateTime day) {
     if (!abWeeks) return 'A';
@@ -325,11 +329,12 @@ class School {
     return AppProvider.weekTypeFrom(day, abSwapped ? reference.add(const Duration(days: 7)) : reference);
   }
 
+  /// The first lesson of the subject on that day in the plan the pages show, as lesson_block() finds it on the desktop.
   int? blockFor(String? subjectKey, String? dayIso) {
     if (subjectKey == null || dayIso == null) return null;
     final day = dayOf(dayIso);
     if (day.weekday > 5) return null;
-    for (final lesson in timetable[weekOf(day)]!['${day.weekday}']!) {
+    for (final lesson in plan[weekOf(day)]?['${day.weekday}'] ?? const <Map<String, Object?>>[]) {
       if (lesson['subject'] == subjectKey) return lesson['block'] as int;
     }
     return null;
@@ -548,10 +553,10 @@ class UiData {
     final reference = AppProvider.abReferenceOf(prefs);
 
     final store = await UiDb.store(db);
-    final custom = customSubjects(store['app-subjects'], subjects);
+    final usable = {...subjects, ...customSubjects(store['app-subjects'], subjects)};
     return School(
       subjects: subjects,
-      known: {...subjects, ...custom},
+      known: usable,
       courses: courses,
       blocks: blocks,
       timetable: timetable,
@@ -559,7 +564,38 @@ class UiData {
       abWeeks: abWeeks,
       names: names,
       abSwapped: store['app-ab-swap'] == true,
+      plan: planOf(timetable, blockTimes(blocks, store['app-block-times']), usable, store),
     );
+  }
+
+  /// The stored lessons with the edits from the setup and the settings on top, as effective_school() builds them on the
+  /// desktop and applySchoolEdits() in core.js on the page. Lessons outside the block times or of a subject put aside drop out.
+  static Map<String, Map<String, List<Map<String, Object?>>>> planOf(Map<String, Map<String, List<Map<String, Object?>>>> timetable,
+      List<Map<String, Object?>> blocks, Map<String, Map<String, Object?>> known, Map<String, Object?> store) {
+    final saved = store['app-subjects'];
+    final removed = {if (saved is Map && saved['removed'] is List) ...(saved['removed'] as List).whereType<String>()};
+    bool active(Object? key) => key is String && known.containsKey(key) && !removed.contains(key);
+    final numbers = {for (final block in blocks) block['n']};
+    final plan = {
+      for (final week in timetable.entries)
+        week.key: {
+          for (final day in week.value.entries)
+            day.key: [for (final lesson in day.value) if (active(lesson['subject']) && numbers.contains(lesson['block'])) lesson],
+        },
+    };
+    final edits = store['app-timetable-edits'];
+    if (edits is! Map) return plan;
+    final cell = RegExp(r'^([AB]):([1-5]):(\d{1,2})$');
+    edits.forEach((key, value) {
+      final match = cell.firstMatch('$key');
+      if (match == null || !numbers.contains(int.parse(match[3]!))) return;
+      if (value != null && !(value is Map && active(value['subject']))) return;
+      final block = int.parse(match[3]!);
+      final day = plan.putIfAbsent(match[1]!, () => {}).putIfAbsent(match[2]!, () => [])..removeWhere((lesson) => lesson['block'] == block);
+      if (value is Map) day.add({'block': block, 'subject': value['subject'], 'room': text(value['room'], 12)});
+      day.sort((a, b) => (a['block'] as int).compareTo(b['block'] as int));
+    });
+    return plan;
   }
 
   static Map<String, Map<String, Object?>> customSubjects(Object? saved, Map<String, Object?> catalog) {
@@ -981,7 +1017,7 @@ class UiData {
       return valid(merged) ? merged : base;
     }
     final blocks = saved is Map && saved['v'] == 2 && saved['blocks'] is List ? (saved['blocks'] as List).whereType<Map>().toList() : null;
-    if (blocks == null || blocks.isEmpty || blocks.length > 8 || blocks.any((item) => item['n'] is! int)) return base;
+    if (blocks == null || blocks.isEmpty || blocks.length > uiMaxBlocks || blocks.any((item) => item['n'] is! int)) return base;
     final ordered = [...blocks]..sort((a, b) => (a['n'] as int).compareTo(b['n'] as int));
     final result = [for (var index = 0; index < ordered.length; index++) <String, Object?>{'n': index + 1, 'start': ordered[index]['start'], 'end': ordered[index]['end']}];
     final numbers = {for (final item in blocks) item['n']};

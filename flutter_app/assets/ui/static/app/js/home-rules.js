@@ -23,7 +23,7 @@ export function dueItems(date, deadlines, upcoming) {
   return { overdue, soon, pinned, written };
 }
 
-// The server finds the lesson of an entry only in the stored plan, so one entered in the settings or the setup is looked up here, as on the school page.
+// The page checks the lesson the server named against the day it shows, as the school page does.
 export function blockIn(item, lessons) {
   if (item.block && lessons.some((lesson) => lesson.block === item.block && lesson.subject === item.subject)) return item.block;
   return lessons.find((lesson) => lesson.subject === item.subject)?.block || null;
