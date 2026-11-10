@@ -309,7 +309,7 @@ def create_deadline():
     prefix = ui_data.DEADLINE_PREFIXES.get(payload.get('kind'))
     if not prefix:
         return _error('Unbekannte Art')
-    school = ui_data.school_setup(db.get_timetable_settings() or {})
+    school = ui_data.school_with_plan(db.get_timetable_settings() or {})
     item = {'id': ui_data.short_id(), 'created_at': datetime.now().isoformat()}
     if prefix == 'hw':
         item.update({'subject_id': '', 'notes': '', 'completed': False})
@@ -356,7 +356,7 @@ def _change_iserv_homework(item_id):
     ui_data.change_iserv_homework(account, change)
     if request.method == 'DELETE':
         return jsonify({'success': True})
-    school = ui_data.school_setup(db.get_timetable_settings() or {})
+    school = ui_data.school_with_plan(db.get_timetable_settings() or {})
     return jsonify({'success': True, 'deadline': ui_data.iserv_homework_view(item, school, ui_data.iserv_homework_state(account)['done'])})
 
 
@@ -368,7 +368,7 @@ def change_deadline(ref):
     if prefix == 'hw' and item_id.startswith(ui_data.ISERV_PREFIX):
         return _change_iserv_homework(item_id)
     name = ui_data.DEADLINE_KINDS[prefix][0]
-    school = ui_data.school_setup(db.get_timetable_settings() or {})
+    school = ui_data.school_with_plan(db.get_timetable_settings() or {})
     payload = None
     if request.method == 'PATCH':
         payload = _payload()
@@ -851,7 +851,7 @@ HOMEWORK_PROBLEMS = {
 
 
 def _iserv_homework_views():
-    school = ui_data.school_setup(db.get_timetable_settings() or {})
+    school = ui_data.school_with_plan(db.get_timetable_settings() or {})
     homework = ui_data.iserv_homework_state(ui_data.iserv_key())
     return [view for view in ui_data.deadlines(school, date.today(), homework) if view.get('origin') == 'iserv']
 

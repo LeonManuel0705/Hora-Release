@@ -385,11 +385,11 @@ def _teachers(stored, saved):
     return teachers
 
 
-def effective_school(settings=None, store=None):
+def effective_school(settings=None, store=None, base=None):
     """The school data as the pages show it: the stored plan with the edits from the settings on top."""
     settings = settings if settings is not None else (db.get_timetable_settings() or {})
     store = store if store is not None else db.get_ui_store()
-    school = school_setup(settings)
+    school = base if base is not None else school_setup(settings)
 
     def saved(key):
         value = store.get(key)
@@ -469,6 +469,16 @@ def effective_school(settings=None, store=None):
     }
 
 
+def school_with_plan(settings, store=None):
+    """The stored school with the plan as the pages show it, where a test or homework finds its lesson.
+
+    A plan made in the setup or the settings lives only in the edits, so the stored one alone would leave it without a lesson.
+    """
+    school = school_setup(settings)
+    school['plan'] = effective_school(settings, store, school)
+    return school
+
+
 def holiday_on(school, day):
     iso = day.isoformat()
     return next((title or 'Schulfrei' for first, last, title in school.get('holidays', ()) if first <= iso <= last), None)
@@ -493,13 +503,15 @@ def lessons_on(school, day):
 
 
 def lesson_block(school, subject_key, day_iso):
+    """The first lesson of the subject on that day, in the plan the pages show when the school brings it along."""
     if not subject_key or not day_iso:
         return None
     day = date.fromisoformat(day_iso)
     if day.weekday() > 4:
         return None
-    week = week_type(day, school['abReference'], school['abWeeks'])
-    for lesson in school['timetable'][week][str(day.weekday() + 1)]:
+    plan = school.get('plan', school)
+    week = week_type(day, plan['abReference'], plan['abWeeks'])
+    for lesson in plan['timetable'].get(week, {}).get(str(day.weekday() + 1), []):
         if lesson['subject'] == subject_key:
             return lesson['block']
     return None
@@ -1220,7 +1232,7 @@ def current_semester(today, grade):
 def build(active, store, now):
     today = now.date()
     settings = db.get_timetable_settings() or {}
-    school = school_setup(settings)
+    school = school_with_plan(settings, store)
     plan, pool = tasks(school['shown'], today)
     iserv = iserv_account()
     homework = iserv_homework_state(iserv['account']) if iserv['connected'] else None
@@ -1519,7 +1531,7 @@ def _views(make, items):
 
 def export_records():
     settings = db.get_timetable_settings() or {}
-    school = school_setup(settings)
+    school = school_with_plan(settings)
     today = date.today()
     grade = known_grade(settings, {})
     dated = []
