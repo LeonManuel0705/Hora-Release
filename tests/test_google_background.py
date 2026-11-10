@@ -1,8 +1,12 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import re
+import shutil
+import subprocess
 import threading
 import time as real_time
+from pathlib import Path
 
 import pytest
 
@@ -284,13 +288,16 @@ def test_a_page_that_opens_or_comes_back_gets_what_changed_in_google_more_than_t
     assert checks(google) == 1 and google.count('calendarList.list') == 0, 'only what changed is asked for'
 
 
-def test_a_page_left_open_checks_every_minute_and_the_loop_counts_those_checks(google, clocks, client):
+def test_a_page_asks_google_again_after_ten_seconds_and_the_loop_counts_those_checks(google, clocks, client):
     calendar_cache.background_round()
-    for minute in range(1, 6):
+    for step in range(1, 6):
         google.calls.clear()
-        clocks.pass_by(60)
+        clocks.pass_by(calendar_cache.PAGE_SECONDS - 2)
         synced(client)
-        assert checks(google) == 1, minute
+        assert checks(google) == 0, step
+        clocks.pass_by(20)
+        synced(client)
+        assert checks(google) == 1, f'{step}: half a minute after the last check'
         clocks.pass_by(1)
         assert calendar_cache.background_round() is False, 'the page just checked'
 
@@ -310,11 +317,12 @@ def test_open_pages_wait_as_long_as_the_loop_while_google_is_out_of_reach(google
     assert synced(client, 'alles') and len(google.calls) >= 1, 'the button still asks at once'
 
 
-def test_without_a_connected_account_a_page_never_asks_google(google, clocks, client, monkeypatch):
-    from app import ui_pages
-    monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {})
-    monkeypatch.setattr(ui_pages, '_synced_macos', lambda start, end: None)
-    for _ in range(3):
-        clocks.pass_by(calendar_cache.PAGE_SECONDS + 1)
-        assert synced(client)['success'] is True
-    assert google.calls == []
+def test_the_open_calendar_page_asks_quietly_and_draws_only_what_changed():
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('node is not installed')
+    if int(re.match(r'v(\d+)', subprocess.run([node, '--version'], capture_output=True, text=True).stdout).group(1)) < 18:
+        pytest.skip('node is too old')
+    check = Path(__file__).resolve().parent / 'js' / 'calendar_sync_check.mjs'
+    result = subprocess.run([node, str(check)], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
