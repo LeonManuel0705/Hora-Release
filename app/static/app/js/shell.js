@@ -796,9 +796,10 @@ const COUNTS = { 2: 2, zwei: 2, 3: 3, drei: 3, 4: 4, vier: 4, 5: 5, fünf: 5, 6:
 const ORDINAL = "(zweite[nmns]?|dritte[nmns]?|vierte[nmns]?|[234]\\.)";
 const UNITS = { tag: "daily", woche: "weekly", monat: "monthly", jahr: "yearly", tage: "daily", wochen: "weekly", monate: "monthly", jahre: "yearly" };
 const DAY_PART = "(abend|morgen|vormittag|nachmittag|mittag|nacht)";
-// Long names in either case, short ones only as written ("So", "Do"): "so" and "do" are words of their own.
+// Every name in either case except a lone "so", which is a word of its own ("so gegen 18 Uhr").
 const CASED_NAMES = DAY_NAMES.map((name) => `[${name[0]}${name[0].toUpperCase()}]${name.slice(1)}`).join("|");
-const CASED_DAY = `(?:(?:${CASED_NAMES})(?:${DAY_PART.slice(1, -1)})?s?|(?:${DAY_SHORT.join("|")})\\.?)`;
+const CASED_SHORT = DAY_SHORT.map((short) => (short === "So" ? short : `[${short[0]}${short[0].toLowerCase()}]${short.slice(1)}`)).join("|");
+const CASED_DAY = `(?:(?:${CASED_NAMES})(?:${DAY_PART.slice(1, -1)})?s?|(?:${CASED_SHORT})\\.?)`;
 const EVERY_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?jede[nm]?\\s+(?:${ORDINAL}\\s+)?(?:(${DAY_NAMES.join("|")})${DAY_PART}?|(${DAY_SHORT.join("|")}))(\\.)?(?![\\p{L}\\p{N}])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
 const DAYS_ADVERB = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?(${DAY_NAMES.join("|")})${DAY_PART}?s(?![\\p{L}\\p{N}\\-])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
 const MORE_DAYS = new RegExp(`^\\s*(?:,|&|und|oder|bis|-|–)\\s*(?:jede[nm]?\\s+)?${CASED_DAY}(?![\\p{L}])`, "u");

@@ -999,11 +999,14 @@ button.add-row:is(:active, .is-pressed) { background: var(--surface-press); colo
 
 .segmented.is-still .seg-thumb { transition: none; }
 
-/* Five kinds in the sheet "Neu" fit from 360 px on with less room around each word, below that the row scrolls. */
+/* Five kinds in the sheet "Neu" fit from 360 px on with less room around each word. Only below that the row
+   scrolls, because a scrolling row clips the 44 px touch area that reaches out above and below each word. */
 @media (max-width: 400px) {
-  #noteForm .segmented[role="radiogroup"] { overflow-x: auto; scrollbar-width: none; }
-  #noteForm .segmented[role="radiogroup"]::-webkit-scrollbar { display: none; }
   #noteForm .segmented[role="radiogroup"] label { padding-inline: 4px; }
+}
+@media (max-width: 359px) {
+  #noteForm .segmented[role="radiogroup"] { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  #noteForm .segmented[role="radiogroup"]::-webkit-scrollbar { display: none; }
 }
 
 .sheet-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 16px; }
