@@ -12,6 +12,7 @@ function tile(id, mine) {
   const yours = id === mine;
   const steps = raw(`steps.${id}`) || [];
   const command = `curl -sL https://${brandHost}/install-macos.sh | bash`;
+  const commandLines = `<span>curl -sL</span> <span>https://</span><wbr><span>${escapeHtml(brandHost)}/</span><wbr><span>install-macos.sh</span> <span>| bash</span>`;
   const action = pwa
     ? `<a class="ap-btn${yours ? "" : " ap-btn-ghost"}" href="${p.href}">${escapeHtml(t("download_page.open"))}</a>`
     : `<a class="ap-btn${yours ? "" : " ap-btn-ghost"}" href="${p.href}" download data-download="${id}">${escapeHtml(t("download_page.get"))}</a>`;
@@ -26,7 +27,7 @@ function tile(id, mine) {
     <div class="ap-dl-action">${action}</div>
     ${p.alt ? `<p class="ap-dl-meta">${escapeHtml(t(`platforms.${id}.alt`))} <a href="${p.alt.href}" download>${escapeHtml(p.alt.file)}, ${megabytes(p.alt.bytes)}&nbsp;MB</a></p>` : ""}
     <ol class="ap-dl-steps">${steps.map((step) => `<li>${stepText(step)}</li>`).join("")}</ol>
-    ${id === "macos" ? `<div class="ap-cmd"><p>${escapeHtml(t("steps.macos_terminal"))}</p><div class="ap-cmd-row"><code>${escapeHtml(command)}</code><button type="button" class="ap-copy" data-copy="${escapeHtml(command)}">${icon("copy", { size: 15 })}<span>${escapeHtml(t("steps.copy"))}</span></button></div></div>` : ""}
+    ${id === "macos" ? `<div class="ap-cmd"><p>${escapeHtml(t("steps.macos_terminal"))}</p><div class="ap-cmd-row"><code>${commandLines}</code><button type="button" class="ap-copy" data-copy="${escapeHtml(command)}">${icon("copy", { size: 15 })}<span>${escapeHtml(t("steps.copy"))}</span></button></div></div>` : ""}
   </article>`;
 }
 

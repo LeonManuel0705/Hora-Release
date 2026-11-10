@@ -960,5 +960,4 @@
   letter-spacing: -0.035em;
   text-wrap: balance;
 }
-.nf-text { max-width: 44ch; color: var(--ink-soft); }
-.nf-en { margin-bottom: var(--space-4); font-size: var(--text-sm); color: #A1A1A6; }
+.nf-text { max-width: 44ch; margin-bottom: var(--space-4); color: var(--ink-soft); }
