@@ -22,6 +22,26 @@ Future<void> forgetIServCredentials(Database db, EncryptionService encryption, {
   await db.delete('iserv_credentials');
 }
 
+/// Why a sign-in did not work, as the cause the status reports and the message the person reads.
+@visibleForTesting
+({String cause, String error})? iservSignInProblem(IServSignIn outcome) => switch (outcome) {
+      IServSignIn.entered => null,
+      IServSignIn.refused => (cause: 'login', error: 'Falscher Benutzername oder Passwort'),
+      IServSignIn.twoFactor => (
+          cause: 'login',
+          error: 'Dein IServ-Konto verlangt nach dem Passwort einen Bestätigungscode. Diese Anmeldung kann die App noch nicht.',
+        ),
+      IServSignIn.external => (
+          cause: 'login',
+          error: 'Deine Schule meldet bei IServ über einen anderen Dienst an. Diese Anmeldung kann die App noch nicht.',
+        ),
+      IServSignIn.notIServ => (
+          cause: 'login',
+          error: 'Unter dieser Adresse antwortet kein IServ. Nimm die Adresse, unter der du IServ im Browser öffnest.',
+        ),
+      IServSignIn.stuck => (cause: 'offline', error: 'IServ hat die Anmeldung nicht abgeschlossen. Bitte später erneut versuchen.'),
+    };
+
 class IServService {
   static final IServService _instance = IServService._internal();
   factory IServService() => _instance;
@@ -173,21 +193,10 @@ class IServService {
       final outcome = await session.signIn(username, password);
       if (kDebugMode) print('IServ: sign-in outcome: ${outcome.name}');
 
-      if (outcome == IServSignIn.refused) {
-        _signInCause = 'login';
-        return {'success': false, 'error': 'Falscher Benutzername oder Passwort'};
-      }
-      if (outcome == IServSignIn.twoFactor) {
-        _signInCause = 'login';
-        return {'success': false, 'error': 'Dein IServ-Konto verlangt nach dem Passwort einen Bestätigungscode. Diese Anmeldung kann die App noch nicht.'};
-      }
-      if (outcome == IServSignIn.external) {
-        _signInCause = 'login';
-        return {'success': false, 'error': 'Deine Schule meldet bei IServ über einen anderen Dienst an. Diese Anmeldung kann die App noch nicht.'};
-      }
-      if (outcome == IServSignIn.stuck) {
-        _signInCause = 'offline';
-        return {'success': false, 'error': 'IServ hat die Anmeldung nicht abgeschlossen. Bitte später erneut versuchen.'};
+      final problem = iservSignInProblem(outcome);
+      if (problem != null) {
+        _signInCause = problem.cause;
+        return {'success': false, 'error': problem.error};
       }
 
       _dio = dio;

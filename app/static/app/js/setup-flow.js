@@ -8,6 +8,7 @@ import {
 import { animates, travels, token } from "./motion.js";
 import { askPermission, readPrefs, switchRemindersOn, blockedHere } from "./reminders.js";
 import { pageUrl } from "./shell.js";
+import { tabReminderNote } from "./persistence.js";
 import * as plan from "./setup-data.js";
 
 const STEPS = [
@@ -708,7 +709,7 @@ function reminderRow() {
   const state = supported ? Notification.permission : "unsupported";
   if (!supported) {
     return appleTab()
-      ? `<div class="setup-extra"><span class="setup-extra-icon">${icon("bell")}</span><p><b>Erinnerungen</b><small>Auf dem iPhone erinnert ${esc(BRAND)} nur vom Home-Bildschirm aus. In Safari auf Teilen tippen, dann „Zum Home-Bildschirm“.</small></p></div>`
+      ? `<div class="setup-extra"><span class="setup-extra-icon">${icon("bell")}</span><p><b>Erinnerungen</b><small>${esc(tabReminderNote({ agent: navigator.userAgent, brand: BRAND }))} Deinen Plan nimmst du über Einstellungen › Daten mit.</small></p></div>`
       : "";
   }
   const what = "vor jeder Stunde und am Vortag eines Tests";

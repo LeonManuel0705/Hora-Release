@@ -64,10 +64,18 @@ async function earlier() {
   return found;
 }
 
+async function matching(path, response) {
+  return response.ok && (await digest(path, response.clone())) === MANIFEST.files[path];
+}
+
+// The page loaded the big files a moment ago, so the browser's copy is taken first. A copy that does not match the
+// list (an older deploy, say) is fetched again, and only a network copy that does not match refuses the build.
 async function fetched(path) {
+  const kept = await fetch(sourceOf(path), { cache: "force-cache" }).then(plain, () => null);
+  if (kept && (await matching(path, kept))) return kept;
   const response = await plain(await fetch(sourceOf(path), { cache: "no-cache" }));
   if (!response.ok) throw new Error(`${path}: ${response.status}`);
-  if ((await digest(path, response.clone())) !== MANIFEST.files[path]) throw new Error(`${path} belongs to another build`);
+  if (!(await matching(path, response))) throw new Error(`${path} belongs to another build`);
   return response;
 }
 

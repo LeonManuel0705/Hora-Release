@@ -40,7 +40,7 @@ class Cache {
 
 function world() {
   const named = new Map();
-  const state = { broken: 0, online: true, deploys: 0, asked: [], held: new Map(), served: new Map(), live: new Set(), clock: 1e12, full: false };
+  const state = { broken: 0, online: true, deploys: 0, asked: [], modes: [], http: new Map(), held: new Map(), served: new Map(), live: new Set(), clock: 1e12, full: false };
   const fail = () => {
     if (state.broken < 1) return;
     state.broken -= 1;
@@ -65,8 +65,13 @@ function world() {
   };
   const registration = { installing: null, waiting: null, unregistered: false, unregister: async () => (registration.unregistered = true) };
 
-  async function network(input) {
+  const answer = ({ body, deploy }) => new Response(body, { status: 200, headers: { "Content-Type": "text/plain", "X-Deploy": String(deploy) } });
+
+  async function network(input, init = {}) {
     const url = new URL(urlOf(input));
+    state.modes.push(`${init.cache || "default"} ${url.pathname}`);
+    const kept = state.http.get(url.pathname);
+    if (init.cache === "force-cache" && kept) return answer(kept);
     state.asked.push(url.pathname);
     const gate = state.held.get(url.pathname);
     if (gate) await gate.promise;
@@ -74,7 +79,14 @@ function world() {
     const body = state.served.get(url.pathname);
     if (body === undefined) return new Response("missing", { status: 404 });
     const page = url.pathname.endsWith("/") || url.pathname.endsWith(".html") ? body.replace("<head>", "<head>\n<!-- injected by the host -->") : body;
-    return new Response(page, { status: 200, headers: { "Content-Type": "text/plain", "X-Deploy": String(state.deploys) } });
+    state.http.set(url.pathname, { body: page, deploy: state.deploys });
+    return answer({ body: page, deploy: state.deploys });
+  }
+
+  async function pageLoads(paths) {
+    for (const path of paths) await (await network(`/pwa/${path}`)).text();
+    state.asked.length = 0;
+    state.modes.length = 0;
   }
 
   function deploy(files) {
@@ -162,7 +174,7 @@ function world() {
 
   const shells = () => [...named.keys()].filter((name) => name.startsWith("app-shell-")).sort();
   const finished = async (build) => named.has(`app-shell-${build}`) && !!(await named.get(`app-shell-${build}`).match("/pwa/__ready"));
-  return { state, named, caches, registration, deploy, hold, worker, shells, finished };
+  return { state, named, caches, registration, deploy, hold, pageLoads, worker, shells, finished };
 }
 
 const first = {
@@ -347,6 +359,47 @@ for (const [changed, failure] of [
   const fine = w.worker(second);
   await fine.install();
   assert.ok(await w.finished(fine.build), "comments and line breaks the host adds do not count");
+}
+
+{
+  const w = world();
+  w.deploy(first);
+  await w.pageLoads(["", "main.dart.js"]);
+  const one = await installed(w, first);
+  assert.deepEqual(
+    w.state.asked.sort(),
+    ["/pwa/assets/assets/ui/pages/tasks.html", "/pwa/assets/assets/ui/static/app/js/settings.js"],
+    "what the page loaded just before is taken from the browser's cache, the rest comes once from the network",
+  );
+  assert.ok(w.state.modes.includes("force-cache /pwa/main.dart.js"), "the browser's copy is asked for first");
+  assert.ok(!w.state.modes.some((line) => line.startsWith("no-cache")), "and nothing is fetched twice");
+  w.state.online = false;
+  assert.equal(await one.load("tab-1", "main.dart.js"), "code(1)", "the copy from the browser's cache works offline");
+  assert.match(await one.open("tab-1"), /start/);
+}
+
+{
+  const w = world();
+  w.deploy(first);
+  await w.pageLoads(["main.dart.js"]);
+  w.deploy(second);
+  const two = await installed(w, second);
+  assert.deepEqual(
+    w.state.modes.filter((line) => line.endsWith(" /pwa/main.dart.js")),
+    ["force-cache /pwa/main.dart.js", "no-cache /pwa/main.dart.js"],
+    "a copy of an older deploy in the browser's cache is checked against the list and fetched again",
+  );
+  w.state.online = false;
+  assert.equal(await two.load("tab-2", "main.dart.js"), "code(2)", "so the offline copy holds the build it belongs to");
+}
+
+{
+  const w = world();
+  w.deploy(first);
+  await w.pageLoads(["main.dart.js"]);
+  w.deploy({ ...second, "main.dart.js": "code(3)" });
+  await assert.rejects(installed(w, second), /main.dart.js belongs to another build/, "a wrong copy in the cache and a wrong one on the network still refuse the build");
+  assert.ok(!(await w.finished(w.worker(second).build)), "and the copy is never finished");
 }
 
 console.log("app worker: ok");

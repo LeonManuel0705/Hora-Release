@@ -22,7 +22,9 @@ class IServPage {
 
   String get text => utf8.decode(bytes, allowMalformed: true);
 
-  String get _head => utf8.decode(bytes.length > 20000 ? Uint8List.sublistView(bytes, 0, 20000) : bytes, allowMalformed: true);
+  String get _head => _start(20000);
+
+  String _start(int limit) => utf8.decode(bytes.length > limit ? Uint8List.sublistView(bytes, 0, limit) : bytes, allowMalformed: true);
 
   bool get isHtml => contentType.toLowerCase().contains('text/html');
 
@@ -43,14 +45,25 @@ class IServPage {
 
   bool get isLogin {
     if (_loginPath.hasMatch(url.path)) return true;
-    if (!isHtml) return false;
-    return loginField.hasMatch(_head);
+    return hasLoginForm;
+  }
+
+  bool get hasLoginForm => isHtml && loginField.hasMatch(_head);
+
+  /// A page of IServ itself after the sign-in: found, under /iserv/ on the school's host, and naming IServ or
+  /// linking into it, which the homepage or the error page of another server at that address does not.
+  bool get showsIServ {
+    if (status < 200 || status >= 300 || !isHtml || !url.path.startsWith('/iserv/')) return false;
+    final page = _start(200000);
+    if (page.contains('IServ')) return true;
+    final own = RegExp.escape('${url.scheme}://${url.authority}');
+    return RegExp('(?:href|src|action)\\s*=\\s*["\'](?:$own)?/iserv/', caseSensitive: false).hasMatch(page);
   }
 
   bool get outsideApp => isLogin || onAuth;
 }
 
-enum IServSignIn { entered, refused, stuck, twoFactor, external }
+enum IServSignIn { entered, refused, stuck, twoFactor, external, notIServ }
 
 class IServSession {
   IServSession(this.dio, this.origin);
@@ -173,41 +186,48 @@ class IServSession {
     }
   }
 
+  /// Another server sends its own address on, keeping the path or going to its start page. A sign-in through
+  /// another service goes to that service's own path instead.
+  static bool _moved(Uri target) => target.path.startsWith('/iserv/') || (target.path.length <= 1 && target.query.isEmpty);
+
+  /// Counts as entered only when the password went into IServ's sign-in form and IServ's own page came back.
   Future<IServSignIn> signIn(String username, String password) async {
     final form = await get('/iserv/auth/login');
-    if (form == null) return _left != null ? IServSignIn.external : IServSignIn.stuck;
-    if (form.isLogin && form.isHtml) {
-      final forms = html_parser.parse(form.text).querySelectorAll('form');
-      final login = forms.where((node) => node.querySelector('input[name="_username"]') != null).firstOrNull ?? forms.firstOrNull;
-      final fields = <String, String>{};
-      if (login != null) {
-        for (final input in login.querySelectorAll('input')) {
-          final name = input.attributes['name'] ?? '';
-          if (name.isEmpty || (input.attributes['type'] ?? '').toLowerCase() != 'hidden') continue;
-          fields[name] = input.attributes['value'] ?? '';
-        }
+    final left = _left;
+    if (form == null) return left == null ? IServSignIn.stuck : (_moved(left) ? IServSignIn.notIServ : IServSignIn.external);
+    if (form.status >= 500) return IServSignIn.stuck;
+    if (!form.hasLoginForm) return IServSignIn.notIServ;
+    final forms = html_parser.parse(form.text).querySelectorAll('form');
+    final login = forms.where((node) => node.querySelector('input[name="_username"]') != null).firstOrNull ?? forms.firstOrNull;
+    final fields = <String, String>{};
+    if (login != null) {
+      for (final input in login.querySelectorAll('input')) {
+        final name = input.attributes['name'] ?? '';
+        if (name.isEmpty || (input.attributes['type'] ?? '').toLowerCase() != 'hidden') continue;
+        fields[name] = input.attributes['value'] ?? '';
       }
-      fields['_username'] = username;
-      fields['_password'] = password;
-      final action = (login?.attributes['action'] ?? '').trim();
-      final target = action.isEmpty ? form.url : _next(form.url, action);
-      if (target == null) return IServSignIn.stuck;
-      await dio.postUri<List<int>>(
-        target,
-        data: fields,
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-          responseType: ResponseType.bytes,
-          followRedirects: false,
-          validateStatus: (_) => true,
-        ),
-      );
     }
+    fields['_username'] = username;
+    fields['_password'] = password;
+    final action = (login?.attributes['action'] ?? '').trim();
+    final target = action.isEmpty ? form.url : _next(form.url, action);
+    if (target == null) return IServSignIn.stuck;
+    await dio.postUri<List<int>>(
+      target,
+      data: fields,
+      options: Options(
+        contentType: Headers.formUrlEncodedContentType,
+        responseType: ResponseType.bytes,
+        followRedirects: false,
+        validateStatus: (_) => true,
+      ),
+    );
     final home = await get('/iserv/');
     if (home == null) return IServSignIn.stuck;
     if (home.asksForCode) return IServSignIn.twoFactor;
     if (home.isLogin) return IServSignIn.refused;
-    return home.onAuth ? IServSignIn.stuck : IServSignIn.entered;
+    if (home.onAuth || home.status >= 500) return IServSignIn.stuck;
+    return home.showsIServ ? IServSignIn.entered : IServSignIn.notIServ;
   }
 }
 
