@@ -1236,13 +1236,18 @@ def get_user_theme(user_id: str = None) -> str:
 
 def get_theme_choice() -> Optional[str]:
     """The colour scheme picked in the classic pages, or None to follow the system. Older databases
-    fill the column of every new row with 'dark', so an untouched row there stays dark as it always was."""
+    fill the column of every new row with 'dark', so there 'dark' can't be told from no choice and
+    only 'light' counts."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT theme, theme_mode FROM hub_timetable_settings ORDER BY id DESC LIMIT 1')
     row = cursor.fetchone()
+    filled = any(column['name'] == 'theme' and (column['dflt_value'] or '').strip("'\"") == 'dark'
+                 for column in cursor.execute('PRAGMA table_info(hub_timetable_settings)').fetchall())
     conn.close()
     if not row or row['theme_mode'] == 'system':
+        return None
+    if row['theme'] == 'dark' and filled:
         return None
     return row['theme'] if row['theme'] in ('light', 'dark') else None
 

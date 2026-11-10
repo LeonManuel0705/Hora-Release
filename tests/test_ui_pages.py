@@ -714,7 +714,7 @@ def test_a_scheme_from_the_classic_pages_carries_over(client):
     assert 'data-theme-mode="dark"' in client.get("/hub").get_data(as_text=True)
 
 
-def test_an_older_database_stays_dark_as_before(tmp_path, monkeypatch):
+def test_an_older_database_follows_the_system_unless_light_was_picked(tmp_path, monkeypatch):
     from app import ui_pages
 
     path = tmp_path / "hub.db"
@@ -724,8 +724,11 @@ def test_an_older_database_stays_dark_as_before(tmp_path, monkeypatch):
     db.init_db()
     assert db.get_theme_choice() is None
     db.save_tour_state("done")
-    assert db.get_theme_choice() == "dark"
-    assert ui_pages.ui_settings({})["theme"] == "dark"
+    assert db.get_theme_choice() is None
+    assert ui_pages.ui_settings({})["theme"] == "auto"
+    db.save_user_theme("light")
+    assert ui_pages.ui_settings({})["theme"] == "light"
+    assert ui_pages.ui_settings({"app-theme-choice": "dark"})["theme"] == "dark"
     assert ui_pages.ui_settings({"app-theme-choice": "auto"})["theme"] == "auto"
 
 
