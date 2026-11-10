@@ -1,7 +1,7 @@
 import {
   data, flags, params, esc, icon, luna, now, pinnedTime, toMin, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, isoWeek, subject, hueVar, blockOf, glue, relativeDay, inDays, duration, shortDate, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT,
-  abWeeks, gradeScale, activeSubjectKeys, ASSESSMENTS, isAssessment, assessmentCount, pastText, pastWord, homeworkDate, BRAND,
+  abWeeks, gradeScale, activeSubjectKeys, ASSESSMENTS, isAssessment, assessmentCount, pastText, pastWord, homeworkDate, periodWords, BRAND,
 } from "../core.js";
 import { animates, travels, token, ms } from "../motion.js";
 import { toast, registerSearch, syncTime, typing, overlayOpen, pageUrl, keepOneLine } from "../shell.js";
@@ -116,6 +116,7 @@ function changesOn(date) {
 }
 
 const blockList = () => [...(data.blocks || [])].sort((a, b) => toMin(a.start) - toMin(b.start));
+const nth = (n) => `${n}.\u00a0${periodWords().one}`;
 
 function lessonsOn(date) {
   const dow = date.getDay();
@@ -277,10 +278,10 @@ const subjectTag = (key) => `<span class="subject"><i class="subject-dot" style=
 function slotLabel(lesson, time) {
   const diff = dayDiff(time.date, lesson.iso);
   const day = diff === 0 ? "Heute" : diff === 1 ? "Morgen" : `${WEEKDAYS_SHORT[lesson.date.getDay()]}., ${lesson.date.getDate()}.${lesson.date.getMonth() + 1}.`;
-  return `${day}, ${lesson.block}.\u00a0Block`;
+  return `${day}, ${nth(lesson.block)}`;
 }
 
-const slotText = (date, block) => `${WEEKDAYS_SHORT[date.getDay()]}., ${date.getDate()}.${date.getMonth() + 1}.${block ? `, ${block}.\u00a0Block` : ""}`;
+const slotText = (date, block) => `${WEEKDAYS_SHORT[date.getDay()]}., ${date.getDate()}.${date.getMonth() + 1}.${block ? `, ${nth(block)}` : ""}`;
 
 function gradesFor(key, semester = SEMESTER) {
   return state.grades.filter((grade) => grade.subject === key && (grade.semester || SEMESTER) === semester).sort((a, b) => b.date.localeCompare(a.date));
@@ -369,7 +370,7 @@ function flagHtml(item, overdue) {
 
 function lessonLabel(lesson, phase, items, context) {
   const info = subject(lesson.subject);
-  const parts = [`${WEEKDAYS[lesson.date.getDay()]}, ${lesson.block}. Block, ${hm(lesson.start)} bis ${hm(lesson.end)}: ${info.name}`];
+  const parts = [`${WEEKDAYS[lesson.date.getDay()]}, ${nth(lesson.block)}, ${hm(lesson.start)} bis ${hm(lesson.end)}: ${info.name}`];
   if (lesson.cancelled) parts.push(`entfällt${lesson.note ? `, Grund: ${lesson.note}` : ""}`);
   else if (lesson.movedFrom) parts.push(`heute in Raum ${lesson.room} statt ${lesson.movedFrom}`);
   else parts.push(`Raum ${lesson.room}`);
@@ -424,8 +425,8 @@ function tableHtml() {
     const cls = iso === context.time.iso ? " is-today" : iso < context.time.iso ? " is-past" : "";
     return `<th scope="col" class="tt-day${cls}"${iso === context.time.iso ? ' aria-current="date"' : ""}><span class="tt-day-head" aria-hidden="true"><span class="tt-day-name">${WEEKDAYS_SHORT[day.getDay()]}</span><span class="tt-day-date">${day.getDate()}.${day.getMonth() + 1}.</span></span><span class="visually-hidden">${WEEKDAYS[day.getDay()]}, ${day.getDate()}. ${MONTHS[day.getMonth()]}${iso === context.time.iso ? ", heute" : ""}</span></th>`;
   }).join("");
-  const rows = blockList().map((block, row) => `<tr><th scope="row" class="block"><span class="block-visual" aria-hidden="true"><span class="block-num">${block.n}</span><span class="block-time">${hm(block.start)}<br>${hm(block.end)}</span></span><span class="visually-hidden">${block.n}. Block, ${hm(block.start)} bis ${hm(block.end)}</span></th>${days.map((day, col) => cellHtml(lessons[col].find((lesson) => lesson.block === block.n), block, row, col, context)).join("")}</tr>`).join("");
-  return `<thead><tr><th scope="col" class="corner"><span class="visually-hidden">Block</span></th>${head}</tr></thead><tbody>${rows}</tbody>`;
+  const rows = blockList().map((block, row) => `<tr><th scope="row" class="block"><span class="block-visual" aria-hidden="true"><span class="block-num">${block.n}</span><span class="block-time">${hm(block.start)}<br>${hm(block.end)}</span></span><span class="visually-hidden">${nth(block.n)}, ${hm(block.start)} bis ${hm(block.end)}</span></th>${days.map((day, col) => cellHtml(lessons[col].find((lesson) => lesson.block === block.n), block, row, col, context)).join("")}</tr>`).join("");
+  return `<thead><tr><th scope="col" class="corner"><span class="visually-hidden">${periodWords().one}</span></th>${head}</tr></thead><tbody>${rows}</tbody>`;
 }
 
 function anchorCell(table) {
@@ -585,8 +586,8 @@ function changeDays() {
 function changeRow(lesson) {
   const info = subject(lesson.subject);
   const title = lesson.cancelled
-    ? `${lesson.block}.\u00a0Block ${info.label} entfällt`
-    : `${lesson.block}.\u00a0Block ${info.label} in ${lesson.room}`;
+    ? `${nth(lesson.block)} ${info.label} entfällt`
+    : `${nth(lesson.block)} ${info.label} in ${lesson.room}`;
   const detail = lesson.cancelled
     ? `${hm(lesson.start)} bis ${hm(lesson.end)}, ${lesson.teacher}${lesson.note ? `, Grund: ${lesson.note}` : ""}`
     : `statt ${lesson.movedFrom}, ${hm(lesson.start)} bis ${hm(lesson.end)}`;
@@ -719,7 +720,7 @@ function nextTestHtml() {
   const diff = dayDiff(time.date, next.date);
   const block = itemBlock(next);
   const lesson = block ? lessonAt(next.date, block) : null;
-  const where = [block ? `${block}.\u00a0Block` : "", lesson ? lesson.room : ""].filter(Boolean).join(", ");
+  const where = [block ? nth(block) : "", lesson ? lesson.room : ""].filter(Boolean).join(", ");
   const soon = diff <= 1 ? " is-soon" : "";
   return `<h2 class="side-title" id="nextTestTitle">${esc(ASSESSMENTS[next.kind].next)}</h2>
     <button type="button" class="ov-item" data-open-item="${esc(next.id)}" aria-describedby="nextTestTitle">
@@ -764,7 +765,7 @@ function dueMeta(item, time) {
   else if (diff < 0) when = `<span class="due-when is-urgent">${overdueText(diff, target)}</span>`;
   else if (diff <= 1) when = `<span class="due-when${prep.total && !prep.open ? "" : " is-urgent"}">${relativeDay(diff, target)}</span>`;
   else when = `<span class="due-when">${inDays(diff)}</span>`;
-  const blockText = block && diff >= 0 ? `, ${block}.\u00a0Block` : "";
+  const blockText = block && diff >= 0 ? `, ${nth(block)}` : "";
   let prepText = "";
   if (prep.total && !written) prepText = prep.open ? `, ${plural(prep.open, "Aufgabe offen", "Aufgaben offen")}` : `, <span class="row-note is-ready">${icon("check")}vorbereitet</span>`;
   return `${kind} ${tag}${when}${blockText}${prepText}`;
@@ -975,7 +976,8 @@ function lessonBox(lesson, time) {
 
 function slotsHtml(key) {
   const slots = slotsOf(key);
-  const line = (list) => list.length ? list.map((slot) => `${WEEKDAYS_SHORT[slot.dow % 7]}.\u00a0${slot.block}.\u00a0Block`).join(", ") : "keine Stunde";
+  const words = periodWords();
+  const line = (list) => list.length ? list.map((slot) => `${WEEKDAYS_SHORT[slot.dow % 7]}.\u00a0${nth(slot.block)}`).join(", ") : `${words.none} ${words.one}`;
   if (!abWeeks()) return `<ul class="slot-list"><li><span>${esc(line(slots.A))}</span></li></ul>`;
   return `<ul class="slot-list">${["A", "B"].map((week) => `<li><span class="week-badge" aria-label="${week}-Woche">${week}</span><span>${esc(line(slots[week]))}</span></li>`).join("")}</ul>`;
 }
@@ -1051,11 +1053,12 @@ function subjectPanelHtml(key, lesson = null) {
   const picked = !lesson && state.selection?.item ? state.items.find((item) => item.id === state.selection.item) : null;
   const due = upcomingFor(key, time, lesson).filter((item) => item !== picked);
   const fields = [];
+  const words = periodWords();
   if (showNext) {
     const diff = dayDiff(time.date, next.iso);
-    fields.push(`<div class="field is-row"><span class="field-label">Nächste Stunde</span><span class="field-value"><button type="button" class="link-button" data-open-lesson="${cellKey(next.iso, next.block)}">${esc(slotText(next.date, next.block))}</button><small>${esc(diff === 0 ? `heute um ${hm(next.start)}` : inDays(diff))}, ${esc(next.room)}</small></span></div>`);
+    fields.push(`<div class="field is-row"><span class="field-label">${words.dative === "der" ? "Nächste" : "Nächster"} ${words.one}</span><span class="field-value"><button type="button" class="link-button" data-open-lesson="${cellKey(next.iso, next.block)}">${esc(slotText(next.date, next.block))}</button><small>${esc(diff === 0 ? `heute um ${hm(next.start)}` : inDays(diff))}, ${esc(next.room)}</small></span></div>`);
   }
-  fields.push(`<div class="field is-row"><span class="field-label">Stunden</span><span class="field-value">${slotsHtml(key)}</span></div>`);
+  fields.push(`<div class="field is-row"><span class="field-label">${words.many}</span><span class="field-value">${slotsHtml(key)}</span></div>`);
   fields.push(`<div class="field is-row"><span class="field-label">${rooms.length === 1 ? "Raum" : "Räume"}</span><span class="field-value num">${esc(rooms.join(", "))}</span></div>`);
   if (course.topic) fields.push(`<div class="field is-row"><span class="field-label">Thema</span><span class="field-value">${esc(course.topic)}</span></div>`);
   fields.push(`<div class="field"><span class="field-label" id="dueLabel">Anstehend</span>${due.length ? `<ul class="mini-list" aria-labelledby="dueLabel">${due.map((item) => miniDueHtml(item, time)).join("")}</ul>` : `<p class="field-empty">Nichts angekündigt.</p>`}</div>`);

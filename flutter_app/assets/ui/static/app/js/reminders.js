@@ -1,5 +1,6 @@
-import { BRAND, LOCAL_KEYS, addDays, data, dayDiff, hm, isoDate, lessonsFor, minutesOf, startOfDay, storage, subject, toMin } from "./core.js";
+import { BRAND, LOCAL_KEYS, addDays, data, dayDiff, hm, isoDate, lessonsFor, minutesOf, nextSchoolDay, startOfDay, storage, subject, toMin } from "./core.js";
 import { expandEvents } from "./recurrence.js";
+import { safariOnMac } from "./persistence.js";
 import { endNotice, read as readPomodoro, subscribe } from "./pomodoro-timer.js";
 
 const SHOWN_KEY = "app-reminders-shown";
@@ -45,6 +46,36 @@ export function switchRemindersOn() {
 }
 
 export const permissionState = () => ("Notification" in window ? Notification.permission : "unsupported");
+
+// Where blocked reminders are allowed again, in the words of the system the page runs in. `settings` names the settings
+// the app can open with a button, where the app shell offers that.
+export function blockedPlace({ shell = "", app = false, agent = "", touchPoints = 0, homeScreen = false } = {}) {
+  if (shell === "android") return { where: `in den Einstellungen unter Apps › ${BRAND} › Benachrichtigungen`, settings: "Einstellungen" };
+  if (shell === "ios") return { where: `in den Einstellungen unter Mitteilungen › ${BRAND}`, settings: "Einstellungen" };
+  if (app && /Windows/.test(agent)) return { where: "in den Windows-Einstellungen unter System › Benachrichtigungen", settings: "Einstellungen" };
+  if (app && /Macintosh/.test(agent)) return { where: `in den Systemeinstellungen unter Mitteilungen › ${BRAND}`, settings: "Systemeinstellungen" };
+  if (app) return { where: "in den Systemeinstellungen unter Benachrichtigungen", settings: "Systemeinstellungen" };
+  const tablet = /iPad/.test(agent) || (/Macintosh/.test(agent) && touchPoints > 1);
+  if (tablet || /iPhone|iPod/.test(agent)) return { where: `in den Einstellungen des ${tablet ? "iPads" : "iPhones"} unter Mitteilungen › ${BRAND}`, settings: "" };
+  if (/Android/.test(agent) && homeScreen) return { where: `in den Einstellungen unter Apps › ${BRAND} › Benachrichtigungen`, settings: "" };
+  if (safariOnMac(agent, touchPoints)) {
+    return { where: homeScreen ? `in den Systemeinstellungen unter Mitteilungen › ${BRAND}` : "in Safari unter Einstellungen › Websites › Mitteilungen", settings: "" };
+  }
+  if (homeScreen) return { where: "in den Website-Einstellungen des Browsers", settings: "" };
+  return { where: "über das Symbol links neben der Adresse, dort bei Benachrichtigungen", settings: "" };
+}
+
+export function blockedHere() {
+  const shell = window.hubShell;
+  const place = blockedPlace({
+    shell: document.documentElement.dataset.shell || "",
+    app: !!shell || /Electron/.test(navigator.userAgent),
+    agent: navigator.userAgent,
+    touchPoints: navigator.maxTouchPoints || 0,
+    homeScreen: matchMedia("(display-mode: standalone)").matches || navigator.standalone === true,
+  });
+  return { ...place, open: place.settings && typeof shell?.openNotificationSettings === "function" ? () => shell.openNotificationSettings() : null };
+}
 
 export const canAsk = () => "Notification" in window && Notification.permission === "default" && readPrefs().enabled;
 
@@ -92,15 +123,20 @@ function noteOf(item) {
   return `\n${word}: ${text.length > NOTE_LIMIT ? `${text.slice(0, NOTE_LIMIT - 1).replace(/[\uD800-\uDBFF]$/, "").trimEnd()}…` : text}`;
 }
 
+const lessonBody = (lesson) => `${subject(lesson.subject).label} um ${hm(lesson.start)}${lesson.room ? ` in ${lesson.room}` : ""}.`;
+
 function lessonReminders(prefs, day, minute) {
   const lead = Number(prefs.categories.lessons.lead) || CATEGORY_DEFAULTS.lessons.lead;
   return lessonsFor(day)
     .filter((lesson) => !lesson.cancelled && dueAt(minute, lesson.startMin - lead))
-    .map((lesson) => ({
-      key: `lesson:${isoDate(day)}:${lesson.block}`,
-      title: BRAND,
-      body: `${subject(lesson.subject).label} um ${hm(lesson.start)}${lesson.room ? ` in ${lesson.room}` : ""}.`,
-    }));
+    .map((lesson) => ({ key: `lesson:${isoDate(day)}:${lesson.block}`, title: BRAND, body: lessonBody(lesson) }));
+}
+
+// Without a lesson in the plan the sample in the settings must not make one up that looks real.
+export function sampleReminder(date) {
+  const minute = minutesOf(date);
+  const lesson = lessonsFor(date).find((item) => !item.cancelled && item.startMin > minute) || nextSchoolDay(date)?.lessons[0];
+  return lesson ? { lesson: true, body: lessonBody(lesson) } : { lesson: false, body: "Das ist eine Probe. Mit Stundenplan steht hier deine nächste Stunde." };
 }
 
 // The days before a test or a homework remind at six in the evening and the day itself in the morning. When six falls into

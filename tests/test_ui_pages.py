@@ -3,6 +3,7 @@
 
 import json
 import re
+import sqlite3
 import subprocess
 import sys
 import time
@@ -688,6 +689,44 @@ def test_the_automatic_colour_scheme_survives_a_reload(client):
     assert 'data-theme-mode="dark"' in client.get("/hub").get_data(as_text=True)
     client.put("/api/ui/store/app-theme-choice", json="auto")
     assert 'data-theme-mode="auto"' in client.get("/hub").get_data(as_text=True)
+
+
+def test_a_new_install_follows_the_system_until_a_scheme_is_picked(client):
+    theme_mode = lambda: re.search(r'data-theme-mode="(\w+)"', client.get("/hub/settings").get_data(as_text=True)).group(1)
+    assert theme_mode() == "auto"
+    client.post("/api/hub/tour", json={"state": "done"})
+    client.put("/api/ui/store/app-ab-weeks", json=False)
+    client.put("/api/ui/store/app-settings", json={"school": {"grade": 12}})
+    assert theme_mode() == "auto"
+    client.put("/api/ui/store/app-theme-choice", json="light")
+    assert theme_mode() == "light"
+    client.put("/api/ui/store/app-theme-choice", json="dark")
+    assert theme_mode() == "dark"
+
+
+def test_a_scheme_from_the_classic_pages_carries_over(client):
+    client.post("/api/hub/theme", json={"theme": "light"})
+    assert 'data-theme-mode="light"' in client.get("/hub").get_data(as_text=True)
+    client.post("/api/hub/theme-preferences", json={"theme_mode": "system"})
+    assert 'data-theme-mode="auto"' in client.get("/hub").get_data(as_text=True)
+    client.post("/api/hub/theme-preferences", json={"theme_mode": "manual"})
+    client.post("/api/hub/theme", json={"theme": "dark"})
+    assert 'data-theme-mode="dark"' in client.get("/hub").get_data(as_text=True)
+
+
+def test_an_older_database_stays_dark_as_before(tmp_path, monkeypatch):
+    from app import ui_pages
+
+    path = tmp_path / "hub.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE hub_timetable_settings (id INTEGER PRIMARY KEY AUTOINCREMENT, has_ab_weeks INTEGER DEFAULT 1, theme TEXT DEFAULT 'dark')")
+    monkeypatch.setattr(db, "DATABASE_PATH", str(path))
+    db.init_db()
+    assert db.get_theme_choice() is None
+    db.save_tour_state("done")
+    assert db.get_theme_choice() == "dark"
+    assert ui_pages.ui_settings({})["theme"] == "dark"
+    assert ui_pages.ui_settings({"app-theme-choice": "auto"})["theme"] == "auto"
 
 
 def test_a_removed_place_can_be_put_back(client, monkeypatch):

@@ -247,6 +247,14 @@ const tests = {
     assert.ok(plan.catalogFor(12).some((item) => item.name === "Seminarkurs" && item.type === "SK"));
     assert.ok(!plan.catalogFor(8).some((item) => item.name === "Seminarkurs"));
     assert.ok(plan.catalogFor(8).some((item) => item.name === "WAT"));
+    for (const grade of [8, 12]) {
+      const list = plan.catalogFor(grade);
+      assert.ok(list.some((item) => item.name === "Ethik" && item.short === "Eth" && item.group === "society"), `Ethik in ${grade}`);
+      assert.ok(list.some((item) => item.name === "Philosophie" && item.short === "Phi" && item.group === "society"), `Philosophie in ${grade}`);
+      assert.equal(new Set(list.map((item) => item.name)).size, list.length);
+      assert.equal(new Set(list.map((item) => item.short)).size, list.length);
+    }
+    assert.equal(plan.suggestShort("Ethik", ["Deu"]), "Eth");
     assert.equal(plan.scaleText(11), "in Punkten von 0 bis 15");
     assert.equal(plan.scaleText(10), "in Noten von 1 bis 6");
   },

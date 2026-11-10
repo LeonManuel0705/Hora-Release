@@ -51,10 +51,14 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
   // opened in the system browser instead of an embedded WebView.
   bool get _useEmbeddedWebView => !Platform.isLinux;
   bool _openedInBrowser = false;
+  InAppWebViewController? _web;
+  bool _asking = false;
+
+  static const _notificationSettings = 'x-apple.systempreferences:com.apple.preference.notifications';
 
   String get _startScript => '''
 (function () {
-  var permission = "${NotificationService().permissionGranted ? 'granted' : 'default'}";
+  var permission = "${NotificationService().permission}";
   function bridge(name, value) {
     if (!window.flutter_inappwebview || !window.flutter_inappwebview.callHandler) return Promise.resolve(null);
     return window.flutter_inappwebview.callHandler(name, value);
@@ -101,7 +105,8 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
     showFile: function (path) { return bridge("showFile", String(path || "")); },
     startAtLogin: function () { return bridge("loginItem", null); },
     setStartAtLogin: function (on) { return bridge("loginItem", on === true); },
-    openLoginItems: function () { return bridge("loginItemSettings", true); }''';
+    openLoginItems: function () { return bridge("loginItemSettings", true); },
+    openNotificationSettings: function () { return bridge("notificationSettings", true); }''';
 
   late AnimationController _logoController;
   late AnimationController _textController;
@@ -208,12 +213,27 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
     if (state == AppLifecycleState.detached) {
       _flask.shutdown();
     }
+    if (state == AppLifecycleState.resumed) unawaited(_recheckPermission());
     // Back from the Python installer or the privacy settings: try again by itself.
     if (state == AppLifecycleState.resumed &&
         _flask.state.value == FlaskServerState.error &&
         (_flask.problem == StartProblem.pythonMissing || _flask.problem == StartProblem.documentsDenied)) {
       _flask.restart();
     }
+  }
+
+  // The page reads the permission from its start script, so a change made in the system settings renews it and reloads.
+  Future<void> _recheckPermission() async {
+    final controller = _web;
+    final service = NotificationService();
+    if (controller == null || _asking || !service.isInitialized) return;
+    final known = service.permission;
+    if (await service.refreshPermission() == known) return;
+    try {
+      await controller.removeAllUserScripts();
+      await controller.addUserScript(userScript: UserScript(source: _startScript, injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START));
+      await controller.reload();
+    } catch (_) {}
   }
 
   void _onStateChange() {
@@ -472,6 +492,7 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
             allowsBackForwardNavigationGestures: false,
           ),
           onWebViewCreated: (controller) async {
+            _web = controller;
             try {
               await InAppWebViewController.clearAllCache();
               await WebStorageManager.instance().deleteAllData();
@@ -483,9 +504,17 @@ class _DesktopWebViewScreenState extends State<DesktopWebViewScreen>
                 final service = NotificationService();
                 if (!service.isInitialized) await service.initialize();
                 if (service.permissionGranted) return 'granted';
-                final granted = await service.requestPermissions();
-                return granted ? 'granted' : 'denied';
+                _asking = true;
+                try {
+                  return await service.requestPermissions() ? 'granted' : 'denied';
+                } finally {
+                  _asking = false;
+                }
               },
+            );
+            controller.addJavaScriptHandler(
+              handlerName: 'notificationSettings',
+              callback: (args) async => Platform.isMacOS && await launchUrl(Uri.parse(_notificationSettings)),
             );
             controller.addJavaScriptHandler(
               handlerName: 'notify',
