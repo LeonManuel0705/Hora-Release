@@ -799,12 +799,19 @@ const DAY_PART = "(abend|morgen|vormittag|nachmittag|mittag|nacht)";
 // Every name in either case except a lone "so", which is a word of its own ("so gegen 18 Uhr").
 const CASED_NAMES = DAY_NAMES.map((name) => `[${name[0]}${name[0].toUpperCase()}]${name.slice(1)}`).join("|");
 const CASED_SHORT = DAY_SHORT.map(([first, second]) => `${first === "S" && second === "o" ? "S" : `[${first}${first.toLowerCase()}]`}[${second}${second.toUpperCase()}]`).join("|");
-const LISTED_SHORT = new RegExp(`(?:,|&|[Uu]nd|[Oo]der)\\s*(?:jede[nm]?\\s+)?(?:${CASED_SHORT})\\.?(?![\\p{L}])`, "u");
+const AND_OR = "[Uu][Nn][Dd]|[Oo][Dd][Ee][Rr]";
+const LISTED_SHORT = new RegExp(`((?:,|&|(?<![\\p{L}])(?:${AND_OR}))\\s*(?:jede[nm]?\\s+)?)(${CASED_SHORT})(\\.?)(?![\\p{L}\\p{N}\\-])`, "gu");
+// A short day after a separator lists a second day, unless it belongs to people ("mit Ben und Mo") or is Frau ("Fr. Lange").
+const listedShort = (body) => [...body.matchAll(LISTED_SHORT)].some((match) => {
+  const at = match.index + match[1].length;
+  const after = body.slice(at + match[2].length + match[3].length);
+  return !WITH_BEFORE.test(body.slice(0, at)) && !(/^fr$/i.test(match[2]) && /^\s*\p{Lu}/u.test(after));
+});
 const CASED_DAY = `(?:(?:${CASED_NAMES})(?:${DAY_PART.slice(1, -1)})?s?|(?:${CASED_SHORT})\\.?)`;
 const EVERY_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?jede[nm]?\\s+(?:${ORDINAL}\\s+)?(?:(${DAY_NAMES.join("|")})${DAY_PART}?|(${DAY_SHORT.join("|")}))(\\.)?(?![\\p{L}\\p{N}])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
 const DAYS_ADVERB = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?(${DAY_NAMES.join("|")})${DAY_PART}?s(?![\\p{L}\\p{N}\\-])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
-const MORE_DAYS = new RegExp(`^\\s*(?:,|&|und|oder|bis|-|–)\\s*(?:jede[nm]?\\s+)?${CASED_DAY}(?![\\p{L}])`, "u");
-const DAYS_BEFORE = new RegExp(`(?<![\\p{L}\\p{N}])${CASED_DAY}\\s*(?:,|&|und|oder)\\s*$`, "u");
+const MORE_DAYS = new RegExp(`^\\s*(?:,|&|${AND_OR}|bis|-|–)\\s*(?:jede[nm]?\\s+)?${CASED_DAY}(?![\\p{L}])`, "u");
+const DAYS_BEFORE = new RegExp(`(?<![\\p{L}\\p{N}])${CASED_DAY}\\s*(?:,|&|${AND_OR})\\s*$`, "u");
 const LONG_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:${DAY_NAMES.join("|")})${DAY_PART}?s?(?![\\p{L}\\p{N}])`, "iu");
 const NAMES_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})(?![\\p{L}])`, "iu");
 const EVERY_UNIT = new RegExp(`(?<![\\p{L}\\p{N}])jede[nmrs]?\\s+(?:${ORDINAL}\\s+)?(tag|woche|monat|jahr)(?![\\p{L}\\p{N}])`, "iu");
@@ -897,7 +904,7 @@ export function parseEntry(text, day = isoDate(now())) {
   let body = repeat ? repeat.spans.sort((a, b) => b[0] - a[0]).reduce((rest, [from, to]) => `${rest.slice(0, from)} ${rest.slice(to)}`, text) : text;
   let info = parseNote(body);
   // Another weekday beside "jeden Montag" ("und Mi 19 Uhr", "mittwochs") asks for a second series: none is read, and no day.
-  if (weekdayRhythm(text)?.listed || (repeat?.dow != null && (LONG_DAY.test(body) || LISTED_SHORT.test(body) || NAMES_DAY.test(info.phrases.date || "")))) {
+  if (weekdayRhythm(text)?.listed || (repeat?.dow != null && (LONG_DAY.test(body) || listedShort(body) || NAMES_DAY.test(info.phrases.date || "")))) {
     repeat = null;
     body = text;
     info = parseNote(text);

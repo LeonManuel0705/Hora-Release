@@ -1005,7 +1005,10 @@ button.add-row:is(:active, .is-pressed) { background: var(--surface-press); colo
   #noteForm .segmented[role="radiogroup"] label { padding-inline: 4px; }
 }
 @media (max-width: 359px) {
-  #noteForm .segmented[role="radiogroup"] label { padding-inline: 2px; font-size: 12px; }
+  #noteForm .segmented[role="radiogroup"] label { padding-inline: 2px; }
+}
+@media (max-width: 340px) {
+  #noteForm .segmented[role="radiogroup"] label { font-size: var(--text-xs); }
 }
 
 .sheet-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 16px; }
