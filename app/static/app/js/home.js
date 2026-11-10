@@ -17,7 +17,7 @@ const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const clamp = (value, low = 0, high = 1) => Math.min(high, Math.max(low, value));
 const widow = (text) => text.replace(/ (\S{1,12})$/, "\u00a0$1");
 const PERIOD = periodWords();
-const nth = (n) => `${n}. ${PERIOD.one}`;
+const nth = (n) => `${n}.\u00a0${PERIOD.one}`;
 const thisPeriod = `${PERIOD.dative === "der" ? "dieser" : "diesem"} ${PERIOD.one}`;
 
 const state = {
