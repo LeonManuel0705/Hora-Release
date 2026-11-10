@@ -553,7 +553,12 @@ class UiData {
     final reference = AppProvider.abReferenceOf(prefs);
 
     final store = await UiDb.store(db);
-    final usable = {...subjects, ...customSubjects(store['app-subjects'], subjects)};
+    final own = customSubjects(store['app-subjects'], subjects);
+    final usable = {...subjects, ...own};
+    // An IServ course also finds the own subjects, put-aside ones included, as course_subject() does on the desktop.
+    for (final entry in {...own, ...customSubjects(store['app-subjects'], subjects, putAside: true)}.entries) {
+      names.putIfAbsent(norm(entry.value['name']), () => entry.key);
+    }
     return School(
       subjects: subjects,
       known: usable,
@@ -598,13 +603,13 @@ class UiData {
     return plan;
   }
 
-  static Map<String, Map<String, Object?>> customSubjects(Object? saved, Map<String, Object?> catalog) {
+  static Map<String, Map<String, Object?>> customSubjects(Object? saved, Map<String, Object?> catalog, {bool putAside = false}) {
     final items = saved is Map ? saved['items'] : null;
     if (items is! Map) return {};
     final removed = (saved as Map)['removed'] is List ? saved['removed'] as List : const [];
     final result = <String, Map<String, Object?>>{};
     items.forEach((key, own) {
-      if (key is! String || catalog.containsKey(key) || removed.contains(key) || own is! Map || own['custom'] != true) return;
+      if (key is! String || catalog.containsKey(key) || removed.contains(key) != putAside || own is! Map || own['custom'] != true) return;
       final raw = own['name'] is String ? (own['name'] as String).trim() : '';
       final name = raw.length > 32 ? raw.substring(0, 32) : raw;
       if (name.isEmpty || !uiHues.containsKey(own['hue'])) return;

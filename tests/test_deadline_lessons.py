@@ -134,3 +134,17 @@ def test_homework_from_iserv_and_the_export_find_the_lesson_too(client):
     assert view['subject'] == 'x-de' and view['block'] == 5
     written = add(client, 'x-de', thursday, kind='Vortrag')
     assert next(item for item in ui_data.export_records()['deadlines'] if item['id'] == written['id'])['block'] == 5
+
+
+@pytest.mark.parametrize('key, value', [
+    ('app-timetable-edits', {'A:1:1': {'subject': ['x-ma'], 'room': 'R1'}, 'A:1:2': {'subject': 'x-ma', 'room': 'R1'}}),
+    ('app-subjects', {**SUBJECTS, 'removed': [{'key': 'x-de'}]}),
+    ('app-subjects', {'items': {**SUBJECTS['items'], 'x-ku': {'custom': True, 'name': 'Kunst', 'hue': ['lake']}}}),
+])
+def test_a_broken_value_in_the_store_leaves_the_pages_and_the_lesson_working(client, key, value):
+    new_plan(client, {'A:1:2': {'subject': 'x-ma', 'room': 'R1'}})
+    assert client.put(f'/api/ui/store/{key}', json=value).status_code == 200
+    pages = ('/hub', '/hub/calendar', '/hub/settings')
+    assert {path: client.get(path).status_code for path in pages} == dict.fromkeys(pages, 200)
+    test = add(client, 'x-ma', monday_of('A'))
+    assert test['block'] == 2 and shown(client)[test['id']] == 2

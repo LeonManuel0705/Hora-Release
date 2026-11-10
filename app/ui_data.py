@@ -397,7 +397,7 @@ def effective_school(settings=None, store=None, base=None):
 
     own_subjects = saved('app-subjects')
     items = own_subjects.get('items') if isinstance(own_subjects.get('items'), dict) else {}
-    removed = set(own_subjects.get('removed')) if isinstance(own_subjects.get('removed'), list) else set()
+    removed = {key for key in own_subjects.get('removed') if isinstance(key, str)} if isinstance(own_subjects.get('removed'), list) else set()
     subjects = {}
     for key, info in school['subjects'].items():
         own = items.get(key) if isinstance(items.get(key), dict) else {}
@@ -411,11 +411,9 @@ def effective_school(settings=None, store=None, base=None):
             label = info['name']
         subjects[key] = {'name': label, 'type': kind, 'retired': key in removed}
     for key, own in items.items():
-        if key in subjects or not isinstance(own, dict) or not own.get('custom'):
+        if key in subjects or not is_own_subject(own):
             continue
-        name = own['name'].strip()[:32] if isinstance(own.get('name'), str) else ''
-        if not name or own.get('hue') not in HUES:
-            continue
+        name = own['name'].strip()[:32]
         kind = own.get('type') if own.get('type') in COURSE_TYPES else 'GK'
         subjects[key] = {'name': f"{name}{' LK' if kind == 'LK' else ''}", 'type': kind, 'retired': key in removed}
 
@@ -434,7 +432,7 @@ def effective_school(settings=None, store=None, base=None):
     known = {block['n'] for block in blocks}
 
     def active(key):
-        return key in subjects and not subjects[key]['retired']
+        return isinstance(key, str) and key in subjects and not subjects[key]['retired']
 
     timetable = {
         week: {

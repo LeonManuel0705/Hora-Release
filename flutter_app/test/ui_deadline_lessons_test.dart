@@ -84,12 +84,15 @@ void main() {
     return {for (final item in (built['deadlines'] as List).cast<Map>()) item['id']: item['block']};
   }
 
-  // The first Monday after this week that falls in the A or B week as the page counts them.
-  Future<DateTime> mondayOf(String week) async {
-    final school = await (await data()).school();
+  // The first Monday after this week that falls in the A or B week, counted from the stored reference and not by
+  // School.weekOf, which is under test. Reading the school first settles the reference of a fresh install.
+  Future<DateTime> mondayOf(String week, {bool swapped = false}) async {
+    await (await data()).school();
+    final stored = AppProvider.abReferenceOf(await SharedPreferences.getInstance());
+    final reference = swapped ? stored.add(const Duration(days: 7)) : stored;
     final today = DateTime.now();
     var monday = DateTime(today.year, today.month, today.day - (today.weekday - 1) + 7);
-    while (school.weekOf(monday) != week) {
+    while (AppProvider.weekTypeFrom(monday, reference) != week) {
       monday = DateTime(monday.year, monday.month, monday.day + 7);
     }
     return monday;
@@ -136,8 +139,8 @@ void main() {
   test('the swapped weeks move the lesson with them', () async {
     await newPlan({'A:1:3': lesson('x-ma'), 'B:1:1': lesson('x-ma')});
     await put('app-ab-swap', true);
-    final inA = await add('x-ma', await mondayOf('A'));
-    final inB = await add('x-ma', await mondayOf('B'));
+    final inA = await add('x-ma', await mondayOf('A', swapped: true));
+    final inB = await add('x-ma', await mondayOf('B', swapped: true));
     expect([inA['block'], inB['block']], [3, 1]);
   });
 
@@ -175,15 +178,15 @@ void main() {
     expect(listed.containsKey(german['id']) ? listed[german['id']] : null, isNull);
   });
 
-  test('homework from IServ finds the lesson too', () async {
+  test('homework from IServ finds an own subject of the new setup and its lesson, as on the desktop', () async {
+    await newPlan({'A:4:3': lesson('x-de'), 'A:4:5': lesson('x-ma')});
     final db = await UiDb.open();
-    await db.insert('subjects', {'name': 'Deutsch', 'created_at': DateTime(2026, 9, 1).toIso8601String()});
-    final german = (await (await data()).school()).names['deutsch']!;
-    await put('app-timetable-edits', {'A:4:3': lesson(german)});
     final thursday = after(await mondayOf('A'), 3);
-    await db.insert('iserv_exercises', {'id': '7', 'title': 'Gedicht', 'course': 'Deutsch', 'due_date': '${isoOf(thursday)}T08:00:00', 'cached_at': DateTime.now().toIso8601String()});
+    for (final (id, course) in [('7', 'Deutsch'), ('8', 'Mathe LK Q3'), ('9', 'Chor')]) {
+      await db.insert('iserv_exercises', {'id': id, 'title': 'Gedicht', 'course': course, 'due_date': '${isoOf(thursday)}T08:00:00', 'cached_at': DateTime.now().toIso8601String()});
+    }
     final setup = await (await data()).school();
-    final view = (await data()).iservView((await db.query('iserv_exercises')).single, setup, const {});
-    expect([view!['subject'], view['block']], [german, 3]);
+    final views = [for (final row in await db.query('iserv_exercises', orderBy: 'id')) (await data()).iservView(row, setup, const {})!];
+    expect([for (final view in views) [view['subject'], view['block']]], [['x-de', 3], ['x-ma', 5], [null, null]]);
   });
 }
