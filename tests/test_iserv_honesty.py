@@ -149,7 +149,8 @@ def test_homework_from_iserv_is_listed_read_only_and_only_once(client, monkeypat
     assert sorted(item['title'] for item in listed) == ['Analysis Blatt 3', 'Diercke S. 24']
     mine = next(item for item in listed if item['title'] == 'Analysis Blatt 3')
     assert (mine['origin'], mine['date'], mine['detail'], mine['status']) == ('iserv', soon, 'Mathematik', 'offen')
-    assert page_data(client, '/hub')['status']['iservParts']['homework'] == datetime.now().isoformat(timespec='minutes')
+    stamp = datetime.fromisoformat(page_data(client, '/hub')['status']['iservParts']['homework'])
+    assert datetime.now() - timedelta(minutes=2) <= stamp <= datetime.now()
 
 
 def test_homework_taken_over_by_hand_and_ticked_off_keeps_its_iserv_copy_away(client):
