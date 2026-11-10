@@ -1910,18 +1910,21 @@ async function startSync({ first = false, manual = false, quiet = false } = {}) 
   try {
     payload = await fetchSynced({ frisch: manual ? "alles" : "1" });
   } catch {}
+  /* Every check moves the stand, which only the head line shows. The view is drawn again, and the events fly in,
+     only when the events changed; a page left open would otherwise do both every minute. */
   const finish = () => {
     let changed = state.loading;
+    let fresh = false;
     sync.busy = false;
     state.loading = false;
     button.classList.remove("is-spinning");
     button.removeAttribute("aria-busy");
     if (payload) {
-      changed = applySynced(payload) || changed;
-      const before = `${sync.state}|${sync.stand}`;
+      fresh = applySynced(payload);
+      const before = sync.state;
       sync.state = payload.source === "google" ? payload.problem || "ok" : null;
       sync.stand = payload.stand || sync.stand;
-      changed = changed || before !== `${sync.state}|${sync.stand}`;
+      changed = changed || fresh || before !== sync.state;
       if (payload.problem && (manual || firstHint(payload.problem))) {
         const settings = { label: "Einstellungen", run: () => location.assign(pageUrl("settings", "/hub/settings#konten")) };
         toast(esc(payload.message), payload.problem === "login" ? { icon: "circle-alert", action: settings } : { icon: "wifi-off" });
@@ -1929,11 +1932,9 @@ async function startSync({ first = false, manual = false, quiet = false } = {}) 
     } else if (!first) {
       toast("Die verbundenen Kalender sind gerade nicht erreichbar.", { icon: "wifi-off" });
     }
-    syncButton();
-    if (changed) {
-      render();
-      revealSynced();
-    }
+    if (changed) render();
+    else renderChrome();
+    if (fresh) revealSynced();
     ensureRange();
   };
   const card = document.querySelector("#calView .cal-loading");
