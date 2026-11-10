@@ -82,7 +82,7 @@
         "icon": "building",
         "hue": "iris",
         "title": "IServ",
-        "text": "Sign in once with your IServ account. {{BRAND_NAME}} then fetches your assignments and the substitution plan on its own, and on the computer your IServ mail too. On Android, events come in as well, and new messages show up as notifications.",
+        "text": "Sign in once with your IServ account. {{BRAND_NAME}} then fetches your assignments on its own, and on the computer your IServ mail too. You get the substitution plan as a PDF or image if your school shows it on an IServ info screen. On Android, events come in as well, and new messages show up as notifications.",
         "facts": [
           "Assignments from IServ",
           "IServ mail on the computer",
@@ -108,11 +108,11 @@
         "icon": "sun",
         "hue": "lake",
         "title": "Calendar",
-        "text": "Your own events and the school holidays and public holidays of all 16 German states, without typing them in. On Android, events from IServ come in too.",
+        "text": "Your own events and the school holidays and public holidays of all 16 German states, without typing them in. On the computer, {{BRAND_NAME}} syncs your events with your Google Calendar both ways and, if you like, adds your timetable and tests to a calendar of its own, “{{BRAND_NAME}} Schule”. On Android, events from IServ come in too.",
         "facts": [
           "Holidays for 16 states",
-          "IServ events on Android",
-          "Your own events"
+          "Google Calendar on the computer",
+          "IServ events on Android"
         ],
         "devices": "all"
       },
@@ -191,6 +191,7 @@
     ],
     "android": [
       "Open the APK and allow installs from this source.",
+      "If your Samsung phone blocks the install, briefly turn off Auto Blocker under Settings › Security and privacy.",
       "{{BRAND_NAME}} tells you when an update is ready."
     ],
     "ios": [
@@ -333,6 +334,13 @@
             "d": "yes",
             "a": "yes",
             "i": "yes"
+          },
+          {
+            "name": "Google Calendar both ways",
+            "note": "if you like, with your timetable and tests in a calendar of its own, “{{BRAND_NAME}} Schule”",
+            "d": "yes",
+            "a": "no",
+            "i": "no"
           },
           {
             "name": "Email for IServ, Gmail and other IMAP mailboxes",
@@ -749,7 +757,7 @@
   "privacy_policy": {
     "nav_title": "Privacy Policy",
     "hero_title": "Privacy Policy",
-    "hero_date": "Effective: November 8, 2026",
+    "hero_date": "Effective: November 10, 2026",
     "s1_title": "§ 1 Data Controller",
     "s1_p1": "The data controller within the meaning of the General Data Protection Regulation (GDPR) is:",
     "s1_name": "Leon Manuel Töpper",
@@ -791,6 +799,8 @@
     "s4_list3": "Page visited",
     "s4_list4": "Browser type and operating system",
     "s4_p2": "This data is collected solely to ensure operation and prevent misuse (legal basis: Art. 6(1)(f) GDPR, legitimate interest) and is automatically deleted after a short period. No identification of individual persons takes place.",
+    "s4_p3": "The Website is hosted by Netlify (Netlify, Inc., 101 2nd Street, San Francisco, CA 94105, USA). Netlify may also process the access data listed above in the USA. Netlify is certified under the EU-U.S. Data Privacy Framework, for which the European Commission has found an adequate level of data protection (Art. 45 GDPR). More in [Netlify's privacy policy](https://www.netlify.com/privacy/).",
+    "s4_p4": "The files for Windows, Linux and Android are hosted on GitHub (GitHub, Inc., 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, USA). When you download one of them, your browser fetches it directly from there, and GitHub receives similar access data, such as your IP address. GitHub is also certified under the EU-U.S. Data Privacy Framework. More in [GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).",
     "s5_title": "§ 5 Cookies",
     "s5_p1": "The Website uses no cookies and no analytics tools. It stores your language preference only in your browser's storage (localStorage).",
     "s6_title": "§ 6 Your Rights",
@@ -843,7 +853,7 @@
         "id": "plan",
         "label": "Timetable",
         "title": "A week, B week, substitutions",
-        "text": "Your timetable with your school's periods. {{BRAND_NAME}} fetches the substitution plan from IServ every morning.¹",
+        "text": "Your timetable with your school's periods. If your school shows the substitution plan on an IServ info screen, {{BRAND_NAME}} picks it up there as a PDF or image, on the computer and on Android.",
         "alt": "The A-week timetable (German) with subjects and rooms, next to it the substitution plan.",
         "alt_phone": "The A-week timetable (German) with subjects and rooms, below it the substitution plan."
       },
@@ -907,7 +917,7 @@
       {
         "id": "luna",
         "lead": "Luna adds, but never deletes",
-        "text": "She only creates tasks. She cannot delete or tick anything off, even if a mail tells her to."
+        "text": "She creates tasks and only ticks one off when you tell her it's done. She cannot delete anything, even if a mail tells her to."
       },
       {
         "id": "move",
@@ -922,7 +932,7 @@
       {
         "id": "holidays",
         "lead": "School holidays included",
-        "text": "{{BRAND_NAME}} adds the holidays of all 16 German states to your calendar by itself."
+        "text": "{{BRAND_NAME}} adds the holidays of all 16 German states by itself. On the computer you can connect your Google Calendar too."
       }
     ],
     "card_alt_phones": "{{BRAND_NAME}} on three iPhones (German): tasks, overview and the evening overview.",
@@ -980,10 +990,10 @@
       "guard_done": "Task created",
       "guard_task": "Maths: p. 42, no. 3 by Friday",
       "guard_check": "Tick off tasks",
-      "guard_yours": "Only you do that.",
+      "guard_yours": "Only when you tell her.",
       "guard_delete": "Delete tasks",
       "guard_never": "Luna is not allowed to.",
-      "guard_alt": "Luna creates a task. Ticking off or deleting tasks is not allowed for Luna.",
+      "guard_alt": "Luna creates a task. She ticks tasks off only when you tell her to and is not allowed to delete them.",
       "move_from": "Nexus",
       "move_tasks": "Tasks",
       "move_events": "Events",

@@ -126,7 +126,7 @@ function guardScene() {
     <div class="sc-guard-mascot">${luna("geschafft", 118, "", { still: true })}</div>
     <div class="sc-app sc-actions">
       <div class="sc-action is-done"><span class="sc-action-glyph">${icon("tasks", { size: 18 })}</span><p>${s("guard_done")}<span>${s("guard_task")}</span></p><span class="sc-check is-big">${icon("check", { size: 16, stroke: 3 })}</span></div>
-      <div class="sc-action is-denied"><span class="sc-action-glyph">${icon("circle-check", { size: 18 })}</span><p>${s("guard_check")}<span>${s("guard_yours")}</span></p><span class="sc-deny">${icon("ban", { size: 18 })}</span></div>
+      <div class="sc-action is-asked"><span class="sc-action-glyph">${icon("circle-check", { size: 18 })}</span><p>${s("guard_check")}<span>${s("guard_yours")}</span></p><span class="sc-ask">${icon("message-circle", { size: 17 })}</span></div>
       <div class="sc-action is-denied"><span class="sc-action-glyph">${icon("trash", { size: 18 })}</span><p>${s("guard_delete")}<span>${s("guard_never")}</span></p><span class="sc-deny">${icon("ban", { size: 18 })}</span></div>
     </div>
   </div>`;
@@ -321,16 +321,17 @@ const PLAYERS = {
     prepare(scene) {
       hidden(scene.querySelector(".sc-guard-mascot"), { opacity: "0", transform: "translateY(30px) scale(0.9)" });
       scene.querySelectorAll(".sc-action").forEach((row) => hidden(row, RISE));
-      scene.querySelectorAll(".sc-check.is-big, .sc-deny").forEach((mark) => hidden(mark, STAMP));
+      scene.querySelectorAll(".sc-check.is-big, .sc-ask, .sc-deny").forEach((mark) => hidden(mark, STAMP));
     },
     play(scene) {
-      const [done, ...denied] = scene.querySelectorAll(".sc-action");
+      const [done, ...later] = scene.querySelectorAll(".sc-action");
+      const denied = later.filter((row) => row.classList.contains("is-denied"));
       enter(scene.querySelector(".sc-guard-mascot"), { opacity: "0", transform: "translateY(30px) scale(0.9)" }, { duration: 700, easing: SPRING });
       enter(done, RISE, { delay: 220 });
       enter(scene.querySelector(".sc-check.is-big"), STAMP, { delay: 620, duration: 480, easing: SPRING });
-      const stamps = denied.map((row, i) => {
+      const stamps = later.map((row, i) => {
         enter(row, RISE, { delay: 900 + i * 160 });
-        return enter(row.querySelector(".sc-deny"), STAMP, { delay: 1220 + i * 160, duration: 460, easing: SPRING });
+        return enter(row.querySelector(".sc-ask, .sc-deny"), STAMP, { delay: 1220 + i * 160, duration: 460, easing: SPRING });
       });
       stamps.at(-1)?.finished.then(() => {
         denied.forEach((row) => row.animate([{}, { transform: "translateX(-7px)" }, { transform: "translateX(6px)" }, { transform: "translateX(-3px)" }, {}], { duration: 440, easing: "ease-in-out" }));

@@ -82,7 +82,7 @@
         "icon": "building",
         "hue": "iris",
         "title": "IServ",
-        "text": "Melde dich einmal mit deinem IServ-Konto an. Deine Aufgaben und den Vertretungsplan holt {{BRAND_NAME}} dann von selbst, am Computer auch deine IServ-Mails. Auf Android kommen Termine dazu, neue Nachrichten melden sich als Mitteilung.",
+        "text": "Melde dich einmal mit deinem IServ-Konto an. Deine Aufgaben holt {{BRAND_NAME}} dann von selbst, am Computer auch deine IServ-Mails. Den Vertretungsplan bekommst du als PDF oder Bild, wenn deine Schule ihn auf einem IServ-Infobildschirm zeigt. Auf Android kommen Termine dazu, neue Nachrichten melden sich als Mitteilung.",
         "facts": [
           "Aufgaben aus IServ",
           "IServ-Mail am Computer",
@@ -108,11 +108,11 @@
         "icon": "sun",
         "hue": "lake",
         "title": "Kalender",
-        "text": "Eigene Termine und die Ferien und Feiertage aller 16 Bundesländer, ohne dass du sie abtippst. Auf Android kommen die Termine aus IServ dazu.",
+        "text": "Eigene Termine und die Ferien und Feiertage aller 16 Bundesländer, ohne dass du sie abtippst. Am Computer gleicht {{BRAND_NAME}} deine Termine in beide Richtungen mit deinem Google Kalender ab und trägt auf Wunsch Stundenplan und Tests in einen eigenen Kalender „{{BRAND_NAME}} Schule“ ein. Auf Android kommen die Termine aus IServ dazu.",
         "facts": [
           "Ferien für 16 Bundesländer",
-          "IServ-Termine auf Android",
-          "Eigene Termine"
+          "Google Kalender am Computer",
+          "IServ-Termine auf Android"
         ],
         "devices": "all"
       },
@@ -191,6 +191,7 @@
     ],
     "android": [
       "APK öffnen und die Installation aus dieser Quelle erlauben.",
+      "Blockiert dein Samsung-Handy die Installation, unter Einstellungen › Sicherheit und Datenschutz den Auto Blocker kurz ausschalten.",
       "{{BRAND_NAME}} meldet sich, sobald es ein Update gibt."
     ],
     "ios": [
@@ -333,6 +334,13 @@
             "d": "yes",
             "a": "yes",
             "i": "yes"
+          },
+          {
+            "name": "Google Kalender in beide Richtungen",
+            "note": "auf Wunsch mit Stundenplan und Tests in einem eigenen Kalender „{{BRAND_NAME}} Schule“",
+            "d": "yes",
+            "a": "no",
+            "i": "no"
           },
           {
             "name": "E-Mail für IServ, Gmail und andere IMAP-Postfächer",
@@ -749,7 +757,7 @@
   "privacy_policy": {
     "nav_title": "Datenschutzerklärung",
     "hero_title": "Datenschutzerklärung",
-    "hero_date": "Stand: 8. November 2026",
+    "hero_date": "Stand: 10. November 2026",
     "s1_title": "§ 1 Verantwortlicher",
     "s1_p1": "Verantwortlicher im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:",
     "s1_name": "Leon Manuel Töpper",
@@ -791,6 +799,8 @@
     "s4_list3": "Aufgerufene Seite",
     "s4_list4": "Browsertyp und Betriebssystem",
     "s4_p2": "Diese Daten werden ausschließlich zur Sicherstellung des Betriebs und zur Abwehr von Missbrauch erhoben (Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, berechtigtes Interesse) und nach kurzer Zeit automatisch gelöscht. Eine Zuordnung zu einzelnen Personen findet nicht statt.",
+    "s4_p3": "Die Website wird von Netlify (Netlify, Inc., 101 2nd Street, San Francisco, CA 94105, USA) bereitgestellt. Netlify kann die oben genannten Zugriffsdaten dabei auch in den USA verarbeiten. Netlify ist nach dem EU-US Data Privacy Framework zertifiziert, für das die EU-Kommission ein angemessenes Datenschutzniveau festgestellt hat (Art. 45 DSGVO). Mehr dazu in der [Datenschutzerklärung von Netlify](https://www.netlify.com/privacy/).",
+    "s4_p4": "Die Dateien für Windows, Linux und Android liegen auf GitHub (GitHub, Inc., 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, USA). Wenn du eine davon lädst, holt dein Browser sie direkt von dort, und GitHub erhält dabei ähnliche Zugriffsdaten, zum Beispiel deine IP-Adresse. Auch GitHub ist nach dem EU-US Data Privacy Framework zertifiziert. Mehr dazu in der [Datenschutzerklärung von GitHub](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).",
     "s5_title": "§ 5 Cookies",
     "s5_p1": "Die Website verwendet keine Cookies und keine Analyse-Tools. Deine Spracheinstellung speichert sie nur im Speicher deines Browsers (localStorage).",
     "s6_title": "§ 6 Deine Rechte",
@@ -843,7 +853,7 @@
         "id": "plan",
         "label": "Stundenplan",
         "title": "A-Woche, B-Woche, Vertretungen",
-        "text": "Dein Stundenplan mit euren Blockzeiten. Den Vertretungsplan holt {{BRAND_NAME}} jeden Morgen aus IServ.¹",
+        "text": "Dein Stundenplan mit euren Blockzeiten. Zeigt deine Schule den Vertretungsplan auf einem IServ-Infobildschirm, holt {{BRAND_NAME}} ihn dort als PDF oder Bild ab, am Computer und auf Android.",
         "alt": "Der Stundenplan der A-Woche mit Fächern und Räumen, daneben der Vertretungsplan.",
         "alt_phone": "Der Stundenplan der A-Woche mit Fächern und Räumen, darunter der Vertretungsplan."
       },
@@ -907,7 +917,7 @@
       {
         "id": "luna",
         "lead": "Luna trägt ein, löscht aber nie",
-        "text": "Sie legt nur Aufgaben an. Löschen oder abhaken kann sie nicht, auch wenn es in einer Mail steht."
+        "text": "Sie legt Aufgaben an und hakt sie nur ab, wenn du es ihr sagst. Löschen kann sie nicht, auch wenn es in einer Mail steht."
       },
       {
         "id": "move",
@@ -922,7 +932,7 @@
       {
         "id": "holidays",
         "lead": "Die Ferien sind schon drin",
-        "text": "Ferien und Feiertage aller 16 Bundesländer trägt {{BRAND_NAME}} selbst in deinen Kalender ein."
+        "text": "Ferien und Feiertage aller 16 Bundesländer trägt {{BRAND_NAME}} selbst ein. Am Computer verbindest du auch deinen Google Kalender."
       }
     ],
     "card_alt_phones": "{{BRAND_NAME}} auf drei iPhones: Aufgaben, Übersicht und die Übersicht am Abend.",
@@ -980,10 +990,10 @@
       "guard_done": "Aufgabe angelegt",
       "guard_task": "Mathe: S. 42, Nr. 3 bis Freitag",
       "guard_check": "Aufgaben abhaken",
-      "guard_yours": "Das machst nur du.",
+      "guard_yours": "Nur wenn du es ihr sagst.",
       "guard_delete": "Aufgaben löschen",
       "guard_never": "Das darf Luna nicht.",
-      "guard_alt": "Luna legt eine Aufgabe an. Aufgaben abhaken oder löschen darf Luna nicht.",
+      "guard_alt": "Luna legt eine Aufgabe an. Aufgaben hakt sie nur ab, wenn du es ihr sagst, löschen darf sie keine.",
       "move_from": "Nexus",
       "move_tasks": "Aufgaben",
       "move_events": "Termine",
