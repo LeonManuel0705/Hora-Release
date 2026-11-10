@@ -7,17 +7,18 @@ import { animates, travels, rich, level, flipKeyed, exitInPlace, enterInPlace, s
 import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
 import { toast, openPage, registerSearch, typing, shortcutsEnabled, overlayOpen, placeNear, clampSheet, parseNote, cleanTitle, syncTime } from "./shell.js";
 import { tasks as taskApi, deadlines as deadlineApi, serverId } from "./api.js";
+import { dueItems as dueLists, blockIn, testAhead, homeFirst, DUE_DAYS } from "./home-rules.js";
 
 const $ = (id) => document.getElementById(id);
 const DAY_START = data.blocks?.length ? Math.min(...data.blocks.map((block) => toMin(block.start))) : 480;
 const DAY_END = data.blocks?.length ? Math.max(...data.blocks.map((block) => toMin(block.end))) : 900;
 const SPAN = DAY_END - DAY_START;
-const WRITTEN_DAYS = 14;
 const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const clamp = (value, low = 0, high = 1) => Math.min(high, Math.max(low, value));
 const widow = (text) => text.replace(/ (\S{1,12})$/, "\u00a0$1");
 const PERIOD = periodWords();
 const nth = (n) => `${n}. ${PERIOD.one}`;
+const thisPeriod = `${PERIOD.dative === "der" ? "dieser" : "diesem"} ${PERIOD.one}`;
 
 const state = {
   tasks: flags.empty ? [] : [...data.tasks, ...(data.taskPool || []).filter((task) => !task.done && task.date && !task.someday)].map((task) => ({ ...task })),
@@ -65,8 +66,8 @@ const byPriority = (a, b) => Number(!!b.priority) - Number(!!a.priority);
 const rowFor = (id) => document.querySelector(`#taskList .task[data-id="${CSS.escape(id)}"], #doneList .task[data-id="${CSS.escape(id)}"]`);
 const label = (key) => subject(key).label;
 
-function testOnDate(iso, block) {
-  return state.deadlines.find((item) => isAssessment(item) && item.date === iso && (!block || item.block === block));
+function testOnDate(iso, block, lessons) {
+  return state.deadlines.find((item) => isAssessment(item) && item.date === iso && blockIn(item, lessons) === block);
 }
 
 function spoken(min) {
@@ -103,6 +104,16 @@ function changeLine(day) {
   return `<p class="today-change">${icon("calendar-x-2")}<span>${esc(lines.join(". "))}.</span></p>`;
 }
 
+function testLine(day) {
+  const test = testAhead(state.deadlines, day);
+  if (!test) return "";
+  const what = test.subject ? `in ${subject(test.subject).name}` : `„${test.title}“`;
+  const text = day.lesson && test.block === day.lesson.block
+    ? `${test.kind} in ${thisPeriod}`
+    : `Heute ${test.kind} ${what}${test.block ? `, ${nth(test.block)}` : ""}`;
+  return `<p class="today-change is-test">${icon(ASSESSMENTS[test.kind].icon)}<span>${esc(text)}</span></p>`;
+}
+
 function reachableBus(day) {
   const fromMin = Math.max(day.last.endMin, day.nowMin);
   const bus = nextDeparture(fromMin);
@@ -119,7 +130,7 @@ function timeInline(parts) {
 }
 
 function heroCopy(day) {
-  const change = inSchool(day) ? changeLine(day) : "";
+  const change = inSchool(day) ? `${changeLine(day)}${testLine(day)}` : "";
   const title = (text) => `<h2 class="today-title" id="todayTitle">${esc(text)}</h2>`;
   const eyebrow = (text) => `<p class="today-eyebrow">${text}</p>`;
   const place = (lesson) => (lesson.movedFrom ? `<b>${esc(lesson.room)}</b> statt ${esc(lesson.movedFrom)}` : lesson.room ? `<b>${esc(lesson.room)}</b>` : "");
@@ -183,7 +194,8 @@ function heroCopy(day) {
     };
   }
   const evening = day.nowMin >= 17 * 60;
-  if (later.length) {
+  const homeNow = day.kind === "afterSoon" && homeFirst(homeBus, later[0], day.nowMin);
+  if (later.length && !homeNow) {
     const [event, second] = later;
     const started = toMin(event.start) <= day.nowMin;
     return {
@@ -193,11 +205,13 @@ function heroCopy(day) {
       next: second ? `Danach <b>${esc(second.title)}</b> um ${esc(second.start)}` : tomorrow(school),
     };
   }
+  const way = homeNow ? `Heimweg mit <b>${ride(homeBus)}</b> ab ${esc(homeBus.from)}` : "";
+  const after = homeNow && later[0];
   return {
     head: `${eyebrow(day.kind === "afterSoon" ? `Schule vorbei um ${hm(day.last.end)}` : evening ? "Heute Abend" : "Heute Nachmittag")}${title("Feierabend")}`,
-    meta: workload,
+    meta: after ? way : workload,
     parts: { plain: "" },
-    next: day.kind === "afterSoon" && homeBus ? `Heimweg mit <b>${ride(homeBus)}</b> ab ${esc(homeBus.from)}` : tomorrow(school),
+    next: after ? `Danach <b>${esc(after.title)}</b> um ${esc(after.start)}${after.place ? `, ${esc(after.place)}` : ""}` : way || tomorrow(school),
   };
 }
 
@@ -369,7 +383,7 @@ function renderTrack(day) {
           <span class="segment-time"><span class="segment-clock">${time}</span></span><span class="segment-label"><span class="label-full">Frei</span><span class="label-short">frei</span></span></div>`;
       }
       const info = subject(lesson.subject);
-      const test = testOnDate(isoDate(model.date), block.n);
+      const test = testOnDate(isoDate(model.date), block.n, model.lessons);
       const tip = `${nth(block.n)}, ${time}: <b>${esc(info.name)}</b>${lesson.room ? ` in ${esc(lesson.room)}` : ""}${lesson.teacher && lesson.teacher !== NO_TEACHER ? `, ${esc(lesson.teacher)}` : ""}${test ? `<br>${esc(test.kind)}: ${esc(test.title)}` : ""}${lesson.cancelled ? "<br>Entfällt" : ""}`;
       return `<div class="segment" role="button" data-block="${block.n}" tabindex="-1" data-tip="${esc(tip)}" data-tip-side="below" data-page-action="school" style="left:${left.toFixed(3)}%;width:${width.toFixed(3)}%;--hue:${hueVar(lesson.subject)}">
         <span class="segment-fill" aria-hidden="true"></span>
@@ -388,7 +402,7 @@ function renderTrack(day) {
     ["is-done", "is-now", "is-next", "is-cancelled"].forEach((name) => node.classList.toggle(name, name === cls));
     const progress = cls === "is-now" ? (day.nowMin - lesson.startMin) / (lesson.endMin - lesson.startMin) : 0;
     node.style.setProperty("--p", progress.toFixed(4));
-    const test = testOnDate(isoDate(model.date), lesson.block);
+    const test = testOnDate(isoDate(model.date), lesson.block, model.lessons);
     const status = stateWords[cls];
     node.setAttribute("aria-label", `${nth(lesson.block)}, ${hm(lesson.start)} bis ${hm(lesson.end)}, ${subject(lesson.subject).name}${lesson.room ? `, ${lesson.room}` : ""}${lesson.teacher && lesson.teacher !== NO_TEACHER ? `, ${lesson.teacher}` : ""}${test ? `, ${test.kind}` : ""}${status ? `, ${status}` : ""}`);
     if (!focusTarget && (cls === "is-now" || cls === "is-next")) focusTarget = node;
@@ -678,22 +692,7 @@ function dueRow(item, date) {
   </li>`;
 }
 
-function dueItems(date) {
-  const linked = new Set(state.tasks.map((task) => task.deadline).filter(Boolean));
-  const deadlines = state.deadlines.map((item) => ({ ...item, source: "deadline", diff: dayDiff(date, item.date) }));
-  const own = upcomingTasks().map((task) => ({
-    id: task.id, kind: "Aufgabe", title: task.title, subject: task.subject, date: task.date, block: task.block, source: "task", diff: dayDiff(date, task.date),
-  }));
-  const today = isoDate(date);
-  const overdue = deadlines.filter((item) => isOverdue(item, today)).sort((a, b) => a.diff - b.diff);
-  const written = deadlines.filter((item) => item.diff < 0 && item.diff >= -WRITTEN_DAYS && isAssessment(item)).sort((a, b) => b.diff - a.diff);
-  const soon = [
-    ...deadlines.filter((item) => item.diff >= 0 && item.diff <= 14 && !item.pinned && item.status !== "abgegeben" && !(item.diff === 0 && linked.has(item.id))),
-    ...own.filter((item) => item.diff <= 14),
-  ].sort((a, b) => a.diff - b.diff || Number(isAssessment(b)) - Number(isAssessment(a)));
-  const pinned = deadlines.filter((item) => item.pinned && item.diff >= 0);
-  return { overdue, soon, pinned, written };
-}
+const dueItems = (date) => dueLists(date, state.deadlines, upcomingTasks());
 
 function renderWritten(written, date) {
   const toggle = $("writtenToggle");
@@ -712,7 +711,7 @@ function renderDue() {
   const date = state.day.date;
   const list = $("dueList");
   const { overdue, soon, pinned, written } = dueItems(date);
-  const horizon = addDays(startOfDay(date), 14);
+  const horizon = addDays(startOfDay(date), DUE_DAYS);
   $("dueMeta").textContent = `bis ${shortDate(horizon)}`;
   renderWritten(written, date);
   if (!overdue.length && !soon.length && !pinned.length) {
@@ -774,7 +773,8 @@ function renderWeek(day) {
     } else {
       state.deadlines.filter((item) => item.date === iso && !item.pinned && item.status !== "abgegeben").forEach((item) => {
         const name = subject(item.subject).name.replace(/ LK$/, "");
-        const block = item.block ? `, ${nth(item.block)}` : "";
+        const n = blockIn(item, lessons);
+        const block = n ? `, ${nth(n)}` : "";
         const test = isAssessment(item);
         const text = `${item.kind} ${name}${block}`;
         markers.push({ order: test ? 0 : 1, text, html: `<p class="marker${test ? " is-test" : ""}">${icon(test ? ASSESSMENTS[item.kind].icon : "list-checks")}<span>${esc(text)}</span></p>` });
