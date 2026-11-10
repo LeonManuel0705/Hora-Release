@@ -50,7 +50,7 @@ globalThis.matchMedia = () => ({ matches: false, addEventListener() {} });
 globalThis.addEventListener = () => {};
 globalThis.dispatchEvent = () => true;
 
-const { dueReminders, readPrefs } = await import(source);
+const { dueReminders, readPrefs, sampleReminder, blockedPlace } = await import(source);
 const { data } = await import(pathToFileURL(resolve(here, "../../app/static/app/js/core.js")).href);
 
 const prefs = { ...readPrefs({ notify: { enabled: true, quiet: { from: "22:00", to: "07:00" } } }) };
@@ -60,6 +60,46 @@ const deadlines = (at, given = prefs) => dueReminders(given, new Date(`${at}:00`
 const morning = (time = "07:00") => dueReminders(prefs, new Date(`2026-11-06T${time}:00`)).filter((item) => item.key.startsWith("tasks:"));
 
 const tests = {
+  "the sample reminder names the next real lesson and makes none up without a plan"() {
+    const before = { timetable: data.timetable, subjects: data.subjects };
+    const empty = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+    try {
+      assert.deepEqual(sampleReminder(new Date("2026-11-08T12:00:00")), { lesson: false, body: "Das ist eine Probe. Mit Stundenplan steht hier deine nächste Stunde." });
+      const monday = (room) => ({ ...empty, 1: [{ block: 1, subject: "mathe", room, teacher: "T" }] });
+      data.subjects = { mathe: { name: "Mathe", label: "Mathe LK", short: "Ma", hue: "rose" } };
+      data.timetable = { A: monday("R101"), B: monday("R101") };
+      assert.deepEqual(sampleReminder(new Date("2026-11-08T12:00:00")), { lesson: true, body: "Mathe LK um 8:00 in R101." });
+      assert.equal(sampleReminder(new Date("2026-11-09T07:00:00")).body, "Mathe LK um 8:00 in R101.");
+      data.timetable = { A: monday(""), B: monday("") };
+      assert.equal(sampleReminder(new Date("2026-11-09T09:00:00")).body, "Mathe LK um 8:00.");
+    } finally {
+      Object.assign(data, before);
+    }
+  },
+  "blocked reminders point to the settings of the system the page runs in"() {
+    const agents = {
+      mac: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+      safari: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+      windows: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Electron/38.0.0 Safari/537.36",
+      linux: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Electron/38.0.0 Safari/537.36",
+      chrome: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      iphone: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+      android: "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36",
+    };
+    const place = (options) => blockedPlace(options);
+    assert.deepEqual(place({ shell: "android", app: true, agent: agents.android }), { where: "in den Einstellungen unter Apps › App › Benachrichtigungen", settings: "Einstellungen" });
+    assert.deepEqual(place({ app: true, agent: agents.mac }), { where: "in den Systemeinstellungen unter Mitteilungen › App", settings: "Systemeinstellungen" });
+    assert.deepEqual(place({ app: true, agent: agents.windows }), { where: "in den Windows-Einstellungen unter System › Benachrichtigungen", settings: "Einstellungen" });
+    assert.equal(place({ app: true, agent: agents.linux }).where, "in den Systemeinstellungen unter Benachrichtigungen");
+    assert.deepEqual(place({ shell: "web", agent: agents.iphone, homeScreen: true }), { where: "in den Einstellungen des iPhones unter Mitteilungen › App", settings: "" });
+    assert.equal(place({ agent: agents.safari, touchPoints: 5 }).where, "in den Einstellungen des iPads unter Mitteilungen › App");
+    assert.equal(place({ agent: agents.safari }).where, "in Safari unter Einstellungen › Websites › Mitteilungen");
+    assert.equal(place({ agent: agents.safari, homeScreen: true }).where, "in den Systemeinstellungen unter Mitteilungen › App");
+    assert.equal(place({ agent: agents.chrome }).where, "über das Symbol links neben der Adresse, dort bei Benachrichtigungen");
+    assert.equal(place({ agent: agents.chrome, homeScreen: true }).where, "in den Website-Einstellungen des Browsers");
+    assert.equal(place({ shell: "web", agent: agents.android, homeScreen: true }).where, "in den Einstellungen unter Apps › App › Benachrichtigungen");
+    assert.equal(place({ agent: agents.android }).settings, "");
+  },
   "the morning reminder names tasks that are overdue, the oldest first"() {
     data.tasks = [task("3", "Referat", "2026-11-05", { dueTime: "18:00" }), task("2", "Vokabeln", "2026-11-06"), task("1", "Bio Mappe", "2026-11-04")];
     const [reminder] = morning();

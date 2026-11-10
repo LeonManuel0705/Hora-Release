@@ -117,6 +117,7 @@ const _downloadScript = '''
   }
   window.hubShell = Object.freeze({
     nativeNotifications: true,
+    openNotificationSettings: function () { return bridge("notificationSettings", true); },
     saveFile: function (name, content) {
       var blob = content instanceof Blob ? content : new Blob([content == null ? "" : content]);
       if (blob.size > limit) return Promise.resolve({ error: "too-large" });
@@ -512,6 +513,10 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
                     onWebViewCreated: (controller) {
                       _controller = controller;
                       controller.addJavaScriptHandler(handlerName: 'notifyPermission', callback: (args) => _askPermission());
+                      controller.addJavaScriptHandler(
+                        handlerName: 'notificationSettings',
+                        callback: (args) => Platform.isAndroid ? AndroidDevice.openNotificationSettings() : false,
+                      );
                       controller.addJavaScriptHandler(
                         handlerName: 'notify',
                         callback: (args) => _notify(args.isNotEmpty && args.first is Map ? args.first as Map : const {}),

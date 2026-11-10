@@ -105,6 +105,7 @@ class MainActivity: FlutterActivity() {
                 }
                 "canInstall" -> result.success(canInstallPackages())
                 "allowInstall" -> result.success(openInstallSettings())
+                "notificationSettings" -> result.success(openNotificationSettings())
                 "install" -> {
                     val path = call.argument<String>("path")
                     result.success(path != null && installPackage(path))
@@ -234,6 +235,20 @@ class MainActivity: FlutterActivity() {
 
     private fun canInstallPackages(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
+
+    private fun openNotificationSettings(): Boolean {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+        }
+        return try {
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     private fun openInstallSettings(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false

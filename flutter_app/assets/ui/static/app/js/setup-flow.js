@@ -6,7 +6,7 @@ import {
   activeSubjectKeys, subject, hueVar, slug, teacherId, teacherLabel, periodWords, weekType, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, isoWeek, hm, addDays, startOfDay, BRAND,
 } from "./core.js";
 import { animates, travels, token } from "./motion.js";
-import { askPermission, readPrefs, switchRemindersOn } from "./reminders.js";
+import { askPermission, readPrefs, switchRemindersOn, blockedHere } from "./reminders.js";
 import { pageUrl } from "./shell.js";
 import * as plan from "./setup-data.js";
 
@@ -719,13 +719,15 @@ function reminderRow() {
     : state === "granted"
       ? `Sind aus. Schalte sie ein, dann melde ich mich ${what}.`
       : state === "denied"
-        ? "Sind blockiert. Freigeben kannst du sie in den Einstellungen des Geräts oder Browsers."
+        ? `Sind blockiert. Freigeben kannst du sie ${blockedHere().where}.`
         : `Ich melde mich ${what}.`;
   const control = on
     ? `<span class="setup-extra-ok">${icon("circle-check")}</span>`
     : state === "granted"
       ? `<button class="btn btn-quiet" type="button" data-setup-remind-on>${icon("bell")}Einschalten</button>`
-      : state === "default" ? `<button class="btn btn-quiet" type="button" data-setup-remind>${icon("bell")}Erlauben</button>` : "";
+      : state === "default"
+        ? `<button class="btn btn-quiet" type="button" data-setup-remind>${icon("bell")}Erlauben</button>`
+        : state === "denied" && blockedHere().open ? `<button class="btn btn-quiet" type="button" data-setup-notify-settings>${icon("settings")}Öffnen</button>` : "";
   return `<div class="setup-extra" id="setupRemind" tabindex="-1"><span class="setup-extra-icon">${icon("bell")}</span><p><b>Erinnerungen</b><small>${text}</small></p>${control}</div>`;
 }
 
@@ -878,6 +880,7 @@ function onClick(event) {
     askPermission().then(repaintReminder);
     return;
   }
+  if (target.closest("[data-setup-notify-settings]")) return blockedHere().open?.();
   if (target.closest("[data-setup-remind-on]")) {
     switchRemindersOn();
     repaintReminder();

@@ -106,6 +106,9 @@ assert.equal(click({ href: "/hub/tasks" }).prevented, false);
 assert.equal(calls.length, 0);
 
 assert.equal(hubShell.nativeNotifications, true);
+answers.notificationSettings = true;
+assert.equal(await hubShell.openNotificationSettings(), true);
+assert.deepEqual(calls.splice(0), [["notificationSettings", true]]);
 answers.saveFile = { state: "saved", name: "sicherung (1).json", folder: "Downloads" };
 assert.deepEqual(await hubShell.saveFile("sicherung.json", '{"a":1}'), { name: "sicherung (1).json", folder: "Downloads" });
 assert.deepEqual(calls.splice(0), [["saveFile", { name: "sicherung.json", data: Buffer.from('{"a":1}').toString("base64") }]]);

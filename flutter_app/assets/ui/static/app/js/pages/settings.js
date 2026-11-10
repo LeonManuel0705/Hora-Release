@@ -1,6 +1,6 @@
 import {
   data, root, variant, flags, platform, esc, icon, luna, storage, now, subject, hueVar, toMin, clock, hm, weekType, isoWeek,
-  isoDate, minutesOf, lessonsFor, nextSchoolDay, shortDate, WEEKDAYS, WEEKDAYS_SHORT,
+  isoDate, shortDate, WEEKDAYS, WEEKDAYS_SHORT,
   LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, hasPlan, activeSubjectKeys, motionDefault, slug, teacherLabel, periodWords, planChange, planRevert, planMeta, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
 import { toast, setTheme, syncTime, renderSync } from "../shell.js";
@@ -9,7 +9,7 @@ import { askBackup, importFlow } from "../plan-share.js";
 import { platformName } from "../feedback.js";
 import { suggestShort, pickHue } from "../setup-data.js";
 import { storageNote, safariOnMac } from "../persistence.js";
-import { remindersOn } from "../reminders.js";
+import { remindersOn, sampleReminder, blockedHere } from "../reminders.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -50,11 +50,11 @@ function keepFocus(container, paint) {
   if (id && !container.contains(document.activeElement)) $(id)?.focus({ preventScroll: true });
 }
 
-function row({ id, label, desc = "", control = "", cls = "", forId = "" }) {
+function row({ id, label, desc = "", control = "", cls = "", forId = "", after = "" }) {
   const name = forId
     ? `<label class="set-row-label" id="${id}Label" for="${forId}">${label}</label>`
     : `<p class="set-row-label" id="${id}Label">${label}</p>`;
-  return `<div class="set-row${cls ? ` ${cls}` : ""}" id="${id}"><div class="set-row-text">${name}${desc ? `<p class="set-row-desc" id="${id}Desc">${desc}</p>` : ""}</div><div class="set-row-control">${control}</div></div>`;
+  return `<div class="set-row${cls ? ` ${cls}` : ""}" id="${id}"><div class="set-row-text">${name}${desc ? `<p class="set-row-desc" id="${id}Desc">${desc}</p>` : ""}${after}</div><div class="set-row-control">${control}</div></div>`;
 }
 
 const switchHtml = (id, on, labelId, { disabled = false, describedBy = "" } = {}) =>
@@ -1872,13 +1872,15 @@ function permissionRow() {
   const state = permission();
   const native = !!page.native || !!window.hubShell?.nativeNotifications;
   const device = appleDevice();
+  const blocked = blockedHere();
   const words = {
     granted: [device ? `${BRAND} darf Erinnerungen zeigen, auf dem ${device} aber nur, solange die App geöffnet ist.` : `${BRAND} darf Erinnerungen zeigen.`, `<span class="status is-ok">${icon("circle-check")}Erlaubt</span>`],
     default: [device ? `Das ${device} fragt einmal nach. Erinnerungen kommen nur, solange die App geöffnet ist.` : `${native ? "Das Gerät" : "Der Browser"} fragt einmal nach, danach meldet sich ${BRAND} vor Stunden, Tests und Abgaben.`, `<button class="btn btn-quiet" type="button" id="notifyAllow">${icon("bell")}Erlauben</button>`],
-    denied: [native ? `Blockiert. Freigeben kannst du das in den Einstellungen des Geräts unter Mitteilungen für ${BRAND}.` : device ? `Blockiert. Freigeben kannst du das in den Einstellungen des ${device}s unter Mitteilungen für ${BRAND}.` : "Blockiert. Freigeben kannst du das in den Website-Einstellungen des Browsers.", `<span class="status is-warn">Blockiert</span>`],
+    denied: [`Blockiert. Freigeben kannst du das ${blocked.where}.`, `<span class="status is-warn">Blockiert</span>`],
     unsupported: [native ? "Dieses Gerät kann gerade keine Erinnerungen zeigen." : unsupportedText(), `<span class="status is-off">Nicht verfügbar</span>`],
   }[state];
-  return row({ id: "rowPermission", label: native ? "Auf diesem Gerät" : device ? `Auf dem ${device}` : "Im Browser", desc: words[0], control: words[1] });
+  const open = state === "denied" && blocked.open ? `<button class="text-button row-action" type="button" id="notifySettings">${icon("settings")}<span>${blocked.settings} öffnen</span></button>` : "";
+  return row({ id: "rowPermission", label: native ? "Auf diesem Gerät" : device ? `Auf dem ${device}` : "Im Browser", desc: words[0], control: words[1], after: open });
 }
 
 function renderNotify() {
@@ -1891,7 +1893,7 @@ function renderNotify() {
       row({ id: "rowNotifyAll", label: "Erinnerungen", desc: `Alle Erinnerungen von ${BRAND} an oder aus`, control: switchHtml("notifyEnabled", notify.enabled, "rowNotifyAllLabel", { describedBy: "rowNotifyAllDesc" }) }),
       row({ id: "rowNotifySound", label: "Ton", desc: "Kurzer Ton bei jeder Erinnerung", cls: off ? "is-muted" : "", control: switchHtml("notifySound", notify.sound, "rowNotifySoundLabel", { disabled: off, describedBy: "rowNotifySoundDesc" }) }),
       row({ id: "rowQuiet", label: "Ruhezeit", desc: `In dieser Zeit bleibt ${BRAND} still`, cls: off ? "is-stack is-muted" : "is-stack", control: `<input class="field-control" type="time" id="quietFrom" value="${notify.quiet.from}" aria-label="Ruhezeit ab" aria-describedby="quietError"${off ? " disabled" : ""}><span class="set-to" aria-hidden="true">bis</span><input class="field-control" type="time" id="quietTo" value="${notify.quiet.to}" aria-label="Ruhezeit bis" aria-describedby="quietError"${off ? " disabled" : ""}>${errorHtml("quietError", "")}` }),
-      row({ id: "rowNotifyTest", label: "Probe-Erinnerung", desc: `So sieht die Erinnerung vor der nächsten Stunde aus: ${esc(nextLessonText())}`, control: `<button class="btn btn-quiet" type="button" id="notifyTest">${icon("bell-ring")}Senden</button>` }),
+      row({ id: "rowNotifyTest", label: "Probe-Erinnerung", desc: sampleDesc(), control: `<button class="btn btn-quiet" type="button" id="notifyTest">${icon("bell-ring")}Senden</button>` }),
     ].join("");
   });
   renderKinds();
@@ -1917,12 +1919,11 @@ function renderNotifyMeta() {
   $("notifyMeta").textContent = notify.enabled ? `An, still von ${hm(notify.quiet.from)} bis ${hm(notify.quiet.to)} Uhr` : "Aus";
 }
 
-function nextLessonText() {
-  const today = now();
-  const minute = minutesOf(today);
-  const lesson = lessonsFor(today).find((item) => !item.cancelled && item.startMin > minute) || nextSchoolDay(today)?.lessons[0];
-  if (!lesson) return "Deutsch um 8:00 in R204.";
-  return `${subject(lesson.subject).label} um ${hm(lesson.start)} in ${lesson.room}.`;
+function sampleDesc() {
+  const sample = sampleReminder(now());
+  if (!sample.lesson) return "Zeigt einmal, wie eine Erinnerung bei dir ankommt.";
+  const words = periodWords();
+  return `So sieht die Erinnerung vor ${words.dative} nächsten ${words.one} aus: ${esc(sample.body)}`;
 }
 
 async function allowNotifications() {
@@ -1950,7 +1951,7 @@ function sendTest() {
     return;
   }
   try {
-    new Notification(BRAND, { body: nextLessonText(), icon: "/static/app/img/hora-favicon.svg", silent: !prefs.notify.sound });
+    new Notification(BRAND, { body: sampleReminder(now()).body, icon: "/static/app/img/hora-favicon.svg", silent: !prefs.notify.sound });
     toast("Probe gesendet", { icon: "bell-ring" });
   } catch {
     toast("Die Probe hat nicht geklappt.", { icon: "bell" });
@@ -1983,6 +1984,7 @@ function bindNotify() {
   const card = $("notifyCard");
   card.addEventListener("click", (event) => {
     if (event.target.closest("#notifyAllow")) allowNotifications();
+    else if (event.target.closest("#notifySettings")) blockedHere().open?.();
     else if (event.target.closest("#notifyTest")) sendTest();
     else if (event.target.closest("#notifyEnabled")) {
       Object.assign(prefs.notify, { enabled: !prefs.notify.enabled, chosen: true });

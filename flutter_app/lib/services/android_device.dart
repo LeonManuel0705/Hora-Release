@@ -76,5 +76,7 @@ class AndroidDevice {
 
   static Future<bool> allowInstall() async => await _call<bool>('allowInstall') ?? false;
 
+  static Future<bool> openNotificationSettings() async => await _call<bool>('notificationSettings') ?? false;
+
   static Future<bool> install(String path) async => await _call<bool>('install', {'path': path}) ?? false;
 }
