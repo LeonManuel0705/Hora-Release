@@ -488,6 +488,8 @@ def _event_payload(payload, item, creating):
         minutes = ui_data.reminder_minutes(payload.get('reminderMinutes'))
         if minutes != item.get('reminder_minutes'):
             item.update(reminder_minutes=minutes, reminder_changed=True)
+    if creating and isinstance(payload.get('calendar'), str) and payload['calendar'].strip():
+        item['google_target'] = payload['calendar'].strip()[:1024]
 
 
 @bp.route('/api/ui/events', methods=['POST'])

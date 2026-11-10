@@ -1290,6 +1290,8 @@ def page_calendar(data, school, settings, today, iserv):
         'state': calendar_cache.page_state()['google'] if google else None,
         'window': {'start': first.isoformat(), 'end': last.isoformat()},
     }
+    if sync['write']:
+        sync.update(calendar_cache.page_calendars())
     return {'region': dict(STATES).get(code, ''), 'events': [], 'holidays': data['holidays'], 'notes': {}, 'sync': sync}
 
 

@@ -182,3 +182,75 @@ def test_the_calendar_page_knows_how_the_copy_stands_before_it_asks(google, clie
     assert sync['state'] == 'ok' and sync['stand']
     monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {google.primary: {'token': 'x', 'expired': True}})
     assert page_data(client, '/hub/calendar')['page']['sync']['state'] == 'login'
+
+
+def own_in(client, calendar, title='Café-Schicht', offset=2):
+    reply = client.post('/api/ui/events', json={'title': title, 'date': day(offset), 'start': '16:00', 'end': '20:00', 'calendar': calendar}).get_json()
+    return reply['event']['id']
+
+
+def test_a_new_event_goes_to_the_calendar_picked_for_it_and_stays_there(google, client):
+    google.add_calendar('nebenjob@example.org', 'Nebenjob', role='writer')
+    calendar_cache.sync()
+    ref = own_in(client, 'nebenjob@example.org')
+    assert stored(google, 'nebenjob@example.org') == ['Café-Schicht'] and stored(google, 'primary') == []
+    item = calendar_cache.ui_data.load_list('calendar')[0]
+    assert item['google_calendar'] == 'nebenjob@example.org' and item['google_account'] == google.primary and 'google_dirty' not in item
+    own(client, 'Fahrstunde', 3)
+    assert stored(google, 'primary') == ['Fahrstunde'], 'the next event without a pick goes where the settings say'
+    client.patch(f'/api/ui/events/{ref}', json={'title': 'Café-Schicht lang'})
+    assert stored(google, 'nebenjob@example.org') == ['Café-Schicht lang']
+    calendar_cache._status['checked'] = None
+    calendar_cache.sync()
+    assert [event['title'] for event in calendar_cache.events(day(-70), day(100))] == [], 'the twin is never shown a second time'
+    client.delete(f'/api/ui/events/{ref}')
+    assert stored(google, 'nebenjob@example.org') == []
+
+
+def test_a_picked_calendar_that_takes_no_events_gives_way_to_the_one_from_the_settings(google, client, monkeypatch):
+    google.add_calendar('schule@example.org', 'Schule', role='owner')
+    google.add_calendar('feiertage@example.org', 'Feiertage', role='reader')
+    google.add_calendar('plan@example.org', 'Stundenplan', role='owner')
+    calendar_cache.sync()
+    monkeypatch.setattr(calendar_cache, '_managed', lambda: {'plan@example.org'})
+    choose(client, 'schule@example.org')
+    own_in(client, 'feiertage@example.org', 'Erstens')
+    own_in(client, 'plan@example.org', 'Zweitens', 3)
+    own_in(client, 'weg@example.org', 'Drittens', 4)
+    assert stored(google, 'schule@example.org') == ['Erstens', 'Zweitens', 'Drittens']
+    assert stored(google, 'feiertage@example.org') == stored(google, 'plan@example.org') == stored(google, 'primary') == []
+
+
+def test_a_change_never_moves_an_event_to_another_calendar(google, client):
+    google.add_calendar('nebenjob@example.org', 'Nebenjob', role='writer')
+    calendar_cache.sync()
+    ref = own(client)
+    client.patch(f'/api/ui/events/{ref}', json={'title': 'Fahrstunde Autobahn', 'calendar': 'nebenjob@example.org'})
+    assert stored(google, 'primary') == ['Fahrstunde Autobahn'] and stored(google, 'nebenjob@example.org') == []
+
+
+def test_the_calendar_page_names_where_new_events_may_go(google, client, configured, monkeypatch):
+    google.add_calendar('nebenjob@example.org', 'Nebenjob', role='writer', color='#f4511e')
+    google.add_calendar('feiertage@example.org', 'Feiertage', role='reader')
+    google.add_calendar('plan@example.org', 'Stundenplan', role='owner')
+    calendar_cache.sync()
+    monkeypatch.setattr(calendar_cache, '_managed', lambda: {'plan@example.org'})
+    google.calls.clear()
+    sync = page_data(client, '/hub/calendar')['page']['sync']
+    assert sync['calendars'] == [
+        {'id': google.primary, 'name': 'Privat', 'color': '#4285f4', 'primary': True},
+        {'id': 'nebenjob@example.org', 'name': 'Nebenjob', 'color': '#f4511e', 'primary': False},
+    ]
+    assert sync['target'] == google.primary and google.calls == []
+    choose(client, 'nebenjob@example.org')
+    assert page_data(client, '/hub/calendar')['page']['sync']['target'] == 'nebenjob@example.org'
+    write_off = client.put('/api/ui/store/app-settings', json={'google': {'write': False}})
+    assert write_off.status_code == 200
+    sync = page_data(client, '/hub/calendar')['page']['sync']
+    assert sync['write'] is False and 'calendars' not in sync
+
+
+def test_without_google_the_calendar_page_names_no_calendar(client, configured, monkeypatch):
+    monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {})
+    sync = page_data(client, '/hub/calendar')['page']['sync']
+    assert sync['source'] is None and sync['write'] is False and 'calendars' not in sync

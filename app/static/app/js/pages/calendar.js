@@ -40,9 +40,9 @@ const REPEATS = [["", "Nie", null], ["daily", "Täglich", { freq: "daily" }], ["
 const RESPONSES = { accepted: ["zugesagt", " is-yes"], declined: ["abgesagt", " is-no"], tentative: ["vielleicht", ""], needsAction: ["offen", ""] };
 const tasksLink = () => `href="${esc(pageUrl("tasks"))}" data-page="tasks"`;
 const KINDS = {
-  school: { label: "Schule", icon: "graduation-cap" },
-  training: { label: "Training", icon: "dumbbell" },
-  private: { label: "Privat", icon: "user" },
+  school: { label: "Schule", chip: "Schultermin", icon: "graduation-cap" },
+  training: { label: "Training", chip: "Training", icon: "dumbbell" },
+  private: { label: "Privat", chip: "Privater Termin", icon: "user" },
 };
 const NAV_WORDS = {
   woche: ["Vorherige Woche", "Nächste Woche"],
@@ -84,7 +84,10 @@ const state = {
   monthRow: 118,
 };
 
-const sync = { source: extra.sync?.source || null, write: !!extra.sync?.write, window: extra.sync?.window || null, ranges: [], busy: false, state: extra.sync?.state || null, stand: extra.sync?.stand || null };
+const sync = {
+  source: extra.sync?.source || null, write: !!extra.sync?.write, window: extra.sync?.window || null, ranges: [], busy: false, state: extra.sync?.state || null, stand: extra.sync?.stand || null,
+  calendars: Array.isArray(extra.sync?.calendars) ? extra.sync.calendars : [], target: extra.sync?.target || null,
+};
 const removed = new Set();
 const SOURCE_WORDS = { google: "dem Google-Kalender", mac: "dem Mac-Kalender" };
 const sourceWord = () => SOURCE_WORDS[sync.source] || "dem verbundenen Kalender";
@@ -916,6 +919,23 @@ function linksHtml(item) {
 }
 
 const calendarLine = (item) => (item.calendarName ? `<span class="cal-calendar"><i class="cal-dot" style="--k:${esc(colorOf(item))}"></i>${esc(item.calendarName)}</span>` : "");
+const SAFE_COLOR = /^#[0-9a-f]{6}$/i;
+const swatch = (calendar) => (SAFE_COLOR.test(calendar.color || "") ? calendar.color : "var(--line-strong)");
+
+// Where a new own event is written in Google: the one picked for it, else the one from the settings.
+function intoGoogle(item = {}) {
+  if (!sync.write || !sync.calendars.length) return null;
+  const wanted = item.googleCalendar || sync.target;
+  return sync.calendars.find((entry) => entry.id === wanted) || sync.calendars.find((entry) => entry.primary) || sync.calendars[0];
+}
+
+function targetHtml(item) {
+  const chosen = item.draft ? intoGoogle(item) : null;
+  if (!chosen) return "";
+  if (sync.calendars.length === 1) return `<div class="field"><span class="field-label">Google-Kalender</span><span class="cal-calendar"><i class="cal-dot" style="--k:${esc(swatch(chosen))}"></i>${esc(chosen.name)}</span></div>`;
+  const options = sync.calendars.map((entry) => `<option value="${esc(entry.id)}"${entry.id === chosen.id ? " selected" : ""}>${esc(entry.name)}</option>`).join("");
+  return `<div class="field"><label class="field-label" for="calPanelTarget">Google-Kalender</label><select class="field-control cal-select" id="calPanelTarget">${options}</select></div>`;
+}
 
 function repeatHtml(item) {
   const rule = normalizeRecurrence(item.recurrence);
@@ -990,7 +1010,7 @@ function panelEdit(item) {
       ${own ? `<div class="field">
         <span class="field-label" id="calKindLabel">Art</span>
         <div class="field-body" role="group" aria-labelledby="calKindLabel">${Object.entries(KINDS).map(([key, kind]) => `<button type="button" class="pill cal-kind" data-kind="${key}" aria-pressed="${item.kind === key}" style="--k:${kindVar(key)}"><i class="cal-dot"></i>${kind.label}</button>`).join("")}</div>
-      </div>` : ""}
+      </div>` : ""}${targetHtml(item)}
       ${!own && notesLocked(item) ? `<div class="field"><span class="field-label">Beschreibung</span><span class="cal-notes-text">${linked(plainText(item.notes))}</span><p class="cal-hint">Diese Beschreibung ist lang oder formatiert. Ändere sie in Google, damit nichts davon verloren geht.${item.htmlLink ? ` <a href="${esc(item.htmlLink)}" target="_blank" rel="noopener">In Google öffnen</a>` : ""}</p></div>` : `<label class="field"><span class="field-label">${own ? "Notizen" : "Beschreibung"}</span><textarea class="field-control" id="calPanelNotes" rows="3" placeholder="${own ? "Was du mitbringen oder vorbereiten willst" : "Was dazu im Kalender stehen soll"}">${esc(item.notes || "")}</textarea></label>`}
       ${own ? "" : `${guestsHtml(item)}${linksHtml(item) ? `<div class="field">${linksHtml(item)}</div>` : ""}`}
       ${draft ? `<div class="cal-save"><button class="btn btn-quiet" type="button" data-draft-cancel>Abbrechen</button><button class="btn btn-primary" type="button" data-draft-save>${icon("check")}Anlegen</button></div>` : `<p class="panel-source">${icon("calendar-days")}${own ? ownSource(item) : "Aus dem Google-Kalender, Änderungen gehen dorthin"}</p>`}
@@ -1419,8 +1439,10 @@ function renderQuickChips() {
   const chips = [];
   if (text.trim()) {
     const entry = parseEntry(text, defaultDay());
+    const into = intoGoogle();
     chips.push(eventChips(entry));
-    chips.push(`<span class="chip cal-kind-chip" style="--k:${kindVar(entry.kind)}"><i class="cal-dot"></i>${KINDS[entry.kind].label}</span>`);
+    chips.push(`<span class="chip cal-kind-chip" style="--k:${kindVar(entry.kind)}">${icon(KINDS[entry.kind].icon)}${KINDS[entry.kind].chip}</span>`);
+    if (into) chips.push(`<span class="chip cal-kind-chip"><i class="cal-dot" style="--k:${esc(swatch(into))}"></i>Google: ${esc(into.name)}</span>`);
   }
   const host = $("calQuickChips");
   const markup = chips.join("");
@@ -1772,6 +1794,7 @@ function bindPanel() {
       else target.value = rule({}).count || 10;
     }
     if (target.id === "calPanelReminder") updateEvent({ reminderMinutes: target.value === "" ? null : Number(target.value) });
+    if (target.id === "calPanelTarget" && item.draft) item.googleCalendar = target.value;
     const note = $("calWhenNote");
     if (note && panelItem() && !press.waiting) note.textContent = whenNote(panelItem());
   });

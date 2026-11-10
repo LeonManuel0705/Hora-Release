@@ -520,6 +520,7 @@
 .cal-link .icon { --s: 14; }
 .cal-urgent { color: var(--urgent-ink); font-weight: var(--weight-medium); }
 .cal-kind-chip .cal-dot { margin-right: 1px; }
+.cal-kind-chip .icon { --s: 15; color: var(--k, currentColor); }
 .cal-kind-chip { padding-right: 10px; }
 
 @media (hover: hover) and (pointer: fine) {

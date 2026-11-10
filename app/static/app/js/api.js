@@ -145,6 +145,7 @@ function eventBody(item) {
     notes: item.notes || "",
     ...(item.recurrence ? { recurrence: item.recurrence } : {}),
     ...(item.reminderMinutes != null ? { reminderMinutes: item.reminderMinutes } : {}),
+    ...(item.googleCalendar ? { calendar: item.googleCalendar } : {}),
   };
 }
 
