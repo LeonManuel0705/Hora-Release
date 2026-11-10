@@ -757,7 +757,7 @@
   "privacy_policy": {
     "nav_title": "Privacy Policy",
     "hero_title": "Privacy Policy",
-    "hero_date": "Effective: November 8, 2026",
+    "hero_date": "Effective: November 10, 2026",
     "s1_title": "§ 1 Data Controller",
     "s1_p1": "The data controller within the meaning of the General Data Protection Regulation (GDPR) is:",
     "s1_name": "Leon Manuel Töpper",
@@ -799,6 +799,8 @@
     "s4_list3": "Page visited",
     "s4_list4": "Browser type and operating system",
     "s4_p2": "This data is collected solely to ensure operation and prevent misuse (legal basis: Art. 6(1)(f) GDPR, legitimate interest) and is automatically deleted after a short period. No identification of individual persons takes place.",
+    "s4_p3": "The Website is hosted by Netlify (Netlify, Inc., 101 2nd Street, San Francisco, CA 94105, USA). Netlify may also process the access data listed above in the USA. Netlify is certified under the EU-U.S. Data Privacy Framework, for which the European Commission has found an adequate level of data protection (Art. 45 GDPR). More in [Netlify's privacy policy](https://www.netlify.com/privacy/).",
+    "s4_p4": "The files for Windows, Linux and Android are hosted on GitHub (GitHub, Inc., 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, USA). When you download one of them, your browser fetches it directly from there, and GitHub receives similar access data, such as your IP address. GitHub is also certified under the EU-U.S. Data Privacy Framework. More in [GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).",
     "s5_title": "§ 5 Cookies",
     "s5_p1": "The Website uses no cookies and no analytics tools. It stores your language preference only in your browser's storage (localStorage).",
     "s6_title": "§ 6 Your Rights",

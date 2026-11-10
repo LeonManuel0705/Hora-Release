@@ -757,7 +757,7 @@
   "privacy_policy": {
     "nav_title": "Datenschutzerklärung",
     "hero_title": "Datenschutzerklärung",
-    "hero_date": "Stand: 8. November 2026",
+    "hero_date": "Stand: 10. November 2026",
     "s1_title": "§ 1 Verantwortlicher",
     "s1_p1": "Verantwortlicher im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:",
     "s1_name": "Leon Manuel Töpper",
@@ -799,6 +799,8 @@
     "s4_list3": "Aufgerufene Seite",
     "s4_list4": "Browsertyp und Betriebssystem",
     "s4_p2": "Diese Daten werden ausschließlich zur Sicherstellung des Betriebs und zur Abwehr von Missbrauch erhoben (Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO, berechtigtes Interesse) und nach kurzer Zeit automatisch gelöscht. Eine Zuordnung zu einzelnen Personen findet nicht statt.",
+    "s4_p3": "Die Website wird von Netlify (Netlify, Inc., 101 2nd Street, San Francisco, CA 94105, USA) bereitgestellt. Netlify kann die oben genannten Zugriffsdaten dabei auch in den USA verarbeiten. Netlify ist nach dem EU-US Data Privacy Framework zertifiziert, für das die EU-Kommission ein angemessenes Datenschutzniveau festgestellt hat (Art. 45 DSGVO). Mehr dazu in der [Datenschutzerklärung von Netlify](https://www.netlify.com/privacy/).",
+    "s4_p4": "Die Dateien für Windows, Linux und Android liegen auf GitHub (GitHub, Inc., 88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, USA). Wenn du eine davon lädst, holt dein Browser sie direkt von dort, und GitHub erhält dabei ähnliche Zugriffsdaten, zum Beispiel deine IP-Adresse. Auch GitHub ist nach dem EU-US Data Privacy Framework zertifiziert. Mehr dazu in der [Datenschutzerklärung von GitHub](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).",
     "s5_title": "§ 5 Cookies",
     "s5_p1": "Die Website verwendet keine Cookies und keine Analyse-Tools. Deine Spracheinstellung speichert sie nur im Speicher deines Browsers (localStorage).",
     "s6_title": "§ 6 Deine Rechte",
