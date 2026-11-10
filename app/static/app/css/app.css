@@ -1552,11 +1552,20 @@ label.switch:is(:active, .is-pressed) input:checked + .switch-track::after { tra
 .scene.is-still .piece, .scene.is-still .scene-screen i { animation-play-state: paused; }
 .scene.is-static .piece, .scene.is-static .scene-screen i { animation: none; }
 
+/* On a phone the desk stands beside the title, so the facts and the first tasks of the day fit on the first screen.
+   The space it takes is held free by a box of its size at the start of the copy. */
 @media (max-width: 760px) {
-  .today.is-desk { grid-template-columns: 1fr; padding: 0 20px; }
-  .today.is-desk .scene { order: -1; justify-self: center; max-width: 380px; margin: 12px auto 8px; }
+  .today.is-desk { --scene-w: clamp(132px, 48%, 250px); grid-template-columns: 1fr; min-height: 0; padding: 0 20px; }
+  .today.is-desk .scene { position: absolute; top: 18px; right: 20px; width: clamp(132px, (100% - 40px) * 0.48, 250px); max-width: none; margin: 0; }
   .today.is-desk .scene svg { overflow: hidden; }
-  .today.is-desk .today-copy { padding: 4px 0 26px; }
+  .today.is-desk .today-copy { padding: 18px 0 22px; }
+  .today.is-desk .today-now { display: grid; grid-template-columns: minmax(0, 1fr) var(--scene-w); grid-template-rows: 1fr auto auto auto 1fr auto; column-gap: 12px; }
+  .today.is-desk .today-now::before { content: ""; grid-column: 2; grid-row: 1 / 6; aspect-ratio: 3 / 2; }
+  .today.is-desk .today-now > * { grid-column: 1; }
+  .today.is-desk .today-now > .today-eyebrow { grid-row: 2; }
+  .today.is-desk .today-now > .today-change { grid-row: 3; margin-bottom: 6px; }
+  .today.is-desk .today-now > .today-title { grid-row: 4; margin-top: 4px; font-size: 26px; }
+  .today.is-desk .today-now > .today-meta { grid-column: 1 / -1; grid-row: 6; }
 }
 
 .tasks-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 40px; align-items: start; margin-top: 24px; }
