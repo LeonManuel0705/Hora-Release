@@ -36,6 +36,7 @@ OPEN_END = 'horaOpenEnd'
 BACK_DAYS = 62
 AHEAD_DAYS = 93
 CHECK_SECONDS = 60
+PAGE_SECONDS = 10
 PERIOD_SECONDS = 300
 TICK_SECONDS = 30
 RETRY_SECONDS = 60
@@ -820,12 +821,16 @@ def _checked_lately(seconds=CHECK_SECONDS):
     return time.monotonic() - checked < seconds and 0 <= time.time() - stamp < seconds
 
 
-def refresh(force=False):
+def refresh(force=False, within=CHECK_SECONDS):
+    """A page asks for a fresh copy. A check made `within` seconds is fresh enough; without network the pause of the
+    background loop counts, so open pages do not ask Google more often than it does."""
     if not connected():
         return None
     if _google().login_expired():
         return 'login'
-    if not force and _load(shared=True) is not None and _checked_lately():
+    if _status['problem'] == 'offline':
+        within = max(within, _pause())
+    if not force and _load(shared=True) is not None and _checked_lately(within):
         return _status['problem']
     return sync(full=force, wait=REQUEST_WAIT)
 

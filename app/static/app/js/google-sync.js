@@ -18,10 +18,8 @@ async function pull() {
     const response = await fetch("/api/ui/google/events", { credentials: "same-origin", cache: "no-store" });
     const payload = await response.json();
     if (response.ok && payload.success !== false && Array.isArray(payload.events)) {
-      const changed = JSON.stringify(payload.events) !== JSON.stringify(data.events);
       data.events = payload.events;
       data.status.google = payload.google;
-      if (changed) dispatchEvent(new CustomEvent("app:google-fresh"));
     }
   } catch {}
   pulling = false;
@@ -35,8 +33,9 @@ function nudge() {
     .catch(() => {});
 }
 
+// The calendar page keeps its events fresh itself and more often (pages/calendar.js, keepFresh).
 export function initGoogleSync() {
-  if (!data?.status?.google) return;
+  if (!data?.status?.google || document.getElementById("calendarPage")) return;
   nudge();
   onAttention(nudge);
   setInterval(pull, PULL_GAP);

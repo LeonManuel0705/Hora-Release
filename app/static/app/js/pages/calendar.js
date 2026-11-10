@@ -7,6 +7,7 @@ import { toast, parseEntry, eventChips, repeatWords, typing, shortcutsEnabled, o
 import { events as eventApi, debounced, serverId } from "../api.js";
 import { expandEvents, normalizeRecurrence, splitOccurrence, occurrenceId, ruleText } from "../recurrence.js";
 import { readPrefs, eventMinutes, permissionState } from "../reminders.js";
+import { attentive, onAttention } from "../attention.js";
 
 const typedBefore = new Map();
 const saveText = debounced(700, (key, id, changes) => {
@@ -1894,13 +1895,16 @@ function ensureRange() {
     });
 }
 
-async function startSync({ first = false, manual = false } = {}) {
+async function startSync({ first = false, manual = false, quiet = false } = {}) {
   if (sync.busy) return;
   sync.busy = true;
+  askedAt = Date.now();
   state.loading = sync.source === "google" && !state.events.some((item) => item.synced) && !extra.sync?.stand;
   const button = $("calSync");
-  button.classList.add("is-spinning");
-  button.setAttribute("aria-busy", "true");
+  if (!quiet) {
+    button.classList.add("is-spinning");
+    button.setAttribute("aria-busy", "true");
+  }
   if (state.loading) render();
   let payload = null;
   try {
@@ -1946,24 +1950,23 @@ function firstHint(problem) {
   return true;
 }
 
-let freshAt = 0;
-let freshWait = null;
+/* While the page is in view it asks for changes made in Google every minute, and at once when it comes back to the
+   front. The server asks Google only for what changed, and not again within PAGE_SECONDS (calendar_cache.py). */
+const FRESH_GAP = 10000;
+const FRESH_EVERY = 60000;
+let askedAt = 0;
 
-function takeFresh() {
-  clearTimeout(freshWait);
-  freshWait = null;
-  const rest = 60000 - (Date.now() - freshAt);
-  if (sync.busy || rest > 0) {
-    freshWait = setTimeout(takeFresh, sync.busy ? 2000 : rest);
-    return;
-  }
-  freshAt = Date.now();
-  startSync({ first: true });
+function freshen() {
+  if (sync.source !== "google" || sync.busy || document.hidden || Date.now() - askedAt < FRESH_GAP) return;
+  startSync({ first: true, quiet: true });
 }
 
-addEventListener("app:google-fresh", () => {
-  if ($("calendarPage")) takeFresh();
-});
+function keepFresh() {
+  onAttention(() => {
+    if (attentive()) freshen();
+  });
+  setInterval(freshen, FRESH_EVERY);
+}
 
 function revealSynced() {
   if (!animates()) return;
@@ -2390,5 +2393,6 @@ export function init() {
   bind();
   render();
   startSync({ first: true });
+  keepFresh();
   scheduleTick();
 }

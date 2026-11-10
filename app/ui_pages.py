@@ -700,7 +700,8 @@ def synced_events():
         mode = request.args.get('frisch')
         problem = None
         if mode in ('1', 'alles') or calendar_cache.due():
-            problem = calendar_cache.refresh(force=mode == 'alles')
+            within = calendar_cache.PAGE_SECONDS if mode == '1' else calendar_cache.CHECK_SECONDS
+            problem = calendar_cache.refresh(force=mode == 'alles', within=within)
         if calendar_cache.covers(start, end) or request.args.get('start') is None:
             events = calendar_cache.events(start, end)
         else:
