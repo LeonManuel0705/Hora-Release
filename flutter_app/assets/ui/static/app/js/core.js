@@ -56,6 +56,7 @@ export const icon = (name, cls = "") => `<svg class="icon ${cls}" aria-hidden="t
 
 export { luna } from "./luna.js";
 import { expandEvents } from "./recurrence.js";
+import { PLAN_KEYS, sameValue } from "./plan-format.js";
 
 export const toMin = (hhmm) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -383,8 +384,12 @@ export function hourIcon(item) {
   return "cloud";
 }
 
+const PLAN_META_KEY = "app-timetable-meta";
+const PLAN_ORIGINS = ["edit", "import", "share"];
+
 const SERVER_KEYS = new Set([
   "app-timetable-edits", "app-block-times", "app-ab-swap", "app-ab-weeks", "app-subjects", "app-teachers", "app-rooms",
+  PLAN_META_KEY,
   "app-settings", "app-motion", "app-theme-choice", "app-single-keys", "app-task-filter", "app-cal-view",
 ]);
 
@@ -417,6 +422,10 @@ function persist(key, value) {
   return next;
 }
 
+const device = typeof data?.device === "string" && data.device ? data.device : null;
+let openChange = null;
+let clockSeen = Math.max(0, ...[serverValues.get(PLAN_META_KEY)?.seen, serverValues.get(PLAN_META_KEY)?.at].filter(Number.isFinite));
+
 export const storage = {
   get(key) {
     if (SERVER_KEYS.has(key)) {
@@ -428,8 +437,11 @@ export const storage = {
       return null;
     }
   },
+  // The plan's record is written only by the plan's own changes, so a backup file or a shared plan never brings in the record of another device.
   set(key, value) {
+    if (key === PLAN_META_KEY) return;
     if (SERVER_KEYS.has(key)) {
+      if (PLAN_KEYS.includes(key)) planTouched();
       serverValues.set(key, JSON.parse(JSON.stringify(value)));
       persist(key, value);
       return;
@@ -439,7 +451,9 @@ export const storage = {
     } catch {}
   },
   remove(key) {
+    if (key === PLAN_META_KEY) return;
     if (SERVER_KEYS.has(key)) {
+      if (PLAN_KEYS.includes(key)) planTouched();
       serverValues.delete(key);
       persist(key, undefined);
       return;
@@ -449,12 +463,99 @@ export const storage = {
     } catch {}
   },
   keys() {
-    return [...serverValues.keys()];
+    return [...serverValues.keys()].filter((key) => key !== PLAN_META_KEY);
   },
   settled() {
+    if (openChange && !openChange.explicit) settleChange();
     return Promise.all(writes.values());
   },
 };
+
+const planValues = () => PLAN_KEYS.map((key) => serverValues.get(key) ?? null);
+
+function keepRecord(record) {
+  if (record) clockSeen = Math.max(clockSeen, record.at);
+  const value = record ? { at: record.at, origin: record.origin, device: record.device ?? null, seen: clockSeen } : { seen: clockSeen };
+  if (sameValue(serverValues.get(PLAN_META_KEY), value)) return;
+  serverValues.set(PLAN_META_KEY, value);
+  persist(PLAN_META_KEY, value);
+}
+
+function settleChange() {
+  const change = openChange;
+  openChange = null;
+  if (!change?.origin || sameValue(change.before, planValues())) return;
+  if (change.shared?.at && planMeta()?.at === change.shared.at) return;
+  // A hybrid clock: a device clock set back can never date a change before one this device has already seen.
+  const at = Math.max(Date.now(), clockSeen + 1);
+  clockSeen = at;
+  keepRecord({ at, origin: change.origin, device });
+  if (change.shared) change.shared.at = at;
+}
+
+// A write to the plan outside planChange is an own edit, and all such writes of one task are one change.
+function planTouched() {
+  if (openChange) return;
+  const change = { origin: "edit", before: planValues() };
+  openChange = change;
+  queueMicrotask(() => openChange === change && settleChange());
+}
+
+export function planMeta() {
+  const saved = serverValues.get(PLAN_META_KEY);
+  if (!Number.isFinite(saved?.at) || !PLAN_ORIGINS.includes(saved.origin)) return null;
+  return { at: saved.at, origin: saved.origin, device: typeof saved.device === "string" ? saved.device : null };
+}
+
+// Runs the writes in run as one change of the plan with the given origin, or with null as writes the app makes on its
+// own, which never count. Without run it hands back a function for an action that writes in several steps, and all its
+// steps share one time.
+export function planChange(origin, run) {
+  if (!run) {
+    const shared = { at: 0 };
+    return (step) => planStep(origin, step, shared);
+  }
+  return planStep(origin, run, null);
+}
+
+function planStep(origin, run, shared) {
+  if (!origin) return planQuiet(run);
+  if (openChange?.explicit) return run();
+  settleChange();
+  openChange = { origin, before: planValues(), explicit: true, shared };
+  try {
+    return run();
+  } finally {
+    settleChange();
+  }
+}
+
+function planQuiet(run) {
+  const change = openChange;
+  const before = planValues();
+  if (!change) openChange = { origin: null, explicit: true };
+  try {
+    return run();
+  } finally {
+    if (!change) openChange = null;
+    else if (change.before) {
+      const after = planValues();
+      change.before = change.before.map((value, index) => (sameValue(before[index], after[index]) ? value : after[index]));
+    }
+  }
+}
+
+// Takes the plan back to an earlier record, or to none: undoing an import or a shared plan brings back the plan as it was, not a new edit.
+export function planRevert(record, run) {
+  settleChange();
+  openChange = { origin: null, explicit: true };
+  try {
+    return run();
+  } finally {
+    openChange = null;
+    keepRecord(record);
+  }
+}
 
 export const LOCAL_KEYS = {
   lessons: "app-timetable-edits",

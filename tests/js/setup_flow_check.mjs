@@ -32,6 +32,7 @@ const STORED = {
 };
 
 const EMPTY = { subjects: {}, courses: {}, timetable: { A: week({}), B: week({}) } };
+const DEVICE = "0123456789abcdef0123456789abcdef";
 
 function pageData(plan, user = {}) {
   return {
@@ -47,6 +48,7 @@ function pageData(plan, user = {}) {
     holidays: [],
     weather: { hours: [] },
     status: {},
+    device: DEVICE,
   };
 }
 
@@ -377,6 +379,33 @@ async function toWeeks(run) {
   await run.next();
   assert.equal(run.step(), "weeks");
 }
+
+CASES["what is picked or typed in the setup is recorded as an own edit of this device"] = async () => {
+  const page = await boot({ plan: EMPTY });
+  page.flow.open({});
+  const run = driver(page);
+  await answerSchool(run);
+  assert.equal(page.core.planMeta(), null, "the class and the Bundesland are no part of the plan");
+  await run.next();
+  await run.change({ name: "times", value: "45" });
+  await run.next();
+  assert.equal(run.step(), "weeks");
+  const times = page.core.planMeta();
+  assert.equal(times.origin, "edit");
+  assert.equal(times.device, DEVICE);
+  await run.change({ name: "ab", value: "yes" });
+  await run.change({ name: "letter", value: "B" });
+  await run.next();
+  await run.pick("Deutsch");
+  await run.next();
+  await run.type("room", "Deutsch", "R101");
+  await run.next();
+  assert.equal(run.step(), "grid");
+  const record = page.core.planMeta();
+  assert.equal(record.origin, "edit");
+  assert.ok(record.at > times.at);
+  assert.equal(storeWrites(page).filter((write) => write === "PUT app-timetable-meta").length, 4, "one change for each step that changed the plan");
+};
 
 CASES["on a weekend the A/B question is about the coming week and waits for Weiter"] = async () => {
   const page = await boot({ plan: EMPTY, search: "?datum=2026-11-07&t=10:00" });

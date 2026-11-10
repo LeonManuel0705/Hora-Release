@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import {
-  data, esc, icon, luna, now, storage, LOCAL_KEYS, HUES, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, abSettled,
+  data, esc, icon, luna, now, storage, planChange, LOCAL_KEYS, HUES, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, abSettled,
   activeSubjectKeys, subject, hueVar, slug, teacherId, teacherLabel, periodWords, weekType, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, isoWeek, hm, addDays, startOfDay, BRAND,
 } from "./core.js";
 import { animates, travels, token } from "./motion.js";
@@ -618,7 +618,7 @@ function gridHint() {
 }
 
 function writeEdits(edits) {
-  if (!abAnswered()) storage.set(LOCAL_KEYS.abWeeks, abWeeks());
+  if (!abAnswered()) planChange(null, () => storage.set(LOCAL_KEYS.abWeeks, abWeeks()));
   saveStore(LOCAL_KEYS.lessons, {}, readObject(LOCAL_KEYS.lessons), edits, !Object.keys(edits).length);
   applySchoolEdits();
   flow.dirty = true;

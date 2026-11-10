@@ -3,12 +3,16 @@
 
 import json
 import re
+import shutil
+import subprocess
+from pathlib import Path
 
 import pytest
 
 from app import database as db
 from app import ui_data
 
+ROOT = Path(__file__).resolve().parent.parent
 RECORD = {"at": 1800000000000, "origin": "edit", "device": "5e7c0f3a9b214d6e8a1f0c2b3d4e5f60", "seen": 1800000000000}
 
 
@@ -29,6 +33,18 @@ def client(tmp_path, monkeypatch):
 def page_json(client, name, path="/hub/settings"):
     html = client.get(path).get_data(as_text=True)
     return json.loads(re.search(rf'<script type="application/json" id="{name}">(.*?)</script>', html, re.S).group(1))
+
+
+@pytest.mark.parametrize("check", ["plan_meta_check.mjs", "settings_plan_record_check.mjs"])
+def test_every_change_of_the_plan_leaves_its_record_under_node(check):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    major = int(re.match(r"v(\d+)", subprocess.run([node, "--version"], capture_output=True, text=True).stdout).group(1))
+    if major < 20:
+        pytest.skip("node is too old")
+    result = subprocess.run([node, str(ROOT / "tests" / "js" / check)], capture_output=True, text=True, timeout=180)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_the_page_knows_the_device_and_it_stays_the_same(client, tmp_path, monkeypatch):

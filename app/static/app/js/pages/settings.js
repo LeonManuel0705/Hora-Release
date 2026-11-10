@@ -1,7 +1,7 @@
 import {
   data, root, variant, flags, platform, esc, icon, luna, storage, now, subject, hueVar, toMin, clock, hm, weekType, isoWeek,
   isoDate, minutesOf, lessonsFor, nextSchoolDay, shortDate, WEEKDAYS, WEEKDAYS_SHORT,
-  LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, hasPlan, activeSubjectKeys, motionDefault, slug, teacherLabel, periodWords, BRAND, BRAND_NAMES } from "../core.js";
+  LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, hasPlan, activeSubjectKeys, motionDefault, slug, teacherLabel, periodWords, planChange, planRevert, planMeta, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
 import { toast, setTheme, syncTime, renderSync } from "../shell.js";
 import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, contents, offerFile } from "../backup.js";
@@ -217,7 +217,7 @@ function readEdits() {
 }
 
 function writeEdits(edits) {
-  if (!abAnswered()) storage.set(LOCAL_KEYS.abWeeks, abWeeks());
+  if (!abAnswered()) planChange(null, () => storage.set(LOCAL_KEYS.abWeeks, abWeeks()));
   if (Object.keys(edits).length) storage.set(LOCAL_KEYS.lessons, edits);
   else removeKey(LOCAL_KEYS.lessons);
   applySchoolEdits();
@@ -3568,6 +3568,8 @@ async function carryState(wanted) {
 
 async function takeBackup(file, payload, entries, records) {
   const before = snapshot();
+  const metaBefore = planMeta();
+  const fromFile = planChange("import");
   const stateBefore = page.school?.state || "";
   const schoolBefore = { ...prefs.school };
   let wanted = Object.fromEntries(entries);
@@ -3602,7 +3604,7 @@ async function takeBackup(file, payload, entries, records) {
   }
   let stateCarried = null;
   if (entries.length) {
-    restore(wanted);
+    fromFile(() => restore(wanted));
     stateCarried = carryState(prefs.school.state);
   }
   const moved = entries.length > 0 && (prefs.school.grade !== schoolBefore.grade || prefs.school.birthday !== schoolBefore.birthday);
@@ -3611,7 +3613,7 @@ async function takeBackup(file, payload, entries, records) {
     if (planSize(plan) > 12) toast(`Übernehme ${plural(planSize(plan), "Eintrag", "Einträge")} aus „${esc(file.name)}“ …`, { icon: "upload", duration: 600000 });
     done = await carryRecords(plan);
     if (held.length) {
-      storage.set(LOCAL_KEYS.subjects, JSON.parse(settled));
+      fromFile(() => storage.set(LOCAL_KEYS.subjects, JSON.parse(settled)));
       reloadState();
     }
     await countSubjectUse();
@@ -3624,7 +3626,7 @@ async function takeBackup(file, payload, entries, records) {
     action: { label: "Rückgängig", undo: true, run: async () => {
       const left = done ? await dropRecords(done.undo) : 0;
       if (entries.length) {
-        restore(before);
+        planRevert(metaBefore, () => restore(before));
         if (moved) savePrefs();
         await carryState(stateBefore);
       }
@@ -3638,6 +3640,7 @@ async function takeBackup(file, payload, entries, records) {
 
 async function wipeData() {
   const before = snapshot();
+  const metaBefore = planMeta();
   if (!Object.keys(before).length) {
     toast("Auf diesem Gerät ist nichts gespeichert.", { icon: "trash-2" });
     return;
@@ -3646,12 +3649,12 @@ async function wipeData() {
   await countSubjectUse();
   const own = subjectStore().items;
   const used = Object.keys(own).filter((key) => own[key]?.custom && keptOnDelete(key));
-  restore(used.length ? { [LOCAL_KEYS.subjects]: JSON.stringify({ items: Object.fromEntries(used.map((key) => [key, own[key]])), removed: used }) } : {});
+  planRevert(null, () => restore(used.length ? { [LOCAL_KEYS.subjects]: JSON.stringify({ items: Object.fromEntries(used.map((key) => [key, own[key]])), removed: used }) } : {}));
   $("dataWipe")?.focus({ preventScroll: true });
   toast(used.length ? "Alles auf diesem Gerät gelöscht. Fächer mit Noten oder Einträgen stehen weiter unter „Gelöscht“." : "Alles auf diesem Gerät gelöscht", {
     icon: "trash-2",
     action: { label: "Rückgängig", undo: true, run: () => {
-      restore(before);
+      planRevert(metaBefore, () => restore(before));
       say("Rückgängig gemacht");
     } },
   });

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { data, root, platform, esc, icon, storage, now, isoDate, slug, LOCAL_KEYS, MAX_BLOCKS, schoolDefaults, applySchoolEdits, abWeeks, BRAND, BRAND_NAMES } from "./core.js";
+import { data, root, platform, esc, icon, storage, now, isoDate, slug, LOCAL_KEYS, MAX_BLOCKS, schoolDefaults, applySchoolEdits, abWeeks, planChange, planRevert, planMeta, BRAND, BRAND_NAMES } from "./core.js";
 import { animates, travels } from "./motion.js";
 import { toast } from "./shell.js";
 import { PLAN_KEYS, PlanError, planOf, encodePlan, decodePlan, payloadOf, linkOf, planFile, planOfFile, planOfValues, describePlan, fitPlan, sameValue, changedKeys, writeValues } from "./plan-format.js";
@@ -99,11 +99,11 @@ function planLine(model, skip = []) {
 
 const snapshot = () => Object.fromEntries(PLAN_KEYS.map((key) => [key, storage.get(key)]));
 
-async function writeChecked(values, keys) {
+async function writeChecked(values, keys, apply) {
   const failed = [];
   const note = () => failed.push(1);
   addEventListener("app:save-failed", note);
-  writeValues(storage, values, keys);
+  apply(() => writeValues(storage, values, keys));
   await storage.settled();
   removeEventListener("app:save-failed", note);
   return !failed.length;
@@ -114,22 +114,23 @@ function reloadHere() {
   location.reload();
 }
 
-async function commit(fitted, message) {
+async function commit(fitted, message, origin) {
   const before = snapshot();
+  const meta = planMeta();
   const keys = changedKeys(before, fitted.values);
   if (!keys.length || !fitted.changed) return "same";
-  if (!(await writeChecked(fitted.values, keys))) {
-    await writeChecked(before, keys);
+  if (!(await writeChecked(fitted.values, keys, (write) => planChange(origin, write)))) {
+    await writeChecked(before, keys, (write) => planRevert(meta, write));
     applySchoolEdits();
     return "failed";
   }
   applySchoolEdits();
-  session.set(UNDO_KEY, JSON.stringify({ at: Date.now(), message, before, keys }));
+  session.set(UNDO_KEY, JSON.stringify({ at: Date.now(), message, before, keys, meta }));
   return "done";
 }
 
 async function undo(record) {
-  const saved = await writeChecked(record.before, record.keys);
+  const saved = await writeChecked(record.before, record.keys, (write) => planRevert(record.meta || null, write));
   session.set(UNDO_KEY, JSON.stringify({ at: Date.now(), message: saved ? "Rückgängig gemacht" : "Der alte Plan ließ sich nicht ganz zurückholen.", failed: !saved }));
   reloadHere();
 }
@@ -663,7 +664,7 @@ function previewView(model, origin = {}) {
       const message = mode === "merge"
         ? `${plural(lessons, "Stunde", "Stunden")} pro Woche ergänzt`
         : `Plan übernommen: ${plural(fitted.subjects, "Fach", "Fächer")} und ${plural(lessons, "Stunde", "Stunden")} pro Woche`;
-      const outcome = await commit(fitted, message);
+      const outcome = await commit(fitted, message, origin.backup ? "import" : "share");
       if (outcome === "failed") {
         setError(body, "Der Plan ließ sich gerade nicht speichern. Versuch es gleich noch einmal.");
         apply.disabled = false;
