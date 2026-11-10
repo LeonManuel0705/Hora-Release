@@ -266,3 +266,55 @@ def test_the_app_still_goes_with_the_app_that_started_it_while_the_check_runs(tm
     finally:
         if child.poll() is None:
             child.kill()
+
+
+def synced(client, mode='1'):
+    return client.get(f'/api/ui/events/synced?frisch={mode}').get_json()
+
+
+def test_a_page_that_opens_or_comes_back_gets_what_changed_in_google_more_than_ten_seconds_ago(google, clocks, client):
+    calendar_cache.background_round()
+    google.put('primary', 'Nachhilfe', day(2), '17:00', '18:00')
+    google.calls.clear()
+    clocks.pass_by(calendar_cache.PAGE_SECONDS - 3)
+    assert [event['title'] for event in synced(client)['events']] == []
+    assert google.calls == [], 'a check a few seconds old is fresh enough'
+    clocks.pass_by(4)
+    assert [event['title'] for event in synced(client)['events']] == ['Nachhilfe']
+    assert checks(google) == 1 and google.count('calendarList.list') == 0, 'only what changed is asked for'
+
+
+def test_a_page_left_open_checks_every_minute_and_the_loop_counts_those_checks(google, clocks, client):
+    calendar_cache.background_round()
+    for minute in range(1, 6):
+        google.calls.clear()
+        clocks.pass_by(60)
+        synced(client)
+        assert checks(google) == 1, minute
+        clocks.pass_by(1)
+        assert calendar_cache.background_round() is False, 'the page just checked'
+
+
+def test_open_pages_wait_as_long_as_the_loop_while_google_is_out_of_reach(google, clocks, client):
+    calendar_cache.background_round()
+    google.offline = True
+    clocks.pass_by(calendar_cache.PERIOD_SECONDS)
+    assert calendar_cache.background_round() is True and calendar_cache._status['problem'] == 'offline'
+    google.calls.clear()
+    clocks.pass_by(calendar_cache.PAGE_SECONDS + 1)
+    assert synced(client)['problem'] == 'offline' and google.calls == []
+    clocks.pass_by(calendar_cache.RETRY_SECONDS)
+    synced(client)
+    assert len(google.calls) >= 1
+    google.calls.clear()
+    assert synced(client, 'alles') and len(google.calls) >= 1, 'the button still asks at once'
+
+
+def test_without_a_connected_account_a_page_never_asks_google(google, clocks, client, monkeypatch):
+    from app import ui_pages
+    monkeypatch.setattr(google_oauth, 'load_tokens', lambda: {})
+    monkeypatch.setattr(ui_pages, '_synced_macos', lambda start, end: None)
+    for _ in range(3):
+        clocks.pass_by(calendar_cache.PAGE_SECONDS + 1)
+        assert synced(client)['success'] is True
+    assert google.calls == []

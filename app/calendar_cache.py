@@ -36,6 +36,7 @@ OPEN_END = 'horaOpenEnd'
 BACK_DAYS = 62
 AHEAD_DAYS = 93
 CHECK_SECONDS = 60
+PAGE_SECONDS = 10
 PERIOD_SECONDS = 300
 TICK_SECONDS = 30
 RETRY_SECONDS = 60
@@ -588,6 +589,17 @@ def target_calendar(cache, account=None):
     return _primary(cache) or account or 'primary'
 
 
+def chosen_calendar(cache, item):
+    """The calendar picked for this one event when it was made, while the account may still write to it."""
+    wanted = item.get('google_target')
+    if not wanted or wanted in _managed():
+        return None
+    for calendar in (cache or {}).get('calendars', []):
+        if calendar['id'] == wanted and _writable(calendar):
+            return wanted
+    return None
+
+
 def _push(service, cache, account=None):
     if not write_enabled():
         return False
@@ -597,8 +609,9 @@ def _push(service, cache, account=None):
         if not item.get('google_dirty') or not ui_data.iso_day(item.get('date')) or not _own_account(account, item):
             continue
         stamp = item.get('updated_at') or item.get('created_at')
+        own = chosen_calendar(cache, item) or target
         try:
-            result = _send(service, item, target)
+            result = _send(service, item, own)
         except Exception as error:
             log.warning('Event not sent to Google: %s', type(error).__name__)
             continue
@@ -611,7 +624,7 @@ def _push(service, cache, account=None):
             'google_seen': answer.get('updated') or '', 'google_etag': answer.get('etag'),
         }
         # Only its own calendar ties a link to the account. One that it may merely write to belongs to someone else.
-        if calendar in ('primary', target):
+        if calendar in ('primary', target, own):
             values['google_account'] = account
         if not _mark(str(item.get('id')), stamp, values):
             _enqueue_delete(calendar, remote)
@@ -808,12 +821,16 @@ def _checked_lately(seconds=CHECK_SECONDS):
     return time.monotonic() - checked < seconds and 0 <= time.time() - stamp < seconds
 
 
-def refresh(force=False):
+def refresh(force=False, within=CHECK_SECONDS):
+    """A page asks for a fresh copy. A check made `within` seconds is fresh enough; without network the pause of the
+    background loop counts, so open pages do not ask Google more often than it does."""
     if not connected():
         return None
     if _google().login_expired():
         return 'login'
-    if not force and _load(shared=True) is not None and _checked_lately():
+    if _status['problem'] == 'offline':
+        within = max(within, _pause())
+    if not force and _load(shared=True) is not None and _checked_lately(within):
         return _status['problem']
     return sync(full=force, wait=REQUEST_WAIT)
 
@@ -932,7 +949,7 @@ def drop(item):
     remote = item.get('google_id')
     if not remote or not connected() or not write_enabled():
         return False
-    _enqueue_delete(item.get('google_calendar'), remote)
+    _enqueue_delete(item.get('google_calendar') or item.get('google_target'), remote)
     return True
 
 
@@ -990,6 +1007,23 @@ def settings_view():
         may_make_calendars=google.covers(scopes, 'school'),
     )
     return view
+
+
+def page_calendars():
+    """The calendars a new event may go to and the one it goes to unless another is picked, read from the copy."""
+    cache = _load(shared=True) or {}
+    try:
+        account = _google().calendar_account()
+    except Exception:
+        account = None
+    if not account or cache.get('account') != account:
+        return {'calendars': [], 'target': None}
+    managed = _managed()
+    calendars = [
+        {'id': item['id'], 'name': item.get('summary') or 'Kalender', 'color': item.get('backgroundColor') or '', 'primary': bool(item.get('primary'))}
+        for item in cache.get('calendars', []) if _writable(item) and item['id'] not in managed
+    ]
+    return {'calendars': calendars, 'target': target_calendar(cache, account)}
 
 
 def page_state():

@@ -3,10 +3,11 @@ import {
   weekType, abWeeks, isoWeek, subject, hueVar, blockOf, lessonsFor, inDays, duration, shortDate, longDate, storage, ASSESSMENTS, isAssessment, isOverdue, assessmentCount,
   WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND, periodWords } from "../core.js";
 import { animates, travels, flipKeyed, exitInPlace, crossfade, token, ms } from "../motion.js";
-import { toast, parseNote, cleanTitle, phraseAt, typing, shortcutsEnabled, overlayOpen, registerSearch, pageUrl, placeNear, clampSheet } from "../shell.js";
+import { toast, parseEntry, eventChips, repeatWords, typing, shortcutsEnabled, overlayOpen, registerSearch, pageUrl, placeNear, clampSheet } from "../shell.js";
 import { events as eventApi, debounced, serverId } from "../api.js";
 import { expandEvents, normalizeRecurrence, splitOccurrence, occurrenceId, ruleText } from "../recurrence.js";
 import { readPrefs, eventMinutes, permissionState } from "../reminders.js";
+import { attentive, onAttention } from "../attention.js";
 
 const typedBefore = new Map();
 const saveText = debounced(700, (key, id, changes) => {
@@ -40,9 +41,9 @@ const REPEATS = [["", "Nie", null], ["daily", "Täglich", { freq: "daily" }], ["
 const RESPONSES = { accepted: ["zugesagt", " is-yes"], declined: ["abgesagt", " is-no"], tentative: ["vielleicht", ""], needsAction: ["offen", ""] };
 const tasksLink = () => `href="${esc(pageUrl("tasks"))}" data-page="tasks"`;
 const KINDS = {
-  school: { label: "Schule", icon: "graduation-cap" },
-  training: { label: "Training", icon: "dumbbell" },
-  private: { label: "Privat", icon: "user" },
+  school: { label: "Schule", chip: "Schultermin", icon: "graduation-cap" },
+  training: { label: "Training", chip: "Training", icon: "dumbbell" },
+  private: { label: "Privat", chip: "Privater Termin", icon: "user" },
 };
 const NAV_WORDS = {
   woche: ["Vorherige Woche", "Nächste Woche"],
@@ -50,9 +51,6 @@ const NAV_WORDS = {
   liste: ["Zwei Wochen zurück", "Zwei Wochen weiter"],
 };
 const ONLINE = /discord|zoom|teams|videocall|video|online|jitsi|webex|meet|https?:/i;
-const TRAINING_WORDS = /\b(gym|training|schwimm\w*|laufen|joggen|fu(ß|ss)ball|tennis|kletter\w*|sport|yoga|workout|volleyball|basketball|handball|tanzen|radtour)\b/i;
-const PRIVATE_WORDS = /\b(nachhilfe|arzt|zahnarzt|geburtstag|kino|party|essen|friseur|fahrstunde|konzert)\b/i;
-const SCHOOL_WORDS = /\b(schule|referat\w*|abikasse|abiball|klausur|test|elternabend|konferenz|infoabend|kurs\w*|lerngruppe|projektwoche|wandertag|exkursion|studien\w*|uni|hpi)\b/i;
 
 const holidays = (extra.holidays || []).map((item) => ({ ...item, endDate: item.endDate || item.date }));
 const deadlines = flags.empty ? [] : data.deadlines.filter((item) => DUE_KINDS.includes(item.kind) && item.status !== "abgegeben");
@@ -87,9 +85,13 @@ const state = {
   monthRow: 118,
 };
 
-const sync = { source: extra.sync?.source || null, write: !!extra.sync?.write, window: extra.sync?.window || null, ranges: [], busy: false, state: extra.sync?.state || null, stand: extra.sync?.stand || null };
+const sync = {
+  source: extra.sync?.source || null, write: !!extra.sync?.write, window: extra.sync?.window || null, ranges: [], busy: false, state: extra.sync?.state || null, stand: extra.sync?.stand || null,
+  calendars: Array.isArray(extra.sync?.calendars) ? extra.sync.calendars : [], target: extra.sync?.target || null,
+};
 const removed = new Set();
-const sourceWord = () => (sync.source === "google" ? "dem Google-Kalender" : "dem verbundenen Kalender");
+const SOURCE_WORDS = { google: "dem Google-Kalender", mac: "dem Mac-Kalender" };
+const sourceWord = () => SOURCE_WORDS[sync.source] || "dem verbundenen Kalender";
 
 function load() {
   const notes = extra.notes || {};
@@ -438,7 +440,8 @@ function lessonBand(lesson, date, pos, len) {
   const test = deadlines.find((item) => isAssessment(item) && item.date === iso && item.block === lesson.block);
   const tip = `${lesson.block}. ${periodWords().one}, ${hm(lesson.start)} bis ${hm(lesson.end)}: <b>${esc(info.name)}</b> in ${esc(lesson.room)}${lesson.movedFrom ? ` statt ${esc(lesson.movedFrom)}` : ""}, ${esc(lesson.teacher)}${test ? `<br>${esc(test.kind)}: ${esc(test.title)}` : ""}${lesson.cancelled ? "<br>Entfällt" : ""}`;
   const room = lesson.cancelled ? "entfällt" : `${esc(lesson.room)}${state.narrow ? `, ${esc(lesson.teacher)}` : ""}`;
-  return `<div class="cw-lesson${lesson.cancelled ? " is-cancelled" : ""}${lesson.movedFrom ? " is-moved" : ""}" style="--top:${pos(lesson.startMin)};--len:${len(lesson.startMin, lesson.endMin)};--hue:${hueVar(lesson.subject)}" data-tip="${esc(tip)}" aria-hidden="true">
+  const short = lesson.endMin - lesson.startMin < 60 ? " is-short" : "";
+  return `<div class="cw-lesson${short}${lesson.cancelled ? " is-cancelled" : ""}${lesson.movedFrom ? " is-moved" : ""}" style="--top:${pos(lesson.startMin)};--len:${len(lesson.startMin, lesson.endMin)};--hue:${hueVar(lesson.subject)}" data-tip="${esc(tip)}" aria-hidden="true">
     <span class="cw-lesson-label"><span class="label-full">${esc(info.label)}</span><span class="label-short">${esc(info.short)}</span></span>
     <span class="cw-lesson-room">${room}</span>${test ? `<span class="cw-lesson-flag">${esc(test.kind)}</span>` : ""}
   </div>`;
@@ -917,6 +920,23 @@ function linksHtml(item) {
 }
 
 const calendarLine = (item) => (item.calendarName ? `<span class="cal-calendar"><i class="cal-dot" style="--k:${esc(colorOf(item))}"></i>${esc(item.calendarName)}</span>` : "");
+const SAFE_COLOR = /^#[0-9a-f]{6}$/i;
+const swatch = (calendar) => (SAFE_COLOR.test(calendar.color || "") ? calendar.color : "var(--line-strong)");
+
+// Where a new own event is written in Google: the one picked for it, else the one from the settings.
+function intoGoogle(item = {}) {
+  if (!sync.write || !sync.calendars.length) return null;
+  const wanted = item.googleCalendar || sync.target;
+  return sync.calendars.find((entry) => entry.id === wanted) || sync.calendars.find((entry) => entry.primary) || sync.calendars[0];
+}
+
+function targetHtml(item) {
+  const chosen = item.draft ? intoGoogle(item) : null;
+  if (!chosen) return "";
+  if (sync.calendars.length === 1) return `<div class="field"><span class="field-label">Google-Kalender</span><span class="cal-calendar"><i class="cal-dot" style="--k:${esc(swatch(chosen))}"></i>${esc(chosen.name)}</span></div>`;
+  const options = sync.calendars.map((entry) => `<option value="${esc(entry.id)}"${entry.id === chosen.id ? " selected" : ""}>${esc(entry.name)}</option>`).join("");
+  return `<div class="field"><label class="field-label" for="calPanelTarget">Google-Kalender</label><select class="field-control cal-select" id="calPanelTarget">${options}</select></div>`;
+}
 
 function repeatHtml(item) {
   const rule = normalizeRecurrence(item.recurrence);
@@ -991,7 +1011,7 @@ function panelEdit(item) {
       ${own ? `<div class="field">
         <span class="field-label" id="calKindLabel">Art</span>
         <div class="field-body" role="group" aria-labelledby="calKindLabel">${Object.entries(KINDS).map(([key, kind]) => `<button type="button" class="pill cal-kind" data-kind="${key}" aria-pressed="${item.kind === key}" style="--k:${kindVar(key)}"><i class="cal-dot"></i>${kind.label}</button>`).join("")}</div>
-      </div>` : ""}
+      </div>` : ""}${targetHtml(item)}
       ${!own && notesLocked(item) ? `<div class="field"><span class="field-label">Beschreibung</span><span class="cal-notes-text">${linked(plainText(item.notes))}</span><p class="cal-hint">Diese Beschreibung ist lang oder formatiert. Ändere sie in Google, damit nichts davon verloren geht.${item.htmlLink ? ` <a href="${esc(item.htmlLink)}" target="_blank" rel="noopener">In Google öffnen</a>` : ""}</p></div>` : `<label class="field"><span class="field-label">${own ? "Notizen" : "Beschreibung"}</span><textarea class="field-control" id="calPanelNotes" rows="3" placeholder="${own ? "Was du mitbringen oder vorbereiten willst" : "Was dazu im Kalender stehen soll"}">${esc(item.notes || "")}</textarea></label>`}
       ${own ? "" : `${guestsHtml(item)}${linksHtml(item) ? `<div class="field">${linksHtml(item)}</div>` : ""}`}
       ${draft ? `<div class="cal-save"><button class="btn btn-quiet" type="button" data-draft-cancel>Abbrechen</button><button class="btn btn-primary" type="button" data-draft-save>${icon("check")}Anlegen</button></div>` : `<p class="panel-source">${icon("calendar-days")}${own ? ownSource(item) : "Aus dem Google-Kalender, Änderungen gehen dorthin"}</p>`}
@@ -1045,12 +1065,88 @@ function panelHoliday(item) {
     <p class="panel-source">${icon("calendar-days")}${item.type === "ferien" ? "Schulferien" : "Feiertage"} ${esc(extra.region || "")}</p>`;
 }
 
-function renderPanel() {
+const alike = (node, next) => node.nodeType === next.nodeType && node.nodeName === next.nodeName
+  && (node.nodeType !== Node.ELEMENT_NODE || (node.id === next.id && node.classList[0] === next.classList[0]));
+
+function shownValue(field) {
+  if (field.localName === "select") return [...field.options].find((option) => option.defaultSelected)?.value ?? field.options[0]?.value ?? "";
+  return field.localName === "textarea" ? field.defaultValue : field.getAttribute("value") ?? "";
+}
+
+function patchNode(node, next) {
+  if (!alike(node, next)) {
+    node.replaceWith(next);
+    return next;
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    if (node.data !== next.data) node.data = next.data;
+    return node;
+  }
+  const field = node.matches("input, textarea, select");
+  const before = field ? shownValue(node) : null;
+  [...node.attributes].forEach(({ name }) => next.hasAttribute(name) || node.removeAttribute(name));
+  [...next.attributes].forEach(({ name, value }) => node.getAttribute(name) === value || node.setAttribute(name, value));
+  patchChildren(node, next);
+  if (field && before !== shownValue(next) && node.value !== next.value) node.value = next.value;
+  return node;
+}
+
+function patchChildren(parent, next) {
+  let current = parent.firstChild;
+  for (const child of [...next.childNodes]) {
+    let match = current;
+    while (match && !alike(match, child)) match = match.nextSibling;
+    if (!match) {
+      parent.insertBefore(child, current);
+      continue;
+    }
+    while (current !== match) {
+      const gone = current;
+      current = current.nextSibling;
+      gone.remove();
+    }
+    current = patchNode(match, child).nextSibling;
+  }
+  while (current) {
+    const gone = current;
+    current = current.nextSibling;
+    gone.remove();
+  }
+}
+
+// With keep the open sheet is brought up to date in place, so the field in focus keeps it.
+function renderPanel({ keep = false } = {}) {
   const entry = findEntry(state.selected);
   const panel = $("calPanel");
   if (!entry) return;
   panel.setAttribute("aria-label", entry.item.title);
-  panel.innerHTML = entry.type === "event" ? panelEvent(entry.item) : entry.type === "due" ? panelDue(entry.item) : panelHoliday(entry.item);
+  const html = entry.type === "event" ? panelEvent(entry.item) : entry.type === "due" ? panelDue(entry.item) : panelHoliday(entry.item);
+  if (!keep || !panel.firstChild) {
+    panel.innerHTML = html;
+    return;
+  }
+  const next = document.createElement("div");
+  next.innerHTML = html;
+  patchChildren(panel, next);
+}
+
+/* A change fires when a field loses focus, which is between pressing and releasing the button that took the focus.
+   Drawn anew or shifted in that moment, the sheet would take the click from that button ("Anlegen" did nothing). */
+const press = { down: false, waiting: false };
+
+function refreshPanel() {
+  if (press.down) press.waiting = true;
+  else renderPanel({ keep: true });
+}
+
+function settlePress() {
+  if (!press.down) return;
+  setTimeout(() => {
+    press.down = false;
+    if (!press.waiting) return;
+    press.waiting = false;
+    renderPanel({ keep: true });
+  });
 }
 
 function markSelected() {
@@ -1134,6 +1230,14 @@ function renderChrome() {
   $("calNext").dataset.tip = forward;
   $("calCount").textContent = countLine();
   $("calToday").setAttribute("aria-label", `Heute, ${longDate(now())}`);
+  syncButton();
+}
+
+function syncButton() {
+  const button = $("calSync");
+  button.hidden = !sync.source;
+  button.dataset.tip = `Aus ${sourceWord()} neu laden`;
+  button.setAttribute("aria-label", `Termine aus ${sourceWord()} neu laden`);
 }
 
 function slideIn(direction) {
@@ -1324,83 +1428,22 @@ function moveItemFocus(direction) {
   target.scrollIntoView({ block: "nearest" });
 }
 
-const PAGE_NOISE = /\b(S\.|Seite|Nr\.|Nummer|Aufgabe|Aufg\.|Unit|Kapitel)\s*\d+[a-z]?(\s*(f\.|ff\.|bis\s*\d+))?/gi;
-const TIME_RANGE = /(?:\bvon\s+)?\b([01]?\d|2[0-3])(?:[:.]([0-5]\d))?\s*(?:uhr\s*)?(?:-|–|bis)\s*([01]?\d|2[0-3])(?:[:.]([0-5]\d))?(?:\s*uhr)?\b/i;
-const TIME_SINGLE = [
-  /(?:\b(?:um|ab|gegen|so)\s+)?\b([01]?\d|2[0-3])[:.]([0-5]\d)(?:\s*uhr)?\b/i,
-  /\b(?:um|ab|gegen)\s+([01]?\d|2[0-3])(?:\s*uhr)?\b/i,
-  /(?:\bso\s+)?\b([01]?\d|2[0-3])\s*uhr\b/i,
-];
 const pad = (value) => String(value).padStart(2, "0");
 const hhmm = (minute) => `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;
 
-function cut(text, phrase) {
-  if (!phrase) return text;
-  const index = phraseAt(text, phrase);
-  return index < 0 ? text : `${text.slice(0, index)} ${text.slice(index + phrase.length)}`;
-}
-
-// The time of day the date came with ("Do Abend 8 Uhr") moves the hour as in the assistant (spoken_time.py, _later).
-function later(hour, part) {
-  const value = Number(hour);
-  if (!part) return value;
-  if (/^(?:nachmittag|abend)/.test(part) && value >= 1 && value < 12) return value + 12;
-  if (part.startsWith("nacht")) return value === 12 ? 0 : value >= 9 && value < 12 ? value + 12 : value;
-  if (part.startsWith("mittag") && value >= 1 && value <= 4) return value + 12;
-  return value;
-}
-
-function parseTime(text, part = null) {
-  const clean = text.replace(PAGE_NOISE, (match) => " ".repeat(match.length));
-  const range = clean.match(TIME_RANGE);
-  if (range && (range[2] || range[4] || /uhr|von/i.test(range[0]))) {
-    const start = `${pad(later(range[1], part))}:${range[2] || "00"}`;
-    const end = `${pad(later(range[3], part))}:${range[4] || "00"}`;
-    if (toMin(end) > toMin(start)) return { start, end, phrase: text.substr(range.index, range[0].length) };
-  }
-  for (const pattern of TIME_SINGLE) {
-    const match = clean.match(pattern);
-    if (match) {
-      const start = `${pad(later(match[1], part))}:${match[2] || "00"}`;
-      return { start, end: null, phrase: text.substr(match.index, match[0].length) };
-    }
-  }
-  return null;
-}
-
 function defaultDay() {
   return state.picked ? state.focus : todayIso();
-}
-
-export function parseEntry(text) {
-  const info = parseNote(text);
-  const date = info.date || null;
-  const time = parseTime(cut(text, info.phrases.date), info.part);
-  let start = time?.start || null;
-  let end = time?.end || null;
-  const block = info.block ? blockOf(info.block) : null;
-  if (block && !start) {
-    start = block.start;
-    end = block.end;
-  }
-  if (start && !end) end = hhmm(Math.min(1439, toMin(start) + 60));
-  const words = info.block && !block ? { ...info, phrases: { ...info.phrases, block: undefined } } : info;
-  const title = cleanTitle(cut(text, time?.phrase), words).replace(/\s+(um|am|von|ab)$/i, "").trim();
-  let kind = "private";
-  if (TRAINING_WORDS.test(text)) kind = "training";
-  else if (PRIVATE_WORDS.test(text)) kind = "private";
-  else if (SCHOOL_WORDS.test(text) || info.subject) kind = "school";
-  return { title, date: date || defaultDay(), start, end, kind };
 }
 
 function renderQuickChips() {
   const text = $("calQuickInput").value;
   const chips = [];
   if (text.trim()) {
-    const entry = parseEntry(text);
-    chips.push(`<span class="chip">${icon("calendar-days")}${esc(shortDate(parseDate(entry.date)))}</span>`);
-    chips.push(`<span class="chip">${icon("clock")}${entry.start ? `${hm(entry.start)} bis ${hm(entry.end)}` : "ganztägig"}</span>`);
-    chips.push(`<span class="chip cal-kind-chip" style="--k:${kindVar(entry.kind)}"><i class="cal-dot"></i>${KINDS[entry.kind].label}</span>`);
+    const entry = parseEntry(text, defaultDay());
+    const into = intoGoogle();
+    chips.push(eventChips(entry));
+    chips.push(`<span class="chip cal-kind-chip" style="--k:${kindVar(entry.kind)}">${icon(KINDS[entry.kind].icon)}${KINDS[entry.kind].chip}</span>`);
+    if (into) chips.push(`<span class="chip cal-kind-chip"><i class="cal-dot" style="--k:${esc(swatch(into))}"></i>Google: ${esc(into.name)}</span>`);
   }
   const host = $("calQuickChips");
   const markup = chips.join("");
@@ -1432,7 +1475,8 @@ function addEvent(fields, { quiet = false } = {}) {
   render({ slide: direction });
   if (direction) announce();
   if (!quiet) {
-    toast(`Angelegt: „${esc(item.title)}“, ${esc(shortDate(parseDate(item.date)))}${item.start ? `, ${hm(item.start)}` : ""}`, {
+    const rhythm = item.recurrence ? repeatWords(item) : "";
+    toast(`Angelegt: „${esc(item.title)}“, ${esc(shortDate(parseDate(item.date)))}${item.start ? `, ${hm(item.start)}` : ""}${rhythm ? `, ${esc(rhythm[0].toLowerCase() + rhythm.slice(1))}` : ""}`, {
       icon: "check",
       action: { label: "Rückgängig", undo: true, run: () => removeEvent(item.id, { silent: true }) },
     });
@@ -1441,9 +1485,9 @@ function addEvent(fields, { quiet = false } = {}) {
 }
 
 function createEvent(text) {
-  const entry = parseEntry(text);
+  const entry = parseEntry(text, defaultDay());
   if (!entry.title) return;
-  addEvent({ date: entry.date, start: entry.start, end: entry.end, title: entry.title, kind: entry.kind });
+  addEvent(entry);
 }
 
 function openDraft(fields) {
@@ -1649,12 +1693,15 @@ function changeRule(recurrence) {
   updateEvent({ recurrence });
   state.scope = "all";
   state.selected = [state.selected, occurrenceId(base.id, base.date), base.id].find((id) => findEntry(id));
-  renderPanel();
+  refreshPanel();
   markSelected();
 }
 
 function bindPanel() {
   const panel = $("calPanel");
+  panel.addEventListener("pointerdown", () => (press.down = true));
+  addEventListener("pointerup", settlePress);
+  addEventListener("pointercancel", settlePress);
   panel.addEventListener("click", (event) => {
     const item = panelItem();
     if (event.target.closest("[data-panel-close], [data-draft-cancel]")) closePanel({ refocus: true });
@@ -1718,7 +1765,7 @@ function bindPanel() {
         const span = item.start && item.end && !overnight(item) ? toMin(item.end) - toMin(item.start) : 60;
         const end = value ? hhmm(Math.min(1439, toMin(value) + span)) : null;
         updateEvent({ start: value, end, endDate: null });
-        renderPanel();
+        refreshPanel();
       }
     }
     if (target.id === "calPanelEnd") {
@@ -1728,7 +1775,7 @@ function bindPanel() {
       } else {
         const later = value && toMin(value) < toMin(item.start) ? isoDate(addDays(parseDate(item.date), 1)) : null;
         updateEvent({ end: value, endDate: later });
-        renderPanel();
+        refreshPanel();
       }
     }
     if (target.id === "calPanelRepeat") {
@@ -1748,8 +1795,9 @@ function bindPanel() {
       else target.value = rule({}).count || 10;
     }
     if (target.id === "calPanelReminder") updateEvent({ reminderMinutes: target.value === "" ? null : Number(target.value) });
+    if (target.id === "calPanelTarget" && item.draft) item.googleCalendar = target.value;
     const note = $("calWhenNote");
-    if (note && panelItem()) note.textContent = whenNote(panelItem());
+    if (note && panelItem() && !press.waiting) note.textContent = whenNote(panelItem());
   });
   panel.addEventListener("input", (event) => {
     const target = event.target;
@@ -1847,13 +1895,16 @@ function ensureRange() {
     });
 }
 
-async function startSync({ first = false, manual = false } = {}) {
+async function startSync({ first = false, manual = false, quiet = false } = {}) {
   if (sync.busy) return;
   sync.busy = true;
+  askedAt = Date.now();
   state.loading = sync.source === "google" && !state.events.some((item) => item.synced) && !extra.sync?.stand;
   const button = $("calSync");
-  button.classList.add("is-spinning");
-  button.setAttribute("aria-busy", "true");
+  if (!quiet) {
+    button.classList.add("is-spinning");
+    button.setAttribute("aria-busy", "true");
+  }
   if (state.loading) render();
   let payload = null;
   try {
@@ -1878,6 +1929,7 @@ async function startSync({ first = false, manual = false } = {}) {
     } else if (!first) {
       toast("Die verbundenen Kalender sind gerade nicht erreichbar.", { icon: "wifi-off" });
     }
+    syncButton();
     if (changed) {
       render();
       revealSynced();
@@ -1898,24 +1950,23 @@ function firstHint(problem) {
   return true;
 }
 
-let freshAt = 0;
-let freshWait = null;
+/* While the page is in view it asks for changes made in Google every minute, and at once when it comes back to the
+   front. The server asks Google only for what changed, and not again within PAGE_SECONDS (calendar_cache.py). */
+const FRESH_GAP = 10000;
+const FRESH_EVERY = 60000;
+let askedAt = 0;
 
-function takeFresh() {
-  clearTimeout(freshWait);
-  freshWait = null;
-  const rest = 60000 - (Date.now() - freshAt);
-  if (sync.busy || rest > 0) {
-    freshWait = setTimeout(takeFresh, sync.busy ? 2000 : rest);
-    return;
-  }
-  freshAt = Date.now();
-  startSync({ first: true });
+function freshen() {
+  if (sync.source !== "google" || sync.busy || document.hidden || Date.now() - askedAt < FRESH_GAP) return;
+  startSync({ first: true, quiet: true });
 }
 
-addEventListener("app:google-fresh", () => {
-  if ($("calendarPage")) takeFresh();
-});
+function keepFresh() {
+  onAttention(() => {
+    if (attentive()) freshen();
+  });
+  setInterval(freshen, FRESH_EVERY);
+}
 
 function revealSynced() {
   if (!animates()) return;
@@ -2245,6 +2296,12 @@ function bind() {
       event.target.blur();
     }
   });
+  addEventListener("app:note", (event) => {
+    if (event.detail?.type !== "event") return;
+    event.preventDefault();
+    const { type, details, ...entry } = event.detail;
+    addEvent({ ...entry, notes: details || "" });
+  });
   $("calQuick").addEventListener("submit", (event) => {
     event.preventDefault();
     const input = $("calQuickInput");
@@ -2322,6 +2379,11 @@ function syncPlaceholder(query) {
 export function init() {
   if (!$("calendarPage")) return;
   load();
+  const asked = /^#tag=(\d{4}-\d{2}-\d{2})$/.exec(location.hash)?.[1];
+  if (asked) {
+    revealDate(asked);
+    state.picked = true;
+  }
   state.narrow = measure();
   const small = matchMedia("(max-width: 640px)");
   syncPlaceholder(small);
@@ -2331,5 +2393,6 @@ export function init() {
   bind();
   render();
   startSync({ first: true });
+  keepFresh();
   scheduleTick();
 }
