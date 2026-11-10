@@ -8,7 +8,7 @@ import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecord
 import { askBackup, importFlow } from "../plan-share.js";
 import { platformName } from "../feedback.js";
 import { suggestShort, pickHue } from "../setup-data.js";
-import { storageNote, safariOnMac } from "../persistence.js";
+import { storageNote, safariOnMac, tabReminderNote } from "../persistence.js";
 import { remindersOn } from "../reminders.js";
 
 const $ = (id) => document.getElementById(id);
@@ -1865,7 +1865,7 @@ function unsupportedText() {
   const device = appleDevice();
   if (!device) return "Dieser Browser kann keine Erinnerungen zeigen.";
   if (onHomeScreen()) return `Für Erinnerungen braucht das ${device} iOS 16.4 oder neuer.`;
-  return `Auf dem ${device} erinnert ${BRAND} nur vom Home-Bildschirm aus: In Safari auf Teilen tippen, dann „Zum Home-Bildschirm“.`;
+  return tabReminderNote({ agent: navigator.userAgent, brand: BRAND });
 }
 
 function permissionRow() {

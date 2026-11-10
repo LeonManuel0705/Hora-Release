@@ -103,7 +103,7 @@ function element(tag = "div") {
 
 const CASES = {};
 
-async function boot({ plan = STORED, user = {}, store = {}, search = "", notification = null } = {}) {
+async function boot({ plan = STORED, user = {}, store = {}, search = "", notification = null, agent = "node" } = {}) {
   const nodes = { appData: { textContent: JSON.stringify(pageData(plan, user)) }, appStore: { textContent: JSON.stringify(store) } };
   const local = new Map();
   const calls = [];
@@ -139,7 +139,7 @@ async function boot({ plan = STORED, user = {}, store = {}, search = "", notific
   };
   globalThis.self = globalThis;
   globalThis.window = globalThis;
-  Object.defineProperty(globalThis, "navigator", { value: { platform: "MacIntel", userAgent: "node" }, configurable: true });
+  Object.defineProperty(globalThis, "navigator", { value: { platform: "MacIntel", userAgent: agent }, configurable: true });
   globalThis.matchMedia = (query) => ({ matches: query.includes("reduce"), addEventListener() {} });
   globalThis.getComputedStyle = () => ({ getPropertyValue: () => "" });
   globalThis.requestAnimationFrame = (run) => {
@@ -435,6 +435,21 @@ CASES["on a school day the A/B question is about this week"] = async () => {
   await run.next();
   assert.equal(page.core.weekType(new Date(2026, 10, 4, 9)), "B");
   assert.equal(page.core.weekType(new Date(2026, 10, 9, 9)), "A");
+};
+
+CASES["in the browser tab of an iPhone the last step says plainly that the tab gives no reminders"] = async () => {
+  const agent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.1 Mobile/15E148 Safari/604.1";
+  const page = await boot({ agent });
+  page.flow.open({});
+  const run = driver(page);
+  await answerSchool(run);
+  for (let step = 0; step < 6; step++) await run.next();
+  assert.equal(run.step(), "done");
+  const reminders = /<b>Erinnerungen<\/b><small>([^<]*)<\/small>/.exec(run.stage())?.[1] ?? "";
+  assert.match(reminders, /^Im Safari-Tab gibt es keine Erinnerungen\./);
+  assert.match(reminders, /erinnert dich die App dort, solange sie geöffnet ist\./, "the home screen app only while it is open, not more");
+  assert.match(reminders, /Einstellungen › Daten/, "and the plan typed in the tab can be taken along");
+  assert.doesNotMatch(reminders, /[—–]/);
 };
 
 const only = process.argv[2];

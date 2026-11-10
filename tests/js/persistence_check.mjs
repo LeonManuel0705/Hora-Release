@@ -6,7 +6,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { storageNote, safariOnMac } = await import(pathToFileURL(resolve(here, "../../app/static/app/js/persistence.js")).href);
+const { storageNote, safariOnMac, tabName, tabReminderNote } = await import(pathToFileURL(resolve(here, "../../app/static/app/js/persistence.js")).href);
 
 const SAFARI_MAC = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.1 Safari/605.1.15";
 const CHROME_MAC = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
@@ -19,7 +19,7 @@ assert.equal(note({ persisted: null }), null, "nothing is said before the browse
 
 const tab = note({ device: "iPhone" });
 assert.equal(tab.state, "tab", "an iPhone tab is only kept for now");
-assert.match(tab.text, /sieben Tage/);
+assert.match(tab.text, /etwa eine Woche/, "the same span the home screen hint names");
 assert.match(tab.text, /Home-Bildschirm/);
 assert.doesNotMatch(tab.text, /Safari/, "Chrome or Firefox on the iPhone are not called Safari");
 assert.equal(note({ device: "iPad", persisted: true }).state, "tab", "lasting storage does not lift the seven day rule of a tab");
@@ -43,5 +43,18 @@ assert.equal(safariOnMac(SAFARI_MAC, 0), true);
 assert.equal(safariOnMac(SAFARI_MAC, 5), false, "an iPad that calls itself a Mac is an iPad");
 assert.equal(safariOnMac(CHROME_MAC, 0), false);
 assert.equal(safariOnMac(FIREFOX_MAC, 0), false);
+
+const IPHONE_SAFARI = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.1 Mobile/15E148 Safari/604.1";
+const IPHONE_CHROME = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/141.0 Mobile/15E148 Safari/604.1";
+const IPHONE_INSTAGRAM = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 380.0.0.0";
+assert.equal(tabName(IPHONE_SAFARI), "Safari");
+assert.equal(tabName(IPHONE_CHROME), "Browser");
+assert.equal(tabName(IPHONE_INSTAGRAM), "Browser");
+
+const reminders = tabReminderNote({ agent: IPHONE_SAFARI, brand });
+assert.match(reminders, /^Im Safari-Tab gibt es keine Erinnerungen\./, "the tab gives none at all, said first and plainly");
+assert.match(reminders, /solange sie geöffnet ist/, "and the home screen app only while it is open");
+assert.doesNotMatch(reminders, /[—–:]/, "no dashes and no colon reveal");
+assert.match(tabReminderNote({ agent: IPHONE_CHROME, brand }), /^Im Browser-Tab/);
 
 console.log("persistence: ok");
