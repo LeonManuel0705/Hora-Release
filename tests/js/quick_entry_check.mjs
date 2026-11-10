@@ -322,6 +322,9 @@ Object.assign(tests, {
       ["Training Di Und jeden Mo 18 Uhr", "Training Di Und jeden Mo", MONDAY, "18:00"],
       ["Training jeden Mo 18 Uhr, Di-Fr 19 Uhr", "Training jeden Mo , Di-Fr 19 Uhr", MONDAY, "18:00"],
       ["Training jeden Mo 18 Uhr und Fr Morgen 9 Uhr", "Training jeden Mo und Fr Morgen 9 Uhr", MONDAY, "18:00"],
+      ["Jeden Mo-Fr Training 18 Uhr", "Jeden Mo-Fr Training", MONDAY, "18:00"],
+      ["Jeden Mo und Fr Training 18 Uhr", "Jeden Mo und Fr Training", MONDAY, "18:00"],
+      ["Training jeden Mo, Mi-Abend 19 Uhr", "Training jeden Mo, Mi-Abend", MONDAY, "19:00"],
     ];
     for (const [text, title, date, start] of cases) {
       const entry = parseEntry(text);

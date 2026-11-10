@@ -799,8 +799,9 @@ const DAY_PART = "(abend|morgen|vormittag|nachmittag|mittag|nacht)";
 // Every name in either case except a lone "so", which is a word of its own ("so gegen 18 Uhr").
 const CASED_NAMES = DAY_NAMES.map((name) => `[${name[0]}${name[0].toUpperCase()}]${name.slice(1)}`).join("|");
 const CASED_SHORT = DAY_SHORT.map(([first, second]) => `${first === "S" && second === "o" ? "S" : `[${first}${first.toLowerCase()}]`}[${second}${second.toUpperCase()}]`).join("|");
+const CASED_PART = DAY_PART.slice(1, -1).split("|").map((word) => `[${word[0]}${word[0].toUpperCase()}]${word.slice(1)}s?|${word.toUpperCase()}S?`).join("|");
 const AND_OR = "[Uu][Nn][Dd]|[Oo][Dd][Ee][Rr]";
-const LISTED_SHORT = new RegExp(`((?:,|&|(?<![\\p{L}])(?:${AND_OR})(?![\\p{L}]))\\s*(?:jede[nm]?\\s+)?)(${CASED_SHORT})(\\.?)(?![\\p{L}\\p{N}]|-(?!\\s*(?:${CASED_SHORT})(?![\\p{L}])))`, "gu");
+const LISTED_SHORT = new RegExp(`((?:,|&|(?<![\\p{L}])(?:${AND_OR})(?![\\p{L}]))\\s*(?:jede[nm]?\\s+)?)(${CASED_SHORT})(\\.?)(?![\\p{L}\\p{N}]|-(?!\\s*(?:${CASED_SHORT}|${CASED_PART})(?![\\p{L}])))`, "gu");
 const frau = (day, after) => /^fr\.?$/i.test(day) && /^\s*\p{Lu}/u.test(after) && !PART_AFTER.test(after);
 // A short day after a separator lists a second day, unless it belongs to people ("mit Ben und Mo") or is Frau ("Fr. Lange").
 const listedShort = (body) => [...body.matchAll(LISTED_SHORT)].some((match) => {
@@ -811,7 +812,7 @@ const listedShort = (body) => [...body.matchAll(LISTED_SHORT)].some((match) => {
 const CASED_DAY = `(?:(?:${CASED_NAMES})(?:${DAY_PART.slice(1, -1)})?s?|(?:${CASED_SHORT})\\.?)`;
 const EVERY_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?jede[nm]?\\s+(?:${ORDINAL}\\s+)?(?:(${DAY_NAMES.join("|")})${DAY_PART}?|(${DAY_SHORT.join("|")}))(\\.)?(?![\\p{L}\\p{N}])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
 const DAYS_ADVERB = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?(${DAY_NAMES.join("|")})${DAY_PART}?s(?![\\p{L}\\p{N}\\-])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
-const MORE_DAYS = new RegExp(`^\\s*(?:,|&|(?:${AND_OR})(?![\\p{L}])|bis|-|–)\\s*(?:jede[nm]?\\s+)?(${CASED_DAY})(?![\\p{L}]|-(?!\\s*(?:${CASED_SHORT})(?![\\p{L}])))`, "u");
+const MORE_DAYS = new RegExp(`^\\s*(,|&|(?:${AND_OR})(?![\\p{L}])|bis|-|–)\\s*(?:jede[nm]?\\s+)?(${CASED_DAY})(?![\\p{L}]|-(?!\\s*(?:${CASED_SHORT}|${CASED_PART})(?![\\p{L}])))`, "u");
 const DAYS_BEFORE = new RegExp(`(?<![\\p{L}\\p{N}])${CASED_DAY}(?:\\s*[,&]|\\s+(?:${AND_OR}))\\s*$`, "u");
 const LONG_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:${DAY_NAMES.join("|")})${DAY_PART}?s?(?![\\p{L}\\p{N}])`, "iu");
 const NAMES_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})(?![\\p{L}])`, "iu");
@@ -846,7 +847,7 @@ function weekdayRhythm(text) {
   if (every && word === "so" && !every[5]) return null;
   const end = found.index + found[0].length;
   const more = text.slice(end).match(MORE_DAYS);
-  if ((more && !frau(more[1], text.slice(end + more[0].length))) || DAYS_BEFORE.test(text.slice(0, found.index))) return { listed: true };
+  if ((more && (["bis", "-", "–"].includes(more[1]) || !(more[2].endsWith(".") && frau(more[2], text.slice(end + more[0].length))))) || DAYS_BEFORE.test(text.slice(0, found.index))) return { listed: true };
   const dow = word.length === 2 ? DAY_SHORT.findIndex((day) => day.toLowerCase() === word.toLowerCase()) : DAY_NAMES.indexOf(word.toLowerCase());
   const part = every ? every[3] || every[6] : adverb[2] || adverb[3];
   return { dow, interval: every ? step(every[1]) : 1, part: part?.toLowerCase() || null, index: found.index, length: found[0].length };
