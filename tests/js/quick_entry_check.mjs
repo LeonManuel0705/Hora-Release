@@ -276,6 +276,9 @@ Object.assign(tests, {
       ["Theater-AG jeden Mittwoch 14 Uhr mit Hr. Lange und Fr. Becker", "Theater-AG mit Hr. Lange und Fr. Becker", "2026-10-07", "14:00", "15:00", rule("weekly")],
       ["Fußball jeden Montag mit Ben und Mo 17 Uhr", "Fußball mit Ben und Mo", MONDAY, "17:00", "18:00", rule("weekly")],
       ["Zocken jeden Freitag mit Freund Mo 20 Uhr", "Zocken mit Freund Mo", "2026-10-09", "20:00", "21:00", rule("weekly")],
+      ["Nachhilfe jeden Montag, Fr. Weber 15 Uhr", "Nachhilfe , Fr. Weber", MONDAY, "15:00", "16:00", rule("weekly")],
+      ["Probe jeden Montag, SA-Halle 18 Uhr", "Probe , SA-Halle", MONDAY, "18:00", "19:00", rule("weekly")],
+      ["SOUND jeden Montag 18 Uhr", "SOUND", MONDAY, "18:00", "19:00", rule("weekly")],
       ["Gitarre mittwochabends 7 Uhr", "Gitarre", "2026-10-07", "19:00", "20:00", rule("weekly")],
       ["Joggen jeden Samstagmorgen 8 Uhr", "Joggen", "2026-10-10", "08:00", "09:00", rule("weekly")],
     ];
@@ -317,6 +320,8 @@ Object.assign(tests, {
       ["Training MO und jeden Mi 18 Uhr", "Training MO und jeden Mi", MONDAY, "18:00"],
       ["TRAINING JEDEN MO UND MI 18 UHR", "TRAINING JEDEN MO UND MI", MONDAY, "18:00"],
       ["Training Di Und jeden Mo 18 Uhr", "Training Di Und jeden Mo", MONDAY, "18:00"],
+      ["Training jeden Mo 18 Uhr, Di-Fr 19 Uhr", "Training jeden Mo , Di-Fr 19 Uhr", MONDAY, "18:00"],
+      ["Training jeden Mo 18 Uhr und Fr Morgen 9 Uhr", "Training jeden Mo und Fr Morgen 9 Uhr", MONDAY, "18:00"],
     ];
     for (const [text, title, date, start] of cases) {
       const entry = parseEntry(text);
