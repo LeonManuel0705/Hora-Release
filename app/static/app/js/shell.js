@@ -798,7 +798,8 @@ const UNITS = { tag: "daily", woche: "weekly", monat: "monthly", jahr: "yearly",
 const DAY_PART = "(abend|morgen|vormittag|nachmittag|mittag|nacht)";
 // Every name in either case except a lone "so", which is a word of its own ("so gegen 18 Uhr").
 const CASED_NAMES = DAY_NAMES.map((name) => `[${name[0]}${name[0].toUpperCase()}]${name.slice(1)}`).join("|");
-const CASED_SHORT = DAY_SHORT.map((short) => (short === "So" ? short : `[${short[0]}${short[0].toLowerCase()}]${short.slice(1)}`)).join("|");
+const CASED_SHORT = DAY_SHORT.map(([first, second]) => `${first === "S" && second === "o" ? "S" : `[${first}${first.toLowerCase()}]`}[${second}${second.toUpperCase()}]`).join("|");
+const LISTED_SHORT = new RegExp(`(?:,|&|[Uu]nd|[Oo]der)\\s*(?:jede[nm]?\\s+)?(?:${CASED_SHORT})\\.?(?![\\p{L}])`, "u");
 const CASED_DAY = `(?:(?:${CASED_NAMES})(?:${DAY_PART.slice(1, -1)})?s?|(?:${CASED_SHORT})\\.?)`;
 const EVERY_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?jede[nm]?\\s+(?:${ORDINAL}\\s+)?(?:(${DAY_NAMES.join("|")})${DAY_PART}?|(${DAY_SHORT.join("|")}))(\\.)?(?![\\p{L}\\p{N}])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
 const DAYS_ADVERB = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?(${DAY_NAMES.join("|")})${DAY_PART}?s(?![\\p{L}\\p{N}\\-])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
@@ -896,7 +897,7 @@ export function parseEntry(text, day = isoDate(now())) {
   let body = repeat ? repeat.spans.sort((a, b) => b[0] - a[0]).reduce((rest, [from, to]) => `${rest.slice(0, from)} ${rest.slice(to)}`, text) : text;
   let info = parseNote(body);
   // Another weekday beside "jeden Montag" ("und Mi 19 Uhr", "mittwochs") asks for a second series: none is read, and no day.
-  if (weekdayRhythm(text)?.listed || (repeat?.dow != null && (LONG_DAY.test(body) || NAMES_DAY.test(info.phrases.date || "")))) {
+  if (weekdayRhythm(text)?.listed || (repeat?.dow != null && (LONG_DAY.test(body) || LISTED_SHORT.test(body) || NAMES_DAY.test(info.phrases.date || "")))) {
     repeat = null;
     body = text;
     info = parseNote(text);
