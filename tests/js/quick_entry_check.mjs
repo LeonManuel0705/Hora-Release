@@ -41,8 +41,8 @@ globalThis.ResizeObserver = class { observe() {} };
 globalThis.CSS = { escape: (text) => text };
 
 const { params } = await import(script("core.js"));
-const { parseNote, cleanTitle } = await import(script("shell.js"));
-const { parseEntry } = await import(script("pages/calendar.js"));
+const { parseNote, cleanTitle, parseEntry, repeatWords, suggestedType } = await import(script("shell.js"));
+const calendar = await import(script("pages/calendar.js"));
 
 const MONDAY = "2026-10-05";
 const on = (day) => params.set("datum", day);
@@ -175,7 +175,7 @@ const tests = {
       ["Gespräch mit Fr. Müller 15 Uhr", "Gespräch mit Fr. Müller"], ["Termin bei Frau Freitag 15 Uhr", "Termin bei Frau Freitag"],
       ["Treffen mit Di Maria um 15 Uhr", "Treffen mit Di Maria"], ["Anruf bei Mi Amor 15 Uhr", "Anruf bei Mi Amor"],
       ["Lady Di Doku schauen 15 Uhr", "Lady Di Doku schauen"], ["So viel lernen 15 Uhr", "So viel lernen"],
-      ["Stoff von Freitag nachholen 15 Uhr", "Stoff von Freitag nachholen"], ["Jeden Montag Training 15 Uhr", "Jeden Montag Training"],
+      ["Stoff von Freitag nachholen 15 Uhr", "Stoff von Freitag nachholen"],
       ["Montagmorgen Sportzeug 15 Uhr", "Montagmorgen Sportzeug"], ["Rufe den Montag-Kurs an 15 Uhr", "Rufe den Montag-Kurs an"],
       ["Mo-Fr Praktikum 15 Uhr", "Mo-Fr Praktikum"], ["Praktikum Mo - Fr 15 Uhr", "Praktikum Mo - Fr"],
       ["Arzt Montag in fünf Wochen 15 Uhr", "Arzt Montag in fünf Wochen"], ["Letzten Freitag nachholen 15 Uhr", "Letzten Freitag nachholen"],
@@ -236,6 +236,90 @@ const tests = {
     assert.equal(parseNote("Gespräch mit Fr. Müller vorbereiten").date, undefined);
   },
 };
+
+const WEEKLY = { freq: "weekly", interval: 1, until: null, count: null, exceptions: [] };
+const rule = (freq, interval = 1) => ({ ...WEEKLY, freq, interval });
+
+Object.assign(tests, {
+  "the calendar page and the sheet Neu read with the same parser"() {
+    assert.equal(calendar.parseEntry, undefined, "the calendar keeps no parser of its own");
+  },
+  "a rhythm makes a series, starts on its weekday with today included, and leaves the title"() {
+    on(MONDAY);
+    const cases = [
+      ["Training jeden Dienstag 18:00", "Training", "2026-10-06", "18:00", "19:00", rule("weekly")],
+      ["Training jeden Di 18 Uhr", "Training", "2026-10-06", "18:00", "19:00", rule("weekly")],
+      ["Training jeden Di. 18 Uhr", "Training", "2026-10-06", "18:00", "19:00", rule("weekly")],
+      ["Jeden Montag Training 15 Uhr", "Training", MONDAY, "15:00", "16:00", rule("weekly")],
+      ["Training dienstags 18 Uhr", "Training", "2026-10-06", "18:00", "19:00", rule("weekly")],
+      ["Chor immer donnerstags 17:30", "Chor", "2026-10-08", "17:30", "18:30", rule("weekly")],
+      ["Training jeden Dienstag abends 7 Uhr", "Training", "2026-10-06", "19:00", "20:00", rule("weekly")],
+      ["Nachhilfe wöchentlich Do 16 Uhr", "Nachhilfe", "2026-10-08", "16:00", "17:00", rule("weekly")],
+      ["Lerngruppe jede Woche 16 Uhr", "Lerngruppe", MONDAY, "16:00", "17:00", rule("weekly")],
+      ["Mathe-Nachhilfe alle 2 Wochen Freitag 15 Uhr", "Mathe-Nachhilfe", "2026-10-09", "15:00", "16:00", rule("weekly", 2)],
+      ["Orchester alle zwei Wochen 19 Uhr", "Orchester", MONDAY, "19:00", "20:00", rule("weekly", 2)],
+      ["Lerngruppe jeden zweiten Mittwoch 16 Uhr", "Lerngruppe", "2026-10-07", "16:00", "17:00", rule("weekly", 2)],
+      ["Putzen alle 14 Tage Sa", "Putzen", "2026-10-10", null, null, rule("weekly", 2)],
+      ["Lauftreff 14-tägig Mi 18 Uhr", "Lauftreff", "2026-10-07", "18:00", "19:00", rule("weekly", 2)],
+      ["Vokabeln täglich 7 Uhr", "Vokabeln", MONDAY, "07:00", "08:00", rule("daily")],
+      ["Vokabeln jeden Tag 7 Uhr", "Vokabeln", MONDAY, "07:00", "08:00", rule("daily")],
+      ["Blumen gießen alle 3 Tage", "Blumen gießen", MONDAY, null, null, rule("daily", 3)],
+      ["Taschengeld jeden Monat am 1.11.", "Taschengeld", "2026-11-01", null, null, rule("monthly")],
+      ["Oma anrufen monatlich", "Oma anrufen", MONDAY, null, null, rule("monthly")],
+      ["Geburtstag Lea jedes Jahr 14.12.", "Geburtstag Lea", "2026-12-14", null, null, rule("yearly")],
+      ["Dosenpfand wegbringen jeden Do 15 Uhr", "Dosenpfand wegbringen", "2026-10-08", "15:00", "16:00", rule("weekly")],
+      ["Lesen, also jeden Sonntag 10 Uhr", "Lesen, also", "2026-10-11", "10:00", "11:00", rule("weekly")],
+    ];
+    for (const [text, title, date, start, end, recurrence] of cases) {
+      assert.deepEqual(parseEntry(text), { title, date, start, end, kind: parseEntry(text).kind, recurrence }, text);
+    }
+    assert.equal(parseEntry("Training jeden Dienstag 18:00").kind, "training");
+  },
+  "a weekday rhythm counts from the day the calendar has open"() {
+    on(MONDAY);
+    assert.equal(parseEntry("Training jeden Dienstag 18:00", "2026-10-21").date, "2026-10-27");
+    assert.equal(parseEntry("Training jeden Mittwoch 18:00", "2026-10-21").date, "2026-10-21");
+    assert.equal(parseEntry("Training wöchentlich 18:00", "2026-10-21").date, "2026-10-21");
+  },
+  "several weekdays, a second rhythm or other words for jeden make no series and keep their words"() {
+    on(MONDAY);
+    const cases = [
+      ["Training jeden Mo und Mi 18 Uhr", "Training jeden Mo und Mi", MONDAY, "18:00"],
+      ["Training montags und mittwochs 18 Uhr", "Training montags und mittwochs", MONDAY, "18:00"],
+      ["Training jeden Montag bis Freitag 18 Uhr", null, null, "18:00"],
+      ["Gym jeden Mo, Mi, Fr 7 Uhr", "Gym jeden Mo, Mi, Fr", MONDAY, "07:00"],
+      ["Jeden Morgen lesen 15 Uhr", "Jeden Morgen lesen", MONDAY, "15:00"],
+      ["Training jeden Dienstag monatlich", null, null, null],
+      ["Dienstags-Treff 18 Uhr", "Dienstags-Treff", MONDAY, "18:00"],
+      ["So viel lernen jeden so 15 Uhr", null, null, "15:00"],
+    ];
+    for (const [text, title, date, start] of cases) {
+      const entry = parseEntry(text);
+      assert.equal(entry.recurrence, undefined, text);
+      if (title) assert.equal(entry.title, title, text);
+      if (date) assert.equal(entry.date, date, text);
+      assert.equal(entry.start, start, text);
+    }
+  },
+  "the chips name the rhythm"() {
+    assert.equal(repeatWords({ date: "2026-10-06", recurrence: rule("weekly") }), "Jeden Dienstag");
+    assert.equal(repeatWords({ date: "2026-10-06", recurrence: rule("weekly", 2) }), "Alle 2 Wochen");
+    assert.equal(repeatWords({ date: "2026-10-06", recurrence: rule("daily") }), "Jeden Tag");
+    assert.equal(repeatWords({ date: "2026-10-06" }), "");
+  },
+  "the sheet Neu picks an event for a time and keeps the rest as before"() {
+    on(MONDAY);
+    const cases = [
+      ["Zahnarzt Do 15:30–16:15", "event"], ["Zahnarzt Do 15:30-16:15", "event"], ["Kino um 17 Uhr", "event"], ["Kino 20 Uhr", "event"],
+      ["Training jeden Dienstag 18:00", "event"], ["Treffen morgen 9.30 Uhr", "event"],
+      ["Mathe Vektoren S. 38 Nr. 4 bis Freitag", "task"], ["Vokabeln lernen", "task"], ["Mathe Mo 2. Block", "task"], ["Abgabe am 12.11.", "task"],
+      ["Mathe Aufgabe 3 bis 5 machen", "task"], ["Kapitel 12.5 lesen", "task"], ["Mathe lernen bis 18 Uhr", "task"], ["Referat fertig bis 17:00", "task"],
+      ["Kino von 20 bis 22 Uhr", "event"],
+      ["Hausaufgabe Mathe bis 17 Uhr", "homework"], ["Idee: Kino um 20 Uhr", "idea"],
+    ];
+    for (const [text, type] of cases) assert.equal(suggestedType(text), type, text);
+  },
+});
 
 let failed = 0;
 for (const [name, run] of Object.entries(tests)) {

@@ -132,6 +132,21 @@ void main() {
     expect(titles, isNot(contains('Vorbei')));
   });
 
+  test('an event from the sheet Neu is made here as in the calendar, a Google calendar it names is left aside', () async {
+    final (status, created) = await send('POST', '/api/ui/events', {
+      'title': 'Training', 'date': '2026-11-17', 'start': '18:00', 'end': '19:00', 'kind': 'training', 'place': '', 'notes': 'Hallenschuhe',
+      'recurrence': {'freq': 'weekly', 'interval': 1, 'until': null, 'count': null, 'exceptions': []}, 'calendar': 'familie@group.calendar.google.com',
+    });
+    expect(status, 200);
+    final event = (created['event'] as Map).cast<String, Object?>();
+    expect([event['title'], event['date'], event['start'], event['end'], event['kind'], event['notes']], ['Training', '2026-11-17', '18:00', '19:00', 'training', 'Hallenschuhe']);
+    expect(event['recurrence'], {'freq': 'weekly', 'interval': 1, 'until': null, 'count': null, 'exceptions': <String>[]});
+    final page = await hub.handle(const UiBridgeRequest(method: 'GET', path: '/hub/calendar', navigate: true));
+    final match = RegExp(r'<script type="application/json" id="appData">(.*?)</script>', dotAll: true).firstMatch(page.body as String)!;
+    final data = (jsonDecode(match.group(1)!) as Map).cast<String, Object?>();
+    expect((data['page'] as Map).containsKey('sync'), isFalse, reason: 'without Google the page offers no Google calendar and no reload button');
+  });
+
   test('the last day of a series counts only days that exist', () {
     expect(seriesLastDay({'date': '2027-01-31', 'recurrence': {'freq': 'monthly', 'count': 6}}), '2027-10-31');
     expect(seriesLastDay({'date': '2028-02-29', 'recurrence': {'freq': 'yearly', 'count': 3}}), '2036-02-29');

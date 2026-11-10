@@ -3,7 +3,7 @@ import {
   weekType, abWeeks, isoWeek, subject, hueVar, blockOf, lessonsFor, inDays, duration, shortDate, longDate, storage, ASSESSMENTS, isAssessment, isOverdue, assessmentCount,
   WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND, periodWords } from "../core.js";
 import { animates, travels, flipKeyed, exitInPlace, crossfade, token, ms } from "../motion.js";
-import { toast, parseNote, cleanTitle, phraseAt, typing, shortcutsEnabled, overlayOpen, registerSearch, pageUrl, placeNear, clampSheet } from "../shell.js";
+import { toast, parseEntry, eventChips, repeatWords, typing, shortcutsEnabled, overlayOpen, registerSearch, pageUrl, placeNear, clampSheet } from "../shell.js";
 import { events as eventApi, debounced, serverId } from "../api.js";
 import { expandEvents, normalizeRecurrence, splitOccurrence, occurrenceId, ruleText } from "../recurrence.js";
 import { readPrefs, eventMinutes, permissionState } from "../reminders.js";
@@ -50,9 +50,6 @@ const NAV_WORDS = {
   liste: ["Zwei Wochen zurück", "Zwei Wochen weiter"],
 };
 const ONLINE = /discord|zoom|teams|videocall|video|online|jitsi|webex|meet|https?:/i;
-const TRAINING_WORDS = /\b(gym|training|schwimm\w*|laufen|joggen|fu(ß|ss)ball|tennis|kletter\w*|sport|yoga|workout|volleyball|basketball|handball|tanzen|radtour)\b/i;
-const PRIVATE_WORDS = /\b(nachhilfe|arzt|zahnarzt|geburtstag|kino|party|essen|friseur|fahrstunde|konzert)\b/i;
-const SCHOOL_WORDS = /\b(schule|referat\w*|abikasse|abiball|klausur|test|elternabend|konferenz|infoabend|kurs\w*|lerngruppe|projektwoche|wandertag|exkursion|studien\w*|uni|hpi)\b/i;
 
 const holidays = (extra.holidays || []).map((item) => ({ ...item, endDate: item.endDate || item.date }));
 const deadlines = flags.empty ? [] : data.deadlines.filter((item) => DUE_KINDS.includes(item.kind) && item.status !== "abgegeben");
@@ -1410,82 +1407,19 @@ function moveItemFocus(direction) {
   target.scrollIntoView({ block: "nearest" });
 }
 
-const PAGE_NOISE = /\b(S\.|Seite|Nr\.|Nummer|Aufgabe|Aufg\.|Unit|Kapitel)\s*\d+[a-z]?(\s*(f\.|ff\.|bis\s*\d+))?/gi;
-const TIME_RANGE = /(?:\bvon\s+)?\b([01]?\d|2[0-3])(?:[:.]([0-5]\d))?\s*(?:uhr\s*)?(?:-|–|bis)\s*([01]?\d|2[0-3])(?:[:.]([0-5]\d))?(?:\s*uhr)?\b/i;
-const TIME_SINGLE = [
-  /(?:\b(?:um|ab|gegen|so)\s+)?\b([01]?\d|2[0-3])[:.]([0-5]\d)(?:\s*uhr)?\b/i,
-  /\b(?:um|ab|gegen)\s+([01]?\d|2[0-3])(?:\s*uhr)?\b/i,
-  /(?:\bso\s+)?\b([01]?\d|2[0-3])\s*uhr\b/i,
-];
 const pad = (value) => String(value).padStart(2, "0");
 const hhmm = (minute) => `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;
 
-function cut(text, phrase) {
-  if (!phrase) return text;
-  const index = phraseAt(text, phrase);
-  return index < 0 ? text : `${text.slice(0, index)} ${text.slice(index + phrase.length)}`;
-}
-
-// The time of day the date came with ("Do Abend 8 Uhr") moves the hour as in the assistant (spoken_time.py, _later).
-function later(hour, part) {
-  const value = Number(hour);
-  if (!part) return value;
-  if (/^(?:nachmittag|abend)/.test(part) && value >= 1 && value < 12) return value + 12;
-  if (part.startsWith("nacht")) return value === 12 ? 0 : value >= 9 && value < 12 ? value + 12 : value;
-  if (part.startsWith("mittag") && value >= 1 && value <= 4) return value + 12;
-  return value;
-}
-
-function parseTime(text, part = null) {
-  const clean = text.replace(PAGE_NOISE, (match) => " ".repeat(match.length));
-  const range = clean.match(TIME_RANGE);
-  if (range && (range[2] || range[4] || /uhr|von/i.test(range[0]))) {
-    const start = `${pad(later(range[1], part))}:${range[2] || "00"}`;
-    const end = `${pad(later(range[3], part))}:${range[4] || "00"}`;
-    if (toMin(end) > toMin(start)) return { start, end, phrase: text.substr(range.index, range[0].length) };
-  }
-  for (const pattern of TIME_SINGLE) {
-    const match = clean.match(pattern);
-    if (match) {
-      const start = `${pad(later(match[1], part))}:${match[2] || "00"}`;
-      return { start, end: null, phrase: text.substr(match.index, match[0].length) };
-    }
-  }
-  return null;
-}
-
 function defaultDay() {
   return state.picked ? state.focus : todayIso();
-}
-
-export function parseEntry(text) {
-  const info = parseNote(text);
-  const date = info.date || null;
-  const time = parseTime(cut(text, info.phrases.date), info.part);
-  let start = time?.start || null;
-  let end = time?.end || null;
-  const block = info.block ? blockOf(info.block) : null;
-  if (block && !start) {
-    start = block.start;
-    end = block.end;
-  }
-  if (start && !end) end = hhmm(Math.min(1439, toMin(start) + 60));
-  const words = info.block && !block ? { ...info, phrases: { ...info.phrases, block: undefined } } : info;
-  const title = cleanTitle(cut(text, time?.phrase), words).replace(/\s+(um|am|von|ab)$/i, "").trim();
-  let kind = "private";
-  if (TRAINING_WORDS.test(text)) kind = "training";
-  else if (PRIVATE_WORDS.test(text)) kind = "private";
-  else if (SCHOOL_WORDS.test(text) || info.subject) kind = "school";
-  return { title, date: date || defaultDay(), start, end, kind };
 }
 
 function renderQuickChips() {
   const text = $("calQuickInput").value;
   const chips = [];
   if (text.trim()) {
-    const entry = parseEntry(text);
-    chips.push(`<span class="chip">${icon("calendar-days")}${esc(shortDate(parseDate(entry.date)))}</span>`);
-    chips.push(`<span class="chip">${icon("clock")}${entry.start ? `${hm(entry.start)} bis ${hm(entry.end)}` : "ganztägig"}</span>`);
+    const entry = parseEntry(text, defaultDay());
+    chips.push(eventChips(entry));
     chips.push(`<span class="chip cal-kind-chip" style="--k:${kindVar(entry.kind)}"><i class="cal-dot"></i>${KINDS[entry.kind].label}</span>`);
   }
   const host = $("calQuickChips");
@@ -1518,7 +1452,8 @@ function addEvent(fields, { quiet = false } = {}) {
   render({ slide: direction });
   if (direction) announce();
   if (!quiet) {
-    toast(`Angelegt: „${esc(item.title)}“, ${esc(shortDate(parseDate(item.date)))}${item.start ? `, ${hm(item.start)}` : ""}`, {
+    const rhythm = item.recurrence ? repeatWords(item) : "";
+    toast(`Angelegt: „${esc(item.title)}“, ${esc(shortDate(parseDate(item.date)))}${item.start ? `, ${hm(item.start)}` : ""}${rhythm ? `, ${esc(rhythm[0].toLowerCase() + rhythm.slice(1))}` : ""}`, {
       icon: "check",
       action: { label: "Rückgängig", undo: true, run: () => removeEvent(item.id, { silent: true }) },
     });
@@ -1527,9 +1462,9 @@ function addEvent(fields, { quiet = false } = {}) {
 }
 
 function createEvent(text) {
-  const entry = parseEntry(text);
+  const entry = parseEntry(text, defaultDay());
   if (!entry.title) return;
-  addEvent({ date: entry.date, start: entry.start, end: entry.end, title: entry.title, kind: entry.kind });
+  addEvent(entry);
 }
 
 function openDraft(fields) {
@@ -2335,6 +2270,12 @@ function bind() {
       event.target.blur();
     }
   });
+  addEventListener("app:note", (event) => {
+    if (event.detail?.type !== "event") return;
+    event.preventDefault();
+    const { type, details, ...entry } = event.detail;
+    addEvent({ ...entry, notes: details || "" });
+  });
   $("calQuick").addEventListener("submit", (event) => {
     event.preventDefault();
     const input = $("calQuickInput");
@@ -2412,6 +2353,11 @@ function syncPlaceholder(query) {
 export function init() {
   if (!$("calendarPage")) return;
   load();
+  const asked = /^#tag=(\d{4}-\d{2}-\d{2})$/.exec(location.hash)?.[1];
+  if (asked) {
+    revealDate(asked);
+    state.picked = true;
+  }
   state.narrow = measure();
   const small = matchMedia("(max-width: 640px)");
   syncPlaceholder(small);

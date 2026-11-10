@@ -1,6 +1,7 @@
-import { data, flags, icon, esc, safeMarkup, root, subject, hueVar, now, addDays, startOfDay, isoDate, parseDate, shortDate, dayDiff, clock, minutesOf, pinnedTime, platform, storage, homeworkDate, stretchOf, BRAND, periodWords } from "./core.js";
+import { data, flags, icon, esc, safeMarkup, root, subject, hueVar, now, addDays, startOfDay, isoDate, parseDate, shortDate, dayDiff, clock, minutesOf, pinnedTime, platform, storage, homeworkDate, stretchOf, BRAND, periodWords, blockOf, toMin, hm, WEEKDAYS } from "./core.js";
 import { animates, travels, rich } from "./motion.js";
-import { tasks as taskApi, deadlines as deadlineApi, notes as noteApi } from "./api.js";
+import { tasks as taskApi, deadlines as deadlineApi, notes as noteApi, events as eventApi } from "./api.js";
+import { normalizeRecurrence, ruleText } from "./recurrence.js";
 import { switchRemindersOn } from "./reminders.js";
 
 const $ = (id) => document.getElementById(id);
@@ -488,6 +489,9 @@ noteSheet?.addEventListener("beforetoggle", (event) => {
 
 noteSheet?.addEventListener("toggle", (event) => {
   if (event.newState === "open") {
+    segmented.classList.add("is-still");
+    syncType();
+    requestAnimationFrame(() => segmented.classList.remove("is-still"));
     clampSheet(noteSheet);
     noteInput.focus();
   } else {
@@ -495,16 +499,28 @@ noteSheet?.addEventListener("toggle", (event) => {
   }
 });
 
+const noteType = () => noteForm.querySelector("input[name='type']:checked")?.value || "task";
+
+// The labels differ in length, so the thumb takes the place and width of the chosen one.
 function syncType() {
-  const inputs = [...noteForm.querySelectorAll("input[name='type']")];
-  const index = inputs.findIndex((input) => input.checked);
-  segmented.style.setProperty("--seg", Math.max(index, 0));
+  const label = noteForm.querySelector("input[name='type']:checked")?.closest("label");
+  if (!label || !segmented.offsetWidth) return;
+  segmented.style.setProperty("--seg-x", `${label.offsetLeft - 3}px`);
+  segmented.style.setProperty("--seg-w", `${label.offsetWidth}px`);
+}
+
+function pickType(type) {
+  const target = noteForm.querySelector(`input[name='type'][value='${type}']`);
+  if (!target || target.checked) return;
+  target.checked = true;
+  syncType();
 }
 
 noteForm?.addEventListener("change", (event) => {
   if (event.target.name === "type") {
     typeTouched = true;
     syncType();
+    renderChips();
   }
 });
 
@@ -763,13 +779,185 @@ export function cleanTitle(text, info) {
   return title.replace(/\s{2,}/g, " ").replace(/^[\s,:;-]+|[\s,:;-]+$/g, "").trim() || text.trim();
 }
 
+const PAGE_NOISE = /\b(S\.|Seite|Nr\.|Nummer|Aufgabe|Aufg\.|Unit|Kapitel)\s*\d+[a-z]?(\s*(f\.|ff\.|bis\s*\d+))?/gi;
+const TIME_RANGE = /(?:\bvon\s+)?\b([01]?\d|2[0-3])(?:[:.]([0-5]\d))?\s*(?:uhr\s*)?(?:-|–|bis)\s*([01]?\d|2[0-3])(?:[:.]([0-5]\d))?(?:\s*uhr)?\b/i;
+const TIME_SINGLE = [
+  /(?:\b(?:um|ab|gegen|so)\s+)?\b([01]?\d|2[0-3])[:.]([0-5]\d)(?:\s*uhr)?\b/i,
+  /\b(?:um|ab|gegen)\s+([01]?\d|2[0-3])(?:\s*uhr)?\b/i,
+  /(?:\bso\s+)?\b([01]?\d|2[0-3])\s*uhr\b/i,
+];
+const TRAINING_WORDS = /\b(gym|training|schwimm\w*|laufen|joggen|fu(ß|ss)ball|tennis|kletter\w*|sport|yoga|workout|volleyball|basketball|handball|tanzen|radtour)\b/i;
+const PRIVATE_WORDS = /\b(nachhilfe|arzt|zahnarzt|geburtstag|kino|party|essen|friseur|fahrstunde|konzert)\b/i;
+const SCHOOL_WORDS = /\b(schule|referat\w*|abikasse|abiball|klausur|test|elternabend|konferenz|infoabend|kurs\w*|lerngruppe|projektwoche|wandertag|exkursion|studien\w*|uni|hpi)\b/i;
+const pad = (value) => String(value).padStart(2, "0");
+const hhmm = (minute) => `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;
+
+const COUNTS = { 2: 2, zwei: 2, 3: 3, drei: 3, 4: 4, vier: 4, 5: 5, fünf: 5, 6: 6, sechs: 6, 7: 7, sieben: 7, 8: 8, acht: 8, 9: 9, neun: 9, 10: 10, zehn: 10, 11: 11, elf: 11, 12: 12, zwölf: 12 };
+const ORDINAL = "(zweite[nmns]?|dritte[nmns]?|vierte[nmns]?|[234]\\.)";
+const UNITS = { tag: "daily", woche: "weekly", monat: "monthly", jahr: "yearly", tage: "daily", wochen: "weekly", monate: "monthly", jahre: "yearly" };
+const EVERY_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?jede[nm]?\\s+(?:${ORDINAL}\\s+)?(${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})(\\.)?(?![\\p{L}\\p{N}])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
+const DAYS_ADVERB = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?(${DAY_NAMES.join("|")})s(?![\\p{L}\\p{N}\\-])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
+const MORE_DAYS = new RegExp(`^\\s*(?:,|&|und|oder|bis|-|–)\\s*(?:jede[nm]?\\s+)?(?:${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})s?\\.?(?![\\p{L}])`, "iu");
+const DAYS_BEFORE = new RegExp(`(?<![\\p{L}\\p{N}])(?:${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})s?\\.?\\s*(?:,|&|und|oder)\\s*$`, "iu");
+const EVERY_UNIT = new RegExp(`(?<![\\p{L}\\p{N}])jede[nmrs]?\\s+(?:${ORDINAL}\\s+)?(tag|woche|monat|jahr)(?![\\p{L}\\p{N}])`, "iu");
+const ALL_UNITS = /(?<![\p{L}\p{N}])alle\s+(\d{1,2}|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf)\s+(tage|wochen|monate|jahre)(?![\p{L}\p{N}])/iu;
+const RHYTHM_WORDS = /(?<![\p{L}\p{N}])(täglich|wöchentlich|zweiwöchentlich|monatlich|jährlich|(?:14|vierzehn)[-\s]?tägig|(?:14|vierzehn)[-\s]?täglich)(?![\p{L}\p{N}])/iu;
+const RHYTHMS = { täglich: ["daily", 1], wöchentlich: ["weekly", 1], zweiwöchentlich: ["weekly", 2], monatlich: ["monthly", 1], jährlich: ["yearly", 1] };
+const step = (word) => (word ? Number(word.match(/\d/)?.[0]) || { zweite: 2, dritte: 3, vierte: 4 }[word.toLowerCase().slice(0, 6)] : 1);
+
+function rhythmOf(text) {
+  const every = text.match(EVERY_UNIT);
+  if (every) return { freq: UNITS[every[2].toLowerCase()], interval: step(every[1]), index: every.index, length: every[0].length };
+  const all = text.match(ALL_UNITS);
+  if (all) {
+    const count = COUNTS[all[1].toLowerCase()];
+    const unit = all[2].toLowerCase();
+    if (unit === "tage" && all[1] === "14") return { freq: "weekly", interval: 2, index: all.index, length: all[0].length };
+    return count ? { freq: UNITS[unit], interval: count, index: all.index, length: all[0].length } : null;
+  }
+  const word = text.match(RHYTHM_WORDS);
+  if (!word) return null;
+  const [freq, interval] = RHYTHMS[word[1].toLowerCase()] || ["weekly", 2];
+  return { freq, interval, index: word.index, length: word[0].length };
+}
+
+function weekdayRhythm(text) {
+  const every = text.match(EVERY_DAY);
+  const adverb = every ? null : text.match(DAYS_ADVERB);
+  const found = every || adverb;
+  if (!found) return null;
+  const word = every ? every[2] : adverb[1];
+  if (every && word.length === 2 && word.toLowerCase() === "so" && word !== "So" && !every[3]) return null;
+  const end = found.index + found[0].length;
+  if (MORE_DAYS.test(text.slice(end)) || DAYS_BEFORE.test(text.slice(0, found.index))) return { listed: true };
+  const dow = word.length === 2 ? DAY_SHORT.findIndex((day) => day.toLowerCase() === word.toLowerCase()) : DAY_NAMES.indexOf(word.toLowerCase());
+  return { dow, interval: every ? step(every[1]) : 1, part: (every ? every[4] : adverb[2])?.toLowerCase() || null, index: found.index, length: found[0].length };
+}
+
+/* How often an event comes round, read from the words for it. Several weekdays ("jeden Mo und Mi") or a weekday with a
+   rhythm other than weeks name nothing a single series can hold, so then nothing is read and the words stay in the title. */
+export function repeatOf(text) {
+  const day = weekdayRhythm(text);
+  if (day?.listed) return null;
+  const rhythm = rhythmOf(text);
+  if (day && rhythm && rhythm.freq !== "weekly") return null;
+  if (!day && !rhythm) return null;
+  const spans = [day, rhythm].filter(Boolean).map(({ index, length }) => [index, index + length]);
+  const interval = day && rhythm ? Math.max(day.interval, rhythm.interval) : (day || rhythm).interval;
+  return { rule: normalizeRecurrence({ freq: day ? "weekly" : rhythm.freq, interval }), dow: day ? day.dow : null, part: day?.part || null, spans };
+}
+
+function cutPhrase(text, phrase) {
+  if (!phrase) return text;
+  const index = phraseAt(text, phrase);
+  return index < 0 ? text : `${text.slice(0, index)} ${text.slice(index + phrase.length)}`;
+}
+
+// The time of day the date came with ("Do Abend 8 Uhr") moves the hour as in the assistant (spoken_time.py, _later).
+function later(hour, part) {
+  const value = Number(hour);
+  if (!part) return value;
+  if (/^(?:nachmittag|abend)/.test(part) && value >= 1 && value < 12) return value + 12;
+  if (part.startsWith("nacht")) return value === 12 ? 0 : value >= 9 && value < 12 ? value + 12 : value;
+  if (part.startsWith("mittag") && value >= 1 && value <= 4) return value + 12;
+  return value;
+}
+
+function parseTime(text, part = null) {
+  const clean = text.replace(PAGE_NOISE, (match) => " ".repeat(match.length));
+  const range = clean.match(TIME_RANGE);
+  if (range && (range[2] || range[4] || /uhr|von/i.test(range[0]))) {
+    const start = `${pad(later(range[1], part))}:${range[2] || "00"}`;
+    const end = `${pad(later(range[3], part))}:${range[4] || "00"}`;
+    if (toMin(end) > toMin(start)) return { start, end, phrase: text.substr(range.index, range[0].length) };
+  }
+  for (const pattern of TIME_SINGLE) {
+    const match = clean.match(pattern);
+    if (match) {
+      const start = `${pad(later(match[1], part))}:${match[2] || "00"}`;
+      return { start, end: null, phrase: text.substr(match.index, match[0].length) };
+    }
+  }
+  return null;
+}
+
+/* An event as the quick fields read it. The calendar's field and the sheet "Neu" share it, so both make the same event.
+   A weekday rhythm ("jeden Dienstag") starts on that weekday, today included. */
+export function parseEntry(text, day = isoDate(now())) {
+  const repeat = repeatOf(text);
+  const body = repeat ? repeat.spans.sort((a, b) => b[0] - a[0]).reduce((rest, [from, to]) => `${rest.slice(0, from)} ${rest.slice(to)}`, text) : text;
+  const info = parseNote(body);
+  let date = info.date || day;
+  if (repeat?.dow != null) {
+    const first = parseDate(date);
+    date = isoDate(addDays(first, (repeat.dow - first.getDay() + 7) % 7));
+  }
+  const time = parseTime(cutPhrase(body, info.phrases.date), info.part || repeat?.part || null);
+  let start = time?.start || null;
+  let end = time?.end || null;
+  const block = info.block ? blockOf(info.block) : null;
+  if (block && !start) {
+    start = block.start;
+    end = block.end;
+  }
+  if (start && !end) end = hhmm(Math.min(1439, toMin(start) + 60));
+  const words = info.block && !block ? { ...info, phrases: { ...info.phrases, block: undefined } } : info;
+  const title = cleanTitle(cutPhrase(body, time?.phrase), words).replace(/\s+(um|am|von|ab)$/i, "").trim();
+  let kind = "private";
+  if (TRAINING_WORDS.test(text)) kind = "training";
+  else if (PRIVATE_WORDS.test(text)) kind = "private";
+  else if (SCHOOL_WORDS.test(text) || info.subject) kind = "school";
+  return { title, date, start, end, kind, ...(repeat ? { recurrence: repeat.rule } : {}) };
+}
+
+/* What the sheet "Neu" picks while nobody chose by hand: a leading word for homework or an idea, a time for an event
+   ("15:30–16:15", "um 17 Uhr"), else a task. A lesson ("2. Block") or a time to finish by ("bis 18 Uhr") names no event. */
+export function suggestedType(text, info = parseNote(text)) {
+  if (info.type) return info.type;
+  const rest = cutPhrase(text, info.phrases.date);
+  const time = parseTime(rest);
+  if (!time) return "task";
+  return !time.end && /(?<![\p{L}])bis\s*$/iu.test(rest.slice(0, phraseAt(rest, time.phrase))) ? "task" : "event";
+}
+
+export function repeatWords(entry) {
+  const rule = normalizeRecurrence(entry.recurrence);
+  if (!rule) return "";
+  return rule.freq === "weekly" && rule.interval === 1 ? `Jeden ${WEEKDAYS[parseDate(entry.date).getDay()]}` : ruleText(rule);
+}
+
+export function eventChips(entry) {
+  return [
+    `<span class="chip">${icon("calendar-days")}${esc(shortDate(parseDate(entry.date)))}</span>`,
+    `<span class="chip">${icon("clock")}${entry.start ? `${hm(entry.start)} bis ${hm(entry.end)}` : "ganztägig"}</span>`,
+    entry.recurrence ? `<span class="chip">${icon("repeat")}${esc(repeatWords(entry))}</span>` : "",
+  ].join("");
+}
+
 const chipWords = { subject: "Fach", date: "Datum", block: "Block" };
 
 function chipButton(kind, content, text, extra = "", style = "") {
   return `<button type="button" class="chip${extra}" data-chip="${kind}"${style} aria-label="${chipWords[kind]} ${esc(text)} entfernen">${content}<span class="chip-x" aria-hidden="true">${icon("x")}</span></button>`;
 }
 
+function renderEventChips() {
+  const raw = noteInput.value.trim();
+  const entry = raw ? parseEntry(raw) : null;
+  const markup = entry ? eventChips(entry) : "";
+  if (noteChips.dataset.markup !== markup) {
+    noteChips.dataset.markup = markup;
+    noteChips.innerHTML = markup;
+  }
+  const note = !entry ? "" : !entry.title ? "Gib dem Termin noch einen Titel." : entry.title !== raw ? `Wird gespeichert als „${entry.title}“` : "";
+  notePreview.hidden = !note;
+  notePreview.textContent = note;
+}
+
 function renderChips() {
+  if (noteType() === "event") {
+    renderEventChips();
+    return;
+  }
   const info = effective();
   const chips = [];
   if (info.subject) {
@@ -809,19 +997,13 @@ noteInput?.addEventListener("input", () => {
   parsed = parseNote(noteInput.value);
   const after = effective();
   lastRecognized = ["date", "block", "subject"].find((kind) => after[kind] && after[kind] !== before[kind]) || null;
+  if (!typeTouched) pickType(suggestedType(noteInput.value, parsed));
   renderChips();
-  if (!typeTouched && parsed.type) {
-    const target = noteForm.querySelector(`input[name='type'][value='${parsed.type}']`);
-    if (target && !target.checked) {
-      target.checked = true;
-      syncType();
-    }
-  }
 });
 
 noteInput?.addEventListener("keydown", (event) => {
   const atEnd = noteInput.selectionStart === noteInput.value.length && noteInput.selectionEnd === noteInput.value.length;
-  if (event.key === "Backspace" && lastRecognized && atEnd) {
+  if (event.key === "Backspace" && lastRecognized && atEnd && noteType() !== "event") {
     event.preventDefault();
     dismissed.add(lastRecognized);
     lastRecognized = null;
@@ -842,10 +1024,14 @@ noteForm?.addEventListener("submit", (event) => {
   event.preventDefault();
   const raw = noteInput.value.trim();
   if (!raw) return;
-  const type = noteForm.querySelector("input[name='type']:checked").value;
+  const type = noteType();
   const info = effective();
   const details = noteForm.querySelector("textarea[name='details']")?.value.trim() || "";
-  const detail = { type, title: cleanTitle(raw, info), subject: info.subject, date: info.date, block: info.block, details };
+  const detail = type === "event" ? { type, ...parseEntry(raw), details } : { type, title: cleanTitle(raw, info), subject: info.subject, date: info.date, block: info.block, details };
+  if (!detail.title) {
+    noteInput.focus();
+    return;
+  }
   noteSheet.hidePopover();
   const handled = !window.dispatchEvent(new CustomEvent("app:note", { detail, cancelable: true }));
   if (!handled) saveNote(detail);
@@ -859,7 +1045,25 @@ addEventListener("app:save-failed", () => {
   toast("Das hat nicht geklappt. Die Änderung ist noch nicht gespeichert.", { icon: "circle-alert" });
 });
 
+function saveEvent(detail) {
+  const { type, details, ...entry } = detail;
+  const item = { id: `neu-${Date.now()}`, place: "", notes: details || "", ...entry };
+  eventApi.create(item).then((saved) => {
+    if (saved && data && !flags.empty) data.events = [...(data.events || []), saved];
+    const when = `${shortDate(parseDate(item.date))}${item.start ? `, ${hm(item.start)}` : ""}`;
+    const rhythm = item.recurrence ? repeatWords(item) : "";
+    toast(`Termin angelegt: „${esc(item.title)}“, ${esc(when)}${rhythm ? `, ${esc(rhythm[0].toLowerCase() + rhythm.slice(1))}` : ""}`, {
+      icon: "check",
+      action: { label: "Anzeigen", run: () => openPage("calendar", `${ROUTES.calendar}#tag=${item.date}`) },
+    });
+  }).catch(() => {});
+}
+
 function saveNote(detail) {
+  if (detail.type === "event") {
+    saveEvent(detail);
+    return;
+  }
   const words = { task: "Aufgabe", homework: "Hausaufgabe", note: "Notiz", idea: "Idee" };
   const today = isoDate(now());
   let job;

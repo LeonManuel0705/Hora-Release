@@ -58,13 +58,13 @@
     
     <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
     
-    <link rel="stylesheet" href="/static/app/css/tokens.css?v=ca20715818">
-    <link rel="stylesheet" href="/static/app/css/app.css?v=ca20715818">
-    <link rel="stylesheet" href="/static/app/css/dialog.css?v=ca20715818">
-    <link rel="stylesheet" href="/static/css/tour.css?v=ca20715818">
-    <link rel="stylesheet" href="/static/app/css/setup.css?v=ca20715818">
+    <link rel="stylesheet" href="/static/app/css/tokens.css?v=f69187a5a6">
+    <link rel="stylesheet" href="/static/app/css/app.css?v=f69187a5a6">
+    <link rel="stylesheet" href="/static/app/css/dialog.css?v=f69187a5a6">
+    <link rel="stylesheet" href="/static/css/tour.css?v=f69187a5a6">
+    <link rel="stylesheet" href="/static/app/css/setup.css?v=f69187a5a6">
     
-    <link rel="stylesheet" href="/static/app/css/touch.css?v=ca20715818">
+    <link rel="stylesheet" href="/static/app/css/touch.css?v=f69187a5a6">
     <script nonce="__APP_NONCE__">
         (function () {
             var root = document.documentElement;
@@ -79,7 +79,7 @@
             if (root.dataset.themeMode === "auto") root.dataset.theme = system.matches ? "dark" : "light";
         })();
     </script>
-    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=ca20715818"></script>
+    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=f69187a5a6"></script>
 </head>
 <body data-tour-auto="__APP_TOUR__" data-server-behind="0" data-app-version="__APP_VERSION__">
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -213,7 +213,7 @@
         <button class="icon-button topbar-search" type="button" data-open-palette aria-label="Suchen">
             <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
         </button>
-        <button class="btn btn-primary" type="button" data-open-note aria-label="Neu: Aufgabe, Hausaufgabe, Notiz oder Idee">
+        <button class="btn btn-primary" type="button" data-open-note aria-label="Neu: Aufgabe, Hausaufgabe, Termin, Notiz oder Idee">
             <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Neu
         </button>
     </div>
@@ -317,7 +317,7 @@
                 <button class="btn btn-quiet" type="button" id="openPalette" data-open-palette>
                     <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>Suchen<span class="btn-keys" aria-hidden="true"><kbd data-key="mod">Strg</kbd><kbd>K</kbd></span>
                 </button>
-                <button class="btn btn-primary" type="button" data-open-note id="noteButton" aria-label="Neu: Aufgabe, Hausaufgabe, Notiz oder Idee">
+                <button class="btn btn-primary" type="button" data-open-note id="noteButton" aria-label="Neu: Aufgabe, Hausaufgabe, Termin, Notiz oder Idee">
                     <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Neu
                 </button>
             </div>
@@ -455,6 +455,7 @@
             <span class="seg-thumb" aria-hidden="true"></span>
             <label><input type="radio" name="type" value="task" checked>Aufgabe</label>
             <label><input type="radio" name="type" value="homework">Hausaufgabe</label>
+            <label><input type="radio" name="type" value="event">Termin</label>
             <label><input type="radio" name="type" value="note">Notiz</label>
             <label><input type="radio" name="type" value="idea">Idee</label>
         </div>
@@ -529,8 +530,8 @@
 <div class="tooltip" id="tooltip" role="tooltip"></div>
 
 <script type="application/json" id="appStore">__APP_STORE__</script>
-<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=ca20715818" defer></script>
-<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=ca20715818" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=f69187a5a6" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=f69187a5a6" defer></script>
 
 
 <script type="application/json" id="appData">__APP_DATA__</script>
