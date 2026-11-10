@@ -1131,7 +1131,8 @@ function renderPanel({ keep = false } = {}) {
 }
 
 /* A change fires when a field loses focus, which is between pressing and releasing the button that took the focus.
-   Drawn anew or shifted in that moment, the sheet would take the click from that button ("Anlegen" did nothing). */
+   Drawn anew or shifted in that moment, the sheet would take the click from that button ("Anlegen" did nothing).
+   Only a press on a button waits: the menu of a select may keep the release to itself. */
 const press = { down: false, waiting: false };
 
 function refreshPanel() {
@@ -1699,7 +1700,7 @@ function changeRule(recurrence) {
 
 function bindPanel() {
   const panel = $("calPanel");
-  panel.addEventListener("pointerdown", () => (press.down = true));
+  panel.addEventListener("pointerdown", (event) => (press.down = !!event.target.closest("button")));
   addEventListener("pointerup", settlePress);
   addEventListener("pointercancel", settlePress);
   panel.addEventListener("click", (event) => {
