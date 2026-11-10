@@ -55,7 +55,7 @@ def script_json(value):
 def ui_settings(store):
     choice = store.get('app-theme-choice')
     if choice not in ('light', 'dark'):
-        choice = 'auto' if 'app-theme-choice' in store or db.get_user_theme() not in ('light', 'dark') else db.get_user_theme()
+        choice = 'auto' if 'app-theme-choice' in store else db.get_theme_choice() or 'auto'
     motion = 'minimal' if store.get('app-motion') == 'minimal' else 'calm'
     return {'theme': choice, 'motion': motion}
 

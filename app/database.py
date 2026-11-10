@@ -394,7 +394,7 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
-            cursor.execute('ALTER TABLE hub_timetable_settings ADD COLUMN theme TEXT DEFAULT \'dark\'')
+            cursor.execute('ALTER TABLE hub_timetable_settings ADD COLUMN theme TEXT')
         except sqlite3.OperationalError:
             pass
         try:
@@ -1234,6 +1234,18 @@ def get_user_theme(user_id: str = None) -> str:
         return row['theme']
     return 'dark'
 
+def get_theme_choice() -> Optional[str]:
+    """The colour scheme picked in the classic pages, or None to follow the system. Older databases
+    fill the column of every new row with 'dark', so an untouched row there stays dark as it always was."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT theme, theme_mode FROM hub_timetable_settings ORDER BY id DESC LIMIT 1')
+    row = cursor.fetchone()
+    conn.close()
+    if not row or row['theme_mode'] == 'system':
+        return None
+    return row['theme'] if row['theme'] in ('light', 'dark') else None
+
 def save_user_theme(theme: str, user_id: str = None) -> bool:
     conn = get_connection()
     cursor = conn.cursor()
@@ -1254,7 +1266,7 @@ def get_theme_preferences(user_id: str = None) -> Dict[str, Any]:
     settings = get_timetable_settings(user_id)
     if settings:
         return {
-            'theme': settings.get('theme', 'dark'),
+            'theme': settings.get('theme') or 'dark',
             'theme_mode': settings.get('theme_mode', 'manual'),
             'theme_schedule_json': settings.get('theme_schedule_json'),
         }
