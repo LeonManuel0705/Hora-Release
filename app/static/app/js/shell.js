@@ -795,10 +795,16 @@ const hhmm = (minute) => `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;
 const COUNTS = { 2: 2, zwei: 2, 3: 3, drei: 3, 4: 4, vier: 4, 5: 5, fünf: 5, 6: 6, sechs: 6, 7: 7, sieben: 7, 8: 8, acht: 8, 9: 9, neun: 9, 10: 10, zehn: 10, 11: 11, elf: 11, 12: 12, zwölf: 12 };
 const ORDINAL = "(zweite[nmns]?|dritte[nmns]?|vierte[nmns]?|[234]\\.)";
 const UNITS = { tag: "daily", woche: "weekly", monat: "monthly", jahr: "yearly", tage: "daily", wochen: "weekly", monate: "monthly", jahre: "yearly" };
-const EVERY_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?jede[nm]?\\s+(?:${ORDINAL}\\s+)?(${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})(\\.)?(?![\\p{L}\\p{N}])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
-const DAYS_ADVERB = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?(${DAY_NAMES.join("|")})s(?![\\p{L}\\p{N}\\-])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
-const MORE_DAYS = new RegExp(`^\\s*(?:,|&|und|oder|bis|-|–)\\s*(?:jede[nm]?\\s+)?(?:${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})s?\\.?(?![\\p{L}])`, "iu");
-const DAYS_BEFORE = new RegExp(`(?<![\\p{L}\\p{N}])(?:${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})s?\\.?\\s*(?:,|&|und|oder)\\s*$`, "iu");
+const DAY_PART = "(abend|morgen|vormittag|nachmittag|mittag|nacht)";
+// Long names in either case, short ones only as written ("So", "Do"): "so" and "do" are words of their own.
+const CASED_NAMES = DAY_NAMES.map((name) => `[${name[0]}${name[0].toUpperCase()}]${name.slice(1)}`).join("|");
+const CASED_DAY = `(?:(?:${CASED_NAMES})(?:${DAY_PART.slice(1, -1)})?s?|(?:${DAY_SHORT.join("|")})\\.?)`;
+const EVERY_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?jede[nm]?\\s+(?:${ORDINAL}\\s+)?(?:(${DAY_NAMES.join("|")})${DAY_PART}?|(${DAY_SHORT.join("|")}))(\\.)?(?![\\p{L}\\p{N}])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
+const DAYS_ADVERB = new RegExp(`(?<![\\p{L}\\p{N}])(?:immer\\s+)?(${DAY_NAMES.join("|")})${DAY_PART}?s(?![\\p{L}\\p{N}\\-])(?:\\s+(${PARTS})(?![\\p{L}]))?`, "iu");
+const MORE_DAYS = new RegExp(`^\\s*(?:,|&|und|oder|bis|-|–)\\s*(?:jede[nm]?\\s+)?${CASED_DAY}(?![\\p{L}])`, "u");
+const DAYS_BEFORE = new RegExp(`(?<![\\p{L}\\p{N}])${CASED_DAY}\\s*(?:,|&|und|oder)\\s*$`, "u");
+const LONG_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:${DAY_NAMES.join("|")})${DAY_PART}?s?(?![\\p{L}\\p{N}])`, "iu");
+const NAMES_DAY = new RegExp(`(?<![\\p{L}\\p{N}])(?:${DAY_NAMES.join("|")}|${DAY_SHORT.join("|")})(?![\\p{L}])`, "iu");
 const EVERY_UNIT = new RegExp(`(?<![\\p{L}\\p{N}])jede[nmrs]?\\s+(?:${ORDINAL}\\s+)?(tag|woche|monat|jahr)(?![\\p{L}\\p{N}])`, "iu");
 const ALL_UNITS = /(?<![\p{L}\p{N}])alle\s+(\d{1,2}|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf)\s+(tage|wochen|monate|jahre)(?![\p{L}\p{N}])/iu;
 const RHYTHM_WORDS = /(?<![\p{L}\p{N}])(täglich|wöchentlich|zweiwöchentlich|monatlich|jährlich|(?:14|vierzehn)[-\s]?tägig|(?:14|vierzehn)[-\s]?täglich)(?![\p{L}\p{N}])/iu;
@@ -826,12 +832,13 @@ function weekdayRhythm(text) {
   const adverb = every ? null : text.match(DAYS_ADVERB);
   const found = every || adverb;
   if (!found) return null;
-  const word = every ? every[2] : adverb[1];
-  if (every && word.length === 2 && word.toLowerCase() === "so" && word !== "So" && !every[3]) return null;
+  const word = every ? every[2] || every[4] : adverb[1];
+  if (every && word === "so" && !every[5]) return null;
   const end = found.index + found[0].length;
   if (MORE_DAYS.test(text.slice(end)) || DAYS_BEFORE.test(text.slice(0, found.index))) return { listed: true };
   const dow = word.length === 2 ? DAY_SHORT.findIndex((day) => day.toLowerCase() === word.toLowerCase()) : DAY_NAMES.indexOf(word.toLowerCase());
-  return { dow, interval: every ? step(every[1]) : 1, part: (every ? every[4] : adverb[2])?.toLowerCase() || null, index: found.index, length: found[0].length };
+  const part = every ? every[3] || every[6] : adverb[2] || adverb[3];
+  return { dow, interval: every ? step(every[1]) : 1, part: part?.toLowerCase() || null, index: found.index, length: found[0].length };
 }
 
 /* How often an event comes round, read from the words for it. Several weekdays ("jeden Mo und Mi") or a weekday with a
@@ -884,9 +891,16 @@ function parseTime(text, part = null) {
 /* An event as the quick fields read it. The calendar's field and the sheet "Neu" share it, so both make the same event.
    A weekday rhythm ("jeden Dienstag") starts on that weekday, today included. */
 export function parseEntry(text, day = isoDate(now())) {
-  const repeat = repeatOf(text);
-  const body = repeat ? repeat.spans.sort((a, b) => b[0] - a[0]).reduce((rest, [from, to]) => `${rest.slice(0, from)} ${rest.slice(to)}`, text) : text;
-  const info = parseNote(body);
+  let repeat = repeatOf(text);
+  let body = repeat ? repeat.spans.sort((a, b) => b[0] - a[0]).reduce((rest, [from, to]) => `${rest.slice(0, from)} ${rest.slice(to)}`, text) : text;
+  let info = parseNote(body);
+  // Another weekday beside "jeden Montag" ("und Mi 19 Uhr", "mittwochs") asks for a second series: none is read, and no day.
+  if (weekdayRhythm(text)?.listed || (repeat?.dow != null && (LONG_DAY.test(body) || NAMES_DAY.test(info.phrases.date || "")))) {
+    repeat = null;
+    body = text;
+    info = parseNote(text);
+    if (NAMES_DAY.test(info.phrases.date || "")) info = { ...info, date: undefined, part: undefined, phrases: { ...info.phrases, date: undefined } };
+  }
   let date = info.date || day;
   if (repeat?.dow != null) {
     const first = parseDate(date);

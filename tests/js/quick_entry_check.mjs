@@ -269,6 +269,11 @@ Object.assign(tests, {
       ["Geburtstag Lea jedes Jahr 14.12.", "Geburtstag Lea", "2026-12-14", null, null, rule("yearly")],
       ["Dosenpfand wegbringen jeden Do 15 Uhr", "Dosenpfand wegbringen", "2026-10-08", "15:00", "16:00", rule("weekly")],
       ["Lesen, also jeden Sonntag 10 Uhr", "Lesen, also", "2026-10-11", "10:00", "11:00", rule("weekly")],
+      ["Training jeden Montag, so 18 Uhr", "Training", MONDAY, "18:00", "19:00", rule("weekly")],
+      ["Gitarre jeden Mittwochabend 17 Uhr", "Gitarre", "2026-10-07", "17:00", "18:00", rule("weekly")],
+      ["Gitarre jeden Mittwochabend 7 Uhr", "Gitarre", "2026-10-07", "19:00", "20:00", rule("weekly")],
+      ["Gitarre mittwochabends 7 Uhr", "Gitarre", "2026-10-07", "19:00", "20:00", rule("weekly")],
+      ["Joggen jeden Samstagmorgen 8 Uhr", "Joggen", "2026-10-10", "08:00", "09:00", rule("weekly")],
     ];
     for (const [text, title, date, start, end, recurrence] of cases) {
       assert.deepEqual(parseEntry(text), { title, date, start, end, kind: parseEntry(text).kind, recurrence }, text);
@@ -292,6 +297,11 @@ Object.assign(tests, {
       ["Training jeden Dienstag monatlich", null, null, null],
       ["Dienstags-Treff 18 Uhr", "Dienstags-Treff", MONDAY, "18:00"],
       ["So viel lernen jeden so 15 Uhr", null, null, "15:00"],
+      ["Training jeden Mo 18 Uhr und Mi 19 Uhr", "Training jeden Mo und Mi 19 Uhr", MONDAY, "18:00"],
+      ["Training jeden Montag 18 Uhr, Mittwoch 19 Uhr", "Training jeden Montag , Mittwoch 19 Uhr", MONDAY, "18:00"],
+      ["Training montags 18 Uhr, mittwochs 19 Uhr", "Training montags , mittwochs 19 Uhr", MONDAY, "18:00"],
+      ["Training jeden Montagabend und Mittwochabend 18 Uhr", "Training jeden Montagabend und Mittwochabend", MONDAY, "18:00"],
+      ["Training Mo und jeden Mi 18 Uhr", "Training Mo und jeden Mi", MONDAY, "18:00"],
     ];
     for (const [text, title, date, start] of cases) {
       const entry = parseEntry(text);
