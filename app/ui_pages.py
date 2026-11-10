@@ -21,6 +21,7 @@ bp = Blueprint('ui', __name__)
 
 STORE_KEYS = {
     'app-timetable-edits', 'app-block-times', 'app-ab-swap', 'app-ab-weeks', 'app-subjects', 'app-teachers', 'app-rooms',
+    'app-timetable-meta',
     'app-settings', 'app-motion', 'app-theme-choice', 'app-single-keys', 'app-task-filter', 'app-cal-view',
     'app-assistant-basic',
 }
@@ -78,6 +79,7 @@ def render_page(active, template=None):
     day = pinned_day()
     now = datetime.combine(day, datetime.now().time()) if day else datetime.now()
     data = ui_data.build(active, store, now)
+    data['device'] = db.device_id()
     return render_template(
         template,
         active=active,

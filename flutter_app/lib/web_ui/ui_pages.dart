@@ -96,6 +96,7 @@ class UiPages {
         ? current
         : dayOf(pinned).add(Duration(hours: current.hour, minutes: current.minute, seconds: current.second));
     final data = await UiData(db, prefs, now, browser: browser).build(page, store);
+    data['device'] = await UiDb.deviceId(db);
     final theme = themeOf(store, prefs);
     final tasks = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM tasks')) ?? 0;
     final tour = prefs.getString('tour_state') == null && prefs.containsKey('user_bundesland') && tasks == 0;

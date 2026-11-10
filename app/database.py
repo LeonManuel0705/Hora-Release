@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import json
+import secrets
 import sqlite3
 import os
 import logging
@@ -1316,6 +1317,8 @@ def save_tour_state(state: str, user_id: str = None) -> bool:
     return True
 
 UI_STORE_MAX_BYTES = 262144
+NATIVE_PREFIX = 'native:'
+DEVICE_KEY = f'{NATIVE_PREFIX}device'
 
 
 def get_ui_store() -> Dict[str, Any]:
@@ -1326,11 +1329,29 @@ def get_ui_store() -> Dict[str, Any]:
     conn.close()
     values = {}
     for row in rows:
+        if row['key'].startswith(NATIVE_PREFIX):
+            continue
         try:
             values[row['key']] = json.loads(row['value'])
         except (TypeError, ValueError):
             continue
     return values
+
+
+def device_id() -> str:
+    """A random id of this installation. It is kept out of the page store, so no backup and no shared plan takes it to another device."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    _execute(cursor, 'SELECT value FROM ui_store WHERE key = ?', (DEVICE_KEY,))
+    row = _fetchone_dict(cursor)
+    if row is None:
+        _execute(cursor, 'INSERT INTO ui_store (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT (key) DO NOTHING',
+                 (DEVICE_KEY, json.dumps(secrets.token_hex(16)), datetime.now().isoformat(timespec='seconds')))
+        conn.commit()
+        _execute(cursor, 'SELECT value FROM ui_store WHERE key = ?', (DEVICE_KEY,))
+        row = _fetchone_dict(cursor)
+    conn.close()
+    return json.loads(row['value'])
 
 
 def save_ui_value(key: str, value: Any) -> None:

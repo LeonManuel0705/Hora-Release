@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:sqflite/sqflite.dart';
 
@@ -16,11 +17,13 @@ class UiDb {
 
   static const storeKeys = {
     'app-timetable-edits', 'app-block-times', 'app-ab-swap', 'app-ab-weeks', 'app-subjects', 'app-teachers', 'app-rooms',
+    'app-timetable-meta',
     'app-settings', 'app-motion', 'app-theme-choice', 'app-single-keys', 'app-task-filter', 'app-cal-view',
   };
   static const maxValueBytes = 256 * 1024;
   static const iservDoneKey = 'native:iserv-done';
   static const iservHiddenKey = 'native:iserv-hidden';
+  static const deviceKey = 'native:device';
 
   static Future<void>? _migration;
 
@@ -99,6 +102,31 @@ class UiDb {
       } catch (_) {}
     }
     return result;
+  }
+
+  /// A random id of this installation. It is kept out of the page store, so no backup and no shared plan takes it to another device.
+  static Future<String> deviceId(Database db) async {
+    Future<String?> stored() async {
+      final rows = await db.query('ui_store', columns: ['value'], where: 'key = ?', whereArgs: [deviceKey], limit: 1);
+      if (rows.isEmpty) return null;
+      try {
+        final value = jsonDecode(rows.first['value'] as String);
+        return value is String && value.isNotEmpty ? value : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final known = await stored();
+    if (known != null) return known;
+    final random = Random.secure();
+    final fresh = List<int>.generate(16, (_) => random.nextInt(256)).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+    await db.insert(
+      'ui_store',
+      {'key': deviceKey, 'value': jsonEncode(fresh), 'updated_at': DateTime.now().toIso8601String()},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+    return await stored() ?? fresh;
   }
 
   static Future<void> save(Database db, String key, Object? value) async {
