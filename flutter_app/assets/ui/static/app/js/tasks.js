@@ -408,7 +408,7 @@ function addTask(task, { tell = true } = {}) {
   const saved = task.synced
     ? deadlineApi.create({ id: task.id.slice(6), kind: "Hausaufgabe", title: task.title, subject: task.subject || null, date: task.date, detail: task.detail || "" })
     : taskApi.create(task);
-  document.dispatchEvent(new CustomEvent("app:task-created", { detail: { id: task.id, title: task.title } }));
+  document.dispatchEvent(new CustomEvent("app:task-created", { detail: { id: task.id, title: task.title, saved } }));
   if (!inFilter(task)) {
     state.filter = "alle";
     storage.set("app-task-filter", "alle");

@@ -1347,6 +1347,12 @@ function bindKeys() {
 
 function bindEvents() {
   window.addEventListener("app:add-task", openAddRow);
+  window.addEventListener("app:remove-task", (event) => {
+    const id = String(event.detail?.id || "");
+    if (!state.tasks.some((task) => task.id === id)) return;
+    event.preventDefault();
+    removeTask(id, "delete");
+  });
   window.addEventListener("app:weather-open", renderWeather);
   window.addEventListener("app:note", (event) => {
     const detail = event.detail;

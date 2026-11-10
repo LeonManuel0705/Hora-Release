@@ -48,6 +48,11 @@
     --ink-soft: #C9BEFA;
 }
 
+/* While Luna guides, she is the only one on screen. */
+.tour-on .empty-state > .luna {
+    visibility: hidden;
+}
+
 .luna-guide.is-gone {
     opacity: 0 !important;
     transition: opacity .26s ease;

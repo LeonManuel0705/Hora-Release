@@ -81,7 +81,7 @@ function node(tag = "div") {
   });
 }
 
-async function boot({ store = {}, plan = { subjects: {}, courses: {}, timetable: { A: week(), B: week() } }, now = 1_800_000_000_000 } = {}) {
+async function boot({ store = {}, plan = { subjects: {}, courses: {}, timetable: { A: week(), B: week() } }, now = 1_800_000_000_000, tour = null } = {}) {
   const data = {
     user: { state: "BB", grade: 12, iserv: "desktop" },
     blocks: BLOCKS,
@@ -142,8 +142,13 @@ async function boot({ store = {}, plan = { subjects: {}, courses: {}, timetable:
   globalThis.cancelAnimationFrame = () => {};
   globalThis.CSS = { escape: (text) => String(text) };
   globalThis.IntersectionObserver = globalThis.MutationObserver = globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  const tours = [];
   globalThis.fetch = async (url, options = {}) => {
     const path = String(url);
+    if (path === "/api/hub/tour") {
+      if (options.method === "POST") tours.push(JSON.parse(options.body).state);
+      return { ok: true, status: 200, json: async () => ({ success: true, state: tour }) };
+    }
     if (path.startsWith("/api/ui/store/")) {
       const key = decodeURIComponent(path.slice(14));
       if (options.method === "DELETE") server.delete(key);
@@ -155,6 +160,7 @@ async function boot({ store = {}, plan = { subjects: {}, courses: {}, timetable:
   const files = [];
   globalThis.hubShell = { saveFile: async (name, text) => (files.push(JSON.parse(text)), { name, folder: "Downloads" }) };
   const core = await import(script("core.js"));
+  await import(pathToFileURL(resolve(here, "../../app/static/js/tour.js")).href);
   const settings = await import(script("pages/settings.js"));
   settings.init();
   const settle = async () => {
@@ -176,7 +182,7 @@ async function boot({ store = {}, plan = { subjects: {}, courses: {}, timetable:
     for (const listener of input.listeners.change) await listener({});
     await settle();
   };
-  return { core, server, clock, files, click, undo, importFile, settle };
+  return { core, server, clock, files, click, undo, importFile, settle, tours, local };
 }
 
 async function backupFile() {
@@ -227,6 +233,34 @@ CASES["a backup made here carries neither the record nor the device id"] = async
   assert.ok(Object.keys(page.files[0].values).includes("app-ab-swap"));
   assert.ok(!text.includes(META), "the record stays on the device");
   assert.ok(!text.includes(DEVICE), "the device id stays on the device");
+};
+
+CASES["a backup carries a finished tutorial"] = async () => {
+  const page = await boot({ tour: "done" });
+  await page.click("dataCard", "#dataExport");
+  assert.equal(page.files[0].tour, "done");
+};
+
+CASES["a backup does not carry a tutorial that never ended"] = async () => {
+  const page = await boot({ tour: null });
+  await page.click("dataCard", "#dataExport");
+  assert.equal(page.files[0].tour, undefined);
+};
+
+CASES["taking over a backup with a finished tutorial ends an unfinished one here for good"] = async () => {
+  const page = await boot({ tour: null });
+  page.local.set("app-tour", JSON.stringify({ id: "task-new", at: 1_800_000_000_000 }));
+  await page.importFile({ ...(await backupFile()), tour: "done" });
+  assert.deepEqual(page.tours, ["done"], "the state is saved on this device");
+  assert.equal(page.local.get("app-tour"), undefined, "the unfinished run is forgotten");
+};
+
+CASES["a backup without a finished tutorial leaves the tutorial alone"] = async () => {
+  const page = await boot({ tour: null });
+  page.local.set("app-tour", JSON.stringify({ id: "task-new", at: 1_800_000_000_000 }));
+  await page.importFile({ ...(await backupFile()), tour: "halfway" });
+  assert.deepEqual(page.tours, []);
+  assert.ok(page.local.get("app-tour"));
 };
 
 CASES["deleting everything on this device leaves the plan without a change of its own, and undo brings it back"] = async () => {

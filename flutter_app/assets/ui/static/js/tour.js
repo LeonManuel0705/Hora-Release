@@ -38,6 +38,15 @@
   const setupNeeded = () => !!(self.AppSetup && self.AppSetup.needed());
   const value = v => typeof v === 'function' ? v() : v;
 
+  const SAMPLE = 'Vokabeln lernen';
+  const plain = text => String(text || '').toLowerCase().replace(/[„“”"'‚‘’.!]/g, '').replace(/\s+/g, ' ').trim();
+  const sampleRow = () => {
+    const row = run && run.sample && run.sample.id ? q(`#taskList .task[data-id="${CSS.escape(run.sample.id)}"]:not(.is-done)`) : null;
+    return row && plain(row.querySelector('.row-title')?.textContent) === plain(run.sample.title) ? row : null;
+  };
+  // While Luna waits for the user, she and her bubble keep clear of everything the user may want to tap or read.
+  const CONTROLS = 'a[href], button, input, select, textarea, [role="button"], h1, h2, .side-title';
+
   const STEPS = [
     {
       id: 'hello', mode: 'hello',
@@ -53,20 +62,18 @@
         : 'Links findest du alle Bereiche. Ein Klick, und du bist da.'
     },
     {
-      id: 'home', dot: true, mode: 'point', target: () => navItem('home'),
+      id: 'home', page: '/hub', dot: true, mode: 'point', target: () => navItem('home'),
       text: 'Die Übersicht zeigt dir, welche Stunde gerade dran ist und was heute ansteht.'
     },
     {
-      id: 'tasks', dot: true, mode: 'point', target: () => navItem('tasks'),
+      id: 'tasks', page: '/hub/tasks', dot: true, mode: 'point', target: () => navItem('tasks'),
       text: 'Unter Aufgaben sammelst du, was zu tun ist. Leg gleich deine erste an!',
       primary: 'Zeig’s mir', secondary: 'Überspringen', onSecondary: 'school'
     },
     {
-      id: 'task-new', page: '/hub/tasks', mode: 'watch', target: () => q('#quickAdd'), dim: false, avoid: () => [q('#taskFilter')],
-      text: () => narrow()
-        ? 'Schreib hier rein, was ansteht, zum Beispiel „Vokabeln lernen“, und tipp auf Fertig.'
-        : 'Schreib hier rein, was ansteht, zum Beispiel „Vokabeln lernen“, und drück Enter.',
-      short: 'Eintippen, dann auf Fertig tippen.',
+      id: 'task-new', page: '/hub/tasks', mode: 'watch', target: () => q('#quickAdd'), dim: false, avoid: () => [q('#taskFilter'), q('.tasks-side')],
+      text: `Schreib hier rein, was ansteht, zum Beispiel „${SAMPLE}“, und drück Enter.`,
+      short: 'Schreib oben ins Feld, was ansteht, und tipp auf Fertig.',
       wait: 'created', secondary: 'Überspringen', onSecondary: 'school'
     },
     {
@@ -75,11 +82,16 @@
       back: null
     },
     {
-      id: 'school', dot: true, mode: 'point', target: () => navItem('school'), back: 'tasks',
+      id: 'school', page: '/hub/school', dot: true, mode: 'point', target: () => navItem('school'), back: 'tasks',
       text: 'Unter Schule findest du deinen Stundenplan und trägst Tests und Noten ein.'
     },
     {
-      id: 'bye', mode: 'present',
+      id: 'sample', page: '/hub', mode: 'point', target: sampleRow, needsTarget: true, skip: () => !(run && run.sample && run.sample.id),
+      text: () => `„${run.sample.title}“ war nur ein Beispiel. Soll ich die Aufgabe wieder löschen?`,
+      primary: 'Löschen', onPrimary: 'drop', secondary: 'Behalten', onSecondary: 'bye', back: null
+    },
+    {
+      id: 'bye', page: '/hub', mode: 'present',
       text: () => setupNeeded()
         ? 'Jetzt fehlt nur noch dein Stundenplan. Ich helf dir beim Eintragen, das dauert etwa fünf Minuten.'
         : `Das war’s schon! ${narrow() ? 'In den Einstellungen unter „Mehr“' : 'In den Einstellungen'} kannst du mich jederzeit wieder rufen.`,
@@ -96,8 +108,9 @@
   let run = null;
 
   function save(id) {
+    if (run) run.saved = id;
     try {
-      localStorage.setItem(KEY, JSON.stringify({ id, at: Date.now(), title: run && run.title }));
+      localStorage.setItem(KEY, JSON.stringify({ id, at: Date.now(), title: run && run.title, sample: run && run.sample }));
     } catch (_) {}
   }
 
@@ -155,10 +168,10 @@
     return { scrim, spot, rings, bubble, measure, guide, size };
   }
 
-  function start(fromId, resumed) {
+  function start(fromId, resumed, here) {
     if (run) return;
     if (!self.AppLuna) return;
-    run = { ui: buildUi(), step: null, token: 0, offs: [], title: resumed && resumed.title };
+    run = { ui: buildUi(), step: null, token: 0, offs: [], title: resumed && resumed.title, sample: resumed && resumed.sample || null };
     const { scrim, bubble } = run.ui;
     bubble.addEventListener('click', onBubbleClick);
     scrim.addEventListener('click', () => {
@@ -172,7 +185,7 @@
     on(window, 'scroll', relayout, true);
     document.documentElement.classList.add('tour-on');
     run.tracker = setInterval(track, 250);
-    if (resumed) setTimeout(() => go(fromId, { first: true }), 450);
+    if (resumed) setTimeout(() => go(fromId, { first: true, here }), 450);
     else go(fromId || 'hello', { first: true });
   }
 
@@ -213,7 +226,7 @@
     const token = ++run.token;
     clearWaits();
     save(step.id);
-    if (step.page && location.pathname !== step.page) {
+    if (step.page && location.pathname !== step.page && !opts.here) {
       hideBubble();
       run.ui.guide.excite();
       await wait(still() ? 0 : 260);
@@ -232,6 +245,11 @@
       if (!run || token !== run.token) return;
     }
     if (!shown(target)) target = null;
+    if (!target && step.needsTarget) {
+      const after = following(step);
+      if (after) go(after.id, opts);
+      return;
+    }
     if (target && clipped(target)) {
       target.scrollIntoView({ block: target.closest('.sidebar') ? 'nearest' : 'center', behavior: still() ? 'auto' : 'smooth' });
       await wait(still() ? 0 : 380);
@@ -299,12 +317,23 @@
     if (step.wait === 'created') {
       const input = q('#quickInput');
       onStep(document, 'app:task-created', e => {
-        run.created = e.detail && e.detail.id;
+        const detail = e.detail || {};
+        run.created = detail.id;
+        run.sample = plain(run.typed || detail.title) === plain(SAMPLE) ? { title: detail.title } : null;
+        const sample = run.sample;
+        if (sample && detail.saved) {
+          Promise.resolve(detail.saved).then(task => {
+            if (!run || run.sample !== sample || !task || task.id == null) return;
+            sample.id = String(task.id);
+            save(run.saved);
+          }, () => {});
+        }
         go('task-done');
       });
       if (input) {
         let last = 0;
         onStep(input, 'input', () => {
+          run.typed = input.value;
           const now = performance.now();
           const r = input.getBoundingClientRect();
           run.ui.guide.lookAt(r.left + Math.min(r.width - 12, 14 + input.value.length * 7.5), r.top + r.height / 2);
@@ -328,7 +357,7 @@
     const bw = b.offsetWidth, bh = b.offsetHeight;
     const fits = (x, y, w, h) => x >= m - .5 && y >= m - .5 && x + w <= W - m + .5 && y + h <= H - m + .5;
     const overlaps = (x, y, w, h, r) => r && x < r.right && x + w > r.left && y < r.bottom && y + h > r.top;
-    const avoid = (step.avoid ? step.avoid() : []).filter(shown).map(el => el.getBoundingClientRect());
+    const avoid = avoidRects(step, target);
     const free = (x, y, w, h) => !avoid.some(a => overlaps(x, y, w, h, a));
     if (!target) {
       const left = narrow() ? 0 : (q('.sidebar')?.getBoundingClientRect().right || 0);
@@ -378,9 +407,10 @@
       const gy = r.top - gap - s, gx = midX - s / 2;
       return { gx, gy, bx: clamp(r.left + r.width / 2 - bw / 2, m, W - m - bw), by: gy - 6 - bh, tail: 'bottom' };
     });
+    const clear = p => fits(p.gx, p.gy, s, s) && fits(p.bx, p.by, bw, bh) && !overlaps(p.bx, p.by, bw, bh, r) && !overlaps(p.gx + s * .2, p.gy + s * .2, s * .6, s * .6, r);
     for (const t of tries) {
       const p = t();
-      if (fits(p.gx, p.gy, s, s) && fits(p.bx, p.by, bw, bh) && !overlaps(p.bx, p.by, bw, bh, r) && !overlaps(p.gx + s * .2, p.gy + s * .2, s * .6, s * .6, r) && free(p.gx, p.gy, s, s) && free(p.bx, p.by, bw, bh)) return p;
+      if (clear(p) && free(p.gx, p.gy, s, s) && free(p.bx, p.by, bw, bh)) return p;
     }
     for (const right of [true, false]) {
       const avail = right ? W - m - (r.right + gap) : r.left - gap - m;
@@ -390,20 +420,30 @@
       const h2 = b.offsetHeight;
       const gy = clamp(r.top, m, H - m - s - 6 - h2);
       const gx = right ? r.right + gap : r.left - gap - s, bx = right ? r.right + gap : r.left - gap - width;
-      if (fits(gx, gy, s, s) && fits(bx, gy + s + 6, width, h2)) return { gx, gy, bx, by: gy + s + 6, tail: 'top', width };
+      if (fits(gx, gy, s, s) && fits(bx, gy + s + 6, width, h2) && free(gx, gy, s, s) && free(bx, gy + s + 6, width, h2)) return { gx, gy, bx, by: gy + s + 6, tail: 'top', width };
     }
-    const dw = W - 2 * m - s - 6;
+    const left = narrow() ? 0 : (q('.sidebar')?.getBoundingClientRect().right || 0);
+    const dw = W - left - 2 * m - s - 6;
     b.style.width = dw + 'px';
     b.classList.add('is-docked');
     const dh = b.offsetHeight, need = Math.max(s, dh);
-    const above = r.top - gap - m, below = H - r.bottom - gap - m;
-    const roomAbove = above >= need && free(m, r.top - gap - need, W - 2 * m, need);
-    const roomBelow = below >= need && free(m, r.bottom + gap, W - 2 * m, need);
-    if (roomAbove || roomBelow || above >= need || below >= need) {
-      const top = roomAbove || (!roomBelow && above >= need);
-      const y0 = top ? r.top - gap - need : r.bottom + gap;
-      return { gx: W - m - s, gy: y0 + (need - s) / 2, bx: m, by: y0 + (need - dh) / 2, tail: 'right', width: dw, docked: true };
+    const docked = y0 => ({ gx: W - m - s, gy: y0 + (need - s) / 2, bx: left + m, by: y0 + (need - dh) / 2, tail: 'right', width: dw, docked: true });
+    // The nearest band across the screen that covers nothing to avoid: right at the target or just past what lies next to it.
+    const bands = [
+      ...[r.top, ...avoid.filter(a => a.top < r.top).map(a => a.top)].map(y => ({ y0: y - gap - need, far: r.top - y + gap })),
+      ...[r.bottom, ...avoid.filter(a => a.bottom > r.bottom).map(a => a.bottom)].map(y => ({ y0: y + gap, far: y - r.bottom + gap }))
+    ].filter(band => band.y0 >= m && band.y0 + need <= H - m && free(left + m, band.y0, W - left - 2 * m, need)).sort((a, z) => a.far - z.far);
+    if (bands.length) return docked(bands[0].y0);
+    for (const t of tries) {
+      const p = t();
+      if (avoid.length && clear(p)) {
+        b.style.width = '';
+        b.classList.remove('is-docked');
+        return p;
+      }
     }
+    const above = r.top - gap - m, below = H - r.bottom - gap - m;
+    if (above >= need || below >= need) return docked(above >= need ? r.top - gap - need : r.bottom + gap);
     b.style.width = '';
     b.classList.remove('is-docked');
     const p = tries[4]();
@@ -411,6 +451,13 @@
       gx: clamp(p.gx, m, W - m - s), gy: clamp(p.gy, m, H - m - s),
       bx: clamp(p.bx, m, W - m - bw), by: clamp(p.by, m, H - m - bh), tail: p.tail
     };
+  }
+
+  function avoidRects(step, target) {
+    const els = step.avoid ? step.avoid() : [];
+    if (step.wait) els.push(...document.querySelectorAll(CONTROLS));
+    return els.filter(el => el && shown(el) && !(target && (target.contains(el) || el.contains(target))) && !el.closest('.tour-bubble, .luna-guide, .luna'))
+      .map(el => el.getBoundingClientRect()).filter(a => a.bottom > 0 && a.top < innerHeight && a.right > 0 && a.left < innerWidth);
   }
 
   function setSpot(step, target) {
@@ -551,14 +598,30 @@
     }
   }
 
+  function following(step) {
+    let i = indexOf(step.id) + 1;
+    while (i < STEPS.length && skipped(STEPS[i])) i++;
+    return STEPS[i] || null;
+  }
+
   function next(step) {
     const after = value(step.onPrimary);
     if (after === 'setup') return handOver();
     if (after === 'done') return end('done');
-    let i = indexOf(step.id) + 1;
-    while (i < STEPS.length && skipped(STEPS[i])) i++;
-    const following = STEPS[i];
-    if (following) go(following.id);
+    if (after === 'drop') dropSample();
+    const then = following(step);
+    if (then) go(then.id);
+  }
+
+  // The home page takes the task out itself, with its undo. Anywhere else the request alone has to do.
+  function dropSample() {
+    const id = run.sample && run.sample.id;
+    run.sample = null;
+    if (!id) return;
+    const asked = new CustomEvent('app:remove-task', { detail: { id }, cancelable: true });
+    if (window.dispatchEvent(asked)) {
+      fetch(`/api/ui/tasks/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
+    }
   }
 
   function onKey(e) {
@@ -574,7 +637,7 @@
     if (e.key === 'Enter' && (e.target === run.ui.bubble || e.target === document.body)) {
       e.preventDefault();
       next(run.step);
-    } else if (e.key === 'ArrowRight') {
+    } else if (e.key === 'ArrowRight' && run.step.onPrimary !== 'drop') {
       e.preventDefault();
       next(run.step);
     } else if (e.key === 'ArrowLeft') {
@@ -651,14 +714,16 @@
     location.href = `${home}${home.includes('?') ? '&' : '?'}einrichtung=1`;
   }
 
+  // A page the step does not belong to was opened on the way, by a link during the step that waits for the user or by
+  // going back. Luna goes on from there instead of pulling the user back.
   function resume(saved) {
     const step = STEPS[indexOf(saved.id)];
+    const typing = step.id === 'task-form' || step.id === 'task-done' || step.id === 'task-new';
     if (step.page && location.pathname !== step.page) {
-      start('school', saved);
+      start(typing ? 'school' : step.id, saved, true);
       return;
     }
-    const id = step.id === 'task-form' || step.id === 'task-done' ? 'task-new' : step.id;
-    start(id, saved);
+    start(typing ? 'task-new' : step.id, saved);
   }
 
   function boot() {
@@ -685,12 +750,24 @@
     }
   }
 
+  // A backup from a device where the tour is over ends it here too, quietly and for good.
+  function settle(state) {
+    if (run) {
+      run.ending = true;
+      run.token++;
+      teardown();
+    }
+    forget();
+    return persist(state);
+  }
+
   self.AppTour = {
     start: () => {
       forget();
       start('hello');
     },
-    stop: () => end('skipped')
+    stop: () => end('skipped'),
+    settle
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

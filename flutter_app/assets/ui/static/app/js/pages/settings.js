@@ -3379,9 +3379,11 @@ function portableValues() {
   return values;
 }
 
-const exported = { records: undefined, pending: null };
+const exported = { records: undefined, pending: null, tour: null };
+const TOUR_OVER = ["done", "skipped"];
 
 function readRecords() {
+  request("GET", "/api/hub/tour").then((answer) => (exported.tour = answer.state || null), () => {});
   const pending = request("GET", "/api/ui/export").then((answer) => answer.data);
   exported.pending = pending;
   pending.then((records) => {
@@ -3403,6 +3405,7 @@ async function exportData() {
   const keys = schoolDefaults ? fileKeys(data.subjects) : new Map();
   if (schoolDefaults) payload.school = { abReference: data.abReference, subjects: fileSubjects(schoolDefaults.subjects, keys) };
   if (records) payload.data = fileRecords(records, keys);
+  if (TOUR_OVER.includes(exported.tour)) payload.tour = exported.tour;
   const name = `${slug(BRAND) || "app"}-sicherung-${isoDate(now())}.json`;
   const missing = payload.data ? "" : ", aber ohne Noten, Aufgaben und Termine. Sie ließen sich gerade nicht lesen.";
   const shell = window.hubShell;
@@ -3620,6 +3623,7 @@ async function takeBackup(file, payload, entries, records) {
     renderPlaces();
   }
   if (stateCarried) await Promise.race([stateCarried, pause(8000)]);
+  if (TOUR_OVER.includes(payload.tour)) settleTour(payload.tour);
   const text = summary({ settings: entries.length > 0, made: done?.made, known: done?.known, failed: done?.failed, unread: !!records && !plan });
   toast(esc(text), {
     icon: (done?.failed || (records && !plan)) ? "triangle-alert" : "upload",
@@ -3636,6 +3640,12 @@ async function takeBackup(file, payload, entries, records) {
       else say("Rückgängig gemacht");
     } },
   });
+}
+
+function settleTour(state) {
+  if (typeof window.AppTour?.settle === "function") window.AppTour.settle(state);
+  else request("POST", "/api/hub/tour", { state }).catch(() => {});
+  exported.tour = state;
 }
 
 async function wipeData() {

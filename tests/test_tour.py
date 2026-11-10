@@ -89,16 +89,33 @@ def test_hub_stops_offering_the_tour_once_it_ran(client):
     assert b'data-tour-auto="0"' in client.get("/hub").data
 
 
+TOUR = Path(__file__).resolve().parent.parent / "app" / "static" / "js" / "tour.js"
+
+
+def tour_steps():
+    steps = TOUR.read_text(encoding="utf-8").split("const STEPS = [", 1)[1].split("\n  ];", 1)[0]
+    return {block.split("'", 1)[0]: block for block in steps.split("id: '")[1:]}
+
+
 def test_the_tour_is_short_and_ends_in_the_setup():
-    tour = (Path(__file__).resolve().parent.parent / "app" / "static" / "js" / "tour.js").read_text(encoding="utf-8")
-    steps = tour.split("const STEPS = [", 1)[1].split("\n  ];", 1)[0]
-    assert steps.count("id: '") == 8
-    assert "IServ" not in steps and "Google" not in steps
-    assert "Stundenplan eintragen" in steps and "function handOver()" in tour
+    tour = TOUR.read_text(encoding="utf-8")
+    steps = tour_steps()
+    assert len(steps) == 9
+    assert "skip:" in steps["sample"], "the step about the sample task only comes when there is one"
+    assert "IServ" not in str(steps) and "Google" not in str(steps)
+    assert "Stundenplan eintragen" in steps["bye"] and "function handOver()" in tour
+
+
+def test_every_step_about_a_page_shows_that_page():
+    steps = tour_steps()
+    pages = {"home": "/hub", "tasks": "/hub/tasks", "task-new": "/hub/tasks", "task-done": "/hub/tasks", "school": "/hub/school", "sample": "/hub", "bye": "/hub"}
+    for step, page in pages.items():
+        assert f"page: '{page}'" in steps[step], step
+    assert "page:" not in steps["hello"] and "page:" not in steps["nav"]
 
 
 def test_keys_belong_to_the_page_again_once_the_tour_ends():
-    tour = (Path(__file__).resolve().parent.parent / "app" / "static" / "js" / "tour.js").read_text(encoding="utf-8")
+    tour = TOUR.read_text(encoding="utf-8")
     end = tour.split("async function end(state) {", 1)[1].split("\n  }\n", 1)[0]
     assert end.index("removeEventListener('keydown', onKey, true)") < end.index("await guide.setMode('bye')")
     go = tour.split("async function go(id, options) {", 1)[1].split("\n  }\n", 1)[0]
