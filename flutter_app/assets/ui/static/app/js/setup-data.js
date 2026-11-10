@@ -16,7 +16,7 @@ const subject = (name, short, hue, group, type = "GK") => ({ name, short, hue, g
 
 export const GROUPS = [["lang", "Sprachen und Künste"], ["society", "Gesellschaft"], ["science", "Mathematik und Naturwissenschaften"], ["more", "Weitere"]];
 
-// The courses of the gymnasiale Oberstufe in Brandenburg.
+// The courses of the gymnasiale Oberstufe in Brandenburg, plus Ethik, which most other states teach there.
 export const UPPER = [
   subject("Deutsch", "Deu", "brick", "lang"), subject("Englisch", "Eng", "rose", "lang"), subject("Französisch", "Fra", "lake", "lang"),
   subject("Spanisch", "Spa", "ochre", "lang"), subject("Latein", "Lat", "olive", "lang"), subject("Russisch", "Rus", "plum", "lang"),
@@ -24,7 +24,7 @@ export const UPPER = [
   subject("Darstellendes Spiel", "DS", "iris", "lang"),
   subject("Geschichte", "Ges", "ochre", "society"), subject("Politische Bildung", "PB", "teal", "society"), subject("Geografie", "Geo", "moss", "society"),
   subject("Wirtschaftswissenschaft", "Wiwi", "olive", "society"), subject("Psychologie", "Psy", "iris", "society"), subject("Philosophie", "Phi", "lake", "society"),
-  subject("Recht", "Rec", "slate", "society"), subject("Religion", "Rel", "lake", "society"),
+  subject("Recht", "Rec", "slate", "society"), subject("Religion", "Rel", "lake", "society"), subject("Ethik", "Eth", "lake", "society"),
   subject("Mathematik", "Mat", "slate", "science"), subject("Biologie", "Bio", "jade", "science"), subject("Chemie", "Che", "teal", "science"),
   subject("Physik", "Phy", "iris", "science"), subject("Informatik", "Inf", "lake", "science"),
   subject("Sport", "Spo", "moss", "more"), subject("Seminarkurs", "Sem", "olive", "more", "SK"),
@@ -37,6 +37,7 @@ export const LOWER = [
   subject("Darstellendes Spiel", "DS", "iris", "lang"),
   subject("Geschichte", "Ges", "ochre", "society"), subject("Politische Bildung", "PB", "teal", "society"), subject("Geografie", "Geo", "moss", "society"),
   subject("Gesellschaftswissenschaften", "GeWi", "ochre", "society"), subject("LER", "LER", "lake", "society"), subject("Religion", "Rel", "lake", "society"),
+  subject("Ethik", "Eth", "lake", "society"), subject("Philosophie", "Phi", "lake", "society"),
   subject("Mathematik", "Mat", "slate", "science"), subject("Biologie", "Bio", "jade", "science"), subject("Chemie", "Che", "teal", "science"),
   subject("Physik", "Phy", "iris", "science"), subject("Naturwissenschaften", "NaWi", "jade", "science"), subject("Informatik", "Inf", "lake", "science"),
   subject("WAT", "WAT", "brick", "more"), subject("Sport", "Spo", "moss", "more"),
