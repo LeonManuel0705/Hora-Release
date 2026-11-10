@@ -89,7 +89,8 @@ const state = {
 
 const sync = { source: extra.sync?.source || null, write: !!extra.sync?.write, window: extra.sync?.window || null, ranges: [], busy: false, state: extra.sync?.state || null, stand: extra.sync?.stand || null };
 const removed = new Set();
-const sourceWord = () => (sync.source === "google" ? "dem Google-Kalender" : "dem verbundenen Kalender");
+const SOURCE_WORDS = { google: "dem Google-Kalender", mac: "dem Mac-Kalender" };
+const sourceWord = () => SOURCE_WORDS[sync.source] || "dem verbundenen Kalender";
 
 function load() {
   const notes = extra.notes || {};
@@ -438,7 +439,8 @@ function lessonBand(lesson, date, pos, len) {
   const test = deadlines.find((item) => isAssessment(item) && item.date === iso && item.block === lesson.block);
   const tip = `${lesson.block}. ${periodWords().one}, ${hm(lesson.start)} bis ${hm(lesson.end)}: <b>${esc(info.name)}</b> in ${esc(lesson.room)}${lesson.movedFrom ? ` statt ${esc(lesson.movedFrom)}` : ""}, ${esc(lesson.teacher)}${test ? `<br>${esc(test.kind)}: ${esc(test.title)}` : ""}${lesson.cancelled ? "<br>Entfällt" : ""}`;
   const room = lesson.cancelled ? "entfällt" : `${esc(lesson.room)}${state.narrow ? `, ${esc(lesson.teacher)}` : ""}`;
-  return `<div class="cw-lesson${lesson.cancelled ? " is-cancelled" : ""}${lesson.movedFrom ? " is-moved" : ""}" style="--top:${pos(lesson.startMin)};--len:${len(lesson.startMin, lesson.endMin)};--hue:${hueVar(lesson.subject)}" data-tip="${esc(tip)}" aria-hidden="true">
+  const short = lesson.endMin - lesson.startMin < 60 ? " is-short" : "";
+  return `<div class="cw-lesson${short}${lesson.cancelled ? " is-cancelled" : ""}${lesson.movedFrom ? " is-moved" : ""}" style="--top:${pos(lesson.startMin)};--len:${len(lesson.startMin, lesson.endMin)};--hue:${hueVar(lesson.subject)}" data-tip="${esc(tip)}" aria-hidden="true">
     <span class="cw-lesson-label"><span class="label-full">${esc(info.label)}</span><span class="label-short">${esc(info.short)}</span></span>
     <span class="cw-lesson-room">${room}</span>${test ? `<span class="cw-lesson-flag">${esc(test.kind)}</span>` : ""}
   </div>`;
@@ -1045,12 +1047,88 @@ function panelHoliday(item) {
     <p class="panel-source">${icon("calendar-days")}${item.type === "ferien" ? "Schulferien" : "Feiertage"} ${esc(extra.region || "")}</p>`;
 }
 
-function renderPanel() {
+const alike = (node, next) => node.nodeType === next.nodeType && node.nodeName === next.nodeName
+  && (node.nodeType !== Node.ELEMENT_NODE || (node.id === next.id && node.classList[0] === next.classList[0]));
+
+function shownValue(field) {
+  if (field.localName === "select") return [...field.options].find((option) => option.defaultSelected)?.value ?? field.options[0]?.value ?? "";
+  return field.localName === "textarea" ? field.defaultValue : field.getAttribute("value") ?? "";
+}
+
+function patchNode(node, next) {
+  if (!alike(node, next)) {
+    node.replaceWith(next);
+    return next;
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    if (node.data !== next.data) node.data = next.data;
+    return node;
+  }
+  const field = node.matches("input, textarea, select");
+  const before = field ? shownValue(node) : null;
+  [...node.attributes].forEach(({ name }) => next.hasAttribute(name) || node.removeAttribute(name));
+  [...next.attributes].forEach(({ name, value }) => node.getAttribute(name) === value || node.setAttribute(name, value));
+  patchChildren(node, next);
+  if (field && before !== shownValue(next) && node.value !== next.value) node.value = next.value;
+  return node;
+}
+
+function patchChildren(parent, next) {
+  let current = parent.firstChild;
+  for (const child of [...next.childNodes]) {
+    let match = current;
+    while (match && !alike(match, child)) match = match.nextSibling;
+    if (!match) {
+      parent.insertBefore(child, current);
+      continue;
+    }
+    while (current !== match) {
+      const gone = current;
+      current = current.nextSibling;
+      gone.remove();
+    }
+    current = patchNode(match, child).nextSibling;
+  }
+  while (current) {
+    const gone = current;
+    current = current.nextSibling;
+    gone.remove();
+  }
+}
+
+// With keep the open sheet is brought up to date in place, so the field in focus keeps it.
+function renderPanel({ keep = false } = {}) {
   const entry = findEntry(state.selected);
   const panel = $("calPanel");
   if (!entry) return;
   panel.setAttribute("aria-label", entry.item.title);
-  panel.innerHTML = entry.type === "event" ? panelEvent(entry.item) : entry.type === "due" ? panelDue(entry.item) : panelHoliday(entry.item);
+  const html = entry.type === "event" ? panelEvent(entry.item) : entry.type === "due" ? panelDue(entry.item) : panelHoliday(entry.item);
+  if (!keep || !panel.firstChild) {
+    panel.innerHTML = html;
+    return;
+  }
+  const next = document.createElement("div");
+  next.innerHTML = html;
+  patchChildren(panel, next);
+}
+
+/* A change fires when a field loses focus, which is between pressing and releasing the button that took the focus.
+   Drawn anew or shifted in that moment, the sheet would take the click from that button ("Anlegen" did nothing). */
+const press = { down: false, waiting: false };
+
+function refreshPanel() {
+  if (press.down) press.waiting = true;
+  else renderPanel({ keep: true });
+}
+
+function settlePress() {
+  if (!press.down) return;
+  setTimeout(() => {
+    press.down = false;
+    if (!press.waiting) return;
+    press.waiting = false;
+    renderPanel({ keep: true });
+  });
 }
 
 function markSelected() {
@@ -1134,6 +1212,14 @@ function renderChrome() {
   $("calNext").dataset.tip = forward;
   $("calCount").textContent = countLine();
   $("calToday").setAttribute("aria-label", `Heute, ${longDate(now())}`);
+  syncButton();
+}
+
+function syncButton() {
+  const button = $("calSync");
+  button.hidden = !sync.source;
+  button.dataset.tip = `Aus ${sourceWord()} neu laden`;
+  button.setAttribute("aria-label", `Termine aus ${sourceWord()} neu laden`);
 }
 
 function slideIn(direction) {
@@ -1649,12 +1735,15 @@ function changeRule(recurrence) {
   updateEvent({ recurrence });
   state.scope = "all";
   state.selected = [state.selected, occurrenceId(base.id, base.date), base.id].find((id) => findEntry(id));
-  renderPanel();
+  refreshPanel();
   markSelected();
 }
 
 function bindPanel() {
   const panel = $("calPanel");
+  panel.addEventListener("pointerdown", () => (press.down = true));
+  addEventListener("pointerup", settlePress);
+  addEventListener("pointercancel", settlePress);
   panel.addEventListener("click", (event) => {
     const item = panelItem();
     if (event.target.closest("[data-panel-close], [data-draft-cancel]")) closePanel({ refocus: true });
@@ -1718,7 +1807,7 @@ function bindPanel() {
         const span = item.start && item.end && !overnight(item) ? toMin(item.end) - toMin(item.start) : 60;
         const end = value ? hhmm(Math.min(1439, toMin(value) + span)) : null;
         updateEvent({ start: value, end, endDate: null });
-        renderPanel();
+        refreshPanel();
       }
     }
     if (target.id === "calPanelEnd") {
@@ -1728,7 +1817,7 @@ function bindPanel() {
       } else {
         const later = value && toMin(value) < toMin(item.start) ? isoDate(addDays(parseDate(item.date), 1)) : null;
         updateEvent({ end: value, endDate: later });
-        renderPanel();
+        refreshPanel();
       }
     }
     if (target.id === "calPanelRepeat") {
@@ -1749,7 +1838,7 @@ function bindPanel() {
     }
     if (target.id === "calPanelReminder") updateEvent({ reminderMinutes: target.value === "" ? null : Number(target.value) });
     const note = $("calWhenNote");
-    if (note && panelItem()) note.textContent = whenNote(panelItem());
+    if (note && panelItem() && !press.waiting) note.textContent = whenNote(panelItem());
   });
   panel.addEventListener("input", (event) => {
     const target = event.target;
@@ -1878,6 +1967,7 @@ async function startSync({ first = false, manual = false } = {}) {
     } else if (!first) {
       toast("Die verbundenen Kalender sind gerade nicht erreichbar.", { icon: "wifi-off" });
     }
+    syncButton();
     if (changed) {
       render();
       revealSynced();
