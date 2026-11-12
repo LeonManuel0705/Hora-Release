@@ -112,6 +112,20 @@ void main() {
     expect(asked, 0);
   });
 
+  test('a device that syncs its plan with an account is not asked while it syncs, and is asked once it stops', () async {
+    final (db, prefs) = await install({'ab_week_inverted': true}, weekly: true);
+    await UiDb.save(db, UiDb.syncKey, {'account': 'acc-1', 'cursor': 0, 'latest': 0, 'entries': [], 'unreadable': []});
+    var asked = 0;
+    Future<String?> answer(String question) async => (asked++, 'B').$2;
+    expect(await settleWeekQuestion(now: monday, ask: answer), isFalse);
+    expect(asked, 0);
+    expect(prefs.getBool(AppProvider.abAskKey), isTrue, reason: 'the question waits');
+    await db.delete('ui_store', where: 'key = ?', whereArgs: [UiDb.syncKey]);
+    await settleWeekQuestion(now: monday, ask: answer);
+    expect(asked, 1);
+    expect(prefs.getBool(AppProvider.abAskKey), isNull);
+  });
+
   testWidgets('a failing question still lets the page come', (tester) async {
     AppProvider.forgetWeekRule();
     SharedPreferences.setMockInitialValues({AppProvider.abReferenceKey: '2026-01-12', AppProvider.abAskKey: 'kaputt'});

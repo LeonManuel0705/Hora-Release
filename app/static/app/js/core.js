@@ -385,11 +385,14 @@ export function hourIcon(item) {
 }
 
 const PLAN_META_KEY = "app-timetable-meta";
+const SYNC_KEY = "app-timetable-sync";
 const PLAN_ORIGINS = ["edit", "import", "share"];
+// Kept for this device alone: storage.keys() leaves them out, so no backup, restore or wipe takes or touches them.
+const DEVICE_KEYS = new Set([PLAN_META_KEY, SYNC_KEY]);
 
 const SERVER_KEYS = new Set([
   "app-timetable-edits", "app-block-times", "app-ab-swap", "app-ab-weeks", "app-subjects", "app-teachers", "app-rooms",
-  PLAN_META_KEY,
+  PLAN_META_KEY, SYNC_KEY,
   "app-settings", "app-motion", "app-theme-choice", "app-single-keys", "app-task-filter", "app-cal-view",
 ]);
 
@@ -437,9 +440,9 @@ export const storage = {
       return null;
     }
   },
-  // The plan's record is written only by the plan's own changes, so a backup file or a shared plan never brings in the record of another device.
+  // The plan's record is written only by the plan's own changes and the sync state only by the sync, so a backup file or a shared plan never brings in either of another device.
   set(key, value) {
-    if (key === PLAN_META_KEY) return;
+    if (DEVICE_KEYS.has(key)) return;
     if (SERVER_KEYS.has(key)) {
       if (PLAN_KEYS.includes(key)) planTouched();
       serverValues.set(key, JSON.parse(JSON.stringify(value)));
@@ -451,7 +454,7 @@ export const storage = {
     } catch {}
   },
   remove(key) {
-    if (key === PLAN_META_KEY) return;
+    if (DEVICE_KEYS.has(key)) return;
     if (SERVER_KEYS.has(key)) {
       if (PLAN_KEYS.includes(key)) planTouched();
       serverValues.delete(key);
@@ -463,7 +466,7 @@ export const storage = {
     } catch {}
   },
   keys() {
-    return [...serverValues.keys()].filter((key) => key !== PLAN_META_KEY);
+    return [...serverValues.keys()].filter((key) => !DEVICE_KEYS.has(key));
   },
   settled() {
     if (openChange && !openChange.explicit) settleChange();
@@ -471,7 +474,30 @@ export const storage = {
   },
 };
 
+export const syncStore = {
+  get: () => (serverValues.has(SYNC_KEY) ? JSON.parse(JSON.stringify(serverValues.get(SYNC_KEY))) : null),
+  set(value) {
+    if (value == null) {
+      if (!serverValues.has(SYNC_KEY)) return;
+      serverValues.delete(SYNC_KEY);
+      persist(SYNC_KEY, undefined);
+      return;
+    }
+    if (sameValue(serverValues.get(SYNC_KEY), value)) return;
+    serverValues.set(SYNC_KEY, JSON.parse(JSON.stringify(value)));
+    persist(SYNC_KEY, value);
+  },
+};
+
 const planValues = () => PLAN_KEYS.map((key) => serverValues.get(key) ?? null);
+const planListeners = new Set();
+const planChanged = () => planListeners.forEach((listener) => listener(planMeta()));
+
+// Called after every change of the plan that planChange or an own edit recorded, never after planRevert.
+export function onPlanChange(listener) {
+  planListeners.add(listener);
+  return () => planListeners.delete(listener);
+}
 
 function keepRecord(record) {
   if (record) clockSeen = Math.max(clockSeen, record.at);
@@ -485,12 +511,16 @@ function settleChange() {
   const change = openChange;
   openChange = null;
   if (!change?.origin || sameValue(change.before, planValues())) return;
-  if (change.shared?.at && planMeta()?.at === change.shared.at) return;
+  if (change.shared?.at && planMeta()?.at === change.shared.at) {
+    planChanged();
+    return;
+  }
   // A hybrid clock: a device clock set back can never date a change before one this device has already seen.
   const at = Math.max(Date.now(), clockSeen + 1);
   clockSeen = at;
   keepRecord({ at, origin: change.origin, device });
   if (change.shared) change.shared.at = at;
+  planChanged();
 }
 
 // A write to the plan outside planChange is an own edit, and all such writes of one task are one change.
@@ -555,6 +585,16 @@ export function planRevert(record, run) {
     openChange = null;
     keepRecord(record);
   }
+}
+
+// A plan from before the records were kept has none. The sync records it as it stands, so that it can travel.
+export function planAdopt(origin) {
+  settleChange();
+  if (planMeta() || !PLAN_ORIGINS.includes(origin)) return planMeta();
+  const at = Math.max(Date.now(), clockSeen + 1);
+  clockSeen = at;
+  keepRecord({ at, origin, device });
+  return planMeta();
 }
 
 export const LOCAL_KEYS = {

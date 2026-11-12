@@ -74,4 +74,14 @@ void main() {
     expect((await UiDb.store(db))['app-timetable-meta'], record);
     expect((await pageJson('appStore'))['app-timetable-meta'], record);
   });
+
+  test('the sync state is kept on the device like the record, and the export leaves it out', () async {
+    final db = await UiDb.open();
+    const state = {'account': 'acc-1', 'cursor': 3, 'latest': 3, 'entries': [], 'unreadable': []};
+    expect((await UiApi(null).handle(put(UiDb.syncKey, state))).status, 200);
+    expect((await UiDb.store(db))[UiDb.syncKey], state);
+    expect((await pageJson('appStore'))[UiDb.syncKey], state);
+    final export = await UiApi(null).handle(UiRequest(method: 'GET', segments: ['ui', 'export'], query: const {}, json: false, body: null));
+    expect(jsonEncode(export.body), isNot(contains('acc-1')));
+  });
 }

@@ -24,6 +24,13 @@ String weekQuestion(DateTime now) => 'Ist ${now.weekday > 5 ? 'nächste' : 'dies
 
 Future<bool> _swapped(Database db) async => (await UiDb.store(db))['app-ab-swap'] == true;
 
+/// A device that syncs its plan with an account takes the A/B setting with the plan from the device that changed it last.
+/// Its own answer here would move only its own count, so it is not asked while it syncs, and is asked once it stops.
+Future<bool> _syncing(Database db) async {
+  final state = (await UiDb.store(db))[UiDb.syncKey];
+  return state is Map && state['account'] is String;
+}
+
 /// The letter the pages show for that week: the count of this install, turned around where A and B are swapped.
 Future<String> shownWeek(Database db, SharedPreferences prefs, DateTime now) async {
   final letter = AppProvider.weekTypeFrom(askedMonday(now), AppProvider.abReferenceOf(prefs));
@@ -68,6 +75,7 @@ Future<bool> settleWeekQuestion({DateTime? now, required Future<String?> Functio
   final today = now ?? DateTime.now();
   await AppProvider.settleWeekRule(db, prefs, today);
   if (prefs.getBool(AppProvider.abAskKey) != true) return false;
+  if (await _syncing(db)) return false;
   await prefs.remove(AppProvider.abAskKey);
   if (!(prefs.getBool('ab_weeks_enabled') ?? true)) return false;
   final before = await shownWeek(db, prefs, today);

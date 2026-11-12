@@ -17,13 +17,16 @@ class UiDb {
 
   static const storeKeys = {
     'app-timetable-edits', 'app-block-times', 'app-ab-swap', 'app-ab-weeks', 'app-subjects', 'app-teachers', 'app-rooms',
-    'app-timetable-meta',
+    'app-timetable-meta', syncKey,
     'app-settings', 'app-motion', 'app-theme-choice', 'app-single-keys', 'app-task-filter', 'app-cal-view',
   };
   static const maxValueBytes = 256 * 1024;
   static const iservDoneKey = 'native:iserv-done';
   static const iservHiddenKey = 'native:iserv-hidden';
   static const deviceKey = 'native:device';
+
+  /// What the page keeps of its sync with an account. Set only while this device syncs, and never part of a backup.
+  static const syncKey = 'app-timetable-sync';
 
   static Future<void>? _migration;
 
