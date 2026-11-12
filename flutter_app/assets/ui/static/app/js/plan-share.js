@@ -4,6 +4,7 @@
 import { data, root, platform, esc, icon, storage, now, isoDate, slug, LOCAL_KEYS, MAX_BLOCKS, schoolDefaults, applySchoolEdits, abWeeks, planChange, planRevert, planMeta, BRAND, BRAND_NAMES } from "./core.js";
 import { animates, travels } from "./motion.js";
 import { toast } from "./shell.js";
+import { syncConnected } from "./sync.js";
 import { PLAN_KEYS, PlanError, planOf, encodePlan, decodePlan, payloadOf, linkOf, planFile, planOfFile, planOfValues, describePlan, fitPlan, sameValue, changedKeys, writeValues } from "./plan-format.js";
 
 const PENDING_KEY = "app-plan-link";
@@ -125,12 +126,14 @@ async function commit(fitted, message, origin) {
     return "failed";
   }
   applySchoolEdits();
-  session.set(UNDO_KEY, JSON.stringify({ at: Date.now(), message, before, keys, meta }));
+  session.set(UNDO_KEY, JSON.stringify({ at: Date.now(), message, before, keys, meta, origin }));
   return "done";
 }
 
+// A plan taken over on all devices already went to the others, so taking it back is an own edit that goes there too.
 async function undo(record) {
-  const saved = await writeChecked(record.before, record.keys, (write) => planRevert(record.meta || null, write));
+  const back = record.origin === "edit" ? (write) => planChange("edit", write) : (write) => planRevert(record.meta || null, write);
+  const saved = await writeChecked(record.before, record.keys, back);
   session.set(UNDO_KEY, JSON.stringify({ at: Date.now(), message: saved ? "Rückgängig gemacht" : "Der alte Plan ließ sich nicht ganz zurückholen.", failed: !saved }));
   reloadHere();
 }
@@ -664,22 +667,54 @@ function previewView(model, origin = {}) {
       const message = mode === "merge"
         ? `${plural(lessons, "Stunde", "Stunden")} pro Woche ergänzt`
         : `Plan übernommen: ${plural(fitted.subjects, "Fach", "Fächer")} und ${plural(lessons, "Stunde", "Stunden")} pro Woche`;
+      const finish = (outcome) => {
+        const reload = flowOptions.reload !== false;
+        close(outcome === "same" ? null : { mode, subjects: fitted.subjects, lessons });
+        if (outcome === "same") {
+          const nothing = fitted.dropped && !fitted.filled ? "Nichts ergänzt, diese Stunden passen nicht in dein Raster." : "Nichts ergänzt, bei dir ist schon jede dieser Stunden belegt.";
+          toast(mode === "merge" ? nothing : "Diesen Plan hast du schon.", { icon: "check" });
+        }
+        else if (reload) reloadHere();
+        else offerUndo();
+      };
+      const unchanged = !fitted.changed || !changedKeys(snapshot(), fitted.values).length;
+      if (!origin.backup && !unchanged && syncConnected()) {
+        everywhereView(fitted, message, finish);
+        return;
+      }
       const outcome = await commit(fitted, message, origin.backup ? "import" : "share");
       if (outcome === "failed") {
         setError(body, "Der Plan ließ sich gerade nicht speichern. Versuch es gleich noch einmal.");
         apply.disabled = false;
         return;
       }
-      const reload = flowOptions.reload !== false;
-      close(outcome === "same" ? null : { mode, subjects: fitted.subjects, lessons });
-      if (outcome === "same") {
-        const nothing = fitted.dropped && !fitted.filled ? "Nichts ergänzt, diese Stunden passen nicht in dein Raster." : "Nichts ergänzt, bei dir ist schon jede dieser Stunden belegt.";
-        toast(mode === "merge" ? nothing : "Diesen Plan hast du schon.", { icon: "check" });
-      }
-      else if (reload) reloadHere();
-      else offerUndo();
+      finish(outcome);
     });
     update();
+  });
+}
+
+// With an account the plan is the same on every device, so a shared plan asks whether it replaces the plan there too.
+function everywhereView(fitted, message, finish) {
+  const html = `<p class="share-lead">Mit deinem Konto ist dein Stundenplan auf allen deinen Geräten gleich. Nutzt du diesen Plan überall, ersetzt er ihn auch auf deinen anderen Geräten.</p>
+    <p class="share-note">${icon("info")}<span>Nur hier: Beim nächsten Abgleich kommt dein eigener Plan zurück.</span></p>
+    ${errorLine("")}
+    <div class="share-actions">${button("shareHere", "map-pin", "Nur hier")}<button class="btn btn-primary" type="button" id="shareEverywhere" data-focus>${icon("refresh-cw")}<span>Überall nutzen</span></button></div>`;
+  show("Diesen Plan überall nutzen?", html, (body) => {
+    const choices = [body.querySelector("#shareHere"), body.querySelector("#shareEverywhere")];
+    const take = async (origin) => {
+      choices.forEach((node) => (node.disabled = true));
+      setError(body, "");
+      const outcome = await commit(fitted, message, origin);
+      if (outcome === "failed") {
+        setError(body, "Der Plan ließ sich gerade nicht speichern. Versuch es gleich noch einmal.");
+        choices.forEach((node) => (node.disabled = false));
+        return;
+      }
+      finish(outcome);
+    };
+    choices[0].addEventListener("click", () => take("share"));
+    choices[1].addEventListener("click", () => take("edit"));
   });
 }
 

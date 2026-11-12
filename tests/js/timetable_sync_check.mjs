@@ -174,6 +174,26 @@ function lessonsOf(page) {
   return weeks.flatMap((name) => Object.entries(data.timetable[name] || {}).flatMap(([dow, list]) => list.map((lesson) => `${name}${dow}.${lesson.block} ${data.subjects[lesson.subject]?.name} ${lesson.room}`))).sort();
 }
 
+async function sharedLink(page, subjects, lessons) {
+  const model = page.format.planOf({
+    subjects,
+    teachers: [],
+    rooms: [],
+    blocks: BLOCKS,
+    timetable: lessons,
+    edits: null,
+    weeks: true,
+    abReference: "2026-01-12",
+  });
+  return page.format.linkOf("https://example.org", await page.format.encodePlan(model));
+}
+
+async function listenerOf(node, type = "click") {
+  for (let turn = 0; turn < 40 && !node.listeners[type]?.length; turn += 1) await tick();
+  assert.ok(node.listeners[type]?.length, "the button is there");
+  return node.listeners[type];
+}
+
 function runDevice() {
   let page = null;
   const actions = {
@@ -235,6 +255,30 @@ function runDevice() {
     async online() {
       dispatchEvent(new Event("online"));
       await settled(page);
+    },
+    async share({ choice = null } = {}) {
+      const { initPlanShare, importFlow } = await import(script("plan-share.js"));
+      sessionStorage.removeItem("app-plan-undo");
+      initPlanShare();
+      const link = await sharedLink(page, { k: { name: "Kunst", short: "Ku", hue: "rose", type: "GK", teacherId: "", room: "K1" } }, { A: week({ 3: [{ block: 3, subject: "k", room: "K9" }] }), B: week({ 3: [{ block: 3, subject: "k", room: "K9" }] }) });
+      importFlow({ text: link });
+      for (let turn = 0; turn < 40 && !page.dialog(); turn += 1) await tick();
+      const sheet = page.dialog();
+      const body = sheet.querySelector("#shareBody");
+      for (const listener of await listenerOf(body.querySelector("#shareApply"))) await listener({});
+      for (let turn = 0; turn < 10; turn += 1) await tick();
+      const title = sheet.querySelector("#shareTitle").textContent;
+      const asked = title === "Diesen Plan überall nutzen?";
+      if (asked) {
+        assert.match(body.innerHTML, /Mit deinem Konto ist dein Stundenplan auf allen deinen Geräten gleich\. Nutzt du diesen Plan überall, ersetzt er ihn auch auf deinen anderen Geräten\./);
+        assert.match(body.innerHTML, /Nur hier: Beim nächsten Abgleich kommt dein eigener Plan zurück\./);
+        assert.match(body.innerHTML, /<span>Überall nutzen<\/span>/);
+        assert.match(body.innerHTML, /<span>Nur hier<\/span>/);
+        const button = body.querySelector(choice === "everywhere" ? "#shareEverywhere" : "#shareHere");
+        for (const listener of await listenerOf(button)) await listener({});
+      }
+      await settled(page);
+      return { asked, title };
     },
     inspect(dates = []) {
       const { core, sync } = page;
@@ -692,15 +736,55 @@ CASES["the plan travels frozen and finds a renamed school subject on a device wi
   assert.equal(onB.values["app-subjects"].items["s-mathe"].name, "Mathematik");
 };
 
+CASES["a shared plan asks once and is recorded as an edit everywhere or as shared here"] = async () => {
+  const service = new AccountService();
+  const shared = account("acc-12");
+  const a = await make(service, "a");
+  const b = await make(service, "b");
+  await a.connect(shared);
+  await b.connect(shared);
+  await a.call("edit", MATHE);
+  await b.call("visible");
+  const everywhere = await b.call("share", { choice: "everywhere" });
+  assert.equal(everywhere.asked, true);
+  const onB = await b.inspect();
+  assert.equal(onB.meta.origin, "edit", "Überall nutzen records the plan as an own edit");
+  assert.ok(onB.lessons.some((line) => line.includes("Kunst K9")));
+  await a.call("visible");
+  assert.deepEqual((await a.inspect()).lessons, onB.lessons, "and it reaches the other device");
+
+  await b.restart();
+  await b.connect(shared);
+  await a.call("clock", 1_900_000_000_000);
+  await a.call("edit", BOTH);
+  await b.call("visible");
+  const here = await b.call("share", { choice: "here" });
+  assert.equal(here.asked, true);
+  const onlyHere = await b.inspect();
+  assert.equal(onlyHere.meta.origin, "share", "Nur hier records it as shared");
+  assert.ok(onlyHere.lessons.some((line) => line.includes("Kunst K9")));
+  await a.call("visible");
+  assert.equal((await a.inspect()).meta.origin, "edit", "the other device keeps its plan");
+  await b.restart();
+  await b.connect(shared);
+  assert.equal((await b.inspect()).meta.origin, "share", "a new page keeps the shared plan");
+  await b.call("visible");
+  const back = await b.inspect();
+  assert.deepEqual(back.meta, (await a.inspect()).meta, "the next sync brings the own plan back");
+  assert.deepEqual(back.lessons, (await a.inspect()).lessons);
+};
+
 CASES["without a connection nothing changes"] = async () => {
   const service = new AccountService();
   const a = await make(service, "a");
   await a.call("edit", MATHE);
   await a.call("importPlan", KUNST);
+  const shown = await a.call("share");
+  assert.equal(shown.asked, false, "no question");
   await a.call("visible");
   await a.call("online");
   const onA = await a.inspect();
-  assert.equal(onA.meta.origin, "import", "the import is recorded as before");
+  assert.equal(onA.meta.origin, "share", "the shared plan is recorded as shared, as before");
   assert.equal(onA.connected, false);
   assert.equal(onA.syncState, null);
   assert.ok(!(SYNC in a.store), "no sync state is stored");
