@@ -17,11 +17,13 @@ const STEPS = [
   { id: "times", label: "Zeiten" },
   { id: "weeks", label: "Wochen" },
   { id: "subjects", label: "Fächer" },
-  { id: "details", label: "Lehrkräfte" },
+  { id: "courses", label: "Kurse", when: () => coursesAsked() },
   { id: "grid", label: "Stunden" },
+  { id: "details", label: "Lehrkräfte" },
   { id: "done" },
 ];
-const COUNTED = STEPS.filter((step) => step.label);
+const available = (step) => !step.when || step.when();
+const counted = () => STEPS.filter((step) => step.label && available(step));
 const DAYS = [1, 2, 3, 4, 5];
 const plural = (count, one, many) => `${count}\u00a0${count === 1 ? one : many}`;
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -124,8 +126,10 @@ export function open(options = {}) {
   if (flow.dialog.open) return;
   model = initial();
   flow.from = options.from || "";
+  flow.only = options.only === "courses" && coursesAsked() ? "courses" : "";
   flow.dirty = false;
-  flow.step = 0;
+  flow.busy = false;
+  flow.step = flow.only ? STEPS.findIndex((step) => step.id === flow.only) : 0;
   render({ enter: true });
   flow.dialog.showModal();
   document.documentElement.classList.add("setup-open");
@@ -138,8 +142,23 @@ export function open(options = {}) {
 function commitOpenStep() {
   const id = current();
   if (id === "subjects" || id === "details") commitSubjects();
+  else if (id === "courses") leaveStep(id);
   else if (id === "weeks" && VIEWS.weeks.ready()) leaveStep(id);
   else if (id === "times" && model.timesEdited && VIEWS.times.ready()) leaveStep(id);
+}
+
+// A way to another part of this page, like a section of the settings opened from the settings, changes no document,
+// so the page loads anew there; a way that is blocked gives the setup back instead of leaving it waiting.
+function leaveTo(to) {
+  const target = new URL(to, location.href);
+  if (target.hash && target.pathname === location.pathname && target.search === location.search) {
+    history.replaceState(history.state, "", `${target.pathname}${target.search}${target.hash}`);
+    location.reload();
+  } else location.assign(to);
+  setTimeout(() => {
+    flow.busy = false;
+    if (flow.dialog?.open) paintFoot();
+  }, 4000);
 }
 
 async function close({ to = "" } = {}) {
@@ -152,8 +171,9 @@ async function close({ to = "" } = {}) {
   if (to || flow.dirty) {
     flow.busy = true;
     paintFoot();
-    await storage.settled();
-    if (to) location.assign(to);
+    // The writes go on while the page changes; a slow connection must not hold the setup.
+    await Promise.race([storage.settled(), new Promise((done) => setTimeout(done, 4000))]);
+    if (to) leaveTo(to);
     else location.reload();
     return;
   }
@@ -172,10 +192,15 @@ async function close({ to = "" } = {}) {
 
 const current = () => STEPS[flow.step].id;
 
+// A step that does not apply, like the Leistungskurse below the upper school, is passed over both ways.
 function go(delta) {
-  const next = Math.max(0, Math.min(STEPS.length - 1, flow.step + delta));
+  const way = Math.sign(delta);
+  let next = flow.step + way;
+  while (next > 0 && next < STEPS.length - 1 && !available(STEPS[next])) next += way;
+  next = Math.max(0, Math.min(STEPS.length - 1, next));
   if (next === flow.step) return;
   if (delta > 0 && !leaveStep(current())) return;
+  if (delta < 0 && current() === "details") commitSubjects();
   flow.step = next;
   render({ direction: Math.sign(delta) });
   focusFirst();
@@ -190,10 +215,11 @@ function focusFirst() {
 
 function paintProgress() {
   const host = flow.dialog.querySelector("#setupProgress");
-  const index = COUNTED.findIndex((step) => step.id === current());
+  const steps = counted();
+  const index = flow.only ? -1 : steps.findIndex((step) => step.id === current());
   host.hidden = index < 0;
   if (index < 0) return;
-  host.innerHTML = `<ol class="setup-steps" aria-label="Schritt ${index + 1} von ${COUNTED.length}">${COUNTED.map((step, at) => `<li class="${at < index ? "is-past" : at === index ? "is-now" : ""}"${at === index ? ' aria-current="step"' : ""}><i aria-hidden="true"></i><span>${esc(step.label)}</span></li>`).join("")}</ol>`;
+  host.innerHTML = `<ol class="setup-steps" aria-label="Schritt ${index + 1} von ${steps.length}">${steps.map((step, at) => `<li class="${at < index ? "is-past" : at === index ? "is-now" : ""}"${at === index ? ' aria-current="step"' : ""}><i aria-hidden="true"></i><span>${esc(step.label)}</span></li>`).join("")}</ol>`;
 }
 
 const FOCUS_KEYS = ["week", "copy-week", "undo", "count", "setup-next", "setup-back"];
@@ -210,6 +236,14 @@ function focusKey(node) {
 
 const focusIn = (host) => (host?.contains(document.activeElement) ? focusKey(document.activeElement) : "");
 
+// WebKit puts a scrolled box back to its top as soon as content inside it is replaced, so a repaint in place keeps the
+// step where it was scrolled to.
+function inPlace(paint) {
+  const top = flow.stage?.scrollTop || 0;
+  paint();
+  if (flow.stage && flow.stage.scrollTop !== top) flow.stage.scrollTop = top;
+}
+
 function refocus(host, key, fallback) {
   if (!key) return;
   const found = host.querySelector(key);
@@ -221,11 +255,11 @@ function paintFoot() {
   const focused = focusIn(foot);
   const id = current();
   const step = VIEWS[id];
-  const back = flow.step > 0 && id !== "done" ? `<button class="btn btn-quiet setup-back" type="button" data-setup-back>${icon("chevron-left")}Zurück</button>` : "";
+  const back = flow.step > 0 && id !== "done" && !flow.only ? `<button class="btn btn-quiet setup-back" type="button" data-setup-back>${icon("chevron-left")}Zurück</button>` : "";
   const ready = !step.ready || step.ready();
-  const label = step.next ? step.next() : "Weiter";
+  const label = flow.only ? (courseCount() ? "Fertig" : "Noch keine") : step.next ? step.next() : "Weiter";
   const hint = step.hint ? `<p class="setup-hint" id="setupHint">${step.hint()}</p>` : "";
-  foot.innerHTML = `${back}${hint}<button class="btn btn-primary setup-next" type="button" data-setup-next${ready && !flow.busy ? "" : " disabled"}${hint ? ' aria-describedby="setupHint"' : ""}>${esc(label)}${id === "done" ? "" : icon("chevron-right")}</button>`;
+  foot.innerHTML = `${back}${hint}<button class="btn btn-primary setup-next" type="button" data-setup-next${ready && !flow.busy ? "" : " disabled"}${hint ? ' aria-describedby="setupHint"' : ""}>${esc(label)}${id === "done" || flow.only ? "" : icon("chevron-right")}</button>`;
   refocus(foot, focused);
 }
 
@@ -364,6 +398,9 @@ const VIEWS = {
 };
 
 const pickNamed = (name) => model.picks.find((pick) => plan.sameName(pick.name, name));
+const coursePicks = () => model.picks.filter((pick) => pick.type !== "SK");
+const courseCount = () => model.picks.filter((pick) => pick.type === "LK").length;
+const coursesAsked = () => plan.upperSchool(model?.grade || 0) && coursePicks().length > 0;
 
 function subjectChip(item) {
   const pick = pickNamed(item.name);
@@ -451,6 +488,7 @@ function saveStore(key, saved, before, after, empty) {
 }
 
 function commitSubjects() {
+  const rooms = new Map(model.picks.filter((pick) => pick.key && data.subjects[pick.key]).map((pick) => [pick.key, data.subjects[pick.key].room || ""]));
   const subjectStore = readObject(LOCAL_KEYS.subjects);
   const teacherStore = readObject(LOCAL_KEYS.teachers);
   const roomStore = readObject(LOCAL_KEYS.rooms);
@@ -494,6 +532,7 @@ function commitSubjects() {
     applySchoolEdits();
     flow.dirty = true;
   }
+  commitRooms(rooms);
   model.picks.forEach((pick) => {
     const info = data.subjects[pick.key];
     if (!info) return;
@@ -503,17 +542,66 @@ function commitSubjects() {
   if (!model.brush || !data.subjects[model.brush]) model.brush = model.picks[0]?.key || null;
 }
 
-function detailRow(pick) {
-  const upper = plan.upperSchool(model.grade || 12) && pick.type !== "SK";
+// The subject's room is where its lessons are: those in the old room follow the new one, and a lesson given a room of
+// its own keeps it.
+function commitRooms(before) {
+  const own = model.lessonRooms || new Map();
+  const moved = model.picks.filter((pick) => data.subjects[pick.key] && before.has(pick.key) && before.get(pick.key) !== (data.subjects[pick.key].room || ""));
+  model.lessonRooms = new Map();
+  if (!moved.length && !own.size) return;
+  const stored = readObject(LOCAL_KEYS.lessons);
+  const edits = clone(stored);
+  const roomStore = readObject(LOCAL_KEYS.rooms);
+  const known = { added: listOf(roomStore.added), removed: listOf(roomStore.removed) };
+  const rooms = clone(known);
+  moved.forEach((pick) => plan.followRoom(edits, schoolDefaults.timetable, data.timetable, pick.key, before.get(pick.key), data.subjects[pick.key].room));
+  // An emptied lesson room is the subject's room again.
+  own.forEach(({ key, group, room }) => data.subjects[key] && plan.setGroupRoom(edits, schoolDefaults.timetable, data.timetable, key, group, tidy(room) ? roomOf(room, rooms) : data.subjects[key].room || ""));
+  const changes = [
+    saveStore(LOCAL_KEYS.rooms, roomStore, known, rooms, !rooms.added.length && !rooms.removed.length),
+    saveStore(LOCAL_KEYS.lessons, {}, stored, edits, !Object.keys(edits).length),
+  ];
+  if (changes.some(Boolean)) {
+    applySchoolEdits();
+    flow.dirty = true;
+  }
+}
+
+const lessonLabel = (group) => `${WEEKDAYS_SHORT[group.dow]} ${group.from}.${group.to > group.from ? `\u2013${group.to}.` : ""}${abWeeks() && group.weeks.length === 1 ? `, ${group.weeks[0]}-Woche` : ""}`;
+
+function lessonsOf(pick) {
+  return pick.key && data.subjects[pick.key] ? plan.lessonGroups(data.timetable, pick.key, abWeeks() ? ["A", "B"] : ["A"]) : [];
+}
+
+// Each lesson with its room, the subject's room filled in; one typed here is the lesson's own.
+function lessonList(pick, groups) {
   const id = esc(pick.name);
-  const type = upper
-    ? `<div class="setup-type" role="radiogroup" aria-label="Kursart ${id}">${["GK", "LK"].map((value) => `<label><input type="radio" name="type:${id}" value="${value}" data-type="${id}"${pick.type === value ? " checked" : ""}><span>${value}</span></label>`).join("")}</div>`
+  const typed = model.lessonRooms || new Map();
+  const rows = groups.map((group) => {
+    const key = `${pick.key}|${group.id}`;
+    const own = typed.get(key);
+    const room = own ? own.room : group.room;
+    const follows = !own && group.room === (pick.room || "");
+    const label = lessonLabel(group);
+    return `<label class="setup-lesson"><span>${esc(label)}</span><input class="field-control" data-lesson="${esc(key)}"${follows ? " data-follow" : ""} value="${esc(room)}" maxlength="12" placeholder="Raum" aria-label="Raum für ${id}, ${esc(label)}" autocomplete="off" spellcheck="false" autocapitalize="characters" enterkeyhint="next"></label>`;
+  }).join("");
+  return `<div class="setup-lessons" id="lessons-${esc(pick.key)}"${model.openLessons?.has(pick.key) ? "" : " hidden"}>${rows}</div>`;
+}
+
+function detailRow(pick) {
+  const id = esc(pick.name);
+  const groups = lessonsOf(pick);
+  const differs = groups.some((group) => group.room !== (pick.room || ""));
+  if (differs) (model.openLessons ||= new Set()).add(pick.key);
+  const open = model.openLessons?.has(pick.key);
+  const more = groups.length > 1 || differs
+    ? `<button class="text-button setup-row-more" type="button" data-lessons="${esc(pick.key)}" aria-expanded="${!!open}" aria-controls="lessons-${esc(pick.key)}">${icon("chevron-down")}<span>An manchen Tagen anders</span></button>${lessonList(pick, groups)}`
     : "";
   return `<div class="setup-row" style="--hue:var(--hue-${pick.hue})">
       <p class="setup-row-name"><i class="subject-dot" aria-hidden="true"></i><span>${id}</span></p>
-      ${type}
       <input class="field-control setup-row-teacher" data-teacher="${id}" value="${esc(pick.teacher)}" maxlength="48" placeholder="Lehrkraft" aria-label="Lehrkraft für ${id}" autocomplete="off" spellcheck="false" enterkeyhint="next">
       <input class="field-control setup-row-room" data-room="${id}" value="${esc(pick.room)}" maxlength="12" placeholder="Raum" aria-label="Raum für ${id}" autocomplete="off" spellcheck="false" autocapitalize="characters" enterkeyhint="next">
+      ${more}
     </div>`;
 }
 
@@ -522,6 +610,49 @@ function pickGroups() {
   const groups = plan.GROUPS.map(([group, title]) => `<fieldset class="setup-group"><legend class="setup-label">${title}</legend><div class="setup-chips">${list.filter((item) => item.group === group).map(subjectChip).join("")}</div></fieldset>`).join("");
   const others = model.picks.filter((pick) => !list.some((item) => plan.sameName(item.name, pick.name)));
   return others.length ? `${groups}<fieldset class="setup-group"><legend class="setup-label">Eigene</legend><div class="setup-chips">${others.map((pick) => subjectChip({ name: pick.name, hue: pick.hue })).join("")}</div></fieldset>` : groups;
+}
+
+// The usual number of Leistungskurse, only where it is the same for everyone; a hint, never a limit.
+const USUAL_COURSES = { BB: "In Brandenburg sind es meistens zwei.", BE: "In Berlin sind es meistens zwei." };
+
+function courseChoice(pick) {
+  return `<button type="button" class="setup-course" data-course="${esc(pick.name)}" aria-pressed="${pick.type === "LK"}" style="--hue:var(--hue-${pick.hue})"><i class="setup-dot" aria-hidden="true"></i><span class="setup-course-name">${esc(pick.name)}</span><span class="setup-course-badge" aria-hidden="true">LK</span></button>`;
+}
+
+// Marks a subject as Leistungskurs or takes it back, in place, so the list keeps its order and the focus.
+function toggleCourse(button) {
+  const pick = pickNamed(button.dataset.course);
+  if (!pick || pick.type === "SK") return;
+  pick.type = pick.type === "LK" ? "GK" : "LK";
+  (pick.touched ||= new Set()).add("type");
+  button.setAttribute("aria-pressed", String(pick.type === "LK"));
+  button.focus?.({ preventScroll: true });
+  if (pick.type === "LK" && travels()) button.querySelector(".setup-course-badge")?.animate([{ transform: "scale(0.4)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 360, easing: token("--spring-delight") || "ease-out" });
+  paintFoot();
+}
+
+function toggleLessons(button) {
+  const key = button.dataset.lessons;
+  const list = flow.stage.querySelector(`#lessons-${CSS.escape(key)}`);
+  if (!list) return;
+  const open = list.hidden;
+  list.hidden = !open;
+  button.setAttribute("aria-expanded", String(open));
+  (model.openLessons ||= new Set())[open ? "add" : "delete"](key);
+  if (open && travels()) list.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: token("--ease-out") || "ease-out" });
+  if (open) list.querySelector("input")?.focus({ preventScroll: true });
+}
+
+// No Leistungskurs, as in the Einführungsphase, is an answer too: kept for this grade, so nothing asks again.
+function noteCourses() {
+  const prefs = savedPrefs();
+  const none = courseCount() ? null : model.grade;
+  if ((prefs.school?.noCourses ?? null) === none) return;
+  const school = { ...(prefs.school || {}) };
+  if (none == null) delete school.noCourses;
+  else school.noCourses = none;
+  storage.set(LOCAL_KEYS.prefs, { ...prefs, school });
+  flow.dirty = true;
 }
 
 Object.assign(VIEWS, {
@@ -534,6 +665,19 @@ Object.assign(VIEWS, {
     },
     ready: () => model.picks.length > 0,
     hint: () => (model.picks.length ? `${plural(model.picks.length, "Fach", "Fächer")} gewählt` : ""),
+  },
+  courses: {
+    html() {
+      const usual = USUAL_COURSES[model.state] || "";
+      return `${bubble("Welche davon sind deine Leistungskurse?", "Tipp sie an. Leistungskurse zählen bei den Noten doppelt.")}
+        <div class="setup-courses" role="group" aria-label="Leistungskurse">${coursePicks().map(courseChoice).join("")}</div>
+        ${usual ? `<p class="setup-note setup-courses-note">${usual}</p>` : ""}`;
+    },
+    after() {
+      flow.stage.querySelector(".setup-course")?.setAttribute("data-autofocus", "");
+    },
+    next: () => (courseCount() ? "Weiter" : "Noch keine"),
+    hint: () => (courseCount() ? `${plural(courseCount(), "Leistungskurs", "Leistungskurse")} gewählt` : ""),
   },
   details: {
     html() {
@@ -596,7 +740,11 @@ function fitCells() {
   }).forEach((cell) => cell.classList.add("is-short"));
 }
 
-function paintBoard({ grid = true } = {}) {
+function paintBoard(options) {
+  inPlace(() => paintBoardNow(options));
+}
+
+function paintBoardNow({ grid = true } = {}) {
   const head = flow.stage.querySelector("#setupBoardHead");
   const table = flow.stage.querySelector("#setupGrid");
   const focused = focusIn(head);
@@ -704,64 +852,81 @@ function appleTab() {
   return apple && !window.hubShell && !standalone;
 }
 
+const REMIND_WHAT = "vor jeder Stunde und am Vortag eines Tests";
+
+// A line of the note on the last step: a ring that ticks once the step is done, the step with its verb, what it brings,
+// and, while it is open, the way there.
+function noteRow({ title, text = "", done = false, action = "", cls = "", id = "" }) {
+  const inner = `<span class="setup-check">${icon("check")}</span><span class="setup-note-text"><b><span>${esc(title)}</span></b>${text ? `<small>${esc(text)}</small>` : ""}</span>${action && !done ? icon("chevron-right", "setup-note-go") : ""}`;
+  const attrs = `class="setup-note-row${done ? " is-done" : ""}${cls ? ` ${cls}` : ""}"${id ? ` id="${id}"` : ""}`;
+  return action && !done ? `<button type="button" ${attrs} ${action}>${inner}</button>` : `<div ${attrs}${id ? ' tabindex="-1"' : ""}>${inner}</div>`;
+}
+
 function reminderRow() {
   const supported = "Notification" in window;
   const state = supported ? Notification.permission : "unsupported";
   if (!supported) {
     return appleTab()
-      ? `<div class="setup-extra"><span class="setup-extra-icon">${icon("bell")}</span><p><b>Erinnerungen</b><small>${esc(tabReminderNote({ agent: navigator.userAgent, brand: BRAND }))} Deinen Plan nimmst du über Einstellungen › Daten mit.</small></p></div>`
+      ? noteRow({ title: "Erinnerungen", text: `${tabReminderNote({ agent: navigator.userAgent, brand: BRAND })} Deinen Plan nimmst du über Einstellungen › Daten mit.`, cls: "is-blocked", id: "setupRemind" })
       : "";
   }
-  const what = "vor jeder Stunde und am Vortag eines Tests";
   // The desktop app always reports the permission as granted, so only the saved switch tells whether reminders are on.
   const on = state === "granted" && readPrefs().enabled;
-  const text = on
-    ? `Sind an. Ich melde mich ${what}.`
-    : state === "granted"
-      ? `Sind aus. Schalte sie ein, dann melde ich mich ${what}.`
-      : state === "denied"
-        ? `Sind blockiert. Freigeben kannst du sie ${blockedHere().where}.`
-        : `Ich melde mich ${what}.`;
-  const control = on
-    ? `<span class="setup-extra-ok">${icon("circle-check")}</span>`
-    : state === "granted"
-      ? `<button class="btn btn-quiet" type="button" data-setup-remind-on>${icon("bell")}Einschalten</button>`
-      : state === "default"
-        ? `<button class="btn btn-quiet" type="button" data-setup-remind>${icon("bell")}Erlauben</button>`
-        : state === "denied" && blockedHere().open ? `<button class="btn btn-quiet" type="button" data-setup-notify-settings>${icon("settings")}Öffnen</button>` : "";
-  return `<div class="setup-extra" id="setupRemind" tabindex="-1"><span class="setup-extra-icon">${icon("bell")}</span><p><b>Erinnerungen</b><small>${text}</small></p>${control}</div>`;
+  if (on) return noteRow({ title: "Erinnerungen erlauben", text: `Sind an. Ich melde mich ${REMIND_WHAT}.`, done: true, id: "setupRemind" });
+  if (state === "granted") return noteRow({ title: "Erinnerungen einschalten", text: `Sind aus. Schalte sie ein, dann melde ich mich ${REMIND_WHAT}.`, action: "data-setup-remind-on", id: "setupRemind" });
+  if (state === "denied") return noteRow({ title: "Erinnerungen freigeben", text: `Sind blockiert. Freigeben kannst du sie ${blockedHere().where}.`, action: blockedHere().open ? "data-setup-notify-settings" : "", cls: "is-blocked", id: "setupRemind" });
+  return noteRow({ title: "Erinnerungen erlauben", text: `Ich melde mich ${REMIND_WHAT}.`, action: "data-setup-remind", id: "setupRemind" });
 }
 
+// Allowing reminders ticks their line in place.
 function repaintReminder() {
   const row = flow.stage.querySelector("#setupRemind");
   if (!row) return;
   const focused = row.contains(document.activeElement);
+  const was = row.classList.contains("is-done");
   row.outerHTML = reminderRow();
-  if (focused) flow.stage.querySelector("#setupRemind")?.focus({ preventScroll: true });
+  const next = flow.stage.querySelector("#setupRemind");
+  if (next && !was && next.classList.contains("is-done") && travels()) {
+    next.classList.remove("is-done");
+    requestAnimationFrame(() => requestAnimationFrame(() => next.classList.add("is-done")));
+  }
+  if (focused) next?.focus({ preventScroll: true });
 }
 
 function iservRow() {
   const kind = data.user?.iserv;
-  if (!kind || data.status?.iserv) return "";
+  if (!kind || data.status?.iservAvailable === false) return "";
   const text = kind === "android" ? "Hausaufgaben und Vertretungsplan kommen dann aus IServ dazu." : "Vertretungsplan und Mails kommen dann aus IServ dazu.";
-  return `<div class="setup-extra"><span class="setup-extra-icon">${icon("graduation-cap")}</span><p><b>IServ verbinden</b><small>${text}</small></p><button class="btn btn-quiet" type="button" data-setup-go="/hub/settings#konten">Verbinden</button></div>`;
+  return noteRow({ title: "IServ verbinden", text, done: !!data.status?.iserv, action: 'data-setup-go="/hub/settings#konten"' });
 }
+
+const PLAN_TICK = 760;
+
+// On the settings page the places are kept as they are changed there; every other page knows them from its load.
+const placesSet = () => (data.page?.places ? Boolean(data.page.places.home && data.page.places.school) : !!data.status?.places);
 
 Object.assign(VIEWS, {
   done: {
     html() {
       const counts = shownWeeks().map(weekCount);
       const lessons = abWeeks() ? `${counts[0]} Stunden in der A-Woche und ${counts[1]} in der B-Woche` : `${plural(counts[0], "Stunde", "Stunden")} pro Woche`;
+      const rows = [
+        noteRow({ title: "Stundenplan eintragen", done: !travels(), cls: "is-plan" }),
+        reminderRow(),
+        noteRow({ title: "Zuhause und Schule festlegen", text: "Dann zeigt der Fahrplan deinen Schulweg und den Heimweg.", done: placesSet(), action: 'data-setup-go="/hub/settings#orte"' }),
+        iservRow(),
+      ].filter(Boolean);
       return `<div class="setup-hello is-done">${luna("ruhe", 112)}<h2 class="setup-title is-big" id="setupTitle" tabindex="-1">Dein Plan steht</h2><p class="setup-lead">${lessons}, ${plural(activeSubjectKeys().length, "Fach", "Fächer")}. Die Übersicht zeigt dir ab jetzt, was gerade dran ist.</p></div>
-        <div class="setup-extras">
-          ${reminderRow()}
-          <div class="setup-extra"><span class="setup-extra-icon">${icon("map-pin")}</span><p><b>Zuhause und Schule</b><small>Dann zeigt der Fahrplan deinen Schulweg und den Heimweg.</small></p><button class="btn btn-quiet" type="button" data-setup-go="/hub/settings#orte">Festlegen</button></div>
-          ${iservRow()}
-        </div>`;
+        <div class="setup-note"><ul>${rows.map((row) => `<li>${row}</li>`).join("")}</ul></div>`;
     },
+    // The note rises in, its lines one after the other, and the first one ticks itself off: the plan is in.
     after() {
       if (!travels()) return;
-      flow.stage.querySelectorAll(".setup-extra").forEach((node, index) => node.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 360, delay: 160 + index * 70, easing: token("--ease-out") || "ease-out", fill: "backwards" }));
+      const plan = flow.stage.querySelector(".setup-note-row.is-plan");
+      setTimeout(() => plan?.classList.add("is-done"), PLAN_TICK);
+      const ease = token("--ease-out") || "ease-out";
+      flow.stage.querySelector(".setup-note")?.animate([{ opacity: 0, transform: "translateY(14px)" }, { opacity: 1, transform: "none" }], { duration: 560, delay: 240, easing: token("--spring-delight") || ease, fill: "backwards" });
+      flow.stage.querySelectorAll(".setup-note li").forEach((node, index) => node.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 420, delay: 360 + index * 70, easing: ease, fill: "backwards" }));
     },
     next: () => "Zur Übersicht",
   },
@@ -829,6 +994,10 @@ function leaveStep(id) {
     model.week = "A";
   }
   if (id === "subjects" || id === "details") commitSubjects();
+  if (id === "courses") {
+    commitSubjects();
+    noteCourses();
+  }
   return true;
 }
 
@@ -837,7 +1006,7 @@ function refreshTimes() {
   if (!host) return;
   const blocks = draftBlocks();
   const focused = focusIn(host);
-  host.innerHTML = `${timesDetail()}${model.times ? `${timelineHtml(blocks)}<p class="setup-note" id="setupTimesNote">${timesNote(blocks)}</p>` : ""}`;
+  inPlace(() => (host.innerHTML = `${timesDetail()}${model.times ? `${timelineHtml(blocks)}<p class="setup-note" id="setupTimesNote">${timesNote(blocks)}</p>` : ""}`));
   refocus(host, focused, () => host.querySelector("[data-count]:not(:disabled)") || host.querySelector("#setupStart"));
   paintFoot();
 }
@@ -848,7 +1017,7 @@ function popChip(node) {
 
 function repaintSubjects(name) {
   const host = flow.stage.querySelector("#setupPicks");
-  if (host) host.innerHTML = pickGroups();
+  if (host) inPlace(() => (host.innerHTML = pickGroups()));
   paintFoot();
   const chip = [...flow.stage.querySelectorAll("[data-pick]")].find((node) => node.dataset.pick === name);
   chip?.focus({ preventScroll: true });
@@ -874,6 +1043,7 @@ function onClick(event) {
   if (target.closest("[data-setup-back]")) return go(-1);
   if (target.closest("[data-setup-next]")) {
     if (current() === "done") return close({ to: pageUrl("home") });
+    if (flow.only) return close();
     return go(1);
   }
   if (target.closest("[data-setup-share]")) return startShare();
@@ -890,6 +1060,10 @@ function onClick(event) {
     repaintReminder();
     return;
   }
+  const course = target.closest("[data-course]");
+  if (course) return toggleCourse(course);
+  const lessons = target.closest("[data-lessons]");
+  if (lessons) return toggleLessons(lessons);
   const pick = target.closest("[data-pick]");
   if (pick) {
     const name = pick.dataset.pick;
@@ -914,12 +1088,15 @@ function onClick(event) {
   if (cell) {
     const [dow, n] = cell.dataset.cell.split(":").map(Number);
     model.cursor = { row: Number(cell.dataset.row), col: Number(cell.dataset.col) };
+    // A tap focuses nothing in Safari; the repaint gives the focus back to the cell that was tapped.
+    cell.focus?.({ preventScroll: true });
     paintCell(dow, n);
     return;
   }
   const week = target.closest("[data-week]");
   if (week) {
     if (model.week === week.dataset.week) return;
+    week.focus?.({ preventScroll: true });
     model.week = week.dataset.week;
     paintBoard();
     if (travels()) flow.stage.querySelector("#setupGrid")?.animate([{ opacity: 0, transform: `translateX(${model.week === "B" ? 14 : -14}px)` }, { opacity: 1, transform: "none" }], { duration: 260, easing: token("--ease-out") || "ease-out" });
@@ -929,7 +1106,7 @@ function onClick(event) {
   if (target.closest("[data-undo]")) return undo();
   if (target.closest("[data-brush-add]")) {
     model.adding = true;
-    flow.stage.querySelector(".setup-brushes").outerHTML = brushesHtml();
+    inPlace(() => (flow.stage.querySelector(".setup-brushes").outerHTML = brushesHtml()));
     flow.stage.querySelector("#setupBrushNew")?.focus();
   }
 }
@@ -973,13 +1150,6 @@ function onChange(event) {
     paintFoot();
     return;
   }
-  if (target.dataset.type) {
-    const pick = pickNamed(target.dataset.type);
-    if (!pick) return;
-    pick.type = target.value;
-    (pick.touched ||= new Set()).add("type");
-    return;
-  }
   if (target.name === "brush") {
     model.brush = target.value;
     popChip(target.closest(".setup-brush"));
@@ -988,11 +1158,23 @@ function onChange(event) {
 
 function onInput(event) {
   const target = event.target;
+  if (target.dataset.lesson) return typeLessonRoom(target);
   const field = target.dataset.teacher ? "teacher" : target.dataset.room ? "room" : "";
   const pick = field && pickNamed(target.dataset[field]);
   if (!pick) return;
   pick[field] = target.value;
   (pick.touched ||= new Set()).add(field);
+  // Lessons still in the subject's room move along while it is typed.
+  if (field === "room") flow.stage.querySelector(`#lessons-${CSS.escape(pick.key || "")}`)?.querySelectorAll("[data-follow]").forEach((input) => (input.value = target.value));
+}
+
+function typeLessonRoom(input) {
+  const [key, id] = input.dataset.lesson.split("|");
+  const pick = model.picks.find((item) => item.key === key);
+  const group = pick && lessonsOf(pick).find((item) => item.id === id);
+  if (!group) return;
+  input.removeAttribute("data-follow");
+  (model.lessonRooms ||= new Map()).set(input.dataset.lesson, { key, group, room: input.value });
 }
 
 function submitCustom(form) {

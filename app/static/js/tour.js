@@ -104,13 +104,33 @@
   const dotIds = () => STEPS.filter(s => s.dot && !skipped(s)).map(s => s.id);
   const DOT_OF = { 'task-new': 'tasks', 'task-done': 'tasks' };
   const indexOf = id => STEPS.findIndex(s => s.id === id);
+  const PAGE_TAB = { '/hub': 'home', '/hub/tasks': 'tasks', '/hub/school': 'school' };
+  const tabOf = page => PAGE_TAB[page] || null;
+  // Luna reaches for the tab, taps it, and the page changes; with reduced motion the tab only lights up briefly.
+  const TAP = { reach: 300, leave: 560, still: 140 };
+
+  // How a step marks its target: shaded around it, a pulsing ring while the user acts on a shaded page, a plain ring
+  // around the field to type into while the page stays bright, or nothing.
+  function spotKind(step) {
+    const dim = step.dim !== false, interactive = !!step.wait;
+    if (dim) return interactive ? 'ring' : 'shade';
+    return interactive ? 'outline' : 'off';
+  }
+
+  // Where Luna was on the page before, kept inside this window, so she goes on from there and never starts in a corner.
+  function carried(saved, width, height, size) {
+    if (!saved || !Number.isFinite(saved.gx) || !Number.isFinite(saved.gy)) return null;
+    return { x: clamp(saved.gx, 0, Math.max(0, width - size)), y: clamp(saved.gy, 0, Math.max(0, height - size)) };
+  }
 
   let run = null;
 
   function save(id) {
     if (run) run.saved = id;
+    const guide = run && run.ui && run.ui.guide;
+    const spot = guide && guide.x > -500 ? { gx: Math.round(guide.x), gy: Math.round(guide.y) } : {};
     try {
-      localStorage.setItem(KEY, JSON.stringify({ id, at: Date.now(), title: run && run.title, sample: run && run.sample }));
+      localStorage.setItem(KEY, JSON.stringify({ id, at: Date.now(), title: run && run.title, sample: run && run.sample, ...spot }));
     } catch (_) {}
   }
 
@@ -173,6 +193,11 @@
     if (!self.AppLuna) return;
     run = { ui: buildUi(), step: null, token: 0, offs: [], title: resumed && resumed.title, sample: resumed && resumed.sample || null };
     const { scrim, bubble } = run.ui;
+    const from = carried(resumed, innerWidth, innerHeight, run.ui.size);
+    if (from) {
+      run.ui.guide.place(from.x, from.y);
+      run.carried = true;
+    }
     bubble.addEventListener('click', onBubbleClick);
     scrim.addEventListener('click', () => {
       run.ui.guide.excite();
@@ -228,8 +253,9 @@
     save(step.id);
     if (step.page && location.pathname !== step.page && !opts.here) {
       hideBubble();
-      run.ui.guide.excite();
-      await wait(still() ? 0 : 260);
+      clearRings();
+      await tapTab(step.page);
+      if (!run || token !== run.token) return;
       location.href = withPinned(step.page);
       return;
     }
@@ -262,10 +288,11 @@
     setSpot(step, target);
     const { guide } = run.ui;
     guide.setMode('float');
-    if (opts.first) {
+    if (opts.first && !run.carried) {
       guide.place(spots.gx, spots.gy);
       await guide.appear();
     } else {
+      run.carried = false;
       await guide.moveTo(spots.gx, spots.gy);
     }
     if (!run || token !== run.token) return;
@@ -278,6 +305,33 @@
     if (step.rings) showRings(step.rings());
     showBubble(step, spots);
     arm(step);
+  }
+
+  // Luna taps the tab of the page she goes to: her tentacle reaches out, the tab gives way, then the page changes.
+  async function tapTab(page) {
+    const key = tabOf(page), tab = key ? navItem(key) : null;
+    const { guide } = run.ui;
+    if (!tab || !shown(tab)) {
+      guide.excite();
+      await wait(still() ? 0 : 260);
+      return;
+    }
+    const r = tab.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    setSpot({}, tab);
+    if (still() || document.documentElement.dataset.motion === 'minimal') {
+      const ring = make('i', 'tour-ring', run.ui.rings);
+      Object.assign(ring.style, { left: (r.left - 3) + 'px', top: (r.top - 3) + 'px', width: (r.width + 6) + 'px', height: (r.height + 6) + 'px' });
+      await wait(TAP.still);
+      return;
+    }
+    const token = run.token;
+    guide.setMode('tap', { x, y });
+    await wait(TAP.reach);
+    if (!run || token !== run.token) return;
+    const ripple = make('i', 'tour-tap', run.ui.rings);
+    Object.assign(ripple.style, { left: x + 'px', top: y + 'px' });
+    tab.animate([{ transform: 'none' }, { transform: 'scale(.92)', offset: .4 }, { transform: 'none' }], { duration: 240, easing: 'cubic-bezier(.3, .7, .4, 1)' });
+    await wait(TAP.leave - TAP.reach);
   }
 
   function clipped(el) {
@@ -462,11 +516,11 @@
 
   function setSpot(step, target) {
     const { spot, scrim } = run.ui;
-    const dim = step.dim !== false;
-    const interactive = !!step.wait;
-    scrim.classList.toggle('is-open', !interactive);
-    spot.classList.toggle('is-off', !dim);
-    spot.classList.toggle('is-ring', dim && interactive);
+    const kind = spotKind(step);
+    scrim.classList.toggle('is-open', !step.wait);
+    spot.classList.toggle('is-off', kind === 'off');
+    spot.classList.toggle('is-ring', kind === 'ring');
+    spot.classList.toggle('is-outline', kind === 'outline');
     if (!target) {
       const W = innerWidth, H = innerHeight;
       Object.assign(spot.style, { left: W / 2 + 'px', top: H / 2 + 'px', width: '0px', height: '0px', borderRadius: '50%' });
@@ -767,7 +821,11 @@
       start('hello');
     },
     stop: () => end('skipped'),
-    settle
+    settle,
+    tabOf,
+    spotKind: id => spotKind(STEPS[indexOf(id)] || {}),
+    carried,
+    TAP
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

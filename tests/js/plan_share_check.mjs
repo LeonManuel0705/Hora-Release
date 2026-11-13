@@ -295,6 +295,24 @@ const tests = {
     assert.deepEqual(Object.keys(fitted.values["app-subjects"].items), ["s-mathe-lk"]);
     assert.deepEqual(Object.keys(fitted.values["app-timetable-edits"]).sort(), ["A:1:1", "B:1:1"]);
   },
+  async "a lesson in a room of its own keeps it through link, QR and file, the others take the subject's room"() {
+    const model = planOf(oberstufe());
+    const sport = model.subjects.findIndex((item) => item.name === "Sport");
+    assert.equal(model.subjects[sport].room, "Halle");
+    const own = model.lessons.filter((lesson) => lesson.subject === sport && lesson.room === "Halle 2");
+    assert.ok(own.length, "the fixture has a lesson in another room");
+    const linked = await decodePlan(payloadOf(linkOf(WEBSITE, await encodePlan(model))));
+    const filed = planOfFile(JSON.parse(JSON.stringify(planFile(model, "App", "2026-11-14T08:00:00.000Z"))));
+    for (const back of [linked, filed]) {
+      assert.deepEqual(back.lessons.filter((lesson) => lesson.subject === sport).map((lesson) => lesson.room), model.lessons.filter((lesson) => lesson.subject === sport).map((lesson) => lesson.room));
+    }
+    const fitted = fitPlan(linked, { mine: emptyState(), defaults: empty }, { maxBlocks: 10 });
+    const key = Object.keys(fitted.values["app-subjects"].items).find((item) => fitted.values["app-subjects"].items[item].name === "Sport");
+    assert.equal(fitted.values["app-subjects"].items[key].room, "Halle");
+    const rooms = Object.values(fitted.values["app-timetable-edits"]).filter((cell) => cell.subject === key).map((cell) => cell.room);
+    assert.deepEqual([...new Set(rooms)].sort(), ["Halle", "Halle 2"], "taken in, the lesson keeps its room and the rest the subject's");
+    assert.ok(fitted.values["app-rooms"].added.includes("Halle 2"));
+  },
   "lessons beyond the blocks this app shows are counted, not refused"() {
     const fitted = fitPlan(planOf(oberstufe()), { mine: emptyState(), defaults: empty }, { maxBlocks: 8 });
     assert.equal(fitted.values["app-block-times"].blocks.length, 8);

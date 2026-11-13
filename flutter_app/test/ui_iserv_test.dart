@@ -115,6 +115,16 @@ void main() {
     expect(web['synced'], {'iserv': null, 'google': null});
   });
 
+  test('every page knows whether home and school are both set', () async {
+    final db = await clean();
+    await db.delete('vbb_known_locations');
+    expect((await status(db))['places'], isFalse);
+    await db.insert('vbb_known_locations', {'key': 'home', 'name': 'Lindenallee', 'vbb_id': 'de-home', 'latitude': 52.52, 'longitude': 13.4, 'type': 'stop'});
+    expect((await status(db))['places'], isFalse, reason: 'home alone is not both');
+    await db.insert('vbb_known_locations', {'key': 'school', 'name': 'Schulzentrum', 'vbb_id': 'de-school', 'latitude': 52.51, 'longitude': 13.41, 'type': 'stop'});
+    expect((await status(db))['places'], isTrue);
+  });
+
   test('the stand is the newest copy IServ gave, and the plan and the homework are named', () async {
     final db = await clean(account: true);
     expect((await status(db))['synced'], {'iserv': null, 'google': null});

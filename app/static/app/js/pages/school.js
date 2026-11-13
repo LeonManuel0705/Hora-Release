@@ -2,6 +2,7 @@ import {
   data, flags, params, esc, icon, luna, now, pinnedTime, toMin, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, isoWeek, subject, hueVar, blockOf, glue, relativeDay, inDays, duration, shortDate, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT,
   abWeeks, gradeScale, activeSubjectKeys, ASSESSMENTS, isAssessment, assessmentCount, pastText, pastWord, homeworkDate, periodWords, BRAND,
+  storage, LOCAL_KEYS,
 } from "../core.js";
 import { animates, travels, token, ms } from "../motion.js";
 import { toast, registerSearch, syncTime, typing, overlayOpen, pageUrl, keepOneLine } from "../shell.js";
@@ -1070,6 +1071,18 @@ function subjectPanelHtml(key, lesson = null) {
     <div class="panel-actions"><button type="button" class="btn btn-quiet" data-new-test="${esc(key)}">${icon("plus")}Test eintragen</button></div>`;
 }
 
+// One quiet line where the grades are, for an upper-school plan without any Leistungskurs, as after an import; an
+// answered Noch keine for this grade keeps it away.
+function coursesHint() {
+  if (typeof window.AppSetup?.open !== "function") return "";
+  const school = storage.get(LOCAL_KEYS.prefs)?.school || {};
+  const grade = Number.isInteger(school.grade) ? school.grade : data.user?.grade;
+  if (!Number.isInteger(grade) || grade < 11 || school.noCourses === grade) return "";
+  const types = activeSubjectKeys().map((key) => data.subjects[key]?.type).filter((type) => type !== "SK");
+  if (!types.length || types.includes("LK")) return "";
+  return `<p class="side-hint courses-hint">Noch kein Leistungskurs markiert. <button type="button" class="inline-link" data-open-courses>Leistungskurse wählen</button></p>`;
+}
+
 function gradesPanelHtml() {
   const semester = state.gradeSemester;
   const rows = semesterRows(semester);
@@ -1099,6 +1112,7 @@ function gradesPanelHtml() {
   }
   return `${panelHead("Noten", "Punkte, Leistungskurse zählen doppelt")}
     ${switcher}
+    ${semester === SEMESTER ? coursesHint() : ""}
     ${value != null ? `<p class="grades-total"><b class="grades-number num">${decimal(value)}</b><span>Punkte im Schnitt${semester === SEMESTER ? `, ${plural(rows.reduce((sum, row) => sum + row.count, 0), "Note", "Noten")} bisher` : ""}</span></p>` : `<p class="field-empty">${semester ? `Für ${esc(semester)} sind` : "Bisher sind"} noch keine Noten eingetragen.</p>`}
     ${entry}
     ${bars ? `<ol class="grade-bars" aria-label="Schnitt je Fach">${bars}</ol>` : ""}
@@ -1794,6 +1808,10 @@ function bindPanel() {
     const editButton = target.closest("[data-edit-item]");
     if (editButton) {
       openEditForm(editButton.dataset.editItem, editButton);
+      return;
+    }
+    if (target.closest("[data-open-courses]")) {
+      window.AppSetup?.open({ only: "courses" });
       return;
     }
     const deleteButton = target.closest("[data-delete-item]");

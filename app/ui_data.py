@@ -1196,9 +1196,11 @@ def sync_status(iserv, now):
         google = None
     parts = iserv_parts(iserv['account']) if iserv['connected'] else {part: None for part in ISERV_PARTS}
     stamps = [stamp for stamp in parts.values() if stamp]
+    known = known_places()
     return {
         'iserv': iserv['connected'],
         'iservAvailable': True,
+        'places': bool(known.get('home') and known.get('school')),
         'rendered': now.isoformat(timespec='minutes'),
         'synced': {'iserv': max(stamps) if stamps else None, 'google': google},
         'iservParts': parts,

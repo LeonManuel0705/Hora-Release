@@ -147,6 +147,55 @@ export function setLesson(edits, base, week, dow, n, value) {
   return edits;
 }
 
+const ownTeacher = (edits, week, dow, n, key) => {
+  const own = edits[cellKey(week, dow, n)];
+  return own && own.subject === key && typeof own.teacher === "string" ? own.teacher : "";
+};
+
+// A lesson in the subject's room, or in none, follows that room when it changes; a lesson with a room of its own keeps it.
+export function followRoom(edits, base, timetable, key, from, to) {
+  const [old, next] = [from || "", to || ""];
+  if (old === next) return edits;
+  ["A", "B"].forEach((week) => Object.entries(timetable?.[week] || {}).forEach(([dow, entries]) => (entries || []).forEach((entry) => {
+    if (entry.subject !== key || (entry.room && entry.room !== old)) return;
+    setLesson(edits, base, week, Number(dow), entry.block, { subject: key, room: next, teacher: ownTeacher(edits, week, dow, entry.block, key) });
+  })));
+  return edits;
+}
+
+// A subject's lessons as the setup lists them: blocks of one day that follow each other in one room are one lesson, and
+// the same lesson in both weeks is one line.
+export function lessonGroups(timetable, key, weeks) {
+  const runs = [];
+  weeks.forEach((week) => [1, 2, 3, 4, 5].forEach((dow) => {
+    (timetable?.[week]?.[String(dow)] || []).filter((entry) => entry.subject === key).sort((a, b) => a.block - b.block).forEach((entry) => {
+      const last = runs.at(-1);
+      const room = entry.room || "";
+      if (last && last.week === week && last.dow === dow && last.to === entry.block - 1 && last.room === room) last.to = entry.block;
+      else runs.push({ week, dow, from: entry.block, to: entry.block, room });
+    });
+  }));
+  const groups = [];
+  runs.forEach((run) => {
+    const twin = groups.find((group) => group.dow === run.dow && group.from === run.from && group.to === run.to && group.room === run.room && !group.weeks.includes(run.week));
+    if (twin) twin.weeks.push(run.week);
+    else groups.push({ dow: run.dow, from: run.from, to: run.to, room: run.room, weeks: [run.week] });
+  });
+  return groups
+    .sort((a, b) => a.dow - b.dow || a.from - b.from || a.weeks[0].localeCompare(b.weeks[0]))
+    .map((group) => ({ ...group, id: `${group.weeks.join("")}:${group.dow}:${group.from}-${group.to}` }));
+}
+
+export function setGroupRoom(edits, base, timetable, key, group, room) {
+  group.weeks.forEach((week) => {
+    for (let n = group.from; n <= group.to; n += 1) {
+      if (entryIn(timetable, week, group.dow, n)?.subject !== key) continue;
+      setLesson(edits, base, week, group.dow, n, { subject: key, room: room || "", teacher: ownTeacher(edits, week, group.dow, n, key) });
+    }
+  });
+  return edits;
+}
+
 export function copyWeek(edits, base, timetable, blocks, from = "A", to = "B") {
   for (let dow = 1; dow <= 5; dow += 1) {
     blocks.forEach((block) => {

@@ -34,7 +34,7 @@ const STORED = {
 const EMPTY = { subjects: {}, courses: {}, timetable: { A: week({}), B: week({}) } };
 const DEVICE = "0123456789abcdef0123456789abcdef";
 
-function pageData(plan, user = {}) {
+function pageData(plan, user = {}, status = {}) {
   return {
     user: { state: "", grade: null, iserv: "desktop", ...user },
     blocks: DEFAULT_BLOCKS,
@@ -47,7 +47,7 @@ function pageData(plan, user = {}) {
     events: [],
     holidays: [],
     weather: { hours: [] },
-    status: {},
+    status,
     device: DEVICE,
   };
 }
@@ -103,8 +103,8 @@ function element(tag = "div") {
 
 const CASES = {};
 
-async function boot({ plan = STORED, user = {}, store = {}, search = "", notification = null, agent = "node" } = {}) {
-  const nodes = { appData: { textContent: JSON.stringify(pageData(plan, user)) }, appStore: { textContent: JSON.stringify(store) } };
+async function boot({ plan = STORED, user = {}, status = {}, store = {}, search = "", path = "/hub", notification = null, agent = "node" } = {}) {
+  const nodes = { appData: { textContent: JSON.stringify(pageData(plan, user, status)) }, appStore: { textContent: JSON.stringify(store) } };
   const local = new Map();
   const calls = [];
   const visits = [];
@@ -132,11 +132,12 @@ async function boot({ plan = STORED, user = {}, store = {}, search = "", notific
   };
   globalThis.location = {
     search,
-    pathname: "/hub",
-    href: `http://127.0.0.1/hub${search}`,
+    pathname: path,
+    href: `http://127.0.0.1${path}${search}`,
     assign: (to) => visits.push(to),
     reload: () => visits.push("reload"),
   };
+  globalThis.history = { state: null, replaceState: (state, title, to) => visits.push(`replace ${to}`) };
   globalThis.self = globalThis;
   globalThis.window = globalThis;
   Object.defineProperty(globalThis, "navigator", { value: { platform: "MacIntel", userAgent: agent }, configurable: true });
@@ -169,8 +170,11 @@ function driver(page) {
     await settle();
   };
   const control = (selector, extra = {}) => {
-    const node = { dataset: {}, disabled: false, ...extra };
+    const node = { dataset: {}, disabled: false, attributes: {}, ...extra };
     node.closest = (wanted) => (wanted === selector ? node : null);
+    node.setAttribute = (name, value) => (node.attributes[name] = value);
+    node.querySelector = () => null;
+    node.focus = () => {};
     return node;
   };
   const stage = () => dialog.querySelector("#setupStage").innerHTML;
@@ -182,13 +186,26 @@ function driver(page) {
     control,
     stage,
     step,
+    foot,
     async next() {
       assert.ok(!/data-setup-next[^>]*disabled/.test(foot()), `Weiter is off on the step ${step()}`);
       await fire("click", { target: control("[data-setup-next]") });
     },
+    async until(id) {
+      for (let turn = 0; turn < 10 && step() !== id; turn += 1) await this.next();
+      assert.equal(step(), id);
+    },
+    course: async (name) => {
+      const button = control("[data-course]", { dataset: { course: name } });
+      await fire("click", { target: button });
+      return button.attributes["aria-pressed"];
+    },
     change: (target) => fire("change", { target: { dataset: {}, name: "", id: "", ...target } }),
     type: (field, name, value) => fire("input", { target: { dataset: { [field]: name }, value } }),
     pick: (name) => fire("click", { target: control("[data-pick]", { dataset: { pick: name } }) }),
+    typeLesson: (key, value) => fire("input", { target: { dataset: { lesson: key }, value, removeAttribute() {} } }),
+    lessons: () => [...stage().matchAll(/<label class="setup-lesson"><span>([^<]+)<\/span><input class="field-control" data-lesson="([^"]+)"( data-follow)? value="([^"]*)"/g)].map((match) => ({ label: match[1], key: match[2], follows: !!match[3], room: match[4] })),
+    paint: (dow, n, row = n - 1, col = dow - 1) => fire("click", { target: control("[data-cell]", { dataset: { cell: `${dow}:${n}`, row: String(row), col: String(col) } }) }),
   };
 }
 
@@ -210,19 +227,18 @@ CASES["going through a stored plan without typing changes nothing but the answer
   const run = driver(page);
   assert.equal(run.step(), "start");
   await answerSchool(run);
-  for (const id of ["times", "weeks", "subjects", "details"]) {
+  for (const id of ["times", "weeks", "subjects", "courses", "grid", "details"]) {
     await run.next();
     assert.equal(run.step(), id);
   }
   for (const text of ['value="Fr. Krüger"', 'value="Hr. Wolf"', 'value="Herr Schmidt"', 'value="Bio2"', 'value="R114"', 'value="Ph1"']) assert.ok(run.stage().includes(text), `the details show ${text}`);
   await run.next();
-  await run.next();
   assert.equal(run.step(), "done");
   await run.next();
   assert.deepEqual(page.visits, ["/hub"]);
-  assert.deepEqual(storeWrites(page), ["PUT app-settings"]);
+  assert.deepEqual(storeWrites(page), ["PUT app-settings", "PUT app-settings"], "the grade and the answer Noch keine");
   assert.deepEqual({ ...snapshot(page.core), "app-settings": "" }, { ...before, "app-settings": "" });
-  assert.deepEqual(page.core.storage.get("app-settings"), { notify: { enabled: true }, school: { grade: 12 } });
+  assert.deepEqual(page.core.storage.get("app-settings"), { notify: { enabled: true }, school: { grade: 12, noCourses: 12 } }, "Noch keine is an answer too");
   assert.ok(page.calls.some((call) => call.url === "/api/hub/bundesland" && call.body.bundesland === "BB"));
 };
 
@@ -235,15 +251,14 @@ CASES["a teacher or room typed like the stored one stays the stored one"] = asyn
   await run.next();
   await run.next();
   await run.pick("Deutsch");
-  await run.next();
-  assert.equal(run.step(), "details");
+  await run.until("details");
   await run.type("teacher", "Biologie", "fr. krüger");
   await run.type("teacher", "Mathematik", "Frau Krüger");
   await run.type("room", "Physik", "PH1");
   await run.type("teacher", "Deutsch", "Fr. Beck");
   await run.type("room", "Deutsch", "r 101");
   await run.next();
-  assert.equal(run.step(), "grid");
+  assert.equal(run.step(), "done");
   const store = (key) => page.core.storage.get(key);
   assert.deepEqual(store("app-teachers"), { items: { "t-frau-beck": { custom: true, title: "Frau", name: "Beck" } }, removed: [] });
   assert.deepEqual(store("app-rooms"), { added: ["R 101"], removed: [] });
@@ -263,8 +278,7 @@ CASES["a room removed from the list and typed again comes back as it was written
   page.flow.open({});
   const run = driver(page);
   await answerSchool(run);
-  for (let index = 0; index < 4; index += 1) await run.next();
-  assert.equal(run.step(), "details");
+  await run.until("details");
   await run.type("room", "Biologie", "PH1");
   await run.next();
   assert.equal(page.core.storage.get("app-rooms"), null);
@@ -284,8 +298,9 @@ CASES["closing keeps what the open step holds"] = async () => {
   await run.next();
   await run.pick("Deutsch");
   await run.pick("Mathematik");
-  await run.next();
-  assert.equal(run.step(), "details");
+  await run.until("grid");
+  await run.paint(1, 1);
+  await run.until("details");
   await run.type("teacher", "Deutsch", "Frau Beck");
   await run.type("room", "Deutsch", "R101");
   await run.fire("cancel", { preventDefault() {} });
@@ -318,6 +333,33 @@ CASES["closing the plan import started on the first step leads back to it, a tak
   await run.fire("click", { target: run.control("[data-setup-share]") });
   assert.equal(run.dialog.open, false, "a plan that was taken does not bring the setup back, the import reloads the page");
   assert.deepEqual(page.visits, [], "and the setup itself stores and reloads nothing");
+};
+
+CASES["entering a lesson or switching the week keeps the grid where it was scrolled to"] = async () => {
+  const page = await boot();
+  page.flow.open({});
+  const run = driver(page);
+  await answerSchool(run);
+  await run.until("grid");
+  const stage = run.dialog.querySelector("#setupStage");
+  // WebKit puts a scrolled box back to its top as soon as content inside it is replaced.
+  for (const id of ["#setupGrid", "#setupBoardHead"]) {
+    const part = stage.querySelector(id);
+    let html = part.innerHTML;
+    Object.defineProperty(part, "innerHTML", { get: () => html, set: (value) => {
+      html = value;
+      stage.scrollTop = 0;
+    } });
+  }
+  await run.change({ name: "brush", value: "s-physik", closest: () => null });
+  stage.scrollTop = 240;
+  await run.fire("click", { target: run.control("[data-cell]", { dataset: { cell: "4:2", row: "1", col: "3" } }) });
+  assert.equal(page.core.storage.get("app-timetable-edits")?.["A:4:2"]?.subject, "s-physik", "the lesson is entered");
+  assert.equal(stage.scrollTop, 240, "and the grid stays where it was");
+  stage.scrollTop = 120;
+  await run.fire("click", { target: run.control("[data-week]", { dataset: { week: "B" } }) });
+  assert.match(stage.querySelector("#setupBoardHead").innerHTML, /data-week="B" aria-pressed="true"/);
+  assert.equal(stage.scrollTop, 120, "switching to the B week keeps it too");
 };
 
 CASES["closing a step left half done keeps nothing of it"] = async () => {
@@ -361,9 +403,98 @@ CASES["closing after changing the count keeps the new times"] = async () => {
 
 async function toDone(run) {
   await answerSchool(run);
-  for (let index = 0; index < 6; index += 1) await run.next();
-  assert.equal(run.step(), "done");
+  await run.until("done");
 }
+
+const rows = (html) => [...html.matchAll(/<(button|div) type="button" class="setup-note-row([^"]*)"([^>]*)>|<div class="setup-note-row([^"]*)"([^>]*)>/g)].map((match, index) => {
+  const titles = [...html.matchAll(/<b><span>([^<]+)<\/span><\/b>/g)].map((title) => title[1]);
+  const cls = match[2] ?? match[4] ?? "";
+  const attrs = match[3] ?? match[5] ?? "";
+  return { title: titles[index], button: match[1] === "button", done: cls.includes("is-done"), go: /data-setup-go="([^"]+)"/.exec(attrs)?.[1] || (/data-setup-[a-z-]+/.exec(attrs)?.[0] ?? "") };
+});
+
+CASES["the last step is a note: the plan ticked off, what is left below with its verb and the way there"] = async () => {
+  const page = await boot({ notification: "default" });
+  page.flow.open({});
+  const run = driver(page);
+  await toDone(run);
+  assert.doesNotMatch(run.stage(), /setup-extra/, "the old rows are gone");
+  assert.match(run.stage(), /class="setup-note"><ul>/);
+  assert.deepEqual(rows(run.stage()), [
+    { title: "Stundenplan eintragen", button: false, done: true, go: "" },
+    { title: "Erinnerungen erlauben", button: true, done: false, go: "data-setup-remind" },
+    { title: "Zuhause und Schule festlegen", button: true, done: false, go: "/hub/settings#orte" },
+    { title: "IServ verbinden", button: true, done: false, go: "/hub/settings#konten" },
+  ]);
+  for (const text of ["Ich melde mich vor jeder Stunde und am Vortag eines Tests.", "Dann zeigt der Fahrplan deinen Schulweg und den Heimweg.", "Vertretungsplan und Mails kommen dann aus IServ dazu."]) assert.ok(run.stage().includes(text), text);
+  assert.match(run.stage(), /class="setup-note-row is-done is-plan"/, "with reduced motion the plan is ticked at once");
+};
+
+CASES["steps already done when the last step opens are ticked"] = async () => {
+  const done = await boot({ notification: "granted", store: { "app-settings": { notify: { enabled: true } } }, status: { iserv: true, places: true } });
+  done.flow.open({});
+  const run = driver(done);
+  await toDone(run);
+  assert.deepEqual(rows(run.stage()).map(({ title, done: ticked, button }) => [title, ticked, button]), [
+    ["Stundenplan eintragen", true, false],
+    ["Erinnerungen erlauben", true, false],
+    ["Zuhause und Schule festlegen", true, false],
+    ["IServ verbinden", true, false],
+  ]);
+  assert.doesNotMatch(run.stage(), /setup-note-go/, "nothing left to go to");
+};
+
+CASES["home and school set on the settings page just now are ticked when the setup opens there again"] = async () => {
+  const page = await boot({ path: "/hub/settings", plan: { ...STORED, page: { places: { home: "Unter den Linden 6, Berlin", school: "" } } }, status: { places: false } });
+  page.flow.open({ from: "settings" });
+  const run = driver(page);
+  await toDone(run);
+  const places = () => rows(run.stage()).find((row) => row.title === "Zuhause und Schule festlegen");
+  assert.equal(places().done, false, "school still missing");
+  const data = JSON.parse(globalThis.document.getElementById("appData").textContent);
+  assert.equal(data.page.places.home, "Unter den Linden 6, Berlin");
+  page.core.data.page.places.school = "Schulzentrum, Berlin";
+  await run.fire("click", { target: run.control("[data-setup-back]") });
+  await run.next();
+  assert.equal(places().done, true, "both set now: ticked, without a new load");
+};
+
+CASES["blocked reminders say how to free them, and a page without IServ has no line for it"] = async () => {
+  const blocked = await boot({ notification: "denied", status: { iservAvailable: false } });
+  blocked.flow.open({});
+  const second = driver(blocked);
+  await toDone(second);
+  const lines = rows(second.stage());
+  assert.equal(lines[1].title, "Erinnerungen freigeben");
+  assert.match(second.stage(), /Sind blockiert\. Freigeben kannst du sie/);
+  assert.deepEqual(lines.map((line) => line.title), ["Stundenplan eintragen", "Erinnerungen freigeben", "Zuhause und Schule festlegen"], "no IServ where there is none");
+};
+
+CASES["switching reminders on ticks their line in place"] = async () => {
+  const page = await boot({ store: { "app-settings": { notify: { enabled: false, chosen: true } } }, notification: "granted" });
+  page.flow.open({});
+  const run = driver(page);
+  await toDone(run);
+  assert.equal(rows(run.stage())[1].title, "Erinnerungen einschalten");
+  await run.fire("click", { target: run.control("[data-setup-remind-on]") });
+  const row = run.dialog.querySelector("#setupStage").querySelector("#setupRemind");
+  assert.match(row.outerHTML, /^<div class="setup-note-row is-done" id="setupRemind" tabindex="-1">/);
+  assert.match(row.outerHTML, /<b><span>Erinnerungen erlauben<\/span><\/b><small>Sind an\./);
+};
+
+CASES["a step of the last note that leads to another part of the same page loads it there, and never leaves the setup waiting"] = async () => {
+  const page = await boot({ path: "/hub/settings", notification: "default" });
+  page.flow.open({ from: "settings" });
+  const run = driver(page);
+  await toDone(run);
+  await run.fire("click", { target: run.control("[data-setup-go]", { dataset: { setupGo: "/hub/settings#orte" } }) });
+  assert.deepEqual(page.visits, ["replace /hub/settings#orte", "reload"], "a way to a section of the settings from the settings loads the page there");
+  assert.match(run.dialog.querySelector("#setupFoot").innerHTML, /data-setup-next disabled/, "while the page loads anew");
+  await new Promise((done) => setTimeout(done, 4100));
+  assert.doesNotMatch(run.dialog.querySelector("#setupFoot").innerHTML, /data-setup-next disabled/, "a way that went nowhere gives Zur Übersicht back");
+  await run.fire("click", { target: run.control("[data-setup-next]") });
+  assert.equal(page.visits.at(-1), "/hub", "and Zur Übersicht leads home");
+};
 
 CASES["the last step says reminders are on only when they are switched on"] = async () => {
   const page = await boot({ store: { "app-settings": { notify: { enabled: false, chosen: true } } }, notification: "granted" });
@@ -419,14 +550,17 @@ CASES["what is picked or typed in the setup is recorded as an own edit of this d
   await run.change({ name: "letter", value: "B" });
   await run.next();
   await run.pick("Deutsch");
+  await run.until("grid");
+  await run.paint(1, 1);
   await run.next();
+  assert.equal(run.step(), "details");
   await run.type("room", "Deutsch", "R101");
   await run.next();
-  assert.equal(run.step(), "grid");
+  assert.equal(run.step(), "done");
   const record = page.core.planMeta();
   assert.equal(record.origin, "edit");
   assert.ok(record.at > times.at);
-  assert.equal(storeWrites(page).filter((write) => write === "PUT app-timetable-meta").length, 4, "one change for each step that changed the plan");
+  assert.equal(storeWrites(page).filter((write) => write === "PUT app-timetable-meta").length, 5, "one change for each step that changed the plan, the lesson entered in the grid among them");
 };
 
 CASES["on a weekend the A/B question is about the coming week and waits for Weiter"] = async () => {
@@ -465,13 +599,213 @@ CASES["in the browser tab of an iPhone the last step says plainly that the tab g
   page.flow.open({});
   const run = driver(page);
   await answerSchool(run);
-  for (let step = 0; step < 6; step++) await run.next();
-  assert.equal(run.step(), "done");
-  const reminders = /<b>Erinnerungen<\/b><small>([^<]*)<\/small>/.exec(run.stage())?.[1] ?? "";
+  await run.until("done");
+  const reminders = /<b><span>Erinnerungen<\/span><\/b><small>([^<]*)<\/small>/.exec(run.stage())?.[1] ?? "";
   assert.match(reminders, /^Im Safari-Tab gibt es keine Erinnerungen\./);
   assert.match(reminders, /erinnert dich die App dort, solange sie geöffnet ist\./, "the home screen app only while it is open, not more");
   assert.match(reminders, /Einstellungen › Daten/, "and the plan typed in the tab can be taken along");
   assert.doesNotMatch(reminders, /[—–]/);
+};
+
+CASES["in the upper school Luna asks for the Leistungskurse right after the subjects, a tap marks one and another takes it back"] = async () => {
+  const page = await boot();
+  page.flow.open({});
+  const run = driver(page);
+  await answerSchool(run);
+  await run.until("subjects");
+  await run.next();
+  assert.equal(run.step(), "courses");
+  assert.match(run.stage(), /Welche davon sind deine Leistungskurse\?/);
+  assert.match(run.stage(), /Tipp sie an\. Leistungskurse zählen bei den Noten doppelt\./);
+  assert.match(run.stage(), /In Brandenburg sind es meistens zwei\./, "a quiet hint where the number is clear");
+  assert.deepEqual([...run.stage().matchAll(/data-course="([^"]+)" aria-pressed="(true|false)"/g)].map((match) => `${match[1]}:${match[2]}`), ["Biologie:false", "Mathematik:false", "Physik:false"]);
+  assert.match(run.foot(), />Noch keine</, "without any, the way on says Noch keine");
+  assert.match(run.dialog.querySelector("#setupProgress").innerHTML, /<span>Kurse<\/span>/);
+  assert.equal(await run.course("Mathematik"), "true");
+  assert.match(run.foot(), />Weiter</);
+  assert.match(run.foot(), /1&nbsp;Leistungskurs gewählt|1 Leistungskurs gewählt/);
+  assert.equal(await run.course("Physik"), "true");
+  assert.match(run.foot(), /2 Leistungskurse gewählt/);
+  assert.equal(await run.course("Physik"), "false", "a second tap takes it back");
+  assert.equal(await run.course("Biologie"), "true");
+  assert.equal(await run.course("Physik"), "true", "and there is no limit");
+  assert.match(run.foot(), /3 Leistungskurse gewählt/);
+  assert.doesNotMatch(run.foot(), /disabled/);
+  await run.course("Physik");
+  await run.next();
+  assert.equal(run.step(), "grid");
+  await run.next();
+  assert.equal(run.step(), "details");
+  assert.doesNotMatch(run.stage(), /setup-type|Kursart|name="type:/, "the Lehrkräfte rows have no course toggle any more");
+  const { items } = page.core.storage.get("app-subjects");
+  assert.deepEqual([items["s-mathematik"], items["s-biologie"], items["s-physik"]], [{ type: "LK" }, { type: "LK" }, undefined]);
+  assert.equal(page.core.data.subjects["s-mathematik"].type, "LK");
+  assert.equal(page.core.storage.get("app-settings").school.noCourses, undefined);
+  await run.fire("click", { target: run.control("[data-setup-back]") });
+  await run.fire("click", { target: run.control("[data-setup-back]") });
+  assert.equal(run.step(), "courses");
+  assert.deepEqual([...run.stage().matchAll(/data-course="([^"]+)" aria-pressed="(true|false)"/g)].map((match) => `${match[1]}:${match[2]}`), ["Biologie:true", "Mathematik:true", "Physik:false"], "going back shows them marked");
+};
+
+CASES["Noch keine moves on without a Leistungskurs and is kept for that grade, a later mark clears it"] = async () => {
+  const page = await boot();
+  page.flow.open({});
+  const run = driver(page);
+  await answerSchool(run);
+  await run.until("courses");
+  await run.next();
+  assert.equal(run.step(), "grid");
+  assert.equal(page.core.storage.get("app-subjects"), null, "nothing of the plan changed");
+  assert.equal(page.core.storage.get("app-settings").school.noCourses, 12);
+};
+
+CASES["a Leistungskurs marked after an earlier Noch keine clears that answer"] = async () => {
+  const again = await boot({ store: { "app-settings": { school: { grade: 12, noCourses: 12 } } } });
+  again.flow.open({});
+  const second = driver(again);
+  await answerSchool(second);
+  await second.until("courses");
+  await second.course("Physik");
+  await second.next();
+  assert.equal(again.core.storage.get("app-settings").school.noCourses, undefined);
+  assert.deepEqual(again.core.storage.get("app-subjects").items["s-physik"], { type: "LK" });
+};
+
+CASES["below the upper school nothing asks for Leistungskurse, and a Seminarkurs is never one to mark"] = async () => {
+  const lower = await boot();
+  lower.flow.open({});
+  const run = driver(lower);
+  await run.next();
+  await run.change({ id: "setupState", value: "BB" });
+  await run.change({ name: "grade", value: "9" });
+  await run.until("subjects");
+  assert.doesNotMatch(run.dialog.querySelector("#setupProgress").innerHTML, /Kurse/, "no step for it in the progress");
+  await run.next();
+  assert.equal(run.step(), "grid");
+  await run.fire("click", { target: run.control("[data-setup-back]") });
+  assert.equal(run.step(), "subjects", "and none on the way back");
+  assert.equal(lower.core.storage.get("app-settings").school.noCourses, undefined);
+};
+
+CASES["a Seminarkurs is never one to mark, and Berlin gets the quiet hint on the usual number"] = async () => {
+  const seminar = {
+    ...STORED,
+    subjects: { ...STORED.subjects, "s-seminarkurs": { name: "Seminarkurs", label: "Seminarkurs", short: "Sem", hue: "olive" } },
+    courses: { ...STORED.courses, "s-seminarkurs": { type: "SK" } },
+    timetable: { ...STORED.timetable, A: { ...STORED.timetable.A, 4: [lesson(1, "s-seminarkurs", "R1", "")] } },
+  };
+  const upper = await boot({ plan: seminar });
+  upper.flow.open({});
+  const second = driver(upper);
+  await second.next();
+  await second.change({ id: "setupState", value: "BE" });
+  await second.change({ name: "grade", value: "12" });
+  await second.until("courses");
+  assert.doesNotMatch(second.stage(), /data-course="Seminarkurs"/);
+  assert.match(second.stage(), /data-course="Physik"/);
+  assert.match(second.stage(), /In Berlin sind es meistens zwei\./);
+};
+
+CASES["opened only for the Leistungskurse, as from the grades, the setup is that one step and Fertig closes it"] = async () => {
+  const page = await boot({ store: { "app-settings": { school: { grade: 11 } } } });
+  page.flow.open({ only: "courses" });
+  const run = driver(page);
+  assert.equal(run.step(), "courses");
+  assert.equal(run.dialog.querySelector("#setupProgress").hidden, true, "no progress for one step");
+  assert.doesNotMatch(run.foot(), /data-setup-back/);
+  assert.match(run.foot(), />Noch keine</);
+  await run.course("Biologie");
+  assert.match(run.foot(), />Fertig</);
+  await run.next();
+  assert.deepEqual(page.visits, ["reload"], "the page shows the marks at once");
+  assert.deepEqual(page.core.storage.get("app-subjects").items["s-biologie"], { type: "LK" });
+};
+
+CASES["opened only for the Leistungskurse, Noch keine closes it and keeps the hint away for that grade"] = async () => {
+  const none = await boot({ store: { "app-settings": { school: { grade: 11 } } } });
+  none.flow.open({ only: "courses" });
+  const second = driver(none);
+  await second.next();
+  assert.deepEqual(none.visits, ["reload"]);
+  assert.equal(none.core.storage.get("app-settings").school.noCourses, 11, "Noch keine keeps the hint away for grade 11");
+};
+
+CASES["lessons in the subject's room follow it, a lesson with its own room keeps it, and the same lesson in both weeks is one line"] = async () => {
+  const page = await boot();
+  const plan = await import(script("setup-data.js"));
+  const timetable = {
+    A: { 1: [lesson(1, "m", "R1"), lesson(2, "m", "R1"), lesson(3, "d", "R7")], 2: [], 3: [], 4: [lesson(3, "m", "R1")], 5: [lesson(1, "m", "Lab")] },
+    B: { 1: [lesson(1, "m", "R1"), lesson(2, "m", "R1")], 2: [], 3: [], 4: [lesson(3, "m", "X")], 5: [lesson(1, "m", "")] },
+  };
+  const groups = plan.lessonGroups(timetable, "m", ["A", "B"]);
+  assert.deepEqual(groups.map((group) => `${group.weeks.join("")} ${group.dow} ${group.from}-${group.to} ${group.room}`), ["AB 1 1-2 R1", "A 4 3-3 R1", "B 4 3-3 X", "A 5 1-1 Lab", "B 5 1-1 "]);
+  assert.deepEqual(plan.lessonGroups(timetable, "m", ["A"]).map((group) => group.id), ["A:1:1-2", "A:4:3-3", "A:5:1-1"], "one week only, nothing of B");
+
+  const edits = { "A:5:1": { subject: "m", room: "Lab", teacher: "t-own" } };
+  plan.followRoom(edits, { A: {}, B: {} }, timetable, "m", "R1", "R2");
+  assert.deepEqual(Object.fromEntries(Object.entries(edits).map(([key, value]) => [key, value.room])), { "A:5:1": "Lab", "A:1:1": "R2", "A:1:2": "R2", "A:4:3": "R2", "B:1:1": "R2", "B:1:2": "R2", "B:5:1": "R2" }, "the old room and no room follow, X and Lab stay");
+  assert.equal(edits["A:5:1"].teacher, "t-own", "a lesson's own teacher stays");
+  assert.equal(edits["A:1:3"], undefined, "another subject is untouched");
+  const same = {};
+  plan.followRoom(same, {}, timetable, "m", "R1", "R1");
+  assert.deepEqual(same, {});
+
+  const own = {};
+  plan.setGroupRoom(own, {}, timetable, "m", groups[0], "R9");
+  assert.deepEqual(Object.keys(own).sort(), ["A:1:1", "A:1:2", "B:1:1", "B:1:2"]);
+  plan.setGroupRoom(own, {}, { A: { 1: [lesson(1, "d", "R7")] } }, "m", { weeks: ["A"], dow: 1, from: 1, to: 1 }, "R5");
+  assert.equal(own["A:1:1"].room, "R9", "a slot the subject left gets no room of it");
+  assert.ok(page.core);
+};
+
+CASES["after the grid each subject has its room, a lesson can have another, and a changed room moves only the lessons that follow it"] = async () => {
+  const page = await boot();
+  page.flow.open({});
+  const run = driver(page);
+  await answerSchool(run);
+  await run.until("details");
+  assert.match(run.stage(), /data-lessons="s-biologie" aria-expanded="false"[^>]*><svg[^>]*><use href="#i-chevron-down"\/><\/svg><span>An manchen Tagen anders<\/span>/);
+  assert.doesNotMatch(run.stage(), /data-lessons="s-physik"/, "one lesson needs no other room");
+  assert.deepEqual(run.lessons().filter((item) => item.key.startsWith("s-biologie")).map(({ label, follows, room }) => `${label} ${follows} ${room}`), ["Mo 1. true Bio2", "Di 1. true Bio2"], "both weeks the same: one line each, filled with the subject's room");
+  await run.fire("click", { target: run.control("[data-lessons]", { dataset: { lessons: "s-biologie" } }) });
+  const tuesday = run.lessons().find((item) => item.label === "Di 1.").key;
+  await run.typeLesson(tuesday, "bio 3");
+  await run.type("room", "Biologie", "Bio1");
+  await run.next();
+  assert.equal(run.step(), "done");
+  const at = (week, dow, n) => (page.core.data.timetable[week][String(dow)] || []).find((entry) => entry.block === n)?.room;
+  assert.deepEqual([at("A", 1, 1), at("B", 1, 1), at("A", 2, 1), at("B", 2, 1)], ["BIO1", "BIO1", "BIO 3", "BIO 3"], "Monday follows the new room, Tuesday keeps its own");
+  assert.equal(page.core.data.subjects["s-biologie"].room, "BIO1");
+  assert.ok(page.core.data.rooms.includes("BIO 3"), "a lesson's own room is in the room list");
+  assert.equal(at("A", 1, 2), "R114", "another subject keeps its room");
+
+  await run.fire("click", { target: run.control("[data-setup-back]") });
+  assert.equal(run.step(), "details");
+  assert.deepEqual(run.lessons().filter((item) => item.key.startsWith("s-biologie")).map(({ label, follows, room }) => `${label} ${follows} ${room}`), ["Mo 1. true BIO1", "Di 1. false BIO 3"], "back again everything is there");
+  assert.match(run.stage(), /data-lessons="s-biologie" aria-expanded="true"/, "a subject with another room shows its lessons");
+  await run.type("room", "Biologie", "Bio5");
+  await run.fire("click", { target: run.control("[data-setup-back]") });
+  assert.equal(run.step(), "grid", "going back keeps what was typed");
+  assert.deepEqual([at("A", 1, 1), at("A", 2, 1)], ["BIO5", "BIO 3"]);
+  await run.next();
+  const tue = run.lessons().find((item) => item.label === "Di 1.");
+  await run.typeLesson(tue.key, "");
+  await run.next();
+  assert.equal(at("A", 2, 1), "BIO5", "an emptied lesson room is the subject's room again");
+};
+
+CASES["with A and B weeks a lesson that differs between them is a line for each week"] = async () => {
+  const page = await boot({ store: { "app-timetable-edits": { "B:2:1": { subject: "s-biologie", room: "Bio4" } } } });
+  page.flow.open({});
+  const run = driver(page);
+  await answerSchool(run);
+  await run.until("details");
+  assert.deepEqual(run.lessons().filter((item) => item.key.startsWith("s-biologie")).map(({ label, room }) => `${label}: ${room}`), ["Mo 1.: Bio2", "Di 1., A-Woche: Bio2", "Di 1., B-Woche: Bio4"]);
+  assert.match(run.stage(), /data-lessons="s-biologie" aria-expanded="true"/);
+  await run.type("room", "Biologie", "Bio7");
+  await run.next();
+  const at = (week, dow, n) => (page.core.data.timetable[week][String(dow)] || []).find((entry) => entry.block === n)?.room;
+  assert.deepEqual([at("A", 1, 1), at("A", 2, 1), at("B", 2, 1)], ["BIO7", "BIO7", "Bio4"]);
 };
 
 const only = process.argv[2];

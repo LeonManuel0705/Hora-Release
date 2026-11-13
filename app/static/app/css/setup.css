@@ -207,7 +207,7 @@ html.setup-open { overflow: hidden; }
 .setup-rows { display: grid; gap: 8px; }
 .setup-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.15fr) minmax(0, 0.55fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 0.55fr);
   align-items: center;
   gap: 10px;
   padding: 8px 10px 8px 14px;
@@ -215,17 +215,60 @@ html.setup-open { overflow: hidden; }
   background: var(--surface);
   box-shadow: inset 0 0 0 1px var(--line);
 }
-.setup-row:not(:has(.setup-type)) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 0.55fr); }
 .setup-row-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: var(--weight-strong); }
 .setup-row-name .subject-dot { flex: none; margin: 0; }
 .setup-row-name span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .setup-row .field-control { min-height: 40px; padding: 7px 12px; border-radius: 12px; }
+.setup-row-more { grid-column: 1 / -1; justify-self: start; margin: -4px 0 -2px -6px; color: var(--ink-muted); }
+.setup-row-more .icon { --s: 16; transition: rotate var(--dur-state) var(--ease-out); }
+.setup-row-more[aria-expanded="true"] .icon { rotate: 180deg; }
+.setup-lessons { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 14px; padding: 2px 0 4px; }
+.setup-lessons[hidden] { display: none; }
+.setup-lesson { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 104px); align-items: center; gap: 10px; font-size: var(--text-sm); color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 
-.setup-type { display: inline-flex; padding: 3px; border-radius: 12px; background: var(--desk-card); }
-.setup-type label { position: relative; display: grid; place-items: center; min-width: 40px; height: 34px; border-radius: 9px; font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--ink-soft); cursor: pointer; transition: background-color var(--dur-state) var(--ease-out), color var(--dur-state) var(--ease-out); }
-.setup-type input { position: absolute; inset: 0; opacity: 0; margin: 0; }
-.setup-type label:has(input:checked) { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(46 58 47 / 0.08), inset 0 0 0 1px var(--line); }
-.setup-type label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
+.setup-courses { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.setup-course {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 0 14px 0 18px;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-align: left;
+  transition: background-color var(--dur-state) var(--ease-out), box-shadow var(--dur-state) var(--ease-out), scale var(--spring-tactile-dur) var(--spring-tactile);
+}
+.setup-course .setup-dot { width: 12px; height: 12px; }
+.setup-course-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.setup-course-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  height: 30px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+  transition: background-color var(--dur-state) var(--ease-out), box-shadow var(--dur-state) var(--ease-out), color var(--dur-state) var(--ease-out);
+}
+.setup-course[aria-pressed="true"] { background: color-mix(in oklab, var(--hue) 14%, var(--surface)); box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--hue) 70%, var(--ink)); }
+.setup-course[aria-pressed="true"] .setup-course-badge { background: color-mix(in oklab, var(--hue) 78%, var(--ink)); box-shadow: none; color: var(--surface); }
+.setup-course:is(:active, .is-pressed) { scale: var(--scale-press); transition-duration: var(--dur-press); }
+.setup-courses-note { margin-top: 12px; }
+
+@media (hover: hover) and (pointer: fine) {
+  .setup-course:hover:not([aria-pressed="true"]) { background: var(--surface-hover); transition-duration: var(--dur-hover-in); }
+  .setup-course:hover:not([aria-pressed="true"]) .setup-course-badge { color: var(--ink-soft); box-shadow: inset 0 0 0 1.5px var(--check-ring); }
+}
 
 .setup-board-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .setup-weeks button { white-space: nowrap; }
@@ -314,15 +357,35 @@ html.setup-open { overflow: hidden; }
 .setup-next .icon { margin-right: -4px; }
 .setup-back .icon { margin-left: -6px; }
 
-.setup-extras { display: grid; gap: 10px; max-width: 560px; margin: 26px auto 0; }
-.setup-extra { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 20px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
-.setup-extra p { display: grid; gap: 2px; min-width: 0; }
-.setup-extra b { font-weight: var(--weight-strong); }
-.setup-extra small { font-size: var(--text-sm); line-height: 1.4; color: var(--ink-muted); }
-.setup-extra-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; background: var(--desk-card); color: var(--ink); }
-.setup-extra-icon .icon { --s: 20; }
-.setup-extra-ok { color: var(--done); }
-.setup-extra-ok .icon { --s: 22; }
+/* The note on the last step, like a short list of tasks: the plan ticked off, what is left below. */
+.setup-note { width: 100%; max-width: 500px; margin: 24px auto 0; padding: 6px; border-radius: 26px; background: var(--desk-card); box-shadow: inset 0 0 0 1px var(--desk-card-edge); text-align: left; }
+.setup-note li { position: relative; list-style: none; }
+.setup-note li + li::before { content: ""; position: absolute; top: 0; left: 48px; right: 16px; height: 1px; background: light-dark(#E2D7C4, #2A342B); }
+.setup-note-row { position: relative; display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: start; column-gap: 12px; width: 100%; padding: 12px 14px 12px 12px; border-radius: 20px; color: var(--ink); text-align: left; outline: none; transition: background-color var(--dur-hover-out) var(--ease-hover), transform var(--spring-tactile-dur) var(--spring-tactile); }
+button.setup-note-row:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+button.setup-note-row:is(:active, .is-pressed) { transform: scale(0.985); transition-duration: var(--dur-press); }
+.setup-check { position: relative; display: grid; place-items: center; width: 24px; height: 21px; }
+.setup-check::before, .setup-check::after { content: ""; position: absolute; width: 20px; height: 20px; border-radius: 50%; }
+.setup-check::before { box-shadow: inset 0 0 0 1.75px var(--check-ring); transition: box-shadow var(--dur-state) var(--ease-out); }
+.setup-check::after { background: var(--done); scale: 0; transition: scale var(--spring-tactile-dur) var(--spring-tactile); }
+.setup-check .icon { --s: 12; position: relative; z-index: 1; stroke-width: 4; color: light-dark(#FFFFFF, #0F1410); stroke-dasharray: 24; stroke-dashoffset: 24; transition: stroke-dashoffset var(--dur-state) var(--ease-out) 60ms; }
+.setup-note-row.is-done .setup-check::before { box-shadow: inset 0 0 0 1.75px var(--done); }
+.setup-note-row.is-done .setup-check::after { scale: 1; }
+.setup-note-row.is-done .setup-check .icon { stroke-dashoffset: 0; }
+.setup-note-row.is-blocked .setup-check::before { box-shadow: inset 0 0 0 1.75px var(--line-strong); }
+.setup-note-text { display: grid; gap: 2px; min-width: 0; }
+.setup-note-text b { font-size: var(--text-md); font-weight: var(--weight-strong); line-height: 1.4; transition: color var(--dur-strike) var(--ease-out) 120ms; }
+.setup-note-text b span { background-image: linear-gradient(currentColor, currentColor); background-repeat: no-repeat; background-position: 0 58%; background-size: 0% 1.5px; transition: background-size var(--dur-strike) var(--ease-out) 120ms; }
+.setup-note-row.is-done .setup-note-text b { color: var(--ink-muted); }
+.setup-note-row.is-done .setup-note-text b span { background-size: 100% 1.5px; }
+.setup-note-text small { font-size: var(--text-sm); line-height: 1.4; color: var(--ink-muted); text-wrap: pretty; }
+.setup-note-go { --s: 16; margin-top: 2px; color: var(--ink-muted); transition: translate var(--spring-tactile-dur) var(--spring-tactile), color var(--dur-hover-out) var(--ease-hover); }
+
+@media (hover: hover) and (pointer: fine) {
+  button.setup-note-row:hover { background: light-dark(rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.04)); transition-duration: var(--dur-hover-in); }
+  button.setup-note-row:hover .setup-check::before { box-shadow: inset 0 0 0 2px var(--done); }
+  button.setup-note-row:hover .setup-note-go { translate: 3px 0; color: var(--ink); }
+}
 
 @media (max-width: 759px) {
   .setup { width: 100vw; height: 100dvh; border-radius: 0; }
@@ -342,10 +405,10 @@ html.setup-open { overflow: hidden; }
   .setup-cards.is-pair { grid-template-columns: 1fr 1fr; }
   .setup-option.is-card { min-height: 0; padding: 14px 40px 14px 16px; }
   .setup-motif { margin-bottom: 8px; }
-  .setup-row, .setup-row:not(:has(.setup-type)) { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); grid-template-areas: "name type" "teacher room"; row-gap: 8px; padding: 10px 10px 10px 14px; }
+  .setup-row { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); grid-template-areas: "name name" "teacher room"; row-gap: 8px; padding: 10px 10px 10px 14px; }
   .setup-row-name { grid-area: name; }
-  .setup-row:not(:has(.setup-type)) .setup-row-name { grid-column: 1 / -1; }
-  .setup-type { grid-area: type; justify-self: end; }
+  .setup-courses { grid-template-columns: 1fr; gap: 8px; }
+  .setup-course { min-height: 58px; }
   .setup-row-teacher { grid-area: teacher; }
   .setup-row-room { grid-area: room; }
   .setup-cards.is-pair .setup-option.is-card { padding-right: 32px; }
@@ -356,16 +419,19 @@ html.setup-open { overflow: hidden; }
   .setup-grid tbody th b { font-size: var(--text-md); }
   .setup-foot { padding-left: calc(16px + var(--safe-left)); padding-right: calc(16px + var(--safe-right)); }
   .setup-hint { display: none; }
-  .setup-extra { grid-template-columns: 36px minmax(0, 1fr); }
-  .setup-extra .btn, .setup-extra-ok { grid-column: 2; justify-self: start; }
+  .setup-note { margin-top: 20px; }
 }
 
-.is-touch .setup :is(.setup-chip, .setup-brush, .setup-cell, .setup-weeks button, .setup-copy, .setup-undo, .setup-share, .setup-extra .btn, .setup-row .field-control, .setup-brush-new .field-control) { min-height: 44px; }
+.is-touch .setup :is(.setup-chip, .setup-brush, .setup-cell, .setup-weeks button, .setup-copy, .setup-undo, .setup-share, .setup-note-row, .setup-row .field-control, .setup-row-more, .setup-brush-new .field-control) { min-height: 44px; }
 .is-touch .setup :is(.setup-close, .setup-stepper .icon-button, .setup-brush-new .icon-button) { width: 44px; height: 44px; }
-.is-touch .setup-type label { min-width: 44px; height: 44px; }
 .is-touch .setup .field-control { font-size: 16px; }
 .is-touch .setup-option.is-grade { width: 48px; height: 48px; }
 
 @media (prefers-reduced-motion: reduce) {
   .setup-timeline i { transition: none; }
+  .setup-check::before, .setup-check::after, .setup-check .icon, .setup-note-text b, .setup-note-text b span { transition: none; }
 }
+
+:root[data-motion="minimal"] .setup-check::before,
+:root[data-motion="minimal"] .setup-check::after,
+:root[data-motion="minimal"] :is(.setup-check .icon, .setup-note-text b, .setup-note-text b span) { transition: none; }

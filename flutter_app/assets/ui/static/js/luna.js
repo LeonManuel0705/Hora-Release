@@ -221,6 +221,8 @@
       el.className = 'luna-guide';
       el.setAttribute('aria-hidden', 'true');
       el.style.width = el.style.height = px(this.size);
+      // Off screen until she is placed, so a new page never shows her in its top left corner first.
+      el.style.transform = 'translate3d(-1000px,-1000px,0)';
       el.innerHTML = guideSvg(++uid);
       (opts.parent || document.body).appendChild(el);
       this.el = el;
@@ -317,7 +319,7 @@
       this.mode = mode;
       this.modeT = 0;
       this.opts = options || {};
-      if (mode === 'point' || mode === 'watch') this.pickSide();
+      if (mode === 'point' || mode === 'watch' || mode === 'tap') this.pickSide();
       if (this.still) this.render();
       wake();
       if (mode === 'bye') {
@@ -479,6 +481,20 @@
         if (this.side < 0) hl = arm; else hr = arm;
         mRot += 6 * dx;
         tx += 2 * dx;
+        look = [dx, dy];
+        brow = -1;
+      }
+
+      // One tap on a tab: the tentacle reaches out, presses once and stays there until the page changes.
+      if (mode === 'tap' && o.x !== undefined) {
+        const [dx, dy, a] = dir(o.x, o.y);
+        const reach = frozen ? 1 : inout(clamp(mt / .26, 0, 1));
+        const press = frozen || mt < .26 || mt > .44 ? 0 : Math.sin(Math.PI * (mt - .26) / .18);
+        const arm = this.pointArm(this.side, a, 1 + .16 * press, t, frozen);
+        if (this.side < 0) hl = lerpPose(hl, arm, reach); else hr = lerpPose(hr, arm, reach);
+        mRot += 6 * dx * reach;
+        tx += 2 * dx * reach + 2.5 * dx * press;
+        ty += 2.5 * dy * press;
         look = [dx, dy];
         brow = -1;
       }

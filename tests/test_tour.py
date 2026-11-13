@@ -1,6 +1,9 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -121,3 +124,14 @@ def test_keys_belong_to_the_page_again_once_the_tour_ends():
     go = tour.split("async function go(id, options) {", 1)[1].split("\n  }\n", 1)[0]
     assert go.lstrip().startswith("if (!run || run.ending) return;")
     assert "token !== run.token" not in go.replace("!run || token !== run.token", "")
+
+
+def test_the_marks_the_tap_and_the_page_change_hold_up_under_node():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    major = int(re.match(r"v(\d+)", subprocess.run([node, "--version"], capture_output=True, text=True).stdout).group(1))
+    if major < 18:
+        pytest.skip("node is too old")
+    result = subprocess.run([node, str(Path(__file__).resolve().parent / "js" / "tour_check.mjs")], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr

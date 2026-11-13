@@ -549,6 +549,27 @@ def test_places_keep_the_address(client, monkeypatch):
     assert page_data(client, "/hub/settings")["page"]["places"]["home"] == "Unter den Linden 6, 10117 Berlin"
 
 
+def test_every_page_knows_whether_home_and_school_are_set(client, monkeypatch):
+    saved = {}
+
+    class Places:
+        def save_known_location(self, key, location):
+            saved[key] = location
+
+        def get_known_locations(self):
+            return {"locations": saved}
+
+    from app import vbb_service
+    monkeypatch.setattr(vbb_service, "get_vbb_service", lambda: Places())
+    assert page_data(client, "/hub")["status"]["places"] is False
+    place = {"name": "Unter den Linden 6", "area": "10117 Berlin", "lat": 52.519, "lon": 13.393, "stop": ""}
+    assert client.put("/api/ui/places/home", json=place).status_code == 200
+    assert page_data(client, "/hub")["status"]["places"] is False, "home alone is not both"
+    assert client.put("/api/ui/places/school", json={**place, "name": "Schulstraße 1"}).status_code == 200
+    for path in ("/hub", "/hub/tasks", "/hub/settings"):
+        assert page_data(client, path)["status"]["places"] is True, path
+
+
 def test_the_address_search_drops_doubles_and_names_the_postcode(monkeypatch):
     from app import transit_service
 

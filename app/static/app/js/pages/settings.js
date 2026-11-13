@@ -8,7 +8,7 @@ import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecord
 import { askBackup, importFlow } from "../plan-share.js";
 import { readProfile, replaceProfile } from "../profile.js";
 import { platformName } from "../feedback.js";
-import { suggestShort, pickHue } from "../setup-data.js";
+import { suggestShort, pickHue, followRoom } from "../setup-data.js";
 import { storageNote, safariOnMac, tabReminderNote } from "../persistence.js";
 import { remindersOn, sampleReminder, blockedHere } from "../reminders.js";
 import { onPlanRefresh } from "../plan-refresh.js";
@@ -2822,6 +2822,8 @@ function saveSubject(formNode) {
     if (name !== plainName(data.subjects[key].label)) own.name = name;
     Object.assign(own, { short, hue, type, teacher, room });
     draft.subjects.items[key] = own;
+    // The Standardraum is where the lessons are that have no room of their own.
+    followRoom(draft.lessons, schoolDefaults.timetable, data.timetable, key, data.subjects[key].room, room);
   }, creating ? `${esc(name)} angelegt` : "", creating ? "plus" : "check");
   catalog.subject = null;
   renderSubjects();

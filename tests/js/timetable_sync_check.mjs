@@ -503,6 +503,19 @@ CASES["an edit on one device reaches the other, which does not send it back"] = 
   assert.deepEqual(service.calls("b").filter((call) => "pull" in call).map((call) => call.pull), [0, 1, 0, 1]);
 };
 
+CASES["a lesson in a room of its own reaches the other device with that room"] = async () => {
+  const service = new AccountService();
+  const shared = account("acc-room");
+  const a = await make(service, "a");
+  const b = await make(service, "b");
+  await a.connect(shared);
+  await a.call("edit", { ...MATHE, ...cells(["A:3:1", "s-mathe", "Lab"]) });
+  await b.connect(shared);
+  const onB = await b.inspect();
+  assert.deepEqual(onB.lessons, (await a.inspect()).lessons);
+  assert.ok(onB.lessons.includes("A3.1 Mathe Lab") && onB.lessons.includes("A1.1 Mathe R1"), onB.lessons.join(", "));
+};
+
 CASES["of two edits the newer wins, and the same time goes to the higher device id"] = async () => {
   const service = new AccountService();
   const shared = account("acc-2");

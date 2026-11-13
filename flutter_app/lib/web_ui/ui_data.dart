@@ -877,9 +877,11 @@ class UiData {
       ]);
     }
     stamps.sort();
+    final known = await knownPlaces();
     return {
       'iserv': connected,
       'iservAvailable': !browser,
+      'places': known['home'] != null && known['school'] != null,
       'rendered': '${isoOf(now)}T${hm(now)}',
       'synced': {'iserv': stamps.isEmpty ? null : stamps.last, 'google': null},
       'iservParts': parts,

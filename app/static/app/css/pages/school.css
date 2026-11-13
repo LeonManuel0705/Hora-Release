@@ -709,6 +709,8 @@
 .list-section .row-text { -webkit-line-clamp: 3; }
 .list-section .empty-state { padding: 18px 16px 24px; }
 
+.courses-hint { margin: 12px 0 14px; }
+
 .inline-link {
   border-radius: 4px;
   font-weight: var(--weight-strong);
