@@ -22,7 +22,7 @@ bp = Blueprint('ui', __name__)
 
 STORE_KEYS = {
     'app-timetable-edits', 'app-block-times', 'app-ab-swap', 'app-ab-weeks', 'app-subjects', 'app-teachers', 'app-rooms',
-    'app-timetable-meta', 'app-timetable-sync', 'app-account',
+    'app-timetable-meta', 'app-timetable-sync', 'app-account', 'app-profile',
     'app-settings', 'app-motion', 'app-theme-choice', 'app-single-keys', 'app-task-filter', 'app-cal-view',
     'app-assistant-basic',
 }
@@ -77,6 +77,10 @@ def render_page(active, template=None):
     template = template or (PAGES[active][1] if active in PAGES else GATED_PAGES[active])
     g.strict_csp = True
     store = db.get_ui_store()
+    # A new installation starts light, stored as the user's choice; one that already has data keeps what it shows.
+    if 'app-theme-choice' not in store and db.first_start():
+        db.save_ui_value('app-theme-choice', 'light')
+        store['app-theme-choice'] = 'light'
     day = pinned_day()
     now = datetime.combine(day, datetime.now().time()) if day else datetime.now()
     data = ui_data.build(active, store, now)

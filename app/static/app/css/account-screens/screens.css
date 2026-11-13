@@ -1,0 +1,53 @@
+/* SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
+
+.app[data-screen="boot"] :is(.card, .topbar) {
+  visibility: hidden;
+}
+
+.view-switch {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  color: var(--ink-soft);
+  font-size: 0.9375rem;
+}
+
+.view-guest {
+  display: flex;
+  justify-content: center;
+  margin-top: -6px;
+  font-size: 0.9375rem;
+}
+
+.view-guest .link {
+  --link-track: var(--line-strong);
+  color: var(--ink-soft);
+  font-weight: 560;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.row-links {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+  font-size: 0.9375rem;
+}
+
+.code-area {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}

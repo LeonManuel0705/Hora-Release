@@ -6,6 +6,7 @@ import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../m
 import { toast, setTheme, syncTime, renderSync, typing, overlayOpen } from "../shell.js";
 import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, contents, offerFile } from "../backup.js";
 import { askBackup, importFlow } from "../plan-share.js";
+import { readProfile, replaceProfile } from "../profile.js";
 import { platformName } from "../feedback.js";
 import { suggestShort, pickHue } from "../setup-data.js";
 import { storageNote, safariOnMac, tabReminderNote } from "../persistence.js";
@@ -1378,6 +1379,51 @@ function renderIserv() {
   renderAccountsMeta();
 }
 
+// The account and its card exist only when the backend names an account service.
+const profile = { api: null, card: null, view: null };
+
+function renderAccount() {
+  const card = profile.card;
+  if (!card || !profile.api || !profile.view) return;
+  keepFocus(card, () => (card.innerHTML = profile.view.accountCardHtml(profile.api.accountState(), row)));
+  renderAccountsMeta();
+}
+
+async function signOutHere(button) {
+  if (!confirmTwice("account", button, "Wirklich abmelden?", "Zum Abmelden noch einmal drücken")) return;
+  button.disabled = true;
+  try {
+    await profile.api.signOut();
+  } catch {
+    button.disabled = false;
+    toast("Abmelden hat nicht geklappt. Versuch es noch einmal.", { icon: "circle-alert" });
+    return;
+  }
+  renderAccount();
+  toast("Abgemeldet. Dein Stundenplan bleibt auf diesem Gerät.", { icon: "user" });
+  profile.card?.querySelector("[data-account-open]")?.focus({ preventScroll: true });
+}
+
+function bindAccount() {
+  if (!data?.accountService) return;
+  Promise.all([import("../account.js"), import("../account-card.js")]).then(async ([api, card]) => {
+    profile.api = api;
+    profile.view = card;
+    profile.card = document.createElement("div");
+    profile.card.className = "set-card";
+    profile.card.id = "accountCard";
+    $("iservCard").before(profile.card);
+    profile.card.addEventListener("click", (event) => {
+      const button = event.target.closest("#accountSignOut");
+      if (button && !button.disabled) signOutHere(button);
+    });
+    addEventListener("app:account", renderAccount);
+    renderAccount();
+    await api.startAccount();
+    renderAccount();
+  }).catch(() => {});
+}
+
 const googleInfo = () => page.accounts?.google || {};
 const schoolUi = { choice: false, busy: false };
 const SAFE_COLOR = /^#[0-9a-f]{3,8}$/i;
@@ -1504,7 +1550,7 @@ function renderAccountsMeta() {
   const text = expired
     ? (iserv ? "IServ verbunden, Google abgelaufen" : "Google abgelaufen, IServ nicht")
     : iserv && google ? "IServ und Google verbunden" : iserv ? (offered ? "IServ verbunden, Google nicht" : "IServ verbunden") : google ? "Google verbunden, IServ nicht" : "Nichts verbunden";
-  $("accountsMeta").textContent = text;
+  $("accountsMeta").textContent = profile.api?.accountState().signedIn ? profile.view.withAccount(text) : text;
 }
 
 function validateIserv(formNode) {
@@ -3661,8 +3707,19 @@ function settleTour(state) {
 async function wipeData() {
   const before = snapshot();
   const metaBefore = planMeta();
+  let signedOut = false;
+  try {
+    signedOut = Boolean(await profile.view?.signOutForWipe(profile.api));
+  } catch {
+    toast("Abmelden hat nicht geklappt, darum ist nichts gelöscht. Versuch es noch einmal.", { icon: "circle-alert" });
+    return;
+  }
+  // The first name and the avatar go with everything else; they are kept on this device only, so the undo brings them back.
+  const named = readProfile();
+  const hadProfile = Boolean(named.name || named.avatar !== "initial" || named.asked);
+  if (hadProfile) replaceProfile(null);
   if (!Object.keys(before).length) {
-    toast("Auf diesem Gerät ist nichts gespeichert.", { icon: "trash-2" });
+    toast(signedOut ? "Abgemeldet. Auf diesem Gerät war sonst nichts gespeichert." : hadProfile ? "Alles auf diesem Gerät gelöscht" : "Auf diesem Gerät ist nichts gespeichert.", { icon: "trash-2" });
     return;
   }
   // An own subject that still has grades or entries cannot go for good, or they would be hidden. The server puts it aside, and so does the page.
@@ -3671,10 +3728,12 @@ async function wipeData() {
   const used = Object.keys(own).filter((key) => own[key]?.custom && keptOnDelete(key));
   planRevert(null, () => restore(used.length ? { [LOCAL_KEYS.subjects]: JSON.stringify({ items: Object.fromEntries(used.map((key) => [key, own[key]])), removed: used }) } : {}));
   $("dataWipe")?.focus({ preventScroll: true });
-  toast(used.length ? "Alles auf diesem Gerät gelöscht. Fächer mit Noten oder Einträgen stehen weiter unter „Gelöscht“." : "Alles auf diesem Gerät gelöscht", {
+  const wiped = signedOut ? "Gelöscht und abgemeldet, im Konto bleibt alles." : "Alles auf diesem Gerät gelöscht";
+  toast(used.length ? `${signedOut ? wiped : "Alles auf diesem Gerät gelöscht."} Fächer mit Noten oder Einträgen stehen weiter unter „Gelöscht“.` : wiped, {
     icon: "trash-2",
     action: { label: "Rückgängig", undo: true, run: () => {
       planRevert(metaBefore, () => restore(before));
+      if (hadProfile) replaceProfile(named);
       say("Rückgängig gemacht");
     } },
   });
@@ -3912,6 +3971,7 @@ export function init() {
   bindRaster();
   bindSchool();
   bindAccounts();
+  bindAccount();
   bindNotify();
   bindLaunch();
   bindLook();

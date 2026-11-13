@@ -691,20 +691,45 @@ def test_the_automatic_colour_scheme_survives_a_reload(client):
     assert 'data-theme-mode="auto"' in client.get("/hub").get_data(as_text=True)
 
 
-def test_a_new_install_follows_the_system_until_a_scheme_is_picked(client):
+def test_a_new_install_starts_light_and_keeps_that_as_its_choice(client):
     theme_mode = lambda: re.search(r'data-theme-mode="(\w+)"', client.get("/hub/settings").get_data(as_text=True)).group(1)
-    assert theme_mode() == "auto"
+    assert theme_mode() == "light"
+    assert db.get_ui_store()["app-theme-choice"] == "light", "stored as if picked"
     client.post("/api/hub/tour", json={"state": "done"})
     client.put("/api/ui/store/app-ab-weeks", json=False)
-    client.put("/api/ui/store/app-settings", json={"school": {"grade": 12}})
-    assert theme_mode() == "auto"
-    client.put("/api/ui/store/app-theme-choice", json="light")
     assert theme_mode() == "light"
+    client.put("/api/ui/store/app-theme-choice", json="auto")
+    assert theme_mode() == "auto", "the system can still be picked"
     client.put("/api/ui/store/app-theme-choice", json="dark")
     assert theme_mode() == "dark"
 
 
+@pytest.mark.parametrize("before", ["device", "task", "tour", "value"])
+def test_an_install_that_already_has_data_keeps_following_the_system(tmp_path, monkeypatch, before):
+    monkeypatch.setattr(db, "DATABASE_PATH", str(tmp_path / "hub.db"))
+    db.init_db()
+    monkeypatch.setattr(ui_data, "refresh_weather_soon", lambda location: None)
+    if before == "device":
+        db.device_id()
+    elif before == "task":
+        db.create_hub_task("Referat", due_date="2026-11-20")
+    elif before == "tour":
+        db.save_tour_state("done")
+    else:
+        db.save_ui_value("app-single-keys", True)
+    from app import app as app_module
+    from app.app import app
+
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        client.get(f"/hub?token={app_module.API_TOKEN}")
+        html = client.get("/hub").get_data(as_text=True)
+    assert 'data-theme-mode="auto"' in html
+    assert "app-theme-choice" not in db.get_ui_store()
+
+
 def test_a_scheme_from_the_classic_pages_carries_over(client):
+    client.delete("/api/ui/store/app-theme-choice")
     client.post("/api/hub/theme", json={"theme": "light"})
     assert 'data-theme-mode="light"' in client.get("/hub").get_data(as_text=True)
     client.post("/api/hub/theme-preferences", json={"theme_mode": "system"})

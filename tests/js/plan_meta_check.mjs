@@ -337,6 +337,26 @@ async function sharedModel() {
   });
 }
 
+CASES["a file picker closed without a file leaves the import open, only its own Escape closes it"] = async () => {
+  const page = await boot();
+  const importFlow = await share(page);
+  let closed = "open";
+  importFlow().then((result) => (closed = result));
+  for (let turn = 0; turn < 20 && !page.dialog()?.open; turn += 1) await tick();
+  const sheet = page.dialog();
+  assert.equal(sheet.open, true);
+  const picker = sheet.querySelector("#shareBody").querySelector("#shareFileInput");
+  let prevented = false;
+  for (const listener of sheet.listeners.cancel) listener({ target: picker, preventDefault: () => (prevented = true) });
+  await tick();
+  assert.equal(closed, "open", "the dismissed file picker's own cancel does not end the import");
+  assert.equal(prevented, false, "and is left alone");
+  for (const listener of sheet.listeners.cancel) listener({ target: sheet, preventDefault: () => (prevented = true) });
+  await tick();
+  assert.equal(closed, null, "Escape on the sheet closes it without a plan");
+  assert.equal(prevented, true);
+};
+
 CASES["a plan taken over from a link is recorded as shared, not as an own edit"] = async () => {
   const page = await boot();
   const importFlow = await share(page);

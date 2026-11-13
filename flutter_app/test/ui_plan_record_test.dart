@@ -99,6 +99,19 @@ void main() {
     expect((await UiDb.store(db)).containsKey(UiDb.accountKey), isFalse);
   });
 
+  test('the first name and the avatar are kept on the device like the account, and the export leaves them out', () async {
+    final db = await UiDb.open();
+    final profile = {'name': 'Lina Marie', 'avatar': 'musik', 'asked': true};
+    expect((await UiApi(null).handle(put(UiDb.profileKey, profile))).status, 200);
+    expect((await UiDb.store(db))[UiDb.profileKey], profile);
+    expect((await pageJson('appStore'))[UiDb.profileKey], profile);
+    final export = await UiApi(null).handle(UiRequest(method: 'GET', segments: ['ui', 'export'], query: const {}, json: false, body: null));
+    expect(jsonEncode(export.body), isNot(contains('Lina Marie')));
+    final removed = await UiApi(null).handle(UiRequest(method: 'DELETE', segments: ['ui', 'store', UiDb.profileKey], query: const {}, json: false, body: null));
+    expect(removed.status, 200);
+    expect((await UiDb.store(db)).containsKey(UiDb.profileKey), isFalse);
+  });
+
   test('the account service comes only from the build and opens the page policy for it alone', () async {
     String connect(String policy) => RegExp('connect-src ([^;]+)').firstMatch(policy)!.group(1)!;
     expect(UiPages.accountService, isNull);

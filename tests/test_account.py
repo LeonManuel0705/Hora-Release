@@ -56,6 +56,11 @@ def test_the_account_core_keeps_its_rules_under_node():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_the_account_screens_open_notice_and_load_by_their_rules_under_node():
+    result = run_node("account_screens_check.mjs")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_the_account_client_works_with_the_real_account_service_when_one_runs():
     result = run_node("account_service_check.mjs")
     assert result.returncode == 0, result.stdout + result.stderr
@@ -97,6 +102,16 @@ def test_with_an_address_the_pages_name_it_and_may_reach_it(client, monkeypatch)
     monkeypatch.setenv(account_service.ENV_NAME, "https://konto.example.org/pfad")
     assert connect_src(client.get("/hub")) == ["'self'"]
     assert "accountService" not in page_json(client, "appData", "/hub")
+
+
+def test_the_first_name_and_avatar_are_kept_on_the_device_and_left_out_of_the_export(client):
+    profile = {'name': 'Lina Marie', 'avatar': 'musik', 'asked': True}
+    assert client.put('/api/ui/store/app-profile', json=profile).status_code == 200
+    assert db.get_ui_store()['app-profile'] == profile
+    assert page_json(client, 'appStore')['app-profile'] == profile
+    assert 'Lina Marie' not in client.get('/api/ui/export').get_data(as_text=True)
+    assert client.delete('/api/ui/store/app-profile').status_code == 200
+    assert 'app-profile' not in db.get_ui_store()
 
 
 def test_the_account_is_kept_on_the_device_and_left_out_of_the_export(client):

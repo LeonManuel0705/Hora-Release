@@ -947,11 +947,12 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
 
 }
 
-Future<WelcomeSetupResult?> showWelcomeSetup(BuildContext context, {bool withDemo = true}) {
+/// With [withAccount] the first step offers a quiet way to sign in first, for someone who already has an account.
+Future<WelcomeSetupResult?> showWelcomeSetup(BuildContext context, {bool withDemo = true, bool withAccount = false}) {
   return showDialog<WelcomeSetupResult>(
     context: context,
     barrierDismissible: false,
-    builder: (context) => _WelcomeSetupDialog(bundeslaender: _MainScreenState._bundeslaender, withDemo: withDemo),
+    builder: (context) => _WelcomeSetupDialog(bundeslaender: _MainScreenState._bundeslaender, withDemo: withDemo, withAccount: withAccount),
   );
 }
 
@@ -959,15 +960,23 @@ class WelcomeSetupResult {
   final String bundesland;
   final int graduationYear;
   final bool enableDemo;
+  final bool signIn;
 
-  WelcomeSetupResult({required this.bundesland, required this.graduationYear, this.enableDemo = false});
+  WelcomeSetupResult({required this.bundesland, required this.graduationYear, this.enableDemo = false}) : signIn = false;
+
+  WelcomeSetupResult.signIn()
+      : bundesland = '',
+        graduationYear = 0,
+        enableDemo = false,
+        signIn = true;
 }
 
 class _WelcomeSetupDialog extends StatefulWidget {
   final List<String> bundeslaender;
   final bool withDemo;
+  final bool withAccount;
 
-  const _WelcomeSetupDialog({required this.bundeslaender, this.withDemo = true});
+  const _WelcomeSetupDialog({required this.bundeslaender, this.withDemo = true, this.withAccount = false});
 
   @override
   State<_WelcomeSetupDialog> createState() => _WelcomeSetupDialogState();
@@ -1398,50 +1407,71 @@ class _WelcomeSetupDialogState extends State<_WelcomeSetupDialog>
 
   Widget _buildFooter(bool isDark) {
     final ink = isDark ? AppPalette.inkDark : AppPalette.ink;
+    final account = widget.withAccount && _currentStep == 0;
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, account ? 8 : 20),
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: isDark ? AppPalette.lineDark : AppPalette.line)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (_currentStep > 0) ...[
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => setState(() => _currentStep = _currentStep - 1),
-                icon: const Icon(Icons.arrow_back, size: 18),
-                label: const Text('Zurück'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: ink,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: BorderSide(color: isDark ? AppPalette.lineStrongDark : AppPalette.lineStrong),
-                  shape: const StadiumBorder(),
-                ),
+          _buildSteps(isDark, ink),
+          if (account)
+            TextButton(
+              key: const ValueKey('welcome-account'),
+              onPressed: () => Navigator.pop(context, WelcomeSetupResult.signIn()),
+              style: TextButton.styleFrom(
+                foregroundColor: isDark ? AppPalette.inkSoftDark : AppPalette.inkSoft,
+                minimumSize: const Size(44, 44),
+                textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
+              child: const Text('Ich habe schon ein Konto'),
             ),
-            const SizedBox(width: 12),
-          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSteps(bool isDark, Color ink) {
+    return Row(
+      children: [
+        if (_currentStep > 0) ...[
           Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _canProceed() ? _handleNext : null,
-              icon: Icon(_currentStep < _lastStep ? Icons.arrow_forward : Icons.check, size: 18),
-              label: Text(_currentStep < _lastStep ? 'Weiter' : 'Los geht\'s'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? AppPalette.brandDark : AppPalette.pine,
-                foregroundColor: isDark ? AppPalette.inkDark : AppPalette.chalk,
-                disabledBackgroundColor: isDark ? AppPalette.lineDark : AppPalette.lineStrong,
-                disabledForegroundColor: isDark ? AppPalette.inkMutedDark : AppPalette.inkMuted,
-                elevation: 0,
-                shadowColor: Colors.transparent,
+            child: OutlinedButton.icon(
+              onPressed: () => setState(() => _currentStep = _currentStep - 1),
+              icon: const Icon(Icons.arrow_back, size: 18),
+              label: const Text('Zurück'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: ink,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: StadiumBorder(
-                  side: isDark && _canProceed() ? const BorderSide(color: Color(0xFF3E5541)) : BorderSide.none,
-                ),
+                side: BorderSide(color: isDark ? AppPalette.lineStrongDark : AppPalette.lineStrong),
+                shape: const StadiumBorder(),
               ),
             ),
           ),
+          const SizedBox(width: 12),
         ],
-      ),
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: _canProceed() ? _handleNext : null,
+            icon: Icon(_currentStep < _lastStep ? Icons.arrow_forward : Icons.check, size: 18),
+            label: Text(_currentStep < _lastStep ? 'Weiter' : 'Los geht\'s'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isDark ? AppPalette.brandDark : AppPalette.pine,
+              foregroundColor: isDark ? AppPalette.inkDark : AppPalette.chalk,
+              disabledBackgroundColor: isDark ? AppPalette.lineDark : AppPalette.lineStrong,
+              disabledForegroundColor: isDark ? AppPalette.inkMutedDark : AppPalette.inkMuted,
+              elevation: 0,
+              shadowColor: Colors.transparent,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: StadiumBorder(
+                side: isDark && _canProceed() ? const BorderSide(color: Color(0xFF3E5541)) : BorderSide.none,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

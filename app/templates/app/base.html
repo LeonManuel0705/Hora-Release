@@ -74,6 +74,7 @@
     <link rel="stylesheet" href="/static/app/css/tokens.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/static/app/css/app.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/static/app/css/dialog.css?v={{ asset_version }}">
+    <link rel="stylesheet" href="/static/app/css/profile.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/static/css/tour.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/static/app/css/setup.css?v={{ asset_version }}">
     {% block page_css %}{% endblock %}
@@ -122,9 +123,7 @@
         <button class="icon-button topbar-search" type="button" data-open-palette aria-label="Suchen">
             <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
         </button>
-        <button class="btn btn-primary" type="button" data-open-note aria-label="Neu: Aufgabe, Hausaufgabe, Termin, Notiz oder Idee">
-            <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Neu
-        </button>
+        {% include "app/_profile_button.html" %}
     </div>
 </header>
 
@@ -240,6 +239,8 @@
         </div>
     </form>
 </div>
+
+<div class="sheet profile-sheet is-glass" id="profileSheet" popover role="dialog" tabindex="-1" aria-labelledby="profileTitle"></div>
 
 <div class="sheet weather-sheet is-glass" id="weatherSheet" popover aria-labelledby="weatherTitle">
     <div class="sheet-head">

@@ -298,6 +298,28 @@ CASES["closing keeps what the open step holds"] = async () => {
   assert.equal(page.core.storage.get("app-ab-weeks"), false);
 };
 
+CASES["closing the plan import started on the first step leads back to it, a taken plan does not"] = async () => {
+  const page = await boot({ plan: EMPTY });
+  const asked = [];
+  let answer = null;
+  globalThis.AppPlanShare = { importFlow: async () => {
+    asked.push("import");
+    return answer;
+  } };
+  page.flow.open({ from: "tour" });
+  const run = driver(page);
+  assert.equal(run.step(), "start");
+  assert.match(run.stage(), /data-setup-share/);
+  await run.fire("click", { target: run.control("[data-setup-share]") });
+  assert.deepEqual(asked, ["import"]);
+  assert.equal(run.dialog.open, true, "closed without a plan, the import leads back to the setup");
+  assert.equal(run.step(), "start", "on its first step");
+  answer = { mode: "replace", subjects: 1, lessons: 2 };
+  await run.fire("click", { target: run.control("[data-setup-share]") });
+  assert.equal(run.dialog.open, false, "a plan that was taken does not bring the setup back, the import reloads the page");
+  assert.deepEqual(page.visits, [], "and the setup itself stores and reloads nothing");
+};
+
 CASES["closing a step left half done keeps nothing of it"] = async () => {
   const page = await boot({ plan: EMPTY });
   page.flow.open({});

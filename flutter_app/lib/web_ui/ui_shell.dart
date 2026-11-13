@@ -22,6 +22,7 @@ import '../services/iserv_plan.dart';
 import '../services/reminder_scheduler.dart';
 import '../services/iserv_service.dart';
 import 'ui_api.dart';
+import 'ui_pages.dart';
 
 class UiNativePage {
   const UiNativePage(this.title, this.build, {this.reload = false});
@@ -43,6 +44,12 @@ mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost, UiIse
   Timer? _changeTimer;
 
   Future<void> reloadPage();
+
+  /// Opens the page's sign in and completes once it is closed again. Only called with an account service.
+  Future<void> openAccountOnPage();
+
+  /// Someone with an account chose to sign in before the first steps; the first steps follow once the page is there.
+  bool accountFirst = false;
 
   Future<R?> overPage<R>(Future<R?> Function() show) => show();
 
@@ -80,8 +87,12 @@ mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost, UiIse
   Future<bool> askWelcome() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted || prefs.containsKey('user_bundesland')) return false;
-    final result = await overPage(() => showWelcomeSetup(context, withDemo: false));
+    final result = await overPage(() => showWelcomeSetup(context, withDemo: false, withAccount: UiPages.accountService != null));
     if (result == null) return false;
+    if (result.signIn) {
+      accountFirst = true;
+      return false;
+    }
     await prefs.setString('user_bundesland', result.bundesland);
     await prefs.setInt('graduation_year', result.graduationYear);
     return true;
@@ -97,13 +108,24 @@ mixin UiShellHost<T extends StatefulWidget> on State<T> implements UiHost, UiIse
   Future<void> welcomeOrHolidays() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
-    if (!prefs.containsKey('user_bundesland')) {
+    if (prefs.containsKey('user_bundesland')) {
+      unawaited(importHolidaysIfNeeded());
+      return;
+    }
+    for (var round = 0; round < 3 && mounted; round++) {
+      if (accountFirst) {
+        accountFirst = false;
+        try {
+          await openAccountOnPage();
+        } catch (_) {}
+        if (!mounted) return;
+      }
       if (await askWelcome()) {
         await importWelcomeHolidays();
         if (mounted) await reloadPage();
+        return;
       }
-    } else {
-      unawaited(importHolidaysIfNeeded());
+      if (!accountFirst) return;
     }
   }
 

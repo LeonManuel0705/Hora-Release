@@ -377,6 +377,6 @@ class _UnbuiltPages extends UiPages {
   _UnbuiltPages() : super(browser: true);
 
   @override
-  Future<String> render(String page, {required String nonce, String? day, String? startScript}) =>
+  Future<String> render(String page, {required String nonce, String? day, String? startScript, UiHost? host}) =>
       Future.error(StateError('offline'));
 }

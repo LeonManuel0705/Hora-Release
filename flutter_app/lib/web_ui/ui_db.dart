@@ -17,7 +17,7 @@ class UiDb {
 
   static const storeKeys = {
     'app-timetable-edits', 'app-block-times', 'app-ab-swap', 'app-ab-weeks', 'app-subjects', 'app-teachers', 'app-rooms',
-    'app-timetable-meta', syncKey, accountKey,
+    'app-timetable-meta', syncKey, accountKey, profileKey,
     'app-settings', 'app-motion', 'app-theme-choice', 'app-single-keys', 'app-task-filter', 'app-cal-view',
   };
   static const maxValueBytes = 256 * 1024;
@@ -30,6 +30,9 @@ class UiDb {
 
   /// The account signed in on this device with its session, or the choice to go on without one. Never part of a backup.
   static const accountKey = 'app-account';
+
+  /// The first name and the avatar chosen on this device. Never part of a backup.
+  static const profileKey = 'app-profile';
 
   static Future<void>? _migration;
 

@@ -13,7 +13,7 @@ import { randomBytes } from "node:crypto";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { resolve, dirname } from "node:path";
 
-const INITS = ["initShell", "initHome", "initTasks", "initReminders", "initPomodoro", "initPlanShare", "initFeedback", "initSetup", "initGoogleSync"];
+const INITS = ["initShell", "initProfile", "initHome", "initTasks", "initReminders", "initPomodoro", "initPlanShare", "initFeedback", "initSetup", "initGoogleSync"];
 const HOOKS = `
 let port = null;
 export function initialize(data) {

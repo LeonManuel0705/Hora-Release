@@ -15,7 +15,7 @@ const SESSION_KEY = "app-sync-pulled";
 let connection = null;
 let chain = Promise.resolve();
 let timer = 0;
-let status = { connected: false, ready: false, busy: false, error: null, unreadable: 0 };
+let status = { connected: false, ready: false, busy: false, error: null, unreadable: 0, syncedAt: null };
 
 const session = {
   get(key) {
@@ -55,7 +55,7 @@ function compare(one, other) {
 const bestOf = (entries) => entries.reduce((best, entry) => (compare(entry, best) > 0 ? entry : best), null);
 
 function freshState(account) {
-  return { account, cursor: 0, latest: 0, entries: [], unreadable: [] };
+  return { account, cursor: 0, latest: 0, entries: [], unreadable: [], at: null, ask: false };
 }
 
 function readState(saved, account) {
@@ -65,7 +65,8 @@ function readState(saved, account) {
     ? saved.entries.filter((item) => isSeq(item?.seq) && Number.isSafeInteger(item.at) && ["edit", "import", "share"].includes(item.origin) && typeof item.device === "string")
       .map(({ seq, at, origin, device }) => ({ seq, at, origin, device }))
     : [];
-  return { account, cursor: number(saved.cursor), latest: number(saved.latest), entries, unreadable: Array.isArray(saved.unreadable) ? saved.unreadable.filter(isSeq) : [] };
+  const at = Number.isSafeInteger(saved.at) && saved.at > 0 ? saved.at : null;
+  return { account, cursor: number(saved.cursor), latest: number(saved.latest), entries, unreadable: Array.isArray(saved.unreadable) ? saved.unreadable.filter(isSeq) : [], at, ask: saved.ask === true };
 }
 
 function report(patch) {
@@ -79,8 +80,14 @@ export const syncConnected = () => connection !== null;
 export const syncStatus = () => ({ ...status });
 
 function keep(current) {
-  const { account, cursor, latest, entries, unreadable } = current.state;
-  syncStore.set({ account, cursor, latest, entries, unreadable });
+  const { account, cursor, latest, entries, unreadable, at, ask } = current.state;
+  syncStore.set({ account, cursor, latest, entries, unreadable, ...(at ? { at } : {}), ...(ask ? { ask: true } : {}) });
+}
+
+function synced(current) {
+  current.state.at = Date.now();
+  keep(current);
+  report({ syncedAt: current.state.at });
 }
 
 function serial(current, task) {
@@ -161,13 +168,13 @@ async function push(current, record) {
   state.entries = [...state.entries.filter((item) => item.seq !== seq), { seq, ...entry.record }];
   prune(state);
   current.pushed = { record: entry.record, plan };
-  keep(current);
+  synced(current);
 }
 
 // After an own change: this device's newest record goes up unless the server already holds it with this very plan.
 async function pushOwn(current) {
   const local = planMeta();
-  if (!current.ready || !local || local.device !== data.device) return;
+  if (!current.ready || current.state.ask || !local || local.device !== data.device) return;
   const moved = sameRecord(current.pushed?.record, local) && !sameValue(current.pushed.plan, frozenPlan());
   if (held(current.state, local) && !moved) return;
   await push(current, local);
@@ -194,10 +201,41 @@ async function takeOver(current, entry) {
   if (keys.length && dispatchEvent(new CustomEvent("app:plan-synced", { cancelable: true, detail: { record: entry.record } }))) refreshPlan();
 }
 
+function answered(current) {
+  if (!current.state.ask) return;
+  current.state.ask = false;
+  keep(current);
+}
+
+// Right after signing in, an own plan here that would replace the plan of the account on every device is not sent
+// before the user chose which one stays. A plan from an import or a share, or none, takes the account's plan as always.
+async function question(current, fetched, best, local) {
+  if (!best || local?.origin !== "edit" || sameRecord(best, local)) return "none";
+  const entry = fetched.get(best.seq) || (await refetch(current, best.seq));
+  if (connection !== current) return "gone";
+  if (!entry || !sameRecord(entry.record, best)) return "none";
+  const here = frozenPlan();
+  if (PLAN_KEYS.every((key) => sameValue(here[key] ?? null, entry.plan[key] ?? null))) return "none";
+  if (!current.choose) return "wait";
+  const answer = await current.choose();
+  if (connection !== current) return "gone";
+  if (answer !== "account") return "none";
+  await takeOver(current, entry);
+  return "taken";
+}
+
 async function settle(current, fetched) {
   for (let turn = 0; turn < 3 && connection === current; turn += 1) {
     const local = planMeta();
     const best = bestOf(current.state.entries);
+    if (current.state.ask && !(best && compare(best, local) > 0)) {
+      const outcome = await question(current, fetched, best, local);
+      if (outcome === "gone" || outcome === "wait") return;
+      answered(current);
+      if (outcome === "taken") return;
+      continue;
+    }
+    answered(current);
     if (best && compare(best, local) > 0) {
       const entry = fetched.get(best.seq) || (await refetch(current, best.seq));
       if (connection !== current) return;
@@ -237,9 +275,10 @@ async function pull(current, whole) {
   state.cursor = Math.max(after, result.latest);
   prune(state);
   current.ready = true;
+  state.at = Date.now();
   keep(current);
   if (whole) session.set(SESSION_KEY, current.account);
-  report({ ready: true, unreadable: state.unreadable.length });
+  report({ ready: true, unreadable: state.unreadable.length, syncedAt: state.at });
   await settle(current, fetched);
 }
 
@@ -295,8 +334,9 @@ function close() {
 
 // The account screens call this with the client of openSync() on every page, and with signedIn after signing in, verifying
 // or resetting the password. A device pulls the whole history and resolves it before it pushes anything, once per start
-// of the app and after every sign in. Other pages only send what is still waiting.
-export function connectSync(client, { signedIn = false } = {}) {
+// of the app and after every sign in. Other pages only send what is still waiting. With ask, right after signing in,
+// choose decides which plan stays when this device's own plan would replace the account's; until then nothing is sent.
+export function connectSync(client, { signedIn = false, ask = false, choose = null } = {}) {
   if (typeof client?.pull !== "function" || typeof client?.push !== "function") throw new TypeError("connectSync needs a sync client");
   close();
   if (!data?.device || !schoolDefaults) {
@@ -305,12 +345,13 @@ export function connectSync(client, { signedIn = false } = {}) {
   }
   const account = typeof client.account === "string" ? client.account : "";
   const saved = readState(syncStore.get(), account);
-  const current = { client, account, state: saved || freshState(account), ready: false, pushed: null, pulling: false };
+  const current = { client, account, state: saved || freshState(account), ready: false, pushed: null, pulling: false, choose: typeof choose === "function" ? choose : null };
+  if (signedIn && ask) current.state.ask = true;
   current.off = listen(current);
   connection = current;
   keep(current);
-  report({ connected: true, ready: false, error: null, unreadable: current.state.unreadable.length });
-  if (saved && !signedIn && session.get(SESSION_KEY) === account) {
+  report({ connected: true, ready: false, error: null, unreadable: current.state.unreadable.length, syncedAt: current.state.at });
+  if (saved && !signedIn && !current.state.ask && session.get(SESSION_KEY) === account) {
     return serial(current, () => {
       current.ready = true;
       report({ ready: true });
@@ -325,5 +366,5 @@ export function disconnectSync() {
   close();
   syncStore.set(null);
   session.remove(SESSION_KEY);
-  report({ connected: false, ready: false, busy: false, error: null, unreadable: 0 });
+  report({ connected: false, ready: false, busy: false, error: null, unreadable: 0, syncedAt: null });
 }

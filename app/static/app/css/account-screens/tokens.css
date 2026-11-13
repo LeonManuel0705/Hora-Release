@@ -1,0 +1,82 @@
+/* SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
+
+.acct {
+  --tanne: #2e3a2f;
+  --tanne-raised: #3a4e37;
+  --kreide: #f8f6ee;
+  --sand: #e7c694;
+  --sand-deep: #d4ae76;
+  --salbei: #86a36f;
+  --terra: #c96f4f;
+
+  --sheet: light-dark(#f8f6ee, #232b24);
+  --panel: light-dark(#efe8dc, #2c352d);
+  --panel-edge: light-dark(#e6ddcd, #3c463c);
+  --field: light-dark(#ffffff, #1a201b);
+  --field-edge: light-dark(#8d948b, #7d877a);
+  --placeholder: light-dark(#6f776b, #a3a99d);
+  --now-soft: light-dark(#f6ead2, #3b3526);
+  --now-edge: light-dark(rgb(212 174 118 / 0.45), rgb(212 174 118 / 0.32));
+  --primary: light-dark(#2e3a2f, #edebe4);
+  --primary-raised: light-dark(#3a4e37, #ffffff);
+  --on-primary: light-dark(#f8f6ee, #18211a);
+  --busy: light-dark(#e4e8dc, #33402f);
+  --busy-ink: light-dark(#2e3a2f, #edebe4);
+  --busy-track: light-dark(rgb(46 58 47 / 0.16), rgb(237 235 228 / 0.18));
+  --hover-wash: light-dark(rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.07));
+  --glass-hover: light-dark(#eae1d1, #343e34);
+  --urgent-edge: light-dark(rgb(201 111 79 / 0.3), rgb(221 132 97 / 0.34));
+  --tile-top: light-dark(#edf0e8, #2e382f);
+  --tile-bottom: light-dark(#e4e8dc, #283129);
+  --tile-digit-top: light-dark(#374935, #e9e6dd);
+  --tile-digit-bottom: light-dark(#2e3a2f, #dcd8cd);
+  --tile-digit-ink: light-dark(#f8f6ee, #1c271e);
+  --tile-seam: light-dark(rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.45));
+
+  --r-control: 18px;
+  --r-tile: 16px;
+  --r-row: 22px;
+  --r-sheet: 32px;
+  --r-pill: 999px;
+
+  --shadow-pine: 46 58 47;
+  --shadow-button:
+    0 1px 0 rgb(255 255 255 / 0.12) inset,
+    0 10px 24px -12px rgb(var(--shadow-pine) / 0.55);
+  --shadow-button-hover:
+    0 1px 0 rgb(255 255 255 / 0.14) inset,
+    0 16px 30px -12px rgb(var(--shadow-pine) / 0.62);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-soft: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --spring-tactile: cubic-bezier(0.25, 0.9, 0.3, 1);
+  --spring-delight: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring-critical: cubic-bezier(0.25, 0.9, 0.3, 1);
+
+  --dur-press: 110ms;
+  --dur-hover: 200ms;
+  --dur-state: 180ms;
+  --dur-underline: 320ms;
+
+  --focus: var(--ink);
+  --selection: rgb(231 198 148 / 0.6);
+}
+
+@supports (transition-timing-function: linear(0, 1)) {
+  .acct {
+    --spring-tactile: linear(0, 0.0017 0.7%, 0.0064 1.3%, 0.014 2%, 0.0241 2.7%, 0.0364 3.3%, 0.0546 4.2%, 0.0936 5.7%, 0.1337 7%, 0.1886 8.7%, 0.4131 15%, 0.514 18%, 0.5661 19.7%, 0.6103 21.2%, 0.656 22.8%, 0.6942 24.3%, 0.7294 25.8%, 0.7652 27.5%, 0.7945 29%, 0.8238 30.7%, 0.8501 32.3%, 0.8734 34%, 0.894 35.7%, 0.9137 37.5%, 0.9306 39.3%, 0.9463 41.3%, 0.9593 43.3%, 0.9709 45.5%, 0.9808 47.8%, 0.9884 50.2%, 0.995 52.8%, 0.9998 55.7%, 1.0047 61%, 1.0063 67.7%, 1);
+    --spring-delight: linear(0, 0.0014 0.7%, 0.0068 1.5%, 0.0139 2.2%, 0.0258 3%, 0.0407 3.8%, 0.0582 4.7%, 0.0781 5.5%, 0.1047 6.5%, 0.1489 8%, 0.2083 9.8%, 0.2713 11.7%, 0.4529 16.8%, 0.5093 18.5%, 0.558 20%, 0.6096 21.7%, 0.6582 23.3%, 0.7034 25%, 0.7412 26.5%, 0.7762 28%, 0.8084 29.5%, 0.8378 31%, 0.8673 32.7%, 0.8911 34.2%, 0.9146 35.8%, 0.9352 37.5%, 0.953 39.2%, 0.97 41%, 0.984 42.8%, 0.9956 44.7%, 1.0058 46.7%, 1.0136 48.7%, 1.0198 50.8%, 1.0272 55.7%, 1.0284 59.3%, 1.0269 63.5%, 1.0083 84.2%, 1);
+  }
+}
+
+.acct[data-still] {
+  --dur-press: 1ms;
+  --dur-hover: 1ms;
+  --dur-state: 90ms;
+  --dur-underline: 1ms;
+  --spring-tactile: var(--ease-out);
+  --spring-delight: var(--ease-out);
+}

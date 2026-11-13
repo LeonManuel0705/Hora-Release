@@ -186,6 +186,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
   String _pausedDay = '';
   bool _setupRunning = false;
   bool _asking = false;
+  final Completer<void> _startSettled = Completer<void>();
 
   @override
   void initState() {
@@ -426,12 +427,27 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
   Future<void> _afterFirstLoad() async {
     if (_setupRunning || _fellBack) return;
     _setupRunning = true;
-    await welcomeOrHolidays();
-    if (!mounted) return;
-    // A force stop drops every alarm without a trace, so each launch sets them all again.
-    if (Platform.isAndroid) unawaited(ReminderScheduler.instance.reschedule(whole: true));
-    if (await askWeekOnce(context) && mounted) await reloadPage();
+    try {
+      await welcomeOrHolidays();
+      if (!mounted) return;
+      // A force stop drops every alarm without a trace, so each launch sets them all again.
+      if (Platform.isAndroid) unawaited(ReminderScheduler.instance.reschedule(whole: true));
+      if (await askWeekOnce(context) && mounted) await reloadPage();
+    } finally {
+      if (!_startSettled.isCompleted) _startSettled.complete();
+    }
     unawaited(_checkForUpdates());
+  }
+
+  @override
+  Future<void> openAccountOnPage() async {
+    final controller = _controller;
+    if (controller == null) return;
+    // The page loads its account part after the first paint, so it may need a moment before it can open the scene.
+    await controller.callAsyncJavaScript(
+      functionBody: 'for (let turn = 0; turn < 50 && !window.AppAccount; turn += 1) await new Promise((done) => setTimeout(done, 100)); '
+          'if (!window.AppAccount) return false; await window.AppAccount.open("signin"); return true;',
+    );
   }
 
   Future<void> _checkForUpdates() async {
@@ -448,8 +464,18 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     await controller.evaluateJavascript(source: script);
   }
 
+  Future<bool> _sceneBack(InAppWebViewController controller) async {
+    try {
+      return await controller.evaluateJavascript(source: 'Boolean(window.AppAccount && window.AppAccount.back())') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _back() async {
     final controller = _controller;
+    // The account scene of the page steps back or closes, as a dialog would.
+    if (controller != null && await _sceneBack(controller)) return;
     if (controller != null && await controller.canGoBack()) {
       await controller.goBack();
     } else {
@@ -530,6 +556,13 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
                         callback: (args) {
                           if (args.isNotEmpty && args.first == false) _fallBack();
                           return null;
+                        },
+                      );
+                      controller.addJavaScriptHandler(
+                        handlerName: 'startSettled',
+                        callback: (args) async {
+                          await _startSettled.future;
+                          return true;
                         },
                       );
                       controller.addJavaScriptHandler(

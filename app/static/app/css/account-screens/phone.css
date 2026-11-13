@@ -1,0 +1,92 @@
+/* SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
+
+@media (max-width: 599px) {
+  .app {
+    --sheet-pb: calc(var(--bottom-inset) + 12px);
+    --layer-max: calc(100dvh - var(--top-inset) - 52px - var(--sheet-pt) - var(--bottom-inset) - 12px - var(--kb-gap, 0px) - var(--kb-pad, 0px));
+  }
+
+  .panel {
+    inset: calc(var(--top-inset) + 44px) 0 calc(var(--sheet-h, 470px) - 46px) 0;
+    transform-origin: 62% 100%;
+  }
+
+  .forms {
+    inset: auto 0 0 0;
+    border-radius: 34px 34px 0 0;
+    box-shadow:
+      0 -1px 0 rgb(255 255 255 / 0.5),
+      0 -24px 48px -30px rgb(18 26 19 / 0.55);
+  }
+
+  .forms::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% - 1px);
+    height: 420px;
+    background: inherit;
+  }
+
+  .acct[data-look="beige"] .forms {
+    box-shadow:
+      0 0 0 1px rgb(214 202 180 / 0.55),
+      0 -26px 50px -32px rgb(var(--shadow-pine) / 0.45);
+  }
+
+  .acct[data-look="tanne"] .forms {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.06),
+      0 -24px 48px -30px rgb(0 0 0 / 0.7);
+  }
+
+  .app[data-kb] {
+    --sheet-pt: 16px;
+    --sheet-px: 20px;
+  }
+
+  .app[data-kb] .topbar {
+    opacity: 0;
+    translate: 0 -10px;
+  }
+
+  .app[data-kb] .forms {
+    bottom: var(--kb-gap, 0px);
+    padding-bottom: calc(var(--kb-pad, 0px) + 10px);
+  }
+
+  .app[data-kb] :is(.layer, .layer .form) {
+    gap: 8px;
+  }
+
+  .app[data-kb] .layer .title {
+    font-size: 1.375rem;
+  }
+
+  .app[data-kb] .layer :is(.sub, .lede, .row-links, .view-switch, .view-guest, .sheet-top, .notice-static) {
+    display: none;
+  }
+
+  .app[data-kb] .field-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .app[data-kb] .layer .control {
+    min-height: 46px;
+  }
+
+  .app[data-kb] .layer .control input {
+    height: 44px;
+  }
+
+  .app[data-kb] .layer .btn {
+    min-height: 46px;
+  }
+}

@@ -211,7 +211,9 @@ function sheetNode() {
   sheet.className = "share-sheet";
   sheet.setAttribute("aria-labelledby", "shareTitle");
   sheet.innerHTML = `<div class="share-card"><div class="share-head"><h2 class="share-title" id="shareTitle" tabindex="-1"></h2><button class="icon-button share-close" type="button" data-share-close aria-label="Schließen">${icon("x")}</button></div><div class="share-body" id="shareBody"></div></div>`;
+  // A file picker that is dismissed sends a cancel of its own that bubbles up here; only the sheet's own Escape closes it.
   sheet.addEventListener("cancel", (event) => {
+    if (event.target !== sheet) return;
     event.preventDefault();
     close();
   });

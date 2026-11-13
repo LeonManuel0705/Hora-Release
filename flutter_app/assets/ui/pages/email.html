@@ -58,13 +58,14 @@
     
     <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
     
-    <link rel="stylesheet" href="/static/app/css/tokens.css?v=7eac26a1fd">
-    <link rel="stylesheet" href="/static/app/css/app.css?v=7eac26a1fd">
-    <link rel="stylesheet" href="/static/app/css/dialog.css?v=7eac26a1fd">
-    <link rel="stylesheet" href="/static/css/tour.css?v=7eac26a1fd">
-    <link rel="stylesheet" href="/static/app/css/setup.css?v=7eac26a1fd">
-    <link rel="stylesheet" href="/static/app/css/pages/email.css?v=7eac26a1fd">
-    <link rel="stylesheet" href="/static/app/css/touch.css?v=7eac26a1fd">
+    <link rel="stylesheet" href="/static/app/css/tokens.css?v=56224b3a6a">
+    <link rel="stylesheet" href="/static/app/css/app.css?v=56224b3a6a">
+    <link rel="stylesheet" href="/static/app/css/dialog.css?v=56224b3a6a">
+    <link rel="stylesheet" href="/static/app/css/profile.css?v=56224b3a6a">
+    <link rel="stylesheet" href="/static/css/tour.css?v=56224b3a6a">
+    <link rel="stylesheet" href="/static/app/css/setup.css?v=56224b3a6a">
+    <link rel="stylesheet" href="/static/app/css/pages/email.css?v=56224b3a6a">
+    <link rel="stylesheet" href="/static/app/css/touch.css?v=56224b3a6a">
     <script nonce="__APP_NONCE__">
         (function () {
             var root = document.documentElement;
@@ -79,7 +80,7 @@
             if (root.dataset.themeMode === "auto") root.dataset.theme = system.matches ? "dark" : "light";
         })();
     </script>
-    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=7eac26a1fd"></script>
+    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=56224b3a6a"></script>
 </head>
 <body data-tour-auto="__APP_TOUR__" data-server-behind="0" data-app-version="__APP_VERSION__">
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -156,6 +157,7 @@
 <symbol id="i-nx-room" viewBox="0 0 24 24"><path d="M5 20.5h14"/><path d="M7 20.5V4.5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16"/><path d="M13.5 12.5h.01"/></symbol>
 <symbol id="i-nx-bus" viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="15" rx="3"/><path d="M5 11h14"/><path d="M8.5 15h.01"/><path d="M15.5 15h.01"/><path d="M7.5 18.5v2"/><path d="M16.5 18.5v2"/></symbol>
 <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-log-out" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></symbol>
 <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
 <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></symbol>
 <symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path class="icon-fill" stroke="none" d="M2 12h6l2 3h4l2-3h6v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></symbol>
@@ -213,9 +215,8 @@
         <button class="icon-button topbar-search" type="button" data-open-palette aria-label="Suchen">
             <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
         </button>
-        <button class="btn btn-primary" type="button" data-open-note aria-label="Neu: Aufgabe, Hausaufgabe, Termin, Notiz oder Idee">
-            <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Neu
-        </button>
+        
+<button class="profile-button" type="button" popovertarget="profileSheet" data-profile-open aria-haspopup="dialog" aria-expanded="false" aria-label="Profil"><span class="avatar" data-avatar aria-hidden="true"></span></button>
     </div>
 </header>
 
@@ -321,6 +322,8 @@
                 <button class="btn btn-primary" type="button" id="mailCompose" aria-label="Neue Mail schreiben">
                     <svg class="icon" aria-hidden="true"><use href="#i-square-pen"/></svg><span class="btn-label">Schreiben</span>
                 </button>
+                
+<button class="profile-button" type="button" popovertarget="profileSheet" data-profile-open aria-haspopup="dialog" aria-expanded="false" aria-label="Profil"><span class="avatar" data-avatar aria-hidden="true"></span></button>
             </div>
         </div>
         <p class="head-alert" id="mailAlert" hidden><svg class="icon" aria-hidden="true"><use href="#i-wifi-off"/></svg><span id="mailAlertText"></span></p>
@@ -465,6 +468,8 @@
     </form>
 </div>
 
+<div class="sheet profile-sheet is-glass" id="profileSheet" popover role="dialog" tabindex="-1" aria-labelledby="profileTitle"></div>
+
 <div class="sheet weather-sheet is-glass" id="weatherSheet" popover aria-labelledby="weatherTitle">
     <div class="sheet-head">
         <h2 class="sheet-title" id="weatherTitle">Wetter</h2>
@@ -518,8 +523,8 @@
 <div class="tooltip" id="tooltip" role="tooltip"></div>
 
 <script type="application/json" id="appStore">__APP_STORE__</script>
-<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=7eac26a1fd" defer></script>
-<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=7eac26a1fd" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=56224b3a6a" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=56224b3a6a" defer></script>
 
 
 <script type="application/json" id="appData">__APP_DATA__</script>

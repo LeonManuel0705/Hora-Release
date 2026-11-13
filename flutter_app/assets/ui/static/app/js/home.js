@@ -192,7 +192,7 @@ function heroCopy(day) {
       head: `${when ? eyebrow(esc(when)) : ""}${title("Noch kein Stundenplan")}`,
       meta: "Trag ihn einmal ein, dann steht hier, welche Stunde gerade dran ist und in welchem Raum.",
       parts: { plain: "" },
-      next: `<button class="btn btn-primary today-setup" type="button" data-open-setup="home">${icon("table-2")}Stundenplan eintragen</button><span class="today-setup-note">dauert etwa fünf Minuten</span>`,
+      next: `<button class="btn btn-primary today-setup" type="button" data-open-setup="home">${icon("table-2")}Stundenplan eintragen</button><span class="today-setup-note">dauert etwa fünf Minuten</span>${data?.accountService ? '<button class="text-button today-account" type="button" data-account-open="signin"><span>Ich habe schon ein Konto</span></button>' : ""}`,
     };
   }
   if (day.kind === "free") {

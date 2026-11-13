@@ -1402,6 +1402,8 @@ label.switch:is(:active, .is-pressed) input:checked + .switch-track::after { tra
 .today-setup { height: 44px; padding: 0 20px; border-radius: var(--radius-pill); font-size: var(--text-base); }
 .today-setup .icon { --s: 18; }
 .today-setup-note { font-size: var(--text-sm); color: var(--ink-muted); }
+.today-account { flex-basis: 100%; justify-content: flex-start; width: max-content; margin: -4px 0 0 -10px; }
+:root:not([data-account="out"]) .today-account { display: none; }
 
 .head-weather {
   display: inline-flex;

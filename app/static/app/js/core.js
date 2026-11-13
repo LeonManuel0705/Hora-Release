@@ -387,13 +387,14 @@ export function hourIcon(item) {
 const PLAN_META_KEY = "app-timetable-meta";
 const SYNC_KEY = "app-timetable-sync";
 const ACCOUNT_KEY = "app-account";
+const PROFILE_KEY = "app-profile";
 const PLAN_ORIGINS = ["edit", "import", "share"];
 // Kept for this device alone: storage.keys() leaves them out, so no backup, restore or wipe takes or touches them.
-const DEVICE_KEYS = new Set([PLAN_META_KEY, SYNC_KEY, ACCOUNT_KEY]);
+const DEVICE_KEYS = new Set([PLAN_META_KEY, SYNC_KEY, ACCOUNT_KEY, PROFILE_KEY]);
 
 const SERVER_KEYS = new Set([
   "app-timetable-edits", "app-block-times", "app-ab-swap", "app-ab-weeks", "app-subjects", "app-teachers", "app-rooms",
-  PLAN_META_KEY, SYNC_KEY, ACCOUNT_KEY,
+  PLAN_META_KEY, SYNC_KEY, ACCOUNT_KEY, PROFILE_KEY,
   "app-settings", "app-motion", "app-theme-choice", "app-single-keys", "app-task-filter", "app-cal-view",
 ]);
 
@@ -494,6 +495,7 @@ function deviceStore(key) {
 
 export const syncStore = deviceStore(SYNC_KEY);
 export const accountStore = deviceStore(ACCOUNT_KEY);
+export const profileStore = deviceStore(PROFILE_KEY);
 
 const planValues = () => PLAN_KEYS.map((key) => serverValues.get(key) ?? null);
 const planListeners = new Set();

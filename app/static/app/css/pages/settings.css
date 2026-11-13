@@ -121,6 +121,8 @@
 .set-row-text { min-width: 0; }
 .set-row-label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: var(--text-base); font-weight: var(--weight-medium); line-height: 1.35; color: var(--ink); text-wrap: balance; }
 .set-row-desc { max-width: 62ch; margin-top: 3px; font-size: var(--text-sm); line-height: 1.45; color: var(--ink-muted); text-wrap: pretty; }
+.account-note { display: flex; align-items: flex-start; gap: 6px; }
+.account-note .icon { --s: 14; flex: none; margin-top: 2px; }
 .set-row-control { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
 .set-row-control:empty { display: none; }
 .set-row.is-muted .set-row-label { color: var(--ink-muted); }

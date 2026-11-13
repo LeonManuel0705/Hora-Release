@@ -1355,6 +1355,17 @@ def get_ui_store() -> Dict[str, Any]:
     return values
 
 
+def first_start() -> bool:
+    """True only on the very first page of a new installation: nothing in the page store yet, not even the device id,
+    no task, no tour and no colour scheme picked in the classic pages."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    _execute(cursor, 'SELECT 1 FROM ui_store LIMIT 1')
+    stored = cursor.fetchone() is not None
+    conn.close()
+    return not stored and not has_hub_tasks() and get_tour_state() is None and get_theme_choice() is None
+
+
 def device_id() -> str:
     """A random id of this installation. It is kept out of the page store, so no backup and no shared plan takes it to another device."""
     conn = get_connection()

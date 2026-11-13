@@ -216,7 +216,7 @@ class UiServer {
   Future<void> _page(HttpRequest request, String page) async {
     final response = request.response;
     final nonce = UiPages.nonce();
-    final html = await _pages.render(page, nonce: nonce, day: request.uri.queryParameters['datum']);
+    final html = await _pages.render(page, nonce: nonce, day: request.uri.queryParameters['datum'], host: _api.host);
     response.headers
       ..set(HttpHeaders.contentTypeHeader, uiContentTypes['html']!)
       ..set(HttpHeaders.cacheControlHeader, 'no-store')

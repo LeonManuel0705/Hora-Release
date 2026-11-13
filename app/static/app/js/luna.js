@@ -542,3 +542,52 @@ export function luna(kind, size = 150) {
   const button = st === "idle" ? ' role="button" tabindex="0" aria-label="Luna antippen, dann winkt sie"' : ' aria-hidden="true" focusable="false"';
   return `<span class="luna is-${kind}"${st === "idle" ? "" : ' aria-hidden="true"'}><svg class="luna-art" data-st="${st}" viewBox="0 0 120 120" width="${size}" height="${size}"${button}>${drawLuna(++uid, st)}</svg>${st === "think" ? LOADER_FX : st === "sleep" ? SLEEP_FX : ""}</span>`;
 }
+
+const PORTRAIT_HANDS = {
+  rest: [T.hl, P.hr],
+  pencil: [T.hl, P.hr],
+  wave: [T.hlwv, P.hr],
+  cheer: [T.hlup, MIR(T.hlup)],
+};
+const PORTRAIT_WEAR = {
+  cap: `<path class="t-wear" d="M38 31C39.5 17 51 8 64.5 8.6C78 9.2 88 17.5 94.5 31.5C90.5 28.8 86.5 27.3 82.5 27.6C82 29 81.6 30 81.4 31Z"/>`
+    + `<path class="t-cream" d="M36.5 32C43 26.6 77 26.6 83.5 32C84.6 33.2 83.6 35.2 82 34.6C74.5 31.2 45.5 31.2 38 34.6C36.4 35.2 35.4 33.2 36.5 32Z"/>`
+    + `<circle class="t-cream" cx="94.4" cy="33.4" r="4.1"/>`,
+  glasses: `<g class="t-rim"><circle class="t-lens" cx="50" cy="47.4" r="7.6"/><circle class="t-lens" cx="70" cy="47.4" r="7.6"/><path d="M57.5 46.2q2.5 -1.8 5 0"/><path d="M42.5 46L36 44"/><path d="M77.5 46L84 44"/></g>`,
+  headphones: `<path class="t-band" d="M32.6 46C32 25.5 44.5 12.6 60 12.6S88 25.5 87.4 46"/>`
+    + `<rect class="t-wear" x="26" y="38.5" width="10.5" height="18" rx="5.25"/><rect class="t-wear" x="83.5" y="38.5" width="10.5" height="18" rx="5.25"/>`
+    + `<rect class="t-wear-h" x="28.6" y="41.5" width="3" height="8" rx="1.5"/><rect class="t-wear-h" x="88.4" y="41.5" width="3" height="8" rx="1.5"/>`,
+  mortarboard: `<path class="t-board-base" d="M43 20.5v7c0 2.9 7.6 5.2 17 5.2s17 -2.3 17 -5.2v-7"/>`
+    + `<path class="t-board" d="M60 7.5L92 17.5L60 27.5L28 17.5Z"/>`
+    + `<path class="t-tassel-cord" d="M60 17.5L85.5 21V31"/><circle class="t-tassel" cx="60" cy="17.5" r="1.8"/><path class="t-tassel" d="M83.2 30h4.6l1.2 7h-7z"/>`,
+};
+
+function portraitFace(face, brows) {
+  const eye = (x) => `<ellipse class="t-ink-f" cx="${x}" cy="47.2" rx="4.1" ry="5.15"/><circle class="t-white" cx="${r2(x + 1.37)}" cy="45.3" r="1.63"/><circle class="t-white" cx="${r2(x - 1.37)}" cy="49.3" r=".79"/>`;
+  const arc = (x, up) => `<path class="t-line" d="M${r2(x - 4.2)} ${up ? 48.6 : 47.8}q4.2 ${up ? -5.2 : 4} 8.4 0"/>`;
+  const eyes = { open: eye(50) + eye(70), happy: arc(50, 1) + arc(70, 1), closed: arc(50, 0) + arc(70, 0), wink: eye(50) + arc(70, 1) }[face] || eye(50) + eye(70);
+  const mouth = face === "happy"
+    ? `<path class="t-ink-f" d="M53.4 56.2q6.6 10 13.2 0z"/><ellipse class="t-rose" cx="60" cy="60.6" rx="3" ry="1.5"/>`
+    : face === "closed" ? `<path class="t-line" d="M56.4 57.4q3.6 2.6 7.2 0"/>` : `<path class="t-line" d="M53.6 56.6q6.4 5.6 12.8 0"/>`;
+  const browLine = brows ? `<path class="t-brow" d="M44.6 38.2q5.2 -3.4 10.4 -1"/><path class="t-brow" d="M65 37.2q5.2 -2.4 10.4 1"/>` : "";
+  return browLine + eyes + blush(42.5, 77.5, 55.5, 1) + mouth;
+}
+
+// A still bust of Luna for an avatar: no rig ever animates it, since it never carries the luna-art class.
+export function lunaPortrait({ pose = "rest", face = "open", wear = "" } = {}) {
+  const id = ++uid;
+  const [left, right] = PORTRAIT_HANDS[pose] || PORTRAIT_HANDS.rest;
+  const seated = armSvg("g1", T.g1, 9, 2, 1) + armSvg("g2", T.g2, 9.5, 2, 1) + armSvg("g3", P.g3, 9.5, 2, -1) + armSvg("g4", P.g4, 9, 2, -1);
+  const pencil = pose === "pencil" ? `<g transform="translate(27.6 43.2) rotate(-16)">${ITEM.pencil}</g>` : "";
+  const sparks = pose === "cheer"
+    ? [[40, 12, "t-apri", .58], [82, 12.5, "t-spark", .46], [95, 60, "t-apri", .4]].map(([x, y, cls, s]) => `<path class="${cls}" transform="translate(${x} ${y}) scale(${s})" d="${SPARK}"/>`).join("")
+    : "";
+  return `<svg class="luna-badge" viewBox="18 4 84 84" aria-hidden="true" focusable="false"><defs><clipPath id="luna-pt${id}"><path d="${MANTLE}"/></clipPath></defs>`
+    + seated + armSvg("hl", left, 7.5, 2.4, 0) + armSvg("hr", right, 7.5, 2.4, 0)
+    + `<path class="t-lav" d="${MANTLE}"/>`
+    + `<g clip-path="url(#luna-pt${id})"><ellipse class="t-lav-s" cx="60" cy="71" rx="32" ry="10" opacity=".55"/></g>`
+    + `<ellipse class="t-lav-h" cx="46" cy="29" rx="8.5" ry="4.5" transform="rotate(-30 46 29)" opacity=".85"/>`
+    + (wear === "cap" || wear === "mortarboard" ? "" : `<circle class="t-spot" cx="72" cy="27" r="2.4"/><circle class="t-spot" cx="78" cy="36" r="1.6"/>`)
+    + `<circle class="t-spot" cx="43" cy="42" r="1.3"/>`
+    + portraitFace(face, wear !== "glasses") + (PORTRAIT_WEAR[wear] || "") + pencil + sparks + `</svg>`;
+}

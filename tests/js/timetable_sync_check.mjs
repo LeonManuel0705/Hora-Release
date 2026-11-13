@@ -197,6 +197,7 @@ async function listenerOf(node, type = "click") {
 
 function runDevice() {
   let page = null;
+  const asked = { count: 0 };
   const actions = {
     async boot(options) {
       page = await boot(options);
@@ -204,11 +205,19 @@ function runDevice() {
     clock(now) {
       page.clock.now = now;
     },
-    async connect({ account, key, signedIn = false }) {
+    async connect({ account, key, signedIn = false, ask = false, answer = null }) {
       const cipher = await page.client.deriveCipherKey(Uint8Array.from(key));
-      const status = await page.sync.connectSync(page.client.createSyncClient({ key: cipher, account, fetchImpl: accountFetch(account) }), { signedIn });
+      const choose = () => {
+        asked.count += 1;
+        return answer === "never" ? new Promise(() => {}) : Promise.resolve(answer);
+      };
+      const connecting = page.sync.connectSync(page.client.createSyncClient({ key: cipher, account, fetchImpl: accountFetch(account) }), { signedIn, ask, choose });
+      const status = answer === "never" ? await Promise.race([connecting, new Promise((done) => setTimeout(done, 300))]) : await connecting;
       await page.core.storage.settled();
-      return status;
+      return { ...(status || {}), asked: asked.count };
+    },
+    asked() {
+      return asked.count;
     },
     async disconnect() {
       page.sync.disconnectSync();
@@ -815,6 +824,130 @@ CASES["the sync state stays on the device and never lands in a backup"] = async 
   assert.equal(gone.connected, false);
   assert.ok(!(SYNC in a.store));
   assert.equal(gone.meta.origin, "edit", "and the plan stays");
+};
+
+// Signing in on a device that has a plan of its own: the account's plan and this one, and which one stays.
+
+async function ownPlanElsewhere(service, shared) {
+  const a = await make(service, "a");
+  await a.connect(shared);
+  await a.call("edit", MATHE);
+  const b = await make(service, "b");
+  await b.call("clock", 1_800_000_100_000);
+  await b.call("edit", KUNST);
+  return { a, b };
+}
+
+CASES["signing in with an own newer plan asks which one stays, and the account's plan replaces this one"] = async () => {
+  const service = new AccountService();
+  const shared = account("acc-q1");
+  const { a, b } = await ownPlanElsewhere(service, shared);
+  const before = service.seqs("acc-q1");
+  const status = await b.connect({ ...shared, signedIn: true, ask: true, answer: "account" });
+  assert.equal(status.asked, 1, "asked once");
+  assert.deepEqual(service.seqs("acc-q1"), before, "nothing was sent");
+  const [onA, onB] = [await a.inspect(), await b.inspect()];
+  assert.deepEqual(onB.lessons, onA.lessons, "B takes the account's plan");
+  assert.deepEqual(onB.meta, onA.meta, "with its record, like any takeover");
+  assert.equal(onB.syncState.ask, undefined, "the question is settled");
+  await b.call("visible");
+  await b.restart({ app: true });
+  await b.connect(shared);
+  assert.equal(await b.call("asked"), 0, "and not asked again");
+  assert.deepEqual(service.seqs("acc-q1"), before);
+};
+
+CASES["choosing this device's plan keeps it as an own edit that reaches the other devices"] = async () => {
+  const service = new AccountService();
+  const shared = account("acc-q2");
+  const { a, b } = await ownPlanElsewhere(service, shared);
+  const kept = await b.inspect();
+  const status = await b.connect({ ...shared, signedIn: true, ask: true, answer: "device" });
+  assert.equal(status.asked, 1);
+  const onB = await b.inspect();
+  assert.deepEqual(onB.values["app-timetable-edits"], kept.values["app-timetable-edits"], "B keeps its plan");
+  assert.deepEqual(onB.values["app-timetable-edits"], KUNST);
+  assert.equal(onB.meta.origin, "edit");
+  assert.equal(onB.meta.device, IDS.b);
+  assert.equal(service.seqs("acc-q2").length, 2, "and sends it");
+  await a.call("visible");
+  const onA = await a.inspect();
+  assert.deepEqual(onA.lessons, onB.lessons, "A takes it at its next sync");
+  assert.ok(onA.lessons.some((line) => line.includes("Kunst")));
+  assert.deepEqual(onA.meta, onB.meta);
+};
+
+CASES["no question for an imported or shared plan, an empty device, an equal plan, an empty account or a new account"] = async () => {
+  const service = new AccountService();
+  const shared = account("acc-q3");
+  const a = await make(service, "a");
+  await a.connect(shared);
+  await a.call("edit", MATHE);
+  const onA = await a.inspect();
+
+  const imported = await make(service, "b");
+  await imported.call("clock", 1_800_000_100_000);
+  await imported.call("importPlan", KUNST);
+  assert.equal((await imported.connect({ ...shared, signedIn: true, ask: true, answer: "device" })).asked, 0, "an import is not asked about");
+  assert.deepEqual((await imported.inspect()).lessons, onA.lessons, "the account's plan wins as before");
+
+  const empty = await make(service, "c");
+  assert.equal((await empty.connect({ ...shared, signedIn: true, ask: true, answer: "device" })).asked, 0, "a device without a plan is not asked");
+  assert.deepEqual((await empty.inspect()).lessons, onA.lessons);
+
+  const same = await make(service, "d");
+  await same.call("clock", 1_800_000_200_000);
+  await same.call("edit", MATHE);
+  assert.equal((await same.connect({ ...shared, signedIn: true, ask: true, answer: "device" })).asked, 0, "the same plan typed in is not asked about");
+
+  const fresh = account("acc-q4");
+  const lone = await make(service, "a");
+  await lone.call("edit", KUNST);
+  assert.equal((await lone.connect({ ...fresh, signedIn: true, ask: true, answer: "account" })).asked, 0, "an empty account takes the plan without a question");
+  assert.equal(service.seqs("acc-q4").length, 1);
+
+  const other = await make(service, "b");
+  await other.call("clock", 1_800_000_300_000);
+  await other.call("edit", BOTH);
+  assert.equal((await other.connect({ ...fresh, signedIn: true, ask: false, answer: "account" })).asked, 0, "signing up or unlocking does not ask");
+};
+
+CASES["an open question holds back every push and comes again after a reload"] = async () => {
+  const service = new AccountService();
+  const shared = account("acc-q5");
+  const { a, b } = await ownPlanElsewhere(service, shared);
+  const before = service.seqs("acc-q5");
+  const waiting = await b.connect({ ...shared, signedIn: true, ask: true, answer: "never" });
+  assert.equal(waiting.asked, 1);
+  assert.equal((await b.inspect()).syncState.ask, true, "the open question is kept on the device");
+  await b.call("burst", [BOTH], false);
+  await new Promise((done) => setTimeout(done, 1800));
+  await b.restart();
+  await b.connect({ ...shared, answer: "never" });
+  assert.equal(await b.call("asked"), 1, "a new page asks again");
+  await b.restart({ app: true });
+  const answered = await b.connect({ ...shared, answer: "account" });
+  assert.equal(answered.asked, 1, "a new start as well");
+  assert.deepEqual(service.seqs("acc-q5"), before, "nothing went up while the question was open");
+  assert.deepEqual((await b.inspect()).lessons, (await a.inspect()).lessons);
+  assert.equal((await b.inspect()).syncState.ask, undefined);
+};
+
+CASES["the sync remembers when it last went through"] = async () => {
+  const service = new AccountService();
+  const shared = account("acc-q6");
+  const a = await make(service, "a");
+  const status = await a.connect(shared);
+  assert.equal(status.syncedAt, 1_800_000_000_000, "the pull went through");
+  await a.call("clock", 1_800_000_070_000);
+  await a.call("edit", MATHE);
+  const onA = await a.inspect();
+  assert.equal(onA.status.syncedAt, 1_800_000_070_000, "and the push");
+  assert.equal(onA.syncState.at, 1_800_000_070_000, "kept with the sync state");
+  await a.restart();
+  assert.equal((await a.connect(shared)).syncedAt, 1_800_000_070_000, "a new page starts from it");
+  await a.call("disconnect");
+  assert.equal((await a.inspect()).status.syncedAt, null);
 };
 
 if (process.argv[2] === "device") {

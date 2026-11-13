@@ -3,7 +3,7 @@
 
 import {
   data, esc, icon, luna, now, storage, planChange, LOCAL_KEYS, HUES, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, abSettled,
-  activeSubjectKeys, subject, hueVar, slug, teacherId, teacherLabel, periodWords, weekType, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, isoWeek, hm, addDays, startOfDay, BRAND,
+  activeSubjectKeys, subject, hueVar, slug, teacherId, teacherLabel, periodWords, weekType, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, isoWeek, hm, addDays, startOfDay, BRAND, hasPlan,
 } from "./core.js";
 import { animates, travels, token } from "./motion.js";
 import { askPermission, readPrefs, switchRemindersOn, blockedHere } from "./reminders.js";
@@ -855,14 +855,17 @@ function repaintSubjects(name) {
   popChip(chip);
 }
 
+// The import is a way through the setup: closed without a plan, it leads back to the setup's first step.
 async function startShare() {
   const run = shareFlow();
   if (!run) return;
   flow.dialog.close();
   document.documentElement.classList.remove("setup-open");
+  let taken = null;
   try {
-    await run();
+    taken = await run();
   } catch {}
+  if (!taken && !hasPlan() && !document.querySelector("dialog.share-sheet[open]:not(.is-leaving)")) open({ from: flow.from });
 }
 
 function onClick(event) {

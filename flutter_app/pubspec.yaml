@@ -113,11 +113,16 @@ flutter:
     - assets/curriculum/concepts.json
     - assets/ui/pages/
     - assets/ui/static/app/css/
+    - assets/ui/static/app/css/account-screens/
     - assets/ui/static/app/css/pages/
     - assets/ui/static/app/img/
     - assets/ui/static/app/img/luna/
     - assets/ui/static/app/js/
     - assets/ui/static/app/js/account/
+    - assets/ui/static/app/js/account-screens/
+    - assets/ui/static/app/js/account-screens/mascot/
+    - assets/ui/static/app/js/account-screens/screens/
+    - assets/ui/static/app/js/account-screens/ui/
     - assets/ui/static/app/js/pages/
     - assets/ui/static/app/js/sync/
     - assets/ui/static/css/

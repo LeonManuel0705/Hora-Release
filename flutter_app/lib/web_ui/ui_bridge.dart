@@ -124,7 +124,7 @@ class UiBridge {
     if (page != null) {
       if (request.method != 'GET') return const UiBridgeReply(405);
       final nonce = UiPages.nonce();
-      final html = await pages.render(page, nonce: nonce, day: request.parameters['datum'], startScript: startScript);
+      final html = await pages.render(page, nonce: nonce, day: request.parameters['datum'], startScript: startScript, host: api.host);
       return UiBridgeReply(200, headers: {
         'Content-Type': uiContentTypes['html']!,
         'Cache-Control': 'no-store',

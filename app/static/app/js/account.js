@@ -32,12 +32,14 @@ let started = null;
 let checking = false;
 let offline = false;
 let retrying = false;
+let chooser = null;
+const choosers = [];
 
 const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
 // What this device keeps of its account, device-only like the sync state: the session token with the account it belongs
-// to and the service that gave it, whether an account was ever signed in here, the choice to go on without one, and
-// whether the last session ended on its own.
+// to and the service that gave it, whether an account was ever signed in here, the choice to go on without one, whether
+// the last session ended on its own, and whether the screens already offered an account here by themselves.
 function readSaved() {
   const value = accountStore.get();
   const stored = isObject(value) ? value : {};
@@ -50,6 +52,7 @@ function readSaved() {
     known: valid || stored.known === true,
     guest: !valid && stored.guest === true,
     ended: !valid && stored.ended === true,
+    offered: stored.offered === true,
   };
 }
 
@@ -60,6 +63,7 @@ function keep(next) {
     ...(next.known ? { known: true } : {}),
     ...(next.guest ? { guest: true } : {}),
     ...(next.ended ? { ended: true } : {}),
+    ...(next.offered ? { offered: true } : {}),
   };
   accountStore.set(Object.keys(value).length ? value : null);
 }
@@ -75,6 +79,7 @@ export function accountState() {
     guest: Boolean(saved?.guest),
     knownDevice: Boolean(saved?.known),
     sessionEnded: Boolean(saved?.ended),
+    offered: Boolean(saved?.offered),
     checking,
     offline,
     sync: syncStatus(),
@@ -87,12 +92,23 @@ function announce(change) {
 
 const owned = (record, account) => (record?.key && record.account === account ? { key: record.key, account } : null);
 
-function connect(signedIn) {
+// The question which plan stays after signing in waits for the screens that ask it.
+function choosePlan() {
+  if (chooser) return chooser();
+  return new Promise((resolve) => choosers.push(resolve)).then((ask) => ask());
+}
+
+export function onPlanQuestion(ask) {
+  chooser = typeof ask === "function" ? ask : null;
+  if (chooser) choosers.splice(0).forEach((resolve) => resolve(chooser));
+}
+
+function connect(signedIn, ask = false) {
   if (!saved?.token || !entryKey || entryKey.account !== saved.account.id) return;
   if (!signedIn && linked === entryKey && syncConnected()) return;
   linked = entryKey;
   const fetchImpl = (url, options) => request(url, options);
-  connectSync(createSyncClient({ key: entryKey.key, account: entryKey.account, baseUrl: service, fetchImpl }), { signedIn });
+  connectSync(createSyncClient({ key: entryKey.key, account: entryKey.account, baseUrl: service, fetchImpl }), { signedIn, ask, choose: choosePlan });
 }
 
 function unlink() {
@@ -105,7 +121,7 @@ function forget({ ended }) {
   entryKey = null;
   offline = false;
   checking = false;
-  keep({ token: null, account: null, known: true, guest: false, ended });
+  keep({ token: null, account: null, known: true, guest: false, ended, offered: saved.offered });
   const removed = keyStore.remove();
   unlink();
   return removed;
@@ -199,18 +215,18 @@ async function ready() {
   await startAccount();
 }
 
-async function opened({ account, token, key }) {
+async function opened({ account, token, key }, { ask = false } = {}) {
   const previous = saved.token;
   entryKey = key ? { key, account: account.id } : null;
   if (entryKey) await keyStore.set(entryKey);
   else await keyStore.remove();
   offline = false;
   checking = false;
-  keep({ token, account: { id: account.id, email: account.email }, known: true, guest: false, ended: false });
+  keep({ token, account: { id: account.id, email: account.email }, known: true, guest: false, ended: false, offered: saved.offered });
   if (previous && previous !== token) auth.endSession(previous).catch(() => {});
   if (!entryKey) unlink();
   announce("signed-in");
-  connect(true);
+  connect(true, ask);
   return { account: { ...account } };
 }
 
@@ -231,7 +247,7 @@ export async function resendCode(email) {
 
 export async function signIn(email, password) {
   await ready();
-  return opened(await auth.signIn(email, password));
+  return opened(await auth.signIn(email, password), { ask: true });
 }
 
 // The session is still valid but the key is gone from this device (cleared site data, or the phone's page server moved
@@ -287,6 +303,16 @@ export async function dismissSessionEnded() {
   if (saved.ended) {
     keep({ ...saved, ended: false });
     announce("dismissed");
+  }
+  return accountState();
+}
+
+// The screens open themselves at most once on a device; after that only the user opens them.
+export async function markOffered() {
+  await ready();
+  if (!saved.offered) {
+    keep({ ...saved, offered: true });
+    announce("offered");
   }
   return accountState();
 }

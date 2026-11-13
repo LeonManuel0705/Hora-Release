@@ -1,0 +1,71 @@
+/* SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
+
+.scene-frame {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: min(100cqw, calc(100cqh * var(--ratio-n)));
+  aspect-ratio: var(--ratio);
+  transform: translateX(-50%);
+  container-type: inline-size;
+}
+
+.scene-frame[data-layout="tall"] {
+  --ratio: 480 / 560;
+  --ratio-n: 0.8571;
+  --m-left: 11.67%;
+  --m-top: 50.64%;
+  --m-size: 35%;
+}
+
+.scene-frame[data-layout="wide"] {
+  --ratio: 480 / 320;
+  --ratio-n: 1.5;
+  --m-left: 15.62%;
+  --m-top: 22.38%;
+  --m-size: 27.08%;
+}
+
+@container (max-width: 345px) {
+  .scene-frame[data-layout="wide"] {
+    --m-left: 17.92%;
+    --m-top: 28.16%;
+    --m-size: 22.5%;
+  }
+}
+
+.scene-art {
+  position: absolute;
+  inset: 0;
+}
+
+.scene-art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.scene-front {
+  pointer-events: none;
+}
+
+.scene-art [data-part] {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+.scene-frame[data-mascot="off"] .mascot {
+  display: none;
+}
+
+.mascot {
+  position: absolute;
+  left: var(--m-left);
+  top: var(--m-top);
+  width: var(--m-size);
+  aspect-ratio: 1;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+}

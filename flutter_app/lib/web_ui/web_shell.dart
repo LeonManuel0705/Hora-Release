@@ -349,6 +349,19 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver, UiShel
     } catch (_) {}
   }
 
+  @override
+  Future<void> openAccountOnPage() async {
+    JSObject? account;
+    for (var turn = 0; turn < 50 && mounted; turn++) {
+      account = (_frame?.contentWindow as JSObject?)?['AppAccount'] as JSObject?;
+      if (account != null) break;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (account == null) return;
+    final opened = account.callMethod<JSAny?>('open'.toJS, 'signin'.toJS);
+    if (opened != null) await (opened as JSPromise<JSAny?>).toDart;
+  }
+
   void _fallBack() {
     if (_fellBack || !mounted) return;
     _fellBack = true;

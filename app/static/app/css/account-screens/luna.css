@@ -1,0 +1,47 @@
+/* SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
+
+.scene-frame[data-scene="l-luna"][data-layout="tall"] {
+  --m-left: 33.5%;
+  --m-top: 14.36%;
+  --m-size: 33%;
+  --ll-pivot: 240px 474px;
+}
+
+.scene-frame[data-scene="l-luna"][data-layout="wide"] {
+  --m-left: 61.75%;
+  --m-top: -3.375%;
+  --m-size: 21.5%;
+  --ll-pivot: 348px 250px;
+}
+
+.scene-frame[data-scene="l-luna"] .ll-rig {
+  transform-box: view-box;
+  transform-origin: var(--ll-pivot);
+}
+
+.scene-frame[data-scene="l-luna"] [data-part="lock"],
+.scene-frame[data-scene="l-luna"] [data-part="shield"],
+.scene-frame[data-scene="l-luna"] [data-part^="gear-"] {
+  transform-origin: 50% 50%;
+}
+
+.scene-frame[data-scene="l-luna"] :is(.ll-pill, .ll-at, .ll-dot, .ll-seg, .ll-plus, .ll-born, .ll-avatar, .ll-badge, .ll-gear, .ll-spark, .ll-confetti, .ll-check, .ll-env, .ll-shield, .ll-mini, .ll-ring, .ll-flash) {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+.scene-frame[data-scene="l-luna"] :is(.ll-digit, .ll-leaf, .ll-button) {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+.scene-frame[data-scene="l-luna"] .ll-shackle {
+  transform-box: fill-box;
+  transform-origin: 0% 100%;
+}
+
+.scene-frame[data-scene="l-luna"] .ll-pen {
+  transform-box: fill-box;
+  transform-origin: 0% 100%;
+}

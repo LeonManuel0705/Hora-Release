@@ -10,6 +10,7 @@ import 'package:sqflite/sqflite.dart' show Sqflite;
 
 import '../brand.dart';
 import '../build_info.dart';
+import 'ui_api.dart';
 import 'ui_data.dart';
 import 'ui_db.dart';
 
@@ -78,6 +79,11 @@ class UiPages {
 
   static String _escape(String value) => const HtmlEscape(HtmlEscapeMode.attribute).convert(value);
 
+  /// A new installation starts light, stored as if picked: nothing kept for the pages yet, not even the device id, no
+  /// task, no tour and no scheme chosen in the older app screens. One that already has data keeps what it shows.
+  static bool firstStart(Map<String, Object?> store, SharedPreferences prefs, {required bool device, required int tasks}) =>
+      store.isEmpty && !device && tasks == 0 && prefs.getString('tour_state') == null && !prefs.containsKey('theme_switch_mode');
+
   static String themeOf(Map<String, Object?> store, SharedPreferences prefs) {
     final choice = store['app-theme-choice'];
     if (choice == 'light' || choice == 'dark') return choice as String;
@@ -99,10 +105,17 @@ class UiPages {
   Future<String> _template(String page) async =>
       _templates[page] ??= await rootBundle.loadString('assets/ui/pages/$page.html', cache: false);
 
-  Future<String> render(String page, {required String nonce, String? day, String? startScript}) async {
+  Future<String> render(String page, {required String nonce, String? day, String? startScript, UiHost? host}) async {
     final db = await UiDb.open();
     final prefs = await SharedPreferences.getInstance();
     final store = await UiDb.store(db);
+    final tasks = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM tasks')) ?? 0;
+    final device = (await db.query('ui_store', columns: ['key'], where: 'key = ?', whereArgs: [UiDb.deviceKey], limit: 1)).isNotEmpty;
+    if (firstStart(store, prefs, device: device, tasks: tasks)) {
+      await UiDb.save(db, 'app-theme-choice', 'light');
+      store['app-theme-choice'] = 'light';
+      await host?.themeChoice('light');
+    }
     final pinned = isoDay(day);
     final current = DateTime.now();
     final now = pinned == null
@@ -113,7 +126,6 @@ class UiPages {
     final service = accountService;
     if (service != null) data['accountService'] = service;
     final theme = themeOf(store, prefs);
-    final tasks = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM tasks')) ?? 0;
     final tour = prefs.getString('tour_state') == null && prefs.containsKey('user_bundesland') && tasks == 0;
     final values = {
       '__APP_NONCE__': nonce,
