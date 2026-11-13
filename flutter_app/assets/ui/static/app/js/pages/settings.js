@@ -3,13 +3,14 @@ import {
   isoDate, shortDate, WEEKDAYS, WEEKDAYS_SHORT,
   LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, hasPlan, activeSubjectKeys, motionDefault, slug, teacherLabel, periodWords, planChange, planRevert, planMeta, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
-import { toast, setTheme, syncTime, renderSync } from "../shell.js";
+import { toast, setTheme, syncTime, renderSync, typing, overlayOpen } from "../shell.js";
 import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, contents, offerFile } from "../backup.js";
 import { askBackup, importFlow } from "../plan-share.js";
 import { platformName } from "../feedback.js";
 import { suggestShort, pickHue } from "../setup-data.js";
 import { storageNote, safariOnMac, tabReminderNote } from "../persistence.js";
 import { remindersOn, sampleReminder, blockedHere } from "../reminders.js";
+import { onPlanRefresh } from "../plan-refresh.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -990,6 +991,13 @@ function refreshRaster() {
   renderPlan();
   renderCatalog();
   renderDataMeta();
+}
+
+// The plan cards wait while a lesson, a subject, a teacher or the block times are being edited, or a field in them has the focus.
+function planInUse() {
+  const active = document.activeElement;
+  const typed = !!active && !!typing(active) && ["stundenplan", "faecher"].some((id) => $(id)?.contains(active));
+  return overlayOpen() || typed || !!catalog.subject || !!catalog.teacher || raster.confirm || raster.errors.size > 0;
 }
 
 function draftTimes() {
@@ -3914,6 +3922,7 @@ export function init() {
   bindAbout();
   bindNav();
   renderAll();
+  onPlanRefresh(refreshRaster, planInUse);
   loadLaunch();
   if (!openHash()) markSection(sectionInView(), { instant: true });
   document.fonts?.ready.then(() => navState.current && placeMarker(navState.current, { instant: true }));

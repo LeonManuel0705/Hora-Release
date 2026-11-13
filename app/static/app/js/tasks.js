@@ -3,6 +3,7 @@ import { animates, travels, flipKeyed, exitInPlace, enterInPlace, token } from "
 import { toast, parseNote, cleanTitle, typing, shortcutsEnabled, overlayOpen, keepOneLine, renderSync } from "./shell.js";
 import { tasks as taskApi, deadlines as deadlineApi, debounced, serverId } from "./api.js";
 import { initNoteList } from "./notes.js";
+import { onPlanRefresh } from "./plan-refresh.js";
 
 const saveText = debounced(700, (key, id, changes) => taskApi.update(id, changes));
 
@@ -919,4 +920,8 @@ export function initTasks() {
   bindNotes();
   render();
   initNoteList({ toTask: taskFromNote });
+  onPlanRefresh(() => {
+    render();
+    renderChips();
+  }, overlayOpen);
 }

@@ -94,12 +94,13 @@ async function boot({ device, store = {}, session = {}, now, school = EMPTY }) {
   const server = new Map(Object.entries(store));
   const kept = new Map(Object.entries(session));
   const clock = { now };
-  const counts = { reloads: 0, store: 0 };
+  const counts = { reloads: 0, refreshes: 0, store: 0 };
   Date.now = () => clock.now;
   const events = new EventTarget();
   globalThis.addEventListener = events.addEventListener.bind(events);
   globalThis.removeEventListener = events.removeEventListener.bind(events);
   globalThis.dispatchEvent = events.dispatchEvent.bind(events);
+  events.addEventListener("app:plan-refreshed", () => (counts.refreshes += 1));
   const local = new Map();
   globalThis.localStorage = { getItem: (key) => (local.has(key) ? local.get(key) : null), setItem: (key, value) => local.set(key, String(value)), removeItem: (key) => local.delete(key) };
   globalThis.sessionStorage = { getItem: (key) => (kept.has(key) ? kept.get(key) : null), setItem: (key, value) => kept.set(key, String(value)), removeItem: (key) => kept.delete(key) };
@@ -290,6 +291,7 @@ function runDevice() {
         status: sync.syncStatus(),
         connected: sync.syncConnected(),
         reloads: page.counts.reloads,
+        refreshes: page.counts.refreshes,
         abReference: core.data.abReference,
         abAnswered: core.abAnswered(),
         weeks: dates.map((day) => core.weekType(new Date(`${day}T12:00:00`))),
@@ -478,7 +480,8 @@ CASES["an edit on one device reaches the other, which does not send it back"] = 
   assert.equal(onB.lessons.length, 2);
   assert.deepEqual(onB.meta, onA.meta, "the record came along, with the time and device of the edit");
   assert.equal(onB.meta.device, IDS.a);
-  assert.equal(onB.reloads, 1, "the page shows the plan it took");
+  assert.equal(onB.refreshes, 1, "the page shows the plan it took");
+  assert.equal(onB.reloads, 0, "in place, without a reload");
   assert.deepEqual(service.seqs("acc-1"), [1], "B sends nothing back");
   await b.restart();
   await b.connect(shared);
@@ -487,7 +490,7 @@ CASES["an edit on one device reaches the other, which does not send it back"] = 
   await b.connect(shared);
   await b.call("online");
   assert.deepEqual(service.seqs("acc-1"), [1], "not after a new page, a new start, coming back or coming online either");
-  assert.equal((await b.inspect()).reloads, 0, "and the plan it holds is not taken again");
+  assert.equal((await b.inspect()).refreshes, 0, "and the plan it holds is not taken again");
   assert.deepEqual(service.calls("b").filter((call) => "pull" in call).map((call) => call.pull), [0, 1, 0, 1]);
 };
 
@@ -539,7 +542,7 @@ CASES["an import never beats an own edit, and the next sync brings the edit back
   await a.call("visible");
   const onA = await a.inspect();
   assert.equal(onA.meta.origin, "edit");
-  assert.equal(onA.reloads, 0, "A keeps its edit");
+  assert.equal(onA.refreshes, 0, "A keeps its edit");
   await b.call("visible");
   const onB = await b.inspect();
   assert.deepEqual(onB.meta, onA.meta, "B takes the edit back");
@@ -562,7 +565,7 @@ CASES["where no device has an own edit, the newest import wins"] = async () => {
   assert.deepEqual(onA.meta, onB.meta);
   assert.deepEqual(onA.lessons, onB.lessons);
   await b.call("visible");
-  assert.equal((await b.inspect()).reloads, 0, "B keeps its own import");
+  assert.equal((await b.inspect()).refreshes, 0, "B keeps its own import");
   const c = await make(service, "c");
   await c.connect(shared);
   assert.deepEqual((await c.inspect()).meta, onB.meta, "a device that comes later takes the newest import as well");

@@ -7,6 +7,7 @@ import { animates, travels, token, ms } from "../motion.js";
 import { toast, registerSearch, syncTime, typing, overlayOpen, pageUrl, keepOneLine } from "../shell.js";
 import { deadlines as deadlineApi, grades as gradeApi } from "../api.js";
 import { askAtFirstEntry } from "../reminders.js";
+import { onPlanRefresh, planViewsFree } from "../plan-refresh.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -1475,6 +1476,7 @@ function closePanel({ refocus = false } = {}) {
     $("schoolPage").classList.remove("has-panel");
   };
   markSelection();
+  planViewsFree();
   if (narrow.matches && animates()) {
     panel.getAnimations().forEach((animation) => animation.cancel());
     const out = panel.animate(
@@ -2250,7 +2252,15 @@ export function init() {
   openFromUrl();
   startVplan();
   scheduleTick();
+  onPlanRefresh(() => {
+    renderWeekSwitch();
+    renderAll();
+  });
+  onPlanRefresh(() => state.selection && renderPanel(), panelInUse);
 }
+
+// The panel waits while a form in it is open or the focus is inside, as with the minute tick.
+const panelInUse = () => !!state.selection && (state.selection.type === "test" || state.gradeForm || $("schoolPanel").contains(document.activeElement));
 
 function settingsHref() {
   const href = pageUrl("settings", "/hub/settings#stundenplan");

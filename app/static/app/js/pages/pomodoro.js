@@ -4,6 +4,7 @@ import { sceneParts, playIntro } from "../desk.js";
 import { readPrefs } from "../reminders.js";
 import { toast } from "../shell.js";
 import { LIMITS, actions, flush, read, remaining, subscribe, waiting } from "../pomodoro-timer.js";
+import { onPlanRefresh } from "../plan-refresh.js";
 
 const $ = (id) => document.getElementById(id);
 const pad = (value) => String(value).padStart(2, "0");
@@ -557,6 +558,7 @@ export function init() {
   render();
   subscribe(handle);
   flush();
+  onPlanRefresh(() => paintSubject(read()), () => document.activeElement === $("pomoSubject"));
   if (!view.introduced) {
     view.introduced = true;
     if (animates()) playIntro($("pomoScene"));

@@ -8,6 +8,7 @@ import { events as eventApi, debounced, serverId } from "../api.js";
 import { expandEvents, normalizeRecurrence, splitOccurrence, occurrenceId, ruleText } from "../recurrence.js";
 import { readPrefs, eventMinutes, permissionState } from "../reminders.js";
 import { attentive, onAttention } from "../attention.js";
+import { onPlanRefresh, planViewsFree } from "../plan-refresh.js";
 
 const typedBefore = new Map();
 const saveText = debounced(700, (key, id, changes) => {
@@ -1195,6 +1196,7 @@ function closePanel({ refocus = false } = {}) {
   }
   state.selected = null;
   state.confirm = null;
+  planViewsFree();
   $("calPanel").hidden = true;
   $("calendarPage").classList.remove("has-panel");
   syncOverview();
@@ -1506,6 +1508,7 @@ function dropDraft() {
   if (!state.draft) return;
   if (state.selected === state.draft.id) state.selected = null;
   state.draft = null;
+  planViewsFree();
 }
 
 function saveDraft() {
@@ -1519,6 +1522,7 @@ function saveDraft() {
   }
   state.draft = null;
   state.selected = null;
+  planViewsFree();
   $("calPanel").hidden = true;
   $("calendarPage").classList.remove("has-panel");
   syncOverview();
@@ -2397,4 +2401,12 @@ export function init() {
   startSync({ first: true });
   keepFresh();
   scheduleTick();
+  onPlanRefresh(() => render(), () => overlayOpen() || !!state.pending || !!$("calView").querySelector(".is-picking, .is-dragging"));
+  onPlanRefresh(() => state.selected && refreshPanel(), panelInUse);
+}
+
+// A new entry being written, or a field of the open entry being typed in, keeps the panel as it is until it closes.
+function panelInUse() {
+  const active = document.activeElement;
+  return !!state.draft || (!!active && !!typing(active) && $("calPanel").contains(active));
 }

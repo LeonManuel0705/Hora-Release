@@ -8,17 +8,29 @@ import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
 import { toast, openPage, registerSearch, typing, shortcutsEnabled, overlayOpen, placeNear, clampSheet, parseNote, cleanTitle, syncTime } from "./shell.js";
 import { tasks as taskApi, deadlines as deadlineApi, serverId } from "./api.js";
 import { dueItems as dueLists, blockIn, testAhead, homeFirst, DUE_DAYS } from "./home-rules.js";
+import { onPlanRefresh } from "./plan-refresh.js";
 
 const $ = (id) => document.getElementById(id);
-const DAY_START = data.blocks?.length ? Math.min(...data.blocks.map((block) => toMin(block.start))) : 480;
-const DAY_END = data.blocks?.length ? Math.max(...data.blocks.map((block) => toMin(block.end))) : 900;
-const SPAN = DAY_END - DAY_START;
+let DAY_START = 480;
+let DAY_END = 900;
+let SPAN = DAY_END - DAY_START;
+let PERIOD = periodWords();
+let thisPeriod = "";
 const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const clamp = (value, low = 0, high = 1) => Math.min(high, Math.max(low, value));
 const widow = (text) => text.replace(/ (\S{1,12})$/, "\u00a0$1");
-const PERIOD = periodWords();
 const nth = (n) => `${n}.\u00a0${PERIOD.one}`;
-const thisPeriod = `${PERIOD.dative === "der" ? "dieser" : "diesem"} ${PERIOD.one}`;
+
+// The day's span and the word for a period follow the block times, which a plan taken over from another device can change.
+function measureDay() {
+  DAY_START = data.blocks?.length ? Math.min(...data.blocks.map((block) => toMin(block.start))) : 480;
+  DAY_END = data.blocks?.length ? Math.max(...data.blocks.map((block) => toMin(block.end))) : 900;
+  SPAN = DAY_END - DAY_START;
+  PERIOD = periodWords();
+  thisPeriod = `${PERIOD.dative === "der" ? "dieser" : "diesem"} ${PERIOD.one}`;
+}
+
+measureDay();
 
 const state = {
   tasks: flags.empty ? [] : [...data.tasks, ...(data.taskPool || []).filter((task) => !task.done && task.date && !task.someday)].map((task) => ({ ...task })),
@@ -1486,6 +1498,15 @@ export function initHome() {
   }).observe($("track"));
   document.fonts?.ready.then(fitTrack);
   scheduleTick();
+  onPlanRefresh(() => {
+    measureDay();
+    $("track").dataset.signature = "";
+    render(state.day);
+  });
+  onPlanRefresh(() => holdFocus(() => {
+    renderTasks();
+    renderDue();
+  }), () => overlayOpen() || listInUse());
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       saveSeen(state.day);

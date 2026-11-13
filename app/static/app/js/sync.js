@@ -6,6 +6,7 @@ import { wholeSchool, fitSchool, fileKeys, fileSubjects } from "./backup.js";
 import { PLAN_KEYS, changedKeys, writeValues, sameValue } from "./plan-format.js";
 import { SyncError } from "./sync/client.js";
 import { TIMETABLE_STREAM, timetableEntry, readTimetableEntry } from "./sync/timetable-entry.js";
+import { refreshPlan } from "./plan-refresh.js";
 
 const HISTORY = 20;
 const PUSH_DELAY = 1500;
@@ -190,7 +191,7 @@ async function takeOver(current, entry) {
   }
   applySchoolEdits();
   current.pushed = null;
-  if (keys.length && dispatchEvent(new CustomEvent("app:plan-synced", { cancelable: true, detail: { record: entry.record } }))) location.reload();
+  if (keys.length && dispatchEvent(new CustomEvent("app:plan-synced", { cancelable: true, detail: { record: entry.record } }))) refreshPlan();
 }
 
 async function settle(current, fetched) {
