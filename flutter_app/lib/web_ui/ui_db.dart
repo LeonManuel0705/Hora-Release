@@ -17,7 +17,7 @@ class UiDb {
 
   static const storeKeys = {
     'app-timetable-edits', 'app-block-times', 'app-ab-swap', 'app-ab-weeks', 'app-subjects', 'app-teachers', 'app-rooms',
-    'app-timetable-meta', syncKey,
+    'app-timetable-meta', syncKey, accountKey,
     'app-settings', 'app-motion', 'app-theme-choice', 'app-single-keys', 'app-task-filter', 'app-cal-view',
   };
   static const maxValueBytes = 256 * 1024;
@@ -27,6 +27,9 @@ class UiDb {
 
   /// What the page keeps of its sync with an account. Set only while this device syncs, and never part of a backup.
   static const syncKey = 'app-timetable-sync';
+
+  /// The account signed in on this device with its session, or the choice to go on without one. Never part of a backup.
+  static const accountKey = 'app-account';
 
   static Future<void>? _migration;
 

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, g, jsonify, render_template, request, send_file
 
+from . import account_service
 from . import brand
 from . import calendar_cache
 from . import database as db
@@ -21,7 +22,7 @@ bp = Blueprint('ui', __name__)
 
 STORE_KEYS = {
     'app-timetable-edits', 'app-block-times', 'app-ab-swap', 'app-ab-weeks', 'app-subjects', 'app-teachers', 'app-rooms',
-    'app-timetable-meta', 'app-timetable-sync',
+    'app-timetable-meta', 'app-timetable-sync', 'app-account',
     'app-settings', 'app-motion', 'app-theme-choice', 'app-single-keys', 'app-task-filter', 'app-cal-view',
     'app-assistant-basic',
 }
@@ -80,6 +81,9 @@ def render_page(active, template=None):
     now = datetime.combine(day, datetime.now().time()) if day else datetime.now()
     data = ui_data.build(active, store, now)
     data['device'] = db.device_id()
+    service = account_service.service_origin()
+    if service:
+        data['accountService'] = service
     return render_template(
         template,
         active=active,

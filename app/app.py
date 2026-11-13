@@ -33,6 +33,7 @@ except ImportError:
     pass
 
 from .crypto_utils import _get_secret_key, encrypt_file, decrypt_file
+from . import account_service
 from . import brand
 from . import site_icons
 
@@ -151,13 +152,15 @@ def set_security_headers(response):
     nonce = getattr(g, 'csp_nonce', None)
     strict = request.blueprint == 'ui' or getattr(g, 'strict_csp', False)
     script_src = f"'self' 'nonce-{nonce}'" if nonce and strict else "'self' 'unsafe-inline'"
+    service = account_service.service_origin()
+    connect_src = f"'self' {service}" if service else "'self'"
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
         f"script-src {script_src}; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: https:; "
-        "connect-src 'self'; "
+        f"connect-src {connect_src}; "
         "object-src 'none'; "
         "base-uri 'none'; "
         "form-action 'self'; "

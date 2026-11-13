@@ -386,13 +386,14 @@ export function hourIcon(item) {
 
 const PLAN_META_KEY = "app-timetable-meta";
 const SYNC_KEY = "app-timetable-sync";
+const ACCOUNT_KEY = "app-account";
 const PLAN_ORIGINS = ["edit", "import", "share"];
 // Kept for this device alone: storage.keys() leaves them out, so no backup, restore or wipe takes or touches them.
-const DEVICE_KEYS = new Set([PLAN_META_KEY, SYNC_KEY]);
+const DEVICE_KEYS = new Set([PLAN_META_KEY, SYNC_KEY, ACCOUNT_KEY]);
 
 const SERVER_KEYS = new Set([
   "app-timetable-edits", "app-block-times", "app-ab-swap", "app-ab-weeks", "app-subjects", "app-teachers", "app-rooms",
-  PLAN_META_KEY, SYNC_KEY,
+  PLAN_META_KEY, SYNC_KEY, ACCOUNT_KEY,
   "app-settings", "app-motion", "app-theme-choice", "app-single-keys", "app-task-filter", "app-cal-view",
 ]);
 
@@ -474,20 +475,25 @@ export const storage = {
   },
 };
 
-export const syncStore = {
-  get: () => (serverValues.has(SYNC_KEY) ? JSON.parse(JSON.stringify(serverValues.get(SYNC_KEY))) : null),
-  set(value) {
-    if (value == null) {
-      if (!serverValues.has(SYNC_KEY)) return;
-      serverValues.delete(SYNC_KEY);
-      persist(SYNC_KEY, undefined);
-      return;
-    }
-    if (sameValue(serverValues.get(SYNC_KEY), value)) return;
-    serverValues.set(SYNC_KEY, JSON.parse(JSON.stringify(value)));
-    persist(SYNC_KEY, value);
-  },
-};
+function deviceStore(key) {
+  return {
+    get: () => (serverValues.has(key) ? JSON.parse(JSON.stringify(serverValues.get(key))) : null),
+    set(value) {
+      if (value == null) {
+        if (!serverValues.has(key)) return;
+        serverValues.delete(key);
+        persist(key, undefined);
+        return;
+      }
+      if (sameValue(serverValues.get(key), value)) return;
+      serverValues.set(key, JSON.parse(JSON.stringify(value)));
+      persist(key, value);
+    },
+  };
+}
+
+export const syncStore = deviceStore(SYNC_KEY);
+export const accountStore = deviceStore(ACCOUNT_KEY);
 
 const planValues = () => PLAN_KEYS.map((key) => serverValues.get(key) ?? null);
 const planListeners = new Set();

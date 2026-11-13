@@ -7,6 +7,7 @@ import { initPlanShare } from "./plan-share.js";
 import { initFeedback } from "./feedback.js";
 import { initSetup } from "./setup.js";
 import { initGoogleSync } from "./google-sync.js";
+import { data } from "./core.js";
 
 initShell();
 initHome();
@@ -17,6 +18,8 @@ initPlanShare();
 initFeedback();
 initSetup();
 initGoogleSync();
+
+if (data?.accountService) import("./account.js").then((account) => account.startAccount()).catch(() => {});
 
 const pageModule = document.querySelector("[data-page-module]")?.dataset.pageModule;
 if (pageModule) (await import(`./pages/${pageModule}.js`)).init?.();

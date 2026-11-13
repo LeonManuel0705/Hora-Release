@@ -84,4 +84,36 @@ void main() {
     final export = await UiApi(null).handle(UiRequest(method: 'GET', segments: ['ui', 'export'], query: const {}, json: false, body: null));
     expect(jsonEncode(export.body), isNot(contains('acc-1')));
   });
+
+  test('the account is kept on the device like the sync state, and the export leaves it out', () async {
+    final db = await UiDb.open();
+    final token = 't' * 43;
+    final account = {'service': 'http://127.0.0.1:8794', 'token': token, 'account': {'id': 'acc-7', 'email': 'lina@example.org'}, 'known': true};
+    expect((await UiApi(null).handle(put(UiDb.accountKey, account))).status, 200);
+    expect((await UiDb.store(db))[UiDb.accountKey], account);
+    expect((await pageJson('appStore'))[UiDb.accountKey], account);
+    final export = await UiApi(null).handle(UiRequest(method: 'GET', segments: ['ui', 'export'], query: const {}, json: false, body: null));
+    expect(jsonEncode(export.body), allOf(isNot(contains('acc-7')), isNot(contains(token))));
+    final removed = await UiApi(null).handle(UiRequest(method: 'DELETE', segments: ['ui', 'store', UiDb.accountKey], query: const {}, json: false, body: null));
+    expect(removed.status, 200);
+    expect((await UiDb.store(db)).containsKey(UiDb.accountKey), isFalse);
+  });
+
+  test('the account service comes only from the build and opens the page policy for it alone', () async {
+    String connect(String policy) => RegExp('connect-src ([^;]+)').firstMatch(policy)!.group(1)!;
+    expect(UiPages.accountService, isNull);
+    expect(connect(UiPages.policy('n', framed: true)), "'self'");
+    expect((await pageJson('appData')).containsKey('accountService'), isFalse);
+    addTearDown(() => UiPages.accountService = null);
+    UiPages.accountService = accountServiceOrigin('http://127.0.0.1:8794/');
+    final reply = await bridge.handle(UiBridgeRequest(method: 'GET', path: '/hub', navigate: true));
+    expect(connect(reply.headers['Content-Security-Policy']!), "'self' http://127.0.0.1:8794");
+    expect(connect(UiPages.policy('n')), "'self' http://127.0.0.1:8794");
+    expect((await pageJson('appData', '/hub'))['accountService'], 'http://127.0.0.1:8794');
+    expect((await UiDb.store(await UiDb.open())).containsKey(UiDb.accountKey), isFalse, reason: 'a page load stores nothing');
+    for (final value in ['', 'konto.example.org', 'ftp://konto.example.org', 'https://konto.example.org/api', 'https://a:b@konto.example.org', 'https://konto.example.org?q=1']) {
+      expect(accountServiceOrigin(value), isNull, reason: value);
+    }
+    expect(accountServiceOrigin(' https://konto.example.org '), 'https://konto.example.org');
+  });
 }

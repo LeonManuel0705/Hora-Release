@@ -40,16 +40,29 @@ String uiContentType(String path) {
   return uiContentTypes[extension] ?? 'application/octet-stream';
 }
 
+/// The origin of an account service address, or null for anything else than a bare http or https origin.
+String? accountServiceOrigin(String value) {
+  final text = value.trim();
+  if (text.isEmpty) return null;
+  final uri = Uri.tryParse(text);
+  if (uri == null || !uri.hasAuthority || (uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty) return null;
+  if (uri.userInfo.isNotEmpty || (uri.path.isNotEmpty && uri.path != '/') || uri.hasQuery || uri.hasFragment) return null;
+  return uri.origin;
+}
+
 class UiPages {
   UiPages({this.browser = false});
 
   final bool browser;
   final Map<String, String> _templates = {};
 
+  /// The account service, set with `--dart-define=HORA_ACCOUNT_SERVICE=<origin>`. Without it the pages keep the account core off.
+  static String? accountService = accountServiceOrigin(const String.fromEnvironment('HORA_ACCOUNT_SERVICE'));
+
   static String policy(String nonce, {bool framed = false}) =>
       "default-src 'self'; script-src 'self' 'nonce-$nonce'; style-src 'self' 'unsafe-inline'; "
-      "img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors ${framed ? "'self'" : "'none'"}; "
-      "base-uri 'none'; form-action 'self'";
+      "img-src 'self' data:; font-src 'self'; connect-src 'self'${accountService == null ? '' : ' $accountService'}; "
+      "frame-ancestors ${framed ? "'self'" : "'none'"}; base-uri 'none'; form-action 'self'";
 
   static String nonce() {
     final random = Random.secure();
@@ -97,6 +110,8 @@ class UiPages {
         : dayOf(pinned).add(Duration(hours: current.hour, minutes: current.minute, seconds: current.second));
     final data = await UiData(db, prefs, now, browser: browser).build(page, store);
     data['device'] = await UiDb.deviceId(db);
+    final service = accountService;
+    if (service != null) data['accountService'] = service;
     final theme = themeOf(store, prefs);
     final tasks = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM tasks')) ?? 0;
     final tour = prefs.getString('tour_state') == null && prefs.containsKey('user_bundesland') && tasks == 0;
