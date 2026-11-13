@@ -1,4 +1,5 @@
-import { BRAND, LOCAL_KEYS, addDays, data, dayDiff, hm, isoDate, lessonsFor, minutesOf, nextSchoolDay, startOfDay, storage, subject, toMin } from "./core.js";
+import { BRAND, LOCAL_KEYS, addDays, data, dayDiff, hm, isoDate, lessonsFor, minutesOf, nextSchoolDay, parseDate, periodWords, startOfDay, storage, subject, toMin } from "./core.js";
+import { blockIn } from "./home-rules.js";
 import { expandEvents } from "./recurrence.js";
 import { safariOnMac } from "./persistence.js";
 import { endNotice, read as readPomodoro, subscribe } from "./pomodoro-timer.js";
@@ -115,6 +116,13 @@ const whenText = (days) => (days === 0 ? "heute" : days === 1 ? "morgen" : `in $
 const capitalized = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const courseOf = (key) => (key ? `, ${subject(key).label}` : "");
 
+// The lesson of a test the overview names as well, so whoever reads it knows whether the break before is still there to learn.
+function periodOf(item) {
+  if (!item.subject) return "";
+  const block = blockIn(item, lessonsFor(parseDate(item.date)));
+  return block ? `, ${block}.\u00a0${periodWords().one}` : "";
+}
+
 function noteOf(item) {
   const lines = String(item.detail || "").split("\n").map((line) => line.replace(/^\s*[-\u2013\u2022*]\s+/, "").trim().replace(/[,;]$/, "")).filter(Boolean);
   if (!lines.length) return "";
@@ -156,7 +164,7 @@ function deadlineReminders(prefs, day, minute) {
       title: `${item.kind}: ${item.title}`,
       body: homework
         ? `Fällig ${whenText(days)}${courseOf(item.subject)}`
-        : `${capitalized(whenText(days))}${item.time ? ` um ${hm(item.time)}` : ""}${courseOf(item.subject)}${noteOf(item)}`,
+        : `${capitalized(whenText(days))}${item.time ? ` um ${hm(item.time)}` : periodOf(item)}${courseOf(item.subject)}${noteOf(item)}`,
     });
   }
   return reminders;

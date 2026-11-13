@@ -156,6 +156,32 @@ const tests = {
     assert.deepEqual(deadlines("2026-11-09T12:00", untilSix), []);
     assert.equal(deadlines("2026-11-09T18:00", untilSix).length, 2);
   },
+  "a test without a time names its lesson in the words of the school, the one the server named when the plan has it that day"() {
+    const before = { timetable: data.timetable, subjects: data.subjects, blocks: data.blocks };
+    const empty = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+    const lesson = (block, key) => ({ block, subject: key, room: "", teacher: "T" });
+    const test = (id, extra) => ({ ...deadline(id, "Test", "2026-11-10"), subject: "mathe", ...extra });
+    try {
+      data.subjects = { mathe: { name: "Mathe", label: "Mathe", short: "Ma", hue: "rose" }, bio: { name: "Bio", label: "Bio", short: "Bi", hue: "moss" } };
+      data.blocks = [{ n: 1, start: "08:00", end: "08:45" }, { n: 2, start: "08:50", end: "09:35" }, { n: 3, start: "09:55", end: "10:40" }];
+      const tuesday = { ...empty, 2: [lesson(1, "bio"), lesson(2, "mathe"), lesson(3, "mathe")] };
+      data.timetable = { A: tuesday, B: tuesday };
+      data.deadlines = [test("t1"), test("t2", { block: 3 }), test("t3", { block: 1 }), test("t4", { time: "08:50" }), test("t5", { subject: "bio" }), test("t6", { subject: null })];
+      assert.deepEqual(deadlines("2026-11-09T18:00").map(([, body]) => body), [
+        "Morgen, 2.\u00a0Stunde, Mathe", "Morgen, 3.\u00a0Stunde, Mathe", "Morgen, 2.\u00a0Stunde, Mathe", "Morgen um 8:50, Mathe", "Morgen, 1.\u00a0Stunde, Bio", "Morgen",
+      ]);
+      assert.equal(deadlines("2026-11-10T07:00")[0][1], "Heute, 2.\u00a0Stunde, Mathe");
+      data.deadlines = [{ ...test("t7"), detail: "Brüche" }, { ...test("t8"), kind: "Klausur", date: "2026-11-11" }];
+      assert.deepEqual(deadlines("2026-11-09T18:00").map(([, body]) => body), ["Morgen, 2.\u00a0Stunde, Mathe\nLernstoff: Brüche"]);
+      assert.deepEqual(deadlines("2026-11-10T18:00").filter(([key]) => key.startsWith("deadline:t8:")).map(([, body]) => body), ["Morgen, Mathe"], "no lesson of the subject that day");
+      data.blocks = [{ n: 1, start: "08:00", end: "09:30" }, { n: 2, start: "09:50", end: "11:20" }, { n: 3, start: "11:40", end: "13:10" }];
+      data.deadlines = [test("t9")];
+      assert.equal(deadlines("2026-11-09T18:00")[0][1], "Morgen, 2.\u00a0Block, Mathe");
+    } finally {
+      Object.assign(data, before);
+      data.deadlines = [];
+    }
+  },
 };
 
 let failed = 0;

@@ -179,6 +179,39 @@ void main() {
     expect(plan[3].body, 'Heute um 8:00, Mathe\nLernstoff: Ableitungen, Kurvendiskussion');
   });
 
+  test('a test without a time names its lesson in the words of the school, the one the server named when the plan here has it that day', () {
+    Map<String, Object?> entry(String id, [Map<String, Object?> extra = const {}]) =>
+        {'id': id, 'kind': 'Test', 'title': 'Analysis', 'subject': '1', 'date': '2026-11-10', 'detail': '', 'status': 'offen', ...extra};
+    final tuesday = _week({2: [_lesson(1, '3'), _lesson(2, '1'), _lesson(3, '1')]});
+    final data = _data(timetable: {'A': tuesday, 'B': tuesday}, deadlines: [
+      entry('t1'),
+      entry('t2', {'block': 3}),
+      entry('t3', {'block': 1}),
+      entry('t4', {'time': '09:50'}),
+      entry('t5', {'subject': '3'}),
+      entry('t6', {'subject': null}),
+      entry('t7', {'date': '2026-11-11'}),
+    ]);
+    String body(Map<String, Object?> store, String key) => _byKey(_plan(data, store, sunday, days: 3))[key]!.body;
+    expect([for (final id in ['t1', 't2', 't3', 't4', 't5', 't6']) body(_store(), 'deadline:$id:2026-11-09')], [
+      'Morgen, 2. Block, Mathe',
+      'Morgen, 3. Block, Mathe',
+      'Morgen, 2. Block, Mathe',
+      'Morgen um 9:50, Mathe',
+      'Morgen, 1. Block, Physik',
+      'Morgen',
+    ]);
+    expect(body(_store(), 'deadline:t1:2026-11-10'), 'Heute, 2. Block, Mathe');
+    expect(body(_store(), 'deadline:t7:2026-11-10'), 'Morgen, Mathe', reason: 'no lesson of the subject that day');
+    expect(body(_store(extra: {'app-timetable-edits': {'B:2:2': null}}), 'deadline:t1:2026-11-09'), 'Morgen, 3. Block, Mathe');
+    data['blocks'] = [
+      {'n': 1, 'start': '08:00', 'end': '08:45'},
+      {'n': 2, 'start': '08:50', 'end': '09:35'},
+      {'n': 3, 'start': '09:55', 'end': '10:40'},
+    ];
+    expect(body(_store(), 'deadline:t1:2026-11-09'), 'Morgen, 2. Stunde, Mathe');
+  });
+
   test('a longer lead reminds every evening up to the date, and six inside the quiet hours moves those to the morning', () {
     final data = _data(deadlines: [
       {'id': 'exam-1', 'kind': 'Klausur', 'title': 'Klausur', 'subject': null, 'date': '2026-11-12', 'detail': '', 'status': 'offen'},
@@ -437,6 +470,8 @@ Future<void> _compareWithPage(Map<String, String>? quiet, {bool eventsOn = true,
       {'id': 'hw-2', 'kind': 'Hausaufgabe', 'title': 'Abgegeben', 'subject': '2', 'date': '2026-11-10', 'detail': '', 'status': 'abgegeben'},
       {'id': 'exam-1', 'kind': 'Klausur', 'title': 'Erörterung', 'subject': '2', 'date': '2026-11-16', 'time': '09:50', 'detail': 'Lyrik', 'status': 'offen'},
       {'id': 'hw-3', 'kind': 'Hausaufgabe', 'title': 'Lesen', 'subject': null, 'date': '2026-11-13', 'detail': '', 'status': 'offen'},
+      {'id': 'test-2', 'kind': 'Test', 'title': 'Vokabeln', 'subject': '2', 'date': '2026-11-16', 'detail': '', 'status': 'offen'},
+      {'id': 'test-3', 'kind': 'Test', 'title': 'Optik', 'subject': '3', 'date': '2026-11-17', 'block': 3, 'detail': '', 'status': 'offen'},
     ],
     events: [
       {'id': 'loc-a', 'date': '2026-11-09', 'start': '15:00', 'end': '16:30', 'title': 'Zahnarzt', 'place': 'Praxis', 'kind': 'private'},
@@ -489,6 +524,8 @@ Future<void> _compareWithPage(Map<String, String>? quiet, {bool eventsOn = true,
   expect(phone.keys.toSet(), page.keys.toSet());
   expect(page['deadline:test-1:2026-11-10']?['minute'], sixQuiet ? isNot(18 * 60) : 18 * 60, reason: '$quiet');
   expect(page['deadline:test-1:2026-11-11']?['minute'], isNot(18 * 60), reason: '$quiet');
+  expect(page['deadline:test-2:2026-11-16']?['body'], 'Heute, 2.\u00a0Block, Deutsch LK');
+  expect(page['deadline:test-3:2026-11-17']?['body'], 'Heute, 1.\u00a0Block, Physik', reason: 'the plan here moved Physik');
   for (final MapEntry(:key, value: shown) in page.entries) {
     final planned = phone[key]!;
     expect(planned.title, shown['title'], reason: '$key $quiet $eventsOn');

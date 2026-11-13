@@ -287,6 +287,9 @@ class _School {
     return _holidays.any((range) => range.$1.compareTo(iso) <= 0 && range.$2.compareTo(iso) >= 0);
   }
 
+  // periodWords() in core.js: single periods are Stunden, longer ones Blöcke.
+  String get periodOne => _blocks.isNotEmpty && _blocks.values.every((block) => block.$2 - block.$1 <= 60) ? 'Stunde' : 'Block';
+
   List<_Lesson> lessons(DateTime day) {
     if (day.weekday > 5 || holiday(day)) return const [];
     return [
@@ -344,6 +347,18 @@ class _Planner {
     }
   }
 
+  // blockIn() in home-rules.js: the lesson the server named when the plan here has it that day, else the first of the subject.
+  String _periodOf(Map<String, Object?> item, String date) {
+    final subject = item['subject'];
+    if (subject is! String || subject.isEmpty) return '';
+    final lessons = school.lessons(dayOf(date));
+    final named = item['block'] is num ? (item['block'] as num).toInt() : null;
+    final block = lessons.any((lesson) => lesson.block == named && lesson.subject == subject)
+        ? named
+        : lessons.where((lesson) => lesson.subject == subject).firstOrNull?.block;
+    return block == null ? '' : ', $block.\u00a0${school.periodOne}';
+  }
+
   void deadlines(DateTime day, List<Map<String, Object?>> items) {
     for (final item in items) {
       final homework = item['kind'] == 'Hausaufgabe';
@@ -357,7 +372,7 @@ class _Planner {
       final time = _text(item['time']);
       final body = homework
           ? 'Fällig ${_whenText(days)}$course'
-          : '${_capitalized(_whenText(days))}${time.isEmpty ? '' : ' um ${_hm(time)}'}$course${_noteOf(item)}';
+          : '${_capitalized(_whenText(days))}${time.isEmpty ? _periodOf(item, date) : ' um ${_hm(time)}'}$course${_noteOf(item)}';
       _add('deadline:${item['id']}:${isoOf(day)}', day, days > 0 ? prefs.evening : prefs.earliest, '${_text(item['kind'])}: ${_text(item['title'])}', body, homework ? 'homework' : 'tests');
     }
   }
