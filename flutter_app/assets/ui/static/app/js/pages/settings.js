@@ -3800,7 +3800,7 @@ function renderAbout() {
   card.innerHTML = `<dl class="about-list">
       <div><dt>Version</dt><dd>${version}</dd></div>
       <div><dt>Plattform</dt><dd>${esc(where)}</dd></div>
-      <div><dt>Daten</dt><dd>Lokal auf diesem Gerät</dd></div>
+      <div><dt>Daten</dt><dd>${data?.accountService ? "Auf diesem Gerät, mit Konto auch verschlüsselt in der Cloud" : "Lokal auf diesem Gerät"}</dd></div>
       <div><dt>Lizenz</dt><dd>${esc(about.license || "PolyForm Noncommercial 1.0.0")}</dd></div>
     </dl>
     <div class="about-links"><button class="pill" type="button" data-feedback>${icon("send")}Rückmeldung geben</button><button class="pill" type="button" data-tour-start>${icon("presentation")}Tutorial mit Luna</button>${browser}${links.map(([href, text, glyph]) => `<a class="pill" href="${esc(href)}" target="_blank" rel="noopener">${icon(glyph)}${text}${icon("arrow-up-right", "is-external")}<span class="visually-hidden">, öffnet in einem neuen Tab</span></a>`).join("")}</div>

@@ -134,6 +134,7 @@ function getHora() {
     <p class="ap-fine ap-footnote">${escapeHtml(PLATFORMS[mine]?.kind === "pwa" ? t("start.footnote_iserv_web", { device: deviceName(mine) }) : t("start.footnote_iserv"))}</p>
     <p class="ap-fine ap-footnote">${escapeHtml(t("start.footnote_agent"))}</p>
     <p class="ap-fine ap-footnote">${escapeHtml(t("start.footnote"))}</p>
+    <p class="ap-fine ap-footnote">${escapeHtml(t("start.footnote_account"))}</p>
   </section>`;
 }
 

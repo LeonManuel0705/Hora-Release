@@ -109,7 +109,7 @@ def inject_globals():
         cache_bust = int(time.time())
     tour_state = db.get_tour_state()
     tour_auto = tour_state is None and not db.has_hub_tasks()
-    return {'app_version': _get_app_version(), 'user_theme': theme, 'cache_bust': cache_bust, 'brand_name': brand.NAME, 'brand_previous': ','.join(brand.PREVIOUS_NAMES), 'brand_repository': brand.REPOSITORY, 'tour_auto': tour_auto}
+    return {'app_version': _get_app_version(), 'user_theme': theme, 'cache_bust': cache_bust, 'brand_name': brand.NAME, 'brand_previous': ','.join(brand.PREVIOUS_NAMES), 'brand_repository': brand.REPOSITORY, 'brand_website': brand.WEBSITE, 'tour_auto': tour_auto}
 
 from .paths import DATA_DIR, env
 API_TOKEN_FILE = DATA_DIR / '.api_token'
@@ -462,13 +462,14 @@ def hub_settings():
     from .google_oauth import is_google_oauth_configured
     return render_template('hub/settings.html', active_tab='settings', google_configured=is_google_oauth_configured())
 
+# The legal texts live on the website only, so the app never shows an outdated copy.
 @app.route('/hub/terms')
 def hub_terms():
-    return render_template('hub/terms.html', active_tab='settings')
+    return redirect(f'{brand.WEBSITE}/nutzungsbedingungen')
 
 @app.route('/hub/privacy')
 def hub_privacy():
-    return render_template('hub/privacy.html', active_tab='settings')
+    return redirect(f'{brand.WEBSITE}/datenschutz')
 
 @app.route('/hub/klassisch/email')
 def hub_email():

@@ -26,7 +26,7 @@
     "privacy_policy": "Datenschutzerklärung · {{BRAND_NAME}}",
     "desc": {
       "features": "Was {{BRAND_NAME}} am Computer, auf Android und als Web-App auf dem iPhone kann, mit einer Tabelle für jede Funktion und jedes Gerät.",
-      "privacy": "Welche Verbindungen {{BRAND_NAME}} ins Netz aufbaut und wofür. Deine Daten bleiben auf deinem Gerät, einen {{BRAND_NAME}}-Server gibt es nicht.",
+      "privacy": "Welche Verbindungen {{BRAND_NAME}} ins Netz aufbaut und wofür. Deine Daten bleiben auf deinem Gerät, mit Konto zusätzlich als verschlüsselte Kopie, die nur deine Geräte lesen können.",
       "download": "{{BRAND_NAME}} kostenlos für Mac, Windows, Linux und Android laden oder als Web-App auf dem iPhone öffnen, mit der Anleitung für jedes Gerät.",
       "about": "{{BRAND_NAME}} ist ein Schülerprojekt aus Brandenburg. Warum es die App gibt und was du mit ihr machen darfst.",
       "terms": "Die Nutzungsbedingungen von {{BRAND_NAME}}.",
@@ -485,7 +485,7 @@
   },
   "privacy_page": {
     "title": "Was {{BRAND_NAME}} mit deinen Daten macht",
-    "lede": "Alles, was du in {{BRAND_NAME}} eingibst, liegt auf deinem Gerät, einen eigenen Server für deine Daten gibt es nicht. Hier steht genau, was trotzdem ins Netz geht und was verschlüsselt ist.",
+    "lede": "Alles, was du in {{BRAND_NAME}} eingibst, liegt auf deinem Gerät. Legst du ein Konto an, kommt eine verschlüsselte Kopie von Stundenplan, Vorname und Profilbild dazu, die nur deine Geräte lesen können. Hier steht genau, was ins Netz geht und was verschlüsselt ist.",
     "where_title": "Wo deine Daten liegen",
     "where": [
       {
@@ -599,11 +599,18 @@
         "tone": "ok"
       },
       {
-        "icon": "server-off",
-        "to": "{{BRAND_NAME}}-Server",
-        "what": "deine Daten",
-        "when": "gibt es nicht",
-        "tone": "cancel"
+        "icon": "lock",
+        "to": "{{BRAND_NAME}}-Konto bei Cloudflare",
+        "what": "deine E-Mail-Adresse, ein Prüfwert zu deinem Passwort und Stundenplan, Vorname und Profilbild, vorher auf deinem Gerät verschlüsselt",
+        "when": "nur mit Konto: beim Anmelden, beim Start und nach jeder Änderung",
+        "tone": "ok"
+      },
+      {
+        "icon": "mail",
+        "to": "Google (Gmail)",
+        "what": "deine E-Mail-Adresse und der Code, den {{BRAND_NAME}} dir schickt",
+        "when": "wenn du ein Konto anlegst oder dein Passwort zurücksetzt",
+        "tone": "ok"
       },
       {
         "icon": "eye-off",
@@ -614,19 +621,19 @@
       }
     ],
     "lock_title": "Was verschlüsselt ist",
-    "lock_text": "Zugangsdaten für IServ und Mail speichert {{BRAND_NAME}} verschlüsselt, am Computer mit Fernet und einem Schlüssel aus 600.000 PBKDF2-Runden, auf Android im verschlüsselten Speicher des Systems. Am Computer verschlüsselt {{BRAND_NAME}} so auch Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Termine, Notizen, Mail-Entwürfe, gespeicherte Orte und den Verlauf mit Luna. Unverschlüsselt liegen dort der Stundenplan mit Fächern, Lehrkräften, Räumen und Zeiten, die Aufgabenliste, Training, Pomodoro-Statistik, Rückblicke, Lesezeichen, Tickets, der zwischengespeicherte Vertretungsplan und die Einstellungen mit Geburtstag und Wetterort, auf Android und in der Web-App alles außer den Zugangsdaten. Das alles bleibt auf deinem Gerät.",
+    "lock_text": "Zugangsdaten für IServ und Mail speichert {{BRAND_NAME}} verschlüsselt, am Computer mit Fernet und einem Schlüssel aus 600.000 PBKDF2-Runden, auf Android im verschlüsselten Speicher des Systems. Am Computer verschlüsselt {{BRAND_NAME}} so auch Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Termine, Notizen, Mail-Entwürfe, gespeicherte Orte und den Verlauf mit Luna. Unverschlüsselt liegen dort der Stundenplan mit Fächern, Lehrkräften, Räumen und Zeiten, die Aufgabenliste, Training, Pomodoro-Statistik, Rückblicke, Lesezeichen, Tickets, der zwischengespeicherte Vertretungsplan und die Einstellungen mit Geburtstag und Wetterort, auf Android und in der Web-App alles außer den Zugangsdaten. Ohne Konto bleibt das alles auf deinem Gerät. Mit Konto verschlüsselt {{BRAND_NAME}} Stundenplan, Vorname und Profilbild vor dem Hochladen mit AES-256. Der Schlüssel entsteht aus deinem Passwort und verlässt das Gerät nie, für den Server bleiben die Einträge unlesbar.",
     "lock_number": "600.000",
     "lock_number_label": "PBKDF2-Runden für deine Zugangsdaten am Computer",
     "no_title": "Was es nicht gibt",
     "no": [
-      "Konto und E-Mail-Adresse",
+      "Kontozwang",
       "Werbung",
       "Tracking, Nutzungsanalyse und Absturzberichte",
-      "Cloud-Synchronisierung",
-      "{{BRAND_NAME}}-Server für deine Daten"
+      "Einträge, die der Server lesen kann",
+      "Dein Passwort auf einem Server"
     ],
     "open_title": "Du musst mir nicht glauben",
-    "open_text": "Den Quellcode von {{BRAND_NAME}} kann jeder lesen. Jede Zeile, die mit deinen Daten arbeitet, liegt öffentlich auf GitHub.",
+    "open_text": "Den Quellcode der App kann jeder lesen. Jede Zeile, die auf deinem Gerät mit deinen Daten arbeitet, liegt öffentlich auf GitHub.",
     "open_link": "Code ansehen",
     "legal_link": "Zur Datenschutzerklärung",
     "eyebrow": "Datenschutz",
@@ -659,7 +666,7 @@
       },
       {
         "q": "Kann ich meine Daten auf ein neues Gerät mitnehmen?",
-        "a": "Ja, mit einer Sicherung. In den Einstellungen unter Daten sicherst du Stundenplan und Fächer, Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Aufgaben, Termine, Notizen, Orte und Einstellungen in einer Datei und liest sie auf dem neuen Gerät wieder ein. Training, Lesezeichen und die Anmeldungen bei IServ und Mail richtest du dort neu ein. Eine Cloud, die deine Geräte von selbst abgleicht, gibt es nicht."
+        "a": "Ja, mit einer Sicherung. In den Einstellungen unter Daten sicherst du Stundenplan und Fächer, Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Aufgaben, Termine, Notizen, Orte und Einstellungen in einer Datei und liest sie auf dem neuen Gerät wieder ein. Training, Lesezeichen und die Anmeldungen bei IServ und Mail richtest du dort neu ein. Mit einem Konto kommen Stundenplan, Vorname und Profilbild von selbst und verschlüsselt auf deine anderen Geräte, für alles andere bleibt die Sicherung."
       },
       {
         "q": "Gehört {{BRAND_NAME}} zu IServ?",
@@ -725,13 +732,13 @@
   "terms": {
     "nav_title": "Nutzungsbedingungen",
     "hero_title": "Nutzungsbedingungen",
-    "hero_date": "Stand: 7. November 2026",
+    "hero_date": "Stand: 14. November 2026",
     "s1_title": "§ 1 Geltungsbereich",
     "s1_p1": "Diese Nutzungsbedingungen gelten für die Nutzung der Anwendung „{{BRAND_NAME}}“ für Computer (macOS, Windows, Linux) und Android sowie als Web-App (zusammen nachfolgend „App“) und der zugehörigen Website {{BRAND_WEBSITE_HOST}} (nachfolgend „Website“), bereitgestellt von Leon Manuel Töpper (nachfolgend „Anbieter“).",
     "s1_p2": "Mit der Installation und Nutzung der App erklärst du dich mit diesen Nutzungsbedingungen einverstanden. Wenn du mit diesen Bedingungen nicht einverstanden bist, nutze die App bitte nicht.",
     "s2_title": "§ 2 Leistungsbeschreibung",
     "s2_p1": "{{BRAND_NAME}} ist eine kostenlose App für den Schulalltag. Die App ermöglicht unter anderem die Verwaltung von Stundenplänen, Noten, Aufgaben, Terminen, Trainingsplänen und ÖPNV-Routen.",
-    "s2_p2": "Die App funktioniert offline-first: Alle Daten werden ausschließlich lokal auf deinem Gerät gespeichert. Es wird kein Benutzerkonto benötigt, und die Apps für Computer und Android brauchen nach der Einrichtung keine Internetverbindung für die Kernfunktionen.",
+    "s2_p2": "Die App funktioniert offline-first: Alle Daten werden auf deinem Gerät gespeichert. Ein Benutzerkonto ist freiwillig, und die Apps für Computer und Android brauchen nach der Einrichtung keine Internetverbindung für die Kernfunktionen. Mit einem Konto lädt die App eine verschlüsselte Kopie einzelner Daten hoch, um sie zwischen deinen Geräten abzugleichen. Einzelheiten stehen in der Datenschutzerklärung unter § 3 f).",
     "s2_p3": "Der Anbieter behält sich das Recht vor, den Funktionsumfang der App jederzeit zu ändern, zu erweitern oder einzuschränken.",
     "s3_title": "§ 3 Nutzungsrechte",
     "s3_p1": "Der Quellcode der App steht unter der PolyForm Noncommercial License 1.0.0. Danach darfst du die App für jeden nicht-kommerziellen Zweck nutzen, verändern und weitergeben, auch als Schule oder andere Bildungseinrichtung.",
@@ -742,7 +749,7 @@
     "s5_p1": "Die App wird ohne jegliche ausdrückliche oder stillschweigende Gewährleistung bereitgestellt. Der Anbieter übernimmt keinerlei Gewähr für die Richtigkeit, Vollständigkeit, Aktualität oder Zuverlässigkeit der in der App angezeigten Daten. Dies gilt insbesondere für ÖPNV-Fahrplandaten, Preisinformationen und sonstige Drittanbieterdaten (z. B. von Transitous oder Open-Meteo), auf die der Anbieter keinen Einfluss hat.",
     "s5_p2": "Der Anbieter haftet nicht für Schäden jeglicher Art, die aus der Nutzung oder Unmöglichkeit der Nutzung der App entstehen (einschließlich, aber nicht beschränkt auf direkte, indirekte, zufällige oder Folgeschäden, entgangenen Gewinn oder Datenverlust). Hiervon unberührt bleibt die Haftung für Schäden aus der Verletzung des Lebens, des Körpers oder der Gesundheit sowie die Haftung für Vorsatz und grobe Fahrlässigkeit gemäß den zwingenden gesetzlichen Vorschriften.",
     "s5_p3": "Der Anbieter übernimmt keine Garantie für die ununterbrochene, fehlerfreie oder sichere Verfügbarkeit der App. Die Nutzung erfolgt auf eigenes Risiko des Nutzers.",
-    "s5_p4": "Da alle Daten ausschließlich lokal auf dem Gerät des Nutzers gespeichert werden, liegt die alleinige Verantwortung für die Sicherung und Wiederherstellung dieser Daten beim Nutzer. Der Anbieter haftet nicht für Datenverlust, gleich aus welchem Grund.",
+    "s5_p4": "Die Daten liegen auf dem Gerät des Nutzers. Die verschlüsselte Kopie im Konto ist keine Sicherung: Sie umfasst nur einzelne Daten und wenige ältere Stände und wird beim Zurücksetzen des Passworts gelöscht. Die Verantwortung für die Sicherung und Wiederherstellung der Daten liegt deshalb beim Nutzer. Der Anbieter haftet nicht für Datenverlust, gleich aus welchem Grund.",
     "s6_title": "§ 6 Datenschutz",
     "s6_p1": "Der Schutz deiner Daten ist uns besonders wichtig. Einzelheiten zur Datenverarbeitung findest du in unserer",
     "s6_link": "Datenschutzerklärung",
@@ -757,17 +764,17 @@
   "privacy_policy": {
     "nav_title": "Datenschutzerklärung",
     "hero_title": "Datenschutzerklärung",
-    "hero_date": "Stand: 10. November 2026",
+    "hero_date": "Stand: 14. November 2026",
     "s1_title": "§ 1 Verantwortlicher",
     "s1_p1": "Verantwortlicher im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:",
     "s1_name": "Leon Manuel Töpper",
     "s1_email_label": "E-Mail:",
     "s2_title": "§ 2 Grundsatz",
-    "s2_p1": "{{BRAND_NAME}} wurde nach dem Prinzip „Local-First“ entwickelt. Das bedeutet: Alle Daten, die du in der App eingibst, werden ausschließlich lokal auf deinem Endgerät gespeichert und nicht an Server des Anbieters übertragen. Dienste Dritter erhalten sie nur, wenn du eine Funktion nutzt, die sie braucht, etwa den Fahrplan oder das Wetter. Einige Anfragen stellt die App außerdem von selbst, zum Beispiel die Frage nach Updates. Welche Dienste das sind, steht in § 3.",
-    "s2_p2": "Wir erheben, speichern oder verarbeiten keine personenbezogenen Daten über die App, es sei denn, du nutzt Funktionen, die eine Internetverbindung erfordern (z. B. ÖPNV-Echtzeitdaten), oder die App stellt von selbst eine der in § 3 d) genannten Anfragen.",
+    "s2_p1": "{{BRAND_NAME}} wurde nach dem Prinzip „Local-First“ entwickelt. Das bedeutet: Alle Daten, die du in der App eingibst, werden auf deinem Endgerät gespeichert. Ein Konto ist freiwillig. Ohne Konto überträgt die App deine Einträge an keinen Server des Anbieters. Mit Konto lädt sie eine Kopie von Stundenplan, Vorname und Profilbild hoch, die sie vorher auf deinem Gerät verschlüsselt, siehe § 3 f). Dienste Dritter erhalten Daten nur, wenn du eine Funktion nutzt, die sie braucht, etwa den Fahrplan oder das Wetter. Einige Anfragen stellt die App außerdem von selbst, zum Beispiel die Frage nach Updates. Welche Dienste das sind, steht in § 3.",
+    "s2_p2": "Personenbezogene Daten verarbeitet der Anbieter über die App nur, wenn du ein Konto anlegst (§ 3 f). Sonst gehen Daten nur an die Dienste, die eine Funktion braucht (z. B. ÖPNV-Echtzeitdaten), oder an die in § 3 d) genannten Stellen, wenn die App von selbst eine Anfrage stellt.",
     "s3_title": "§ 3 Datenverarbeitung in der App",
     "s3_sub1_title": "a) Lokal gespeicherte Daten",
-    "s3_sub1_p1": "Sämtliche von dir eingegebenen Daten (Stundenpläne, Noten, Aufgaben, Trainingsdaten, Notizen etc.) werden ausschließlich auf deinem Gerät gespeichert. Zugangsdaten, etwa für IServ und E-Mail, speichert die App verschlüsselt. In den Apps für Computer gilt das auch für Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Termine, Notizen, Mail-Entwürfe, gespeicherte Orte und den Verlauf des Assistenten. Unverschlüsselt in einer lokalen Datenbank liegen dort der Stundenplan mit Fächern, Lehrkräften, Räumen und Zeiten, die Aufgabenliste, Trainingsdaten, Pomodoro-Statistik, Rückblicke, Lesezeichen, Tickets und die Einstellungen, zu denen auch Geburtstag und Wetterort gehören. Auch der zwischengespeicherte Vertretungsplan liegt dort unverschlüsselt. Auf Android und in der Web-App liegen alle Daten außer den Zugangsdaten unverschlüsselt. Der Anbieter hat zu keinem Zeitpunkt Zugriff auf diese Daten.",
+    "s3_sub1_p1": "Sämtliche von dir eingegebenen Daten (Stundenpläne, Noten, Aufgaben, Trainingsdaten, Notizen etc.) werden auf deinem Gerät gespeichert. Mit Konto kommt für Stundenplan, Vorname und Profilbild eine verschlüsselte Kopie dazu, siehe f). Zugangsdaten, etwa für IServ und E-Mail, speichert die App verschlüsselt. In den Apps für Computer gilt das auch für Noten, Hausaufgaben, Tests, Klausuren, Vorträge, Termine, Notizen, Mail-Entwürfe, gespeicherte Orte und den Verlauf des Assistenten. Unverschlüsselt in einer lokalen Datenbank liegen dort der Stundenplan mit Fächern, Lehrkräften, Räumen und Zeiten, die Aufgabenliste, Trainingsdaten, Pomodoro-Statistik, Rückblicke, Lesezeichen, Tickets und die Einstellungen, zu denen auch Geburtstag und Wetterort gehören. Auch der zwischengespeicherte Vertretungsplan liegt dort unverschlüsselt. Auf Android und in der Web-App liegen alle Daten außer den Zugangsdaten unverschlüsselt. Der Anbieter hat zu keinem Zeitpunkt Zugriff auf diese Daten. Das gilt auch für die verschlüsselte Kopie im Konto, siehe f).",
     "s3_sub2_title": "b) ÖPNV-Echtzeitdaten",
     "s3_sub2_p1": "Wenn du die Fahrplanfunktion nutzt, sendet die App Anfragen an Transitous (api.transitous.org), für Ticketpreise in Berlin und Brandenburg an transport.rest (v6.vbb.transport.rest). Übermittelt werden die Haltestellen, Adressen und Uhrzeiten deiner Suche. Hast du dein Zuhause oder deine Schule als Ort gespeichert, geht für Verbindungen von dort oder dorthin auch deren Lage mit, und mit „In der Nähe“ dein aktueller Standort, wenn du ihn freigibst. In den älteren Ansichten der Computer-App gehen Anfragen außerdem an transport.rest und für Preise an die Deutsche Bahn. Geräte-IDs werden nicht übermittelt.",
     "s3_sub2_p2": "Hast du deine Schule und dein Zuhause als Ort gespeichert, fragt die App außerdem von selbst bei Transitous die nächsten Verbindungen von der Schule nach Hause ab, wenn du zwischen 90 Minuten vor dem Ende deiner letzten Stunde und zwei Stunden danach eine Seite der App öffnest. Dabei geht die Lage beider Orte mit.",
@@ -787,11 +794,26 @@
     "s3_list11": "Die Websites deiner Lesezeichen: ein Abruf der Seite, um ihr Logo neben dem Lesezeichen zu zeigen",
     "s3_list12": "Diese Website oder GitHub: der Abruf der neuen Version der App, wenn du in der App „Aktualisieren“ antippst (Android)",
     "s3_list13": "Google: dein Kalender und, wo eingerichtet, Gmail, wenn du dein Google-Konto verbindest (Apps für Computer). Mehr dazu in e)",
+    "s3_list14": "{{BRAND_NAME}}-Konto bei Cloudflare: deine E-Mail-Adresse, ein Prüfwert zu deinem Passwort und deine verschlüsselten Einträge, nur wenn du ein Konto anlegst oder angemeldet bist. Mehr dazu in f)",
+    "s3_list15": "Google (Gmail): deine E-Mail-Adresse und der Code, wenn du ein Konto anlegst oder dein Passwort zurücksetzt. Mehr dazu in f)",
     "s3_sub5_title": "e) Google-Konto",
     "s3_sub5_p1": "In den Apps für Computer kannst du dein Google-Konto verbinden. {{BRAND_NAME}} liest dann über die Schnittstellen von Google deine Kalendereinträge und die Liste deiner Kalender und trägt Termine ein, die du in der App anlegst oder änderst. Schaltest du „Stundenplan und Tests in Google eintragen“ ein, legt die App dafür einen eigenen Kalender an und bearbeitet nur diesen. Auf Gmail greift die App über die Anmeldung mit Google nur in Installationen zu, die dafür eingerichtet sind. Dort kann sie deine Mails lesen, in deinem Namen senden und löschen. Sonst verbindest du Gmail mit einem App-Passwort über deinen E-Mail-Anbieter, wie in d) beschrieben.",
     "s3_sub5_p2": "Diese Daten nutzt die App nur, um sie dir auf deinem Gerät zu zeigen und dort zu bearbeiten. Was du änderst, schreibt sie in dein Google-Konto zurück. Eine Kopie der Kalendereinträge und die Anmeldung bei Google speichert sie verschlüsselt auf deinem Gerät. An Server des Anbieters oder an Dritte gibt die App diese Daten nicht weiter, und sie nutzt sie nicht für Werbung.",
     "s3_sub5_p3": "Trennst du dein Google-Konto in der App unter Einstellungen, Konten, löscht sie die Anmeldung und die Kopie auf deinem Gerät. Die Freigabe selbst widerrufst du jederzeit unter [myaccount.google.com/permissions](https://myaccount.google.com/permissions).",
     "s3_sub5_p4": "Die Nutzung und Übertragung von Informationen, die {{BRAND_NAME}} über Google-APIs erhält, an andere Apps hält sich an die [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), einschließlich der Anforderungen zur eingeschränkten Nutzung (Limited Use requirements).",
+    "s3_sub6_title": "f) Konto und Abgleich (Beta)",
+    "s3_sub6_p1": "Ab Version 0.6 kannst du ein Konto anlegen. Damit gleicht {{BRAND_NAME}} deinen Stundenplan (Fächer, Lehrkräfte, Räume, Stundenzeiten und A/B-Wochen), deinen Vornamen und dein Profilbild zwischen deinen Geräten ab. Das Konto ist freiwillig, die App funktioniert ohne es genauso. Den Dienst dafür betreibt der Anbieter bei Cloudflare (Cloudflare, Inc., USA). Die Datenbank liegt in Rechenzentren in der EU. Die Anfragen deiner Geräte laufen über das Netz von Cloudflare. Cloudflare ist nach dem EU-US Data Privacy Framework zertifiziert. Mehr dazu in der [Datenschutzerklärung von Cloudflare](https://www.cloudflare.com/privacypolicy/).",
+    "s3_sub6_p2": "Zu deinem Konto speichert der Dienst:",
+    "s3_list16": "deine E-Mail-Adresse und wann du das Konto angelegt und bestätigt hast",
+    "s3_list17": "einen Prüfwert zu deinem Passwort. Das Passwort selbst verlässt dein Gerät nicht: Die App berechnet daraus mit 600.000 PBKDF2-Runden einen Anmeldeschlüssel, und der Dienst speichert davon nur einen HMAC-Wert",
+    "s3_list18": "deine verschlüsselten Einträge: die letzten 20 Stände deines Stundenplans und die letzten 3 Stände von Vorname und Profilbild, jeweils mit Größe und Eingangszeit. Ältere Stände löscht der Dienst, sobald ein neuer ankommt",
+    "s3_list19": "für jedes angemeldete Gerät eine Sitzung, gespeichert nur als Prüfwert, gültig für 30 Tage. Abmelden beendet sie sofort",
+    "s3_list20": "die sechsstelligen Codes zum Bestätigen und Zurücksetzen, nur als HMAC-Wert, gültig für 10 Minuten",
+    "s3_list21": "Zähler gegen Missbrauch: wie oft Codes, Registrierungen, Anmeldungen und Einträge in einem Zeitfenster zwischen einer Minute und einem Tag angefragt wurden, je zu deiner E-Mail-Adresse, deinem Konto oder der IP-Adresse der Anfrage",
+    "s3_sub6_p3": "Deine Einträge verschlüsselt die App auf deinem Gerät mit AES-256-GCM, bevor sie sie hochlädt. Den Schlüssel leitet sie aus deinem Passwort ab, er verlässt das Gerät nie. Der Dienst kann deshalb nicht lesen, was in deinem Stundenplan, deinem Vornamen oder deinem Profilbild steht. Er sieht nur, zu welchem Konto ein Eintrag gehört, ob er zum Stundenplan oder zum Profil gehört, wie groß er ungefähr ist (in Schritten von 1 KiB), wann er ankam und wie oft dein Konto Einträge sendet. Wie bei jeder Verbindung sehen Cloudflare und der Dienst außerdem die IP-Adresse deines Geräts.",
+    "s3_sub6_p4": "Den Code zum Bestätigen deiner E-Mail-Adresse und zum Zurücksetzen des Passworts schickt der Dienst über Gmail vom Konto horaapp.team@gmail.com. Google erhält dabei deine E-Mail-Adresse, den Code und den Text der Mail. Gmail legt jede verschickte Mail im Ordner „Gesendet“ dieses Kontos ab, und kommt eine Mail nicht an, erhält das Konto die Rückmeldung darüber. Der Dienst setzt die Mail bei Cloudflare zusammen und speichert sie nicht, den Code behält er nur als HMAC-Wert. Mehr dazu in der [Datenschutzerklärung von Google](https://policies.google.com/privacy).",
+    "s3_sub6_p5": "Auf deinem Gerät speichert die App zum Konto deine E-Mail-Adresse, den Sitzungsschlüssel und den Schlüssel für deine Einträge. Sie gehören nur zu diesem Gerät und kommen in keine Sicherungsdatei.",
+    "s3_sub6_p6": "Dein Konto bleibt, bis du es löschst. Mit „Konto löschen“ in den Einstellungen löscht der Dienst dein Konto mit allem, was dazu in der Cloud liegt. Die Daten auf deinen Geräten bleiben erhalten. Abmelden löscht nichts in der Cloud. Setzt du dein Passwort zurück, löscht der Dienst alle Einträge und beendet alle Sitzungen, und deine Geräte laden ihren Stand danach neu hoch. Ein Konto, das nie bestätigt wurde, abgelaufene Codes und die Zähler gegen Missbrauch löscht der Dienst bisher nicht von selbst. Ein Zähler beginnt beim nächsten Versuch neu. Die Code-Mails im Ordner „Gesendet“ bleiben, bis der Anbieter sie dort löscht.",
     "s4_title": "§ 4 Datenverarbeitung auf der Website",
     "s4_p1": "Beim Besuch unserer Website werden durch den Hosting-Anbieter automatisch technische Zugriffsdaten erfasst (sog. Server-Logfiles). Diese können umfassen:",
     "s4_list1": "IP-Adresse (anonymisiert)",
@@ -804,14 +826,14 @@
     "s5_title": "§ 5 Cookies",
     "s5_p1": "Die Website verwendet keine Cookies und keine Analyse-Tools. Deine Spracheinstellung speichert sie nur im Speicher deines Browsers (localStorage).",
     "s6_title": "§ 6 Deine Rechte",
-    "s6_p1": "Da wir keine personenbezogenen Daten über die App erheben, gibt es in der Regel nichts, worüber wir Auskunft erteilen könnten. Solltest du dennoch Fragen haben, stehen dir gemäß DSGVO folgende Rechte zu:",
+    "s6_p1": "Ohne Konto erhebt der Anbieter über die App keine personenbezogenen Daten, dann gibt es in der Regel nichts, worüber er Auskunft geben könnte. Mit Konto speichert der Dienst die in § 3 f) genannten Daten. Gemäß DSGVO stehen dir folgende Rechte zu:",
     "s6_list1": "Recht auf Auskunft (Art. 15 DSGVO)",
     "s6_list2": "Recht auf Berichtigung (Art. 16 DSGVO)",
     "s6_list3": "Recht auf Löschung (Art. 17 DSGVO)",
     "s6_list4": "Recht auf Einschränkung der Verarbeitung (Art. 18 DSGVO)",
     "s6_list5": "Recht auf Datenübertragbarkeit (Art. 20 DSGVO)",
     "s6_list6": "Widerspruchsrecht (Art. 21 DSGVO)",
-    "s6_p2": "Darüber hinaus hast du das Recht, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren.",
+    "s6_p2": "Dein Konto löschst du jederzeit selbst mit „Konto löschen“ in den Einstellungen der App. Darüber hinaus hast du das Recht, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren.",
     "s7_title": "§ 7 Kontakt",
     "s7_p1": "Bei Fragen zum Datenschutz erreichst du den Verantwortlichen unter:",
     "s8_title": "§ 8 Änderungen",
@@ -876,7 +898,7 @@
     ],
     "tile_luna_label": "Luna antippen, dann winkt sie",
     "privacy_title": "Deine Noten gehen nur dich was an",
-    "privacy_text": "Deine Daten bleiben auf deinem Gerät, weil es keinen {{BRAND_NAME}}-Server gibt. Was mit ihnen passiert, kannst du im Quellcode nachlesen, Zeile für Zeile.",
+    "privacy_text": "Deine Daten bleiben auf deinem Gerät. Mit einem Konto kommt eine verschlüsselte Kopie dazu, die nur deine Geräte lesen können.⁴ Was die App mit ihnen macht, kannst du im Quellcode nachlesen, Zeile für Zeile.",
     "privacy_link": "Mehr zum Datenschutz",
     "get_title": "Hol dir {{BRAND_NAME}}",
     "get_text": "Kostenlos für Mac, Windows, Linux und Android. Aufs iPhone kommt {{BRAND_NAME}} als Web-App.",
@@ -1082,6 +1104,7 @@
     "free_label": "Preis: 0 Euro",
     "footnote_iserv": "¹ IServ gibt es in den Apps für Mac, Windows, Linux und Android. Auf dem iPhone läuft {{BRAND_NAME}} als Web-App, dort geht IServ nicht.",
     "footnote_iserv_web": "¹ IServ gibt es nur in den Apps für Mac, Windows, Linux und Android. In der Web-App auf deinem {device} geht IServ nicht, Hausaufgaben trägst du dort selbst ein.",
-    "footnote_agent": "² Das Sprachmodell für den Assistenten lädt {{BRAND_NAME}} erst, wenn du ihn zum ersten Mal öffnest, etwa 3 GB."
+    "footnote_agent": "² Das Sprachmodell für den Assistenten lädt {{BRAND_NAME}} erst, wenn du ihn zum ersten Mal öffnest, etwa 3 GB.",
+    "footnote_account": "⁴ Das Konto ist freiwillig und noch eine Beta. Damit gleicht {{BRAND_NAME}} Stundenplan, Vorname und Profilbild zwischen deinen Geräten ab. Die App verschlüsselt sie vorher auf deinem Gerät, die Kopie liegt bei Cloudflare in der EU."
   }
 }
