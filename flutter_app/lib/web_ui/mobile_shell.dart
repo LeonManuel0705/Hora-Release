@@ -364,7 +364,9 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
     }
     final long = paused != null && DateTime.now().difference(paused) > const Duration(minutes: 10);
     // A permission changed in the system settings shows in every row of the page, so reload it.
-    if (!alive || long || changed || _pausedDay != _dayKey()) await controller.reload();
+    // A system sheet over the app, like the photo picker of the page, only makes it inactive; coming back from it is no new day.
+    final newDay = paused != null && _pausedDay != _dayKey();
+    if (!alive || long || changed || newDay) await controller.reload();
   }
 
   SystemUiOverlayStyle get _overlay {
@@ -466,7 +468,8 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
 
   Future<bool> _sceneBack(InAppWebViewController controller) async {
     try {
-      return await controller.evaluateJavascript(source: 'Boolean(window.AppAccount && window.AppAccount.back())') == true;
+      const back = 'Boolean((window.AppAccount && window.AppAccount.back()) || (window.AppProfile && window.AppProfile.back()))';
+      return await controller.evaluateJavascript(source: back) == true;
     } catch (_) {
       return false;
     }
@@ -474,7 +477,7 @@ class _MobileShellState extends State<MobileShell> with WidgetsBindingObserver, 
 
   Future<void> _back() async {
     final controller = _controller;
-    // The account scene of the page steps back or closes, as a dialog would.
+    // The account scene and the profile sheet of the page step back or close, as a dialog would.
     if (controller != null && await _sceneBack(controller)) return;
     if (controller != null && await controller.canGoBack()) {
       await controller.goBack();

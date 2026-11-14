@@ -25,52 +25,98 @@ export function cleanName(value) {
   return [...flat].slice(0, NAME_MAX).join("").trim();
 }
 
-// The first name and the avatar live on this device alone, in a device-only value like the account: no backup,
-// export or plan share takes them. Syncing them comes later with the personal settings.
+const PHOTO = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/]+=*$/;
+const PHOTO_MAX = 60000;
+const stamp = (value) => (Number.isSafeInteger(value) && value > 0 ? value : 0);
+
+export const cleanPhoto = (value) => (typeof value === "string" && value.length <= PHOTO_MAX && PHOTO.test(value) ? value : "");
+
+// The first name and the picture live in a device-only value like the account: no backup, export or plan share takes
+// them. With an account they travel through its own encrypted stream; at and by say when and on which device they were
+// last changed, seen is the newest time this device knows of, so its clock never goes back.
 export function readProfile() {
   const value = profileStore.get();
   const stored = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const photo = cleanPhoto(stored.photo);
+  const avatar = stored.avatar === "photo" && photo ? "photo" : LOOKS.has(stored.avatar) ? stored.avatar : "initial";
   return {
     name: cleanName(stored.name),
-    avatar: LOOKS.has(stored.avatar) ? stored.avatar : "initial",
+    avatar,
+    photo: avatar === "photo" ? photo : "",
     asked: stored.asked === true,
+    at: stamp(stored.at),
+    by: typeof stored.by === "string" ? stored.by.slice(0, 64) : "",
+    seen: stamp(stored.seen),
   };
 }
 
 export const profileName = () => readProfile().name || null;
 
-function keep(next) {
+// What travels: the first name and the picture, or nothing at all while both are left as they come.
+export function profileValue(profile = readProfile()) {
+  if (!profile.name && profile.avatar === "initial") return null;
+  return { name: profile.name, avatar: profile.avatar, ...(profile.avatar === "photo" ? { photo: profile.photo } : {}) };
+}
+
+function keep(next, { own = false } = {}) {
+  const dated = Boolean(next.name || LOOKS.has(next.avatar) || (next.avatar === "photo" && cleanPhoto(next.photo)));
   const value = {
     ...(next.name ? { name: next.name } : {}),
-    ...(LOOKS.has(next.avatar) ? { avatar: next.avatar } : {}),
+    ...(LOOKS.has(next.avatar) || (next.avatar === "photo" && cleanPhoto(next.photo)) ? { avatar: next.avatar } : {}),
+    ...(next.avatar === "photo" && cleanPhoto(next.photo) ? { photo: next.photo } : {}),
     ...(next.asked ? { asked: true } : {}),
+    ...(dated && next.at ? { at: next.at, by: next.by || "" } : {}),
+    ...(dated && next.seen ? { seen: next.seen } : {}),
   };
   profileStore.set(Object.keys(value).length ? value : null);
   const kept = readProfile();
-  listeners.forEach((listener) => listener(kept));
+  listeners.forEach((listener) => listener(kept, { own }));
   if (typeof dispatchEvent === "function") dispatchEvent(new CustomEvent("app:profile", { detail: kept }));
   return kept;
+}
+
+// An own change of the name or the picture: a hybrid clock, so a device whose clock runs late still counts as later.
+function changed(current, patch) {
+  const at = Math.max(Date.now(), current.seen + 1, current.at + 1);
+  return keep({ ...current, ...patch, at, by: data?.device || "", seen: at }, { own: true });
 }
 
 export function setProfileName(value) {
   const current = readProfile();
   const name = cleanName(value);
   if (name === current.name) return current;
-  return keep({ ...current, name });
+  return changed(current, { name });
 }
 
-export function setAvatar(choice) {
+export function setAvatar(choice, photo = "") {
   const current = readProfile();
-  const avatar = LOOKS.has(choice) ? choice : "initial";
-  if (avatar === current.avatar) return current;
-  return keep({ ...current, avatar });
+  const picture = choice === "photo" ? cleanPhoto(photo) || current.photo : "";
+  const avatar = choice === "photo" && picture ? "photo" : LOOKS.has(choice) ? choice : "initial";
+  if (avatar === current.avatar && picture === current.photo) return current;
+  return changed(current, { avatar, photo: picture });
 }
 
 // The question for the first name is asked once, whatever the answer.
 export function answerName(value) {
   const current = readProfile();
   const name = cleanName(value) || current.name;
-  return keep({ ...current, name, asked: true });
+  if (name === current.name) return keep({ ...current, asked: true });
+  return changed(current, { name, asked: true });
+}
+
+// A profile from another device of the account: taken as it is, with its time, and never sent back.
+export function adoptProfile({ record, profile }) {
+  const current = readProfile();
+  const seen = Math.max(current.seen, record.at);
+  return keep({ ...current, name: cleanName(profile.name), avatar: profile.avatar, photo: profile.photo || "", at: record.at, by: record.device, seen });
+}
+
+// A profile from before it travelled has no time yet; it gets one before it is sent the first time.
+export function datedProfile() {
+  const current = readProfile();
+  if (current.at) return current;
+  const at = Math.max(Date.now(), current.seen + 1);
+  return keep({ ...current, at, by: data?.device || "", seen: at });
 }
 
 export function wantsName(planned) {
@@ -122,8 +168,10 @@ function firstLetter(text) {
   return letter ? [...letter.toLocaleUpperCase("de")][0] : "";
 }
 
-// The avatar: a chosen Luna, else the first letter of the first name, else of the email, else a neutral figure.
+// The avatar: an own picture or a chosen Luna, else the first letter of the first name, else of the email, else a
+// neutral figure.
 export function avatarModel(profile = readProfile(), email = profileAccount()?.signedIn ? profileAccount().email : null) {
+  if (profile.avatar === "photo" && cleanPhoto(profile.photo)) return { kind: "photo", photo: profile.photo };
   const look = LOOKS.get(profile.avatar);
   if (look) return { kind: "luna", look: look.id, hue: look.hue, label: look.label };
   const source = [profile.name, email].find((text) => firstLetter(text));
@@ -132,6 +180,7 @@ export function avatarModel(profile = readProfile(), email = profileAccount()?.s
 }
 
 export function avatarInner(model) {
+  if (model.kind === "photo") return `<img class="avatar-photo" src="${model.photo}" alt="" decoding="async" draggable="false">`;
   if (model.kind === "luna") return lunaPortrait(LOOKS.get(model.look));
   if (model.kind === "initial") return `<span class="avatar-letter">${esc(model.letter)}</span>`;
   return icon("user");
@@ -143,7 +192,7 @@ export function avatarHtml(model = avatarModel()) {
   return `<span class="avatar is-${model.kind}"${hue}${look} aria-hidden="true">${avatarInner(model)}</span>`;
 }
 
-const signature = (model) => `${model.kind}:${model.look || model.letter || ""}:${model.hue || ""}`;
+const signature = (model) => `${model.kind}:${model.look || model.letter || ""}:${model.hue || ""}:${model.photo ? `${model.photo.length}:${model.photo.slice(-24)}` : ""}`;
 
 export function paintAvatar(node, model = avatarModel()) {
   const key = signature(model);

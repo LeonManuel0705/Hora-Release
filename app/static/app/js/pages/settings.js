@@ -3716,7 +3716,7 @@ async function wipeData() {
     toast("Abmelden hat nicht geklappt, darum ist nichts gelöscht. Versuch es noch einmal.", { icon: "circle-alert" });
     return;
   }
-  // The first name and the avatar go with everything else; they are kept on this device only, so the undo brings them back.
+  // The first name and the avatar go with everything else; the account keeps its copy, and the undo brings them back here.
   const named = readProfile();
   const hadProfile = Boolean(named.name || named.avatar !== "initial" || named.asked);
   if (hadProfile) replaceProfile(null);

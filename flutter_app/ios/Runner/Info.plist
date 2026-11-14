@@ -29,6 +29,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Damit du ein Foto für dein Profilbild aufnehmen kannst.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Damit der Fahrplan Haltestellen in deiner Nähe findet.</string>
 	<key>UILaunchStoryboardName</key>

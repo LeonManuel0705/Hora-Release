@@ -5,6 +5,8 @@ import { data, esc, icon, luna, BRAND, hasPlan } from "./core.js";
 import { placeNear, clampSheet, toast } from "./shell.js";
 import { readProfile, cleanName, avatarModel, avatarHtml, paintAvatar, paintAvatars, setProfileName, setAvatar, answerName, wantsName, onProfile, profileAccount, noteAccount, accountPart, LUNA_LOOKS } from "./profile.js";
 import { pageQuiet, shellSettled } from "./quiet.js";
+import { readPhoto, encodePhoto, barePhoto, dataUrlOf, PHOTO_UNREADABLE } from "./profile-photo.js";
+import { cropHtml, mountCrop } from "./profile-crop.js";
 
 const SAVE_MS = 500;
 const CONFIRM_MS = 4000;
@@ -17,6 +19,12 @@ let invoker = null;
 let saveTimer = 0;
 let confirmTimer = 0;
 let draft = null;
+let picker = null;
+let photo = null;
+let cropping = null;
+let reading = 0;
+
+const IMAGE_PLUS = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h6"/><path d="M19 2v6"/><path d="M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/><circle cx="9" cy="9" r="2"/></svg>';
 
 function loadAccount() {
   if (!data?.accountService) return null;
@@ -32,6 +40,7 @@ function loadAccount() {
 
 const accountNow = () => (account ? account.api.accountState() : profileAccount());
 const emailOf = (state) => (state?.signedIn ? state.email : null);
+const profileHint = (state) => (state?.signedIn ? "Name und Profilbild kommen verschlüsselt auf deine anderen Geräte." : "Name und Profilbild bleiben auf diesem Gerät.");
 const shown = () => Boolean(sheet?.matches(":popover-open"));
 const phone = () => matchMedia(PHONE).matches;
 
@@ -73,7 +82,7 @@ function mainHtml() {
       <button class="icon-button profile-close" type="button" data-profile-close aria-label="Schließen">${icon("x")}</button>
     </div>
     <label class="field profile-field"><span>Vorname</span><input class="input" id="profileNameInput" type="text" maxlength="40" autocomplete="given-name" autocapitalize="words" spellcheck="false" enterkeyhint="done" value="${esc(profile.name)}"></label>
-    <p class="profile-hint">Name und Profilbild bleiben auf diesem Gerät.</p>
+    <p class="profile-hint" data-profile-hint>${profileHint(state)}</p>
     <div data-profile-account>${accountHtml(state)}</div>
     <a class="profile-link" href="/hub/settings" data-page="settings">${icon("settings")}<span>Einstellungen</span>${icon("chevron-right")}</a>
   </div>`;
@@ -84,23 +93,38 @@ function pickHtml() {
   const email = emailOf(accountNow());
   const plain = avatarModel({ ...profile, avatar: "initial" }, email);
   const options = [
-    { id: "initial", label: plain.kind === "initial" ? "Buchstabe" : "Ohne Bild", model: plain },
-    ...LUNA_LOOKS.map((look) => ({ id: look.id, label: look.label, model: avatarModel({ ...profile, avatar: look.id }, email) })),
+    { id: "initial", label: plain.kind === "initial" ? "Buchstabe" : "Ohne Bild", name: plain.kind === "initial" ? "Buchstabe" : "Ohne Bild", model: plain },
+    { id: "photo", label: "Eigenes Bild", name: "Eigenes Bild", model: profile.avatar === "photo" ? avatarModel(profile, email) : null },
+    ...LUNA_LOOKS.map((look) => ({ id: look.id, label: look.label, name: `Luna: ${look.label}`, model: avatarModel({ ...profile, avatar: look.id }, email) })),
   ];
+  const face = (option) => (option.model ? avatarHtml(option.model) : `<span class="avatar is-add" aria-hidden="true">${IMAGE_PLUS}</span>`);
   return `<div class="profile-view" data-view="pick">
     <div class="profile-pick-head"><button class="icon-button" type="button" data-profile-back aria-label="Zurück">${icon("chevron-left")}</button><h2 class="sheet-title" id="profilePickTitle">Profilbild</h2></div>
     <div class="avatar-grid" role="group" aria-labelledby="profilePickTitle">
-      ${options.map((option) => `<button class="avatar-option" type="button" data-avatar-choice="${option.id}" aria-pressed="${profile.avatar === option.id}" aria-label="${esc(option.id === "initial" ? option.label : `Luna: ${option.label}`)}">${avatarHtml(option.model)}<span aria-hidden="true">${esc(option.label)}</span></button>`).join("")}
+      ${options.map((option) => `<button class="avatar-option" type="button" data-avatar-choice="${option.id}" aria-pressed="${profile.avatar === option.id}" aria-label="${esc(option.name)}">${face(option)}<span aria-hidden="true">${esc(option.label)}</span></button>`).join("")}
     </div>
+    <p class="profile-photo-error" role="alert" data-photo-error hidden></p>
   </div>`;
+}
+
+const VIEWS = { main: mainHtml, pick: pickHtml, crop: cropHtml };
+const TITLES = { main: "profileTitle", pick: "profilePickTitle", crop: "profileCropTitle" };
+
+function stopCrop() {
+  if (!cropping) return;
+  if (photo) photo.view = cropping.view();
+  cropping.stop();
+  cropping = null;
 }
 
 function show(which, direction = 0) {
   clearConfirm();
-  sheet.innerHTML = which === "pick" ? pickHtml() : mainHtml();
-  sheet.setAttribute("aria-labelledby", which === "pick" ? "profilePickTitle" : "profileTitle");
+  stopCrop();
+  sheet.innerHTML = VIEWS[which]();
+  sheet.setAttribute("aria-labelledby", TITLES[which]);
   const view = sheet.firstElementChild;
-  if (which !== "pick") refreshHead();
+  if (which === "main") refreshHead();
+  if (which === "crop") cropping = mountCrop(view, photo.work, photo.view);
   if (direction) {
     view.style.setProperty("--from", `${direction * 12}px`);
     view.classList.add("is-entering");
@@ -121,7 +145,10 @@ function refreshHead() {
 function refreshAccount(force = false) {
   const holder = sheet?.querySelector("[data-profile-account]");
   if (!holder || (!force && holder.contains(document.activeElement))) return;
-  holder.innerHTML = accountHtml(accountNow());
+  const state = accountNow();
+  holder.innerHTML = accountHtml(state);
+  const hint = sheet.querySelector("[data-profile-hint]");
+  if (hint) hint.textContent = profileHint(state);
 }
 
 function saveName() {
@@ -165,6 +192,95 @@ async function signOutHere(button) {
   sheet.querySelector('[data-account-open="signin"]')?.focus({ preventScroll: true });
 }
 
+const viewNow = () => sheet?.firstElementChild?.dataset.view || "";
+
+function photoError(text) {
+  const slot = sheet.querySelector("[data-photo-error]");
+  if (!slot) return;
+  slot.textContent = text;
+  slot.hidden = false;
+}
+
+// The system picker, from the tap itself, as the phone only opens it from one; the file stays on this device.
+function openPicker() {
+  if (!picker) {
+    picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = "image/*";
+    picker.hidden = true;
+    picker.addEventListener("change", () => {
+      const file = picker.files?.[0];
+      picker.value = "";
+      if (file) takePhoto(file);
+    });
+    document.body.append(picker);
+  }
+  picker.click();
+}
+
+async function takePhoto(file) {
+  const turn = ++reading;
+  const slot = sheet.querySelector("[data-photo-error]");
+  if (slot) slot.hidden = true;
+  sheet.setAttribute("aria-busy", "true");
+  try {
+    const work = await readPhoto(file);
+    if (turn !== reading || !shown()) return;
+    photo = { work, view: {} };
+    show("crop", viewNow() === "crop" ? 0 : 1);
+    focusCrop();
+  } catch {
+    if (turn === reading && shown()) photoError(PHOTO_UNREADABLE);
+  } finally {
+    if (turn === reading) sheet.removeAttribute("aria-busy");
+  }
+}
+
+function focusCrop() {
+  const target = phone() ? sheet.querySelector("#profileCropTitle") : sheet.querySelector("[data-crop-stage]");
+  requestAnimationFrame(() => target?.focus({ preventScroll: true }));
+}
+
+function leaveCrop() {
+  stopCrop();
+  photo = null;
+  reading++;
+  show("pick", -1);
+  sheet.querySelector('[data-avatar-choice="photo"]')?.focus({ preventScroll: true });
+}
+
+async function applyPhoto(button) {
+  if (!photo || !cropping) return;
+  const view = cropping.view();
+  const buttons = [...sheet.querySelectorAll("[data-crop-apply], [data-crop-other], [data-crop-cancel], [data-crop-back]")];
+  buttons.forEach((node) => (node.disabled = true));
+  try {
+    const { blob } = await encodePhoto(photo.work, view);
+    const url = await dataUrlOf(await barePhoto(blob));
+    if (setAvatar("photo", url).photo !== url) throw new Error("not_kept");
+  } catch {
+    buttons.forEach((node) => (node.disabled = false));
+    photoError(PHOTO_UNREADABLE);
+    return;
+  }
+  if (!shown() || !button.isConnected) return;
+  photo = null;
+  show("main", -1);
+  sheet.querySelector("[data-profile-pick]")?.focus({ preventScroll: true });
+}
+
+// The back gesture of the phone app steps back like the sheet's own back button, and closes the sheet from its start.
+function stepBack() {
+  if (!shown()) return false;
+  const view = viewNow();
+  if (view === "crop") leaveCrop();
+  else if (view === "pick") {
+    show("main", -1);
+    sheet.querySelector("[data-profile-pick]")?.focus({ preventScroll: true });
+  } else sheet.hidePopover();
+  return true;
+}
+
 function placeSheet() {
   if (phone()) {
     sheet.style.removeProperty("top");
@@ -194,6 +310,9 @@ function bindSheet() {
     }
     saveName();
     clearConfirm();
+    stopCrop();
+    photo = null;
+    reading++;
   });
   sheet.addEventListener("click", (event) => {
     const target = event.target.closest("button, a");
@@ -207,7 +326,11 @@ function bindSheet() {
     } else if (target.hasAttribute("data-profile-back")) {
       show("main", -1);
       sheet.querySelector("[data-profile-pick]")?.focus({ preventScroll: true });
-    } else if (target.dataset.avatarChoice) {
+    } else if (target.dataset.avatarChoice === "photo") openPicker();
+    else if (target.hasAttribute("data-crop-back") || target.hasAttribute("data-crop-cancel")) leaveCrop();
+    else if (target.hasAttribute("data-crop-other")) openPicker();
+    else if (target.hasAttribute("data-crop-apply")) applyPhoto(target);
+    else if (target.dataset.avatarChoice) {
       sheet.querySelectorAll("[data-avatar-choice]").forEach((option) => option.setAttribute("aria-pressed", String(option === target)));
       setAvatar(target.dataset.avatarChoice);
       setTimeout(() => {
@@ -250,7 +373,7 @@ function nameDialog() {
       <form class="name-question-form" novalidate autocomplete="off">
         <div class="name-question-luna">${luna("ruhe", 88)}</div>
         <h2 class="sheet-title" id="nameQuestionTitle" tabindex="-1">Wie soll ich dich nennen?</h2>
-        <p class="dialog-text" id="nameQuestionText">Dein Vorname bleibt auf diesem Gerät.</p>
+        <p class="dialog-text" id="nameQuestionText">${accountNow()?.signedIn ? "Dein Vorname kommt verschlüsselt auf deine anderen Geräte." : "Dein Vorname bleibt auf diesem Gerät."}</p>
         <label class="field"><span>Vorname</span><input class="input" name="name" type="text" maxlength="40" autocomplete="given-name" autocapitalize="words" spellcheck="false" enterkeyhint="done"></label>
         <div class="dialog-actions">
           <button class="btn btn-quiet" type="button" data-skip>Überspringen</button>
@@ -313,7 +436,10 @@ export function initProfile() {
     const button = (event.key === "Enter" || event.key === " ") && event.target.closest?.("[data-profile-open]");
     if (button) invoker = button;
   }, true);
-  if (sheet) bindSheet();
+  if (sheet) {
+    bindSheet();
+    window.AppProfile = Object.freeze({ back: stepBack });
+  }
   addEventListener("pagehide", saveName);
   loadAccount()?.then(() => {
     if (shown()) refreshAccount();

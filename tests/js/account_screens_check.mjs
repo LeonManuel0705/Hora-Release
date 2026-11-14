@@ -93,9 +93,10 @@ class AccountService {
     return this.requests.filter((item) => item.path === path);
   }
 
-  stream(id) {
-    if (!this.streams.has(id)) this.streams.set(id, { last: 0, entries: [] });
-    return this.streams.get(id);
+  stream(id, name = "timetable") {
+    const key = `${id}:${name}`;
+    if (!this.streams.has(key)) this.streams.set(key, { last: 0, entries: [] });
+    return this.streams.get(key);
   }
 
   open(account) {
@@ -125,12 +126,27 @@ class AccountService {
       if (bearer) this.sessions.delete(bearer);
       return reply(200, {});
     }
+    if (route === "POST /api/reset/request") {
+      if (account) this.codes.set(body.email, String(100000 + (this.count += 1)));
+      return reply(200, { email: body.email, resendAfter: 60, expiresIn: 600 });
+    }
+    // A reset seals the account anew: every entry goes, the counters stay, every session ends.
+    if (route === "POST /api/reset/confirm") {
+      if (!account || this.code(body.email) !== body.code) return reply(400, { error: "invalid_code" });
+      Object.assign(account, { salt: body.salt, verifier: body.authKey });
+      for (const [key, value] of this.streams) if (key.startsWith(`${account.id}:`)) value.entries = [];
+      for (const [token, id] of this.sessions) if (id === account.id) this.sessions.delete(token);
+      return this.open(account);
+    }
     if (!session) return reply(401, { error: "no_session" });
     if (route === "GET /api/session") return reply(200, { account: { id: session.id, email: session.email } });
-    const stream = this.stream(session.id);
+    const name = method === "POST" ? body.stream : address.searchParams.get("stream");
+    if (!["timetable", "profile"].includes(name)) return reply(400, { error: "unknown_stream" });
+    const stream = this.stream(session.id, name);
     if (route === "POST /api/entries") {
       stream.last += 1;
       stream.entries.push({ seq: stream.last, data: body.data });
+      stream.entries = stream.entries.slice(name === "profile" ? -3 : -20);
       return reply(201, { seq: stream.last });
     }
     if (route === "GET /api/entries") {
@@ -284,7 +300,10 @@ class Device {
         else device.store[key] = JSON.parse(options.body);
         return reply(200, { success: true });
       }
-      if (device.address && text.startsWith(device.address)) return device.service.fetch(text, options);
+      if (device.address && text.startsWith(device.address)) {
+        if (device.offline) throw new TypeError("Failed to fetch");
+        return device.service.fetch(text, options);
+      }
       return reply(200, {});
     };
     const load = (name) => import(`${script(name)}?page=${number}`);
@@ -714,7 +733,7 @@ CASES["the avatar: a chosen Luna, else the first letter of the first name, else 
   device.store["app-profile"] = { name: "Lina", avatar: "clown" };
   const again = await device.load({ quiet: false });
   const kept = await import(`${script("profile.js")}?page=${again.number}`);
-  assert.deepEqual(kept.readProfile(), { name: "Lina", avatar: "initial", asked: false }, "an unknown avatar is the letter");
+  assert.deepEqual(plainProfile(kept.readProfile()), { name: "Lina", avatar: "initial", photo: "", asked: false }, "an unknown avatar is the letter");
 
   const signedIn = new Device(new AccountService(), { school: PLANNED });
   signedIn.store[ACCOUNT] = { service: SERVICE, token: "t".repeat(43), account: { id: "acc-1", email: "mira@example.org" } };
@@ -759,7 +778,8 @@ CASES["the first name and the avatar stay on this device: cleaned, kept, read ba
 
   profile.setProfileName("  Lina \n Marie\t");
   await settle(20);
-  assert.deepEqual(device.store["app-profile"], { name: "Lina Marie" });
+  assert.deepEqual(plainProfile(device.store["app-profile"]), { name: "Lina Marie" });
+  assert.ok(device.store["app-profile"].at > 0 && device.store["app-profile"].by === device.id, "an own change says when and where");
   assert.equal(profile.profileName(), "Lina Marie", "the rest of the page can read it");
   assert.deepEqual(heard, ["Lina Marie", "event Lina Marie"]);
   assert.equal(profile.wantsName(true), false, "a name means no question");
@@ -779,7 +799,7 @@ CASES["the first name and the avatar stay on this device: cleaned, kept, read ba
   profile.setAvatar("clown");
   profile.setAvatar("brille");
   await settle(20);
-  assert.deepEqual(device.store["app-profile"], { name: "Jonas", avatar: "brille", asked: true });
+  assert.deepEqual(plainProfile(device.store["app-profile"]), { name: "Jonas", avatar: "brille", asked: true });
 
   assert.ok(!page.core.storage.keys().includes("app-profile"), "no backup or key list takes it");
   page.core.storage.set("app-profile", { name: "Fremd" });
@@ -789,13 +809,155 @@ CASES["the first name and the avatar stay on this device: cleaned, kept, read ba
 
   const again = await device.load({ quiet: false, app: true });
   const read = await import(`${script("profile.js")}?page=${again.number}`);
-  assert.deepEqual(read.readProfile(), { name: "Jonas", avatar: "brille", asked: true }, "read back at the next start");
+  assert.deepEqual(plainProfile(read.readProfile()), { name: "Jonas", avatar: "brille", photo: "", asked: true }, "read back at the next start");
   read.replaceProfile(null);
   await settle(20);
   assert.equal(device.store["app-profile"], undefined, "deleting everything takes it");
   read.replaceProfile({ name: "Jonas", avatar: "initial", asked: true });
   await settle(20);
-  assert.deepEqual(device.store["app-profile"], { name: "Jonas", asked: true }, "and the undo brings back what it read");
+  assert.deepEqual(plainProfile(device.store["app-profile"]), { name: "Jonas", asked: true }, "and the undo brings back what it read");
+};
+
+// The profile module of the device's current page, and its stored profile without the change record.
+const profileOf = (device) => import(`${script("profile.js")}?page=${device.page.number}`);
+const shown = (device) => plainProfile(device.store["app-profile"] ?? null);
+const profileEntries = (service, email = "lina@example.org") => service.stream(service.accounts.get(email).id, "profile").entries;
+const PUSHED = 1800;
+
+CASES["a profile entry is the name and the picture with their record, never an empty one"] = async () => {
+  const device = new Device(new AccountService(), { address: null });
+  const page = await device.load({ quiet: false });
+  const { profileEntry, readProfileEntry, newerRecord } = await import(`${script("sync/profile-entry.js")}?page=${page.number}`);
+  const record = { at: 1_800_000_000_000, device: "a".repeat(32) };
+  assert.deepEqual(profileEntry({ record, profile: { name: "Lina", avatar: "abi", asked: true, at: 5 } }), { v: 1, record, profile: { name: "Lina", avatar: "abi" } }, "only the name and the picture travel");
+  assert.throws(() => profileEntry({ record, profile: { name: "", avatar: "initial" } }), /empty_profile/, "an empty profile never goes up");
+  assert.throws(() => profileEntry({ record: { at: 0, device: "x" }, profile: { name: "Lina" } }), /invalid_value/);
+  assert.throws(() => profileEntry({ record, profile: { name: "", avatar: "photo", photo: "https://example.org/me.jpg" } }), /invalid_value/, "a picture is the picture itself, never a link");
+  assert.equal(readProfileEntry({ v: 2, record, profile: { name: "Lina" } }), null);
+  assert.equal(readProfileEntry({ v: 1, record, profile: { name: "", avatar: "initial" } }), null);
+  assert.ok(newerRecord({ at: 2, device: "a" }, { at: 1, device: "z" }) && newerRecord({ at: 2, device: "b" }, { at: 2, device: "a" }) && !newerRecord({ at: 1, device: "z" }, { at: 2, device: "a" }));
+};
+
+CASES["signing up sends the profile there is, and nothing for a device without one"] = async () => {
+  const service = new AccountService();
+  const named = new Device(service);
+  await named.load();
+  (await profileOf(named)).setProfileName("Lina");
+  (await profileOf(named)).setAvatar("abi");
+  await signedUp(named);
+  await settle(PUSHED);
+  assert.equal(profileEntries(service).length, 1, "the profile went up once the account was read");
+  const quiet = new Device(service, { id: "b".repeat(32) });
+  await quiet.load();
+  await signedUp(quiet, "mira@example.org");
+  await settle(PUSHED);
+  assert.equal(profileEntries(service, "mira@example.org").length, 0, "no empty profile ever");
+};
+
+CASES["signing in on an empty device takes the account's profile, the later change wins on one with its own"] = async () => {
+  const service = new AccountService();
+  const first = new Device(service);
+  await first.load();
+  (await profileOf(first)).setProfileName("Lina");
+  (await profileOf(first)).setAvatar("abi");
+  await signedUp(first);
+  await settle(PUSHED);
+
+  const empty = new Device(service, { id: "b".repeat(32) });
+  const page = await empty.load();
+  await page.account.signIn("lina@example.org", PASSWORD);
+  await settle(200);
+  assert.deepEqual(shown(empty), { name: "Lina", avatar: "abi" }, "an empty device takes it, asking nobody");
+  assert.deepEqual(page.surface.toasts, [], "with no question and no notice");
+  assert.equal(profileEntries(service).length, 1, "and sends nothing back");
+
+  const older = new Device(service, { id: "c".repeat(32) });
+  older.store["app-profile"] = { name: "Mira", avatar: "musik", at: first.store["app-profile"].at - 60_000, by: older.id, seen: first.store["app-profile"].at - 60_000 };
+  const olderPage = await older.load();
+  await olderPage.account.signIn("lina@example.org", PASSWORD);
+  await settle(200);
+  assert.deepEqual(shown(older), { name: "Lina", avatar: "abi" }, "an older own profile gives way");
+
+  const newer = new Device(service, { id: "d".repeat(32) });
+  const newerPage = await newer.load();
+  (await profileOf(newer)).setProfileName("Jonas");
+  await newerPage.account.signIn("lina@example.org", PASSWORD);
+  await settle(PUSHED);
+  assert.deepEqual(shown(newer), { name: "Jonas" }, "a newer own profile stays");
+  assert.equal(profileEntries(service).length, 2, "and goes up");
+  await first.load({ app: true });
+  await settle(200);
+  assert.deepEqual(shown(first), { name: "Jonas" }, "the first device takes it whole at its next start, the letter instead of Luna");
+};
+
+CASES["a change on one device reaches the other, and offline it waits and goes up when the device is back"] = async () => {
+  const service = new AccountService();
+  const one = new Device(service);
+  await one.load();
+  (await profileOf(one)).setProfileName("Lina");
+  await signedUp(one);
+  await settle(PUSHED);
+  const two = new Device(service, { id: "b".repeat(32) });
+  const twoPage = await two.load();
+  await twoPage.account.signIn("lina@example.org", PASSWORD);
+  await settle(200);
+  assert.deepEqual(shown(two), { name: "Lina" });
+
+  await one.load({ app: true });
+  await settle(200);
+  (await profileOf(one)).setAvatar("brille");
+  await settle(PUSHED);
+  await two.load({ app: true });
+  await settle(200);
+  assert.deepEqual(shown(two), { name: "Lina", avatar: "brille" }, "the other device has it at its next start");
+
+  two.offline = true;
+  (await profileOf(two)).setProfileName("Lina Marie");
+  await settle(PUSHED);
+  assert.equal(profileEntries(service).length, 2, "nothing went up offline");
+  two.offline = false;
+  dispatchEvent(new Event("online"));
+  await settle(400);
+  assert.equal(profileEntries(service).length, 3, "it goes up once the device is back");
+  await one.load({ app: true });
+  await settle(200);
+  assert.deepEqual(shown(one), { name: "Lina Marie", avatar: "brille" });
+};
+
+CASES["a device's clock running late still makes its change the later one"] = async () => {
+  const device = new Device(new AccountService(), { address: null });
+  await device.load({ quiet: false });
+  const profile = await profileOf(device);
+  const ahead = Date.now() + 3_600_000;
+  profile.adoptProfile({ record: { at: ahead, device: "f".repeat(32) }, profile: { name: "Lina", avatar: "initial" } });
+  profile.setProfileName("Mira");
+  await settle(20);
+  assert.ok(device.store["app-profile"].at > ahead, "after what it has seen, not after its own clock");
+};
+
+CASES["after a password reset the profile goes up again, signing out keeps it here"] = async () => {
+  const service = new AccountService();
+  const device = new Device(service);
+  const page = await device.load();
+  (await profileOf(device)).setProfileName("Lina");
+  await signedUp(device);
+  await settle(PUSHED);
+  assert.equal(profileEntries(service).length, 1);
+  await page.account.requestPasswordReset("lina@example.org");
+  await page.account.resetPassword("lina@example.org", service.code("lina@example.org"), "Kastanienweg-im-Stadtpark-8");
+  await settle(PUSHED);
+  assert.equal(profileEntries(service).length, 1, "the reset emptied the stream and the device sent its profile again");
+  const other = new Device(service, { id: "b".repeat(32) });
+  const otherPage = await other.load();
+  await otherPage.account.signIn("lina@example.org", "Kastanienweg-im-Stadtpark-8");
+  await settle(200);
+  assert.deepEqual(shown(other), { name: "Lina" }, "readable with the new password");
+  await otherPage.account.signOut();
+  await settle(50);
+  assert.deepEqual(shown(other), { name: "Lina" }, "signing out keeps the profile on the device");
+  (await profileOf(other)).setProfileName("Mira");
+  await settle(PUSHED);
+  assert.equal(profileEntries(service).length, 1, "and nothing goes up without an account");
 };
 
 CASES["the page asks for the first name only after the offer, and not after a scene the offer opened"] = async () => {
@@ -909,6 +1071,155 @@ CASES["deleting everything while signed in signs out here and deletes nothing in
   assert.equal(page.account.accountState().sync.connected, false);
   assert.equal(await page.card.signOutForWipe(page.account), false, "nothing to sign out the second time");
   assert.equal(await page.card.signOutForWipe(null), false, "nor without an account service");
+};
+
+// A canvas as the encoder sees it: what it was asked to draw, and blobs whose type and size the engine decides.
+function fakeCanvases(engine) {
+  const made = [];
+  const canvas = () => {
+    const node = {
+      width: 0,
+      height: 0,
+      drawn: [],
+      getContext: () => ({ fillRect() {}, drawImage: (...args) => node.drawn.push(args) }),
+      toBlob: (done, type, quality) => {
+        const kind = engine.type(type);
+        queueMicrotask(() => done(kind ? { type: kind, size: engine.size(kind, quality, node.width) } : null));
+      },
+    };
+    made.push(node);
+    return node;
+  };
+  return { canvas, made };
+}
+
+CASES["the crop keeps the circle filled, never leaves the picture and zooms around the spot under the fingers"] = async () => {
+  const { cropView, zoomAt, clampZoom, ZOOM_MAX } = await import(script("profile-photo.js"));
+  const size = { width: 1600, height: 1200 };
+  assert.deepEqual(cropView(size), { zoom: 1, x: 0, y: 0, side: 1200, sx: 200, sy: 0 }, "at zoom 1 the shorter side fills the circle, in the middle");
+  const right = cropView({ ...size, x: 5, y: -5 });
+  assert.ok(Math.abs(right.x - 1 / 6) < 1e-9 && right.y === 0, "the picture only moves as far as it reaches");
+  assert.ok(Math.abs(right.sx) < 1e-9, "dragged fully right, the crop starts at the left edge");
+  assert.deepEqual([clampZoom(9), clampZoom(0.2), clampZoom(Number.NaN), ZOOM_MAX], [4, 1, 1, 4]);
+  const close = cropView({ ...size, zoom: 2, x: 0.9, y: -0.4 });
+  assert.equal(close.side, 600);
+  assert.ok(Math.abs(close.x - 5 / 6) < 1e-9 && Math.abs(close.y + 0.4) < 1e-9);
+
+  const spotOf = (view, px, py) => [view.sx + (px + 0.5) * view.side, view.sy + (py + 0.5) * view.side];
+  const before = cropView({ ...size, zoom: 1.5, x: 0.05, y: 0.02 });
+  const after = zoomAt(before, size, 2.5, 0.2, -0.15);
+  const [a, b] = [spotOf(before, 0.2, -0.15), spotOf(after, 0.2, -0.15)];
+  assert.ok(Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6, "the spot under the fingers stays put");
+
+  let seed = 7;
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (const shape of [size, { width: 900, height: 2000 }, { width: 1024, height: 1024 }]) {
+    for (let turn = 0; turn < 300; turn += 1) {
+      const view = zoomAt(cropView({ ...shape, zoom: 1 + random() * 3, x: random() * 4 - 2, y: random() * 4 - 2 }), shape, random() * 6, random() - 0.5, random() - 0.5);
+      assert.ok(view.sx >= -1e-9 && view.sy >= -1e-9 && view.sx + view.side <= shape.width + 1e-9 && view.sy + view.side <= shape.height + 1e-9, JSON.stringify({ shape, view }));
+    }
+  }
+};
+
+CASES["the picture is written as WebP where the engine writes it, else as JPEG, near 24 KB and always small enough to travel"] = async () => {
+  const { encodePhoto, PhotoError, PHOTO_TARGET, PHOTO_CAP, PHOTO_SIDE, PHOTO_UNREADABLE, cropView } = await import(script("profile-photo.js"));
+  const page = await new Device(new AccountService(), { address: null }).load({ quiet: false });
+  const { cleanPhoto, setAvatar, readProfile, avatarModel } = await import(`${script("profile.js")}?page=${page.number}`);
+  const { profileEntry } = await import(script("sync/profile-entry.js"));
+  const { MAX_ENTRY_BYTES } = await import(script("sync/client.js"));
+  const view = cropView({ width: 1600, height: 1200, zoom: 2, x: 0.3, y: -0.2 });
+  const source = { name: "work" };
+
+  const webp = fakeCanvases({ type: (type) => type, size: () => 14000 });
+  const first = await encodePhoto(source, view, { canvas: webp.canvas });
+  assert.deepEqual([first.type, first.side, first.quality, first.blob.size], ["image/webp", PHOTO_SIDE, 0.86, 14000]);
+  assert.deepEqual(webp.made[0].drawn[0], [source, view.sx, view.sy, view.side, view.side, 0, 0, PHOTO_SIDE, PHOTO_SIDE], "the crop is drawn at 256 px");
+
+  const noWebp = fakeCanvases({ type: (type) => (type === "image/webp" ? "image/png" : type), size: () => 18000 });
+  assert.equal((await encodePhoto(source, view, { canvas: noWebp.canvas })).type, "image/jpeg", "an engine that hands back a PNG for WebP writes JPEG");
+
+  const falling = fakeCanvases({ type: (type) => type, size: (type, quality) => Math.round(40000 * quality) });
+  const lower = await encodePhoto(source, view, { canvas: falling.canvas });
+  assert.equal(lower.quality, 0.56, "the quality goes down until the picture is near the target");
+  assert.ok(lower.blob.size <= PHOTO_TARGET);
+
+  const stubborn = fakeCanvases({ type: (type) => type, size: () => 30000 });
+  const kept = await encodePhoto(source, view, { canvas: stubborn.canvas });
+  assert.deepEqual([kept.side, kept.blob.size], [PHOTO_SIDE, 30000], "above the target but under the cap it stays at 256 px");
+
+  const huge = fakeCanvases({ type: (type) => type, size: (type, quality, side) => side * 200 });
+  const smaller = await encodePhoto(source, view, { canvas: huge.canvas });
+  assert.equal(smaller.side, 160, "too big at every quality, the picture gets smaller");
+  assert.ok(smaller.blob.size <= PHOTO_CAP);
+
+  await assert.rejects(encodePhoto(source, view, { canvas: fakeCanvases({ type: (type) => type, size: () => 90000 }).canvas }), PhotoError);
+  await assert.rejects(encodePhoto(source, view, { canvas: fakeCanvases({ type: () => null, size: () => 1 }).canvas }), PhotoError);
+  assert.equal(PHOTO_UNREADABLE, "Dieses Bild kann ich nicht öffnen. Nimm am besten ein JPG oder PNG.");
+
+  const longest = `data:image/jpeg;base64,${"A".repeat(Math.ceil(PHOTO_CAP / 3) * 4)}`;
+  assert.equal(cleanPhoto(longest), longest, "the largest picture is still a valid profile picture");
+  assert.equal(setAvatar("photo", longest).photo, longest);
+  assert.deepEqual(avatarModel(readProfile(), null), { kind: "photo", photo: longest }, "and shows wherever the avatar does");
+  assert.equal(setAvatar("initial").photo, "", "removing it goes back to the letter");
+  assert.equal(readProfile().avatar, "initial");
+  const entry = profileEntry({ record: { at: Date.now(), device: "d".repeat(64) }, profile: { name: "Maximiliane-Sophie", avatar: "photo", photo: longest } });
+  assert.ok(1 + 12 + new TextEncoder().encode(JSON.stringify(entry)).length + 16 <= MAX_ENTRY_BYTES, "and fits into one profile entry");
+};
+
+CASES["the written picture keeps only the image: the encoders' Exif, XMP, Photoshop, comment and colour profile blocks go"] = async () => {
+  const { bareImage, PhotoError } = await import(script("profile-photo.js"));
+  const segment = (marker, text) => {
+    const body = [...new TextEncoder().encode(text)];
+    return [0xff, marker, (body.length + 2) >> 8, (body.length + 2) & 0xff, ...body];
+  };
+  const scan = [0xff, 0xda, 0x00, 0x08, 1, 2, 3, 4, 5, 6, 0x12, 0x34, 0xff, 0x00, 0x56, 0xff, 0xd9];
+  const jpeg = Uint8Array.from([0xff, 0xd8, ...segment(0xe0, "JFIF\0"), ...segment(0xe1, "Exif\0\0GPS Testkamera"), ...segment(0xe2, "ICC_PROFILE"), ...segment(0xed, "Photoshop 3.0"), ...segment(0xfe, "comment"), ...segment(0xdb, "quant"), ...segment(0xc0, "frame"), ...segment(0xc4, "huff"), ...scan]);
+  const bare = bareImage(jpeg, "image/jpeg");
+  const text = Buffer.from(bare).toString("latin1");
+  for (const word of ["Exif", "GPS", "ICC_PROFILE", "Photoshop", "comment"]) assert.ok(!text.includes(word), `${word} is gone`);
+  for (const word of ["JFIF", "quant", "frame", "huff"]) assert.ok(text.includes(word), `${word} stays`);
+  assert.deepEqual([...bare.subarray(bare.length - scan.length)], scan, "the image data is untouched");
+
+  const chunk = (name, body) => {
+    const bytes = typeof body === "string" ? [...new TextEncoder().encode(body)] : body;
+    const size = bytes.length;
+    return [...new TextEncoder().encode(name), size & 0xff, (size >> 8) & 0xff, 0, 0, ...bytes, ...(size % 2 ? [0] : [])];
+  };
+  const chunks = [...chunk("VP8X", [0x2c, 0, 0, 0, 255, 0, 0, 255, 0, 0]), ...chunk("ICCP", "srgb!"), ...chunk("VP8 ", "frame-data"), ...chunk("EXIF", "Exif GPS"), ...chunk("XMP ", "<x:xmpmeta/>")];
+  const size = chunks.length + 4;
+  const webp = Uint8Array.from([..."RIFF"].map((c) => c.charCodeAt(0)).concat([size & 0xff, (size >> 8) & 0xff, 0, 0], [..."WEBP"].map((c) => c.charCodeAt(0)), chunks));
+  const clean = bareImage(webp, "image/webp");
+  const words = Buffer.from(clean).toString("latin1");
+  assert.ok(!words.includes("ICCP") && !words.includes("EXIF") && !words.includes("XMP ") && words.includes("VP8 ") && words.includes("frame-data"));
+  assert.equal(clean[20], 0, "the flags no longer announce a profile, Exif or XMP");
+  assert.equal(new DataView(clean.buffer).getUint32(4, true), clean.length - 8, "the RIFF size fits what is left");
+  assert.throws(() => bareImage(Uint8Array.from([1, 2, 3]), "image/jpeg"), PhotoError);
+  assert.throws(() => bareImage(webp, "image/png"), PhotoError);
+};
+
+CASES["a file the engine can not read ends in the one short message, never in a half picture"] = async () => {
+  const { readPhoto, PhotoError } = await import(script("profile-photo.js"));
+  const saved = { createImageBitmap: globalThis.createImageBitmap, Image: globalThis.Image, FileReader: globalThis.FileReader };
+  try {
+    globalThis.createImageBitmap = async () => { throw new Error("The source image could not be decoded."); };
+    globalThis.FileReader = class {
+      readAsDataURL() {
+        this.result = "data:image/heic;base64,AAAA";
+        queueMicrotask(() => this.onload());
+      }
+    };
+    globalThis.Image = class {
+      decode() {
+        return Promise.reject(new Error("EncodingError"));
+      }
+    };
+    await assert.rejects(readPhoto({ size: 22496, type: "image/heic" }), PhotoError, "HEIC on an engine without it");
+    await assert.rejects(readPhoto({ size: 0 }), PhotoError, "an empty file");
+    await assert.rejects(readPhoto({ size: 50 * 1024 * 1024 }), PhotoError, "a file far too big to open on a phone");
+    await assert.rejects(readPhoto(null), PhotoError);
+  } finally {
+    Object.assign(globalThis, saved);
+  }
 };
 
 CASES["without an address nothing of the screens loads or shows, with one only the small part until it opens"] = async () => {

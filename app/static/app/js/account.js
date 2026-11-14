@@ -3,6 +3,7 @@
 
 import { data, accountStore, syncStore } from "./core.js";
 import { connectSync, disconnectSync, syncConnected, syncStatus } from "./sync.js";
+import { connectProfileSync, disconnectProfileSync } from "./profile-sync.js";
 import { createSyncClient } from "./sync/client.js";
 import { createKeyStore } from "./sync/key-store.js";
 import { AuthError, appFetch, createAuthClient } from "./account/auth-client.js";
@@ -108,12 +109,15 @@ function connect(signedIn, ask = false) {
   if (!signedIn && linked === entryKey && syncConnected()) return;
   linked = entryKey;
   const fetchImpl = (url, options) => request(url, options);
-  connectSync(createSyncClient({ key: entryKey.key, account: entryKey.account, baseUrl: service, fetchImpl }), { signedIn, ask, choose: choosePlan });
+  const client = createSyncClient({ key: entryKey.key, account: entryKey.account, baseUrl: service, fetchImpl });
+  connectSync(client, { signedIn, ask, choose: choosePlan });
+  connectProfileSync(client, { signedIn });
 }
 
 function unlink() {
   linked = null;
   if (syncConnected() || syncStore.get()) disconnectSync();
+  disconnectProfileSync();
 }
 
 // Signing out on this device keeps every plan and all data here; only the session, the key and the sync state go.

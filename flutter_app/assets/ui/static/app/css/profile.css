@@ -22,6 +22,7 @@
 .avatar-letter { font-size: calc(var(--size) * 0.44); font-weight: var(--weight-strong); line-height: 1; letter-spacing: 0; translate: 0 0.03em; }
 .avatar.is-blank { --hue: var(--ink-muted); }
 .avatar.is-blank .icon { width: 52%; height: 52%; stroke-width: 2; }
+.avatar-photo { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .avatar.is-luna { background: radial-gradient(circle at 50% 34%, color-mix(in oklab, var(--hue) 8%, var(--surface)) 0 38%, color-mix(in oklab, var(--hue) 24%, var(--surface)) 100%); }
 
 .luna-badge {
@@ -150,6 +151,49 @@
   .avatar-option:hover { background: var(--surface-hover); transition-duration: var(--dur-hover-in); }
 }
 
+.avatar.is-add { --hue: var(--ink-muted); background: none; box-shadow: none; border: 1.5px dashed var(--line-strong); color: var(--ink-muted); }
+.avatar.is-add .icon { --s: 22; }
+.profile-photo-error { margin: 2px 2px 8px; font-size: var(--text-sm); line-height: 1.4; color: var(--urgent-ink); }
+.profile-photo-error[hidden] { display: none; }
+
+.crop-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 6px 2px 0 6px; }
+.crop-stage {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface-sunken);
+  box-shadow: 0 0 0 4px var(--overlay), 0 0 0 5px var(--line-strong), 0 12px 30px -14px light-dark(rgba(20, 30, 22, 0.42), rgba(0, 0, 0, 0.7));
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  outline: none;
+  animation: crop-in var(--spring-delight-dur) var(--spring-delight) backwards;
+}
+.crop-stage.is-dragging { cursor: grabbing; }
+.crop-stage:focus-visible { box-shadow: 0 0 0 4px var(--overlay), 0 0 0 6px var(--focus); }
+.crop-picture { position: absolute; top: 0; left: 0; max-width: none; transform-origin: 0 0; pointer-events: none; }
+.crop-sizes { display: grid; justify-items: center; gap: 4px; }
+.crop-sizes small { margin-bottom: 6px; font-size: var(--text-xs); color: var(--ink-muted); }
+.crop-size { --hue: var(--ink-muted); background: var(--surface-sunken); animation: crop-size-in var(--spring-delight-dur) var(--spring-delight) backwards; }
+.crop-size:nth-of-type(2) { animation-delay: var(--stagger); }
+.crop-size:nth-of-type(3) { animation-delay: calc(var(--stagger) * 2); }
+.crop-size canvas { display: block; width: 100%; height: 100%; border-radius: 50%; }
+.crop-zoom { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: var(--ink-muted); }
+.crop-zoom .icon { --s: 16; }
+.crop-zoom input { flex: 1; min-width: 0; height: 28px; margin: 0; accent-color: var(--brand); }
+.crop-hint { margin-top: 4px; font-size: var(--text-xs); line-height: 1.4; text-align: center; color: var(--ink-muted); }
+.crop-other { margin-top: 6px; text-align: center; }
+.crop-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; padding-bottom: 6px; }
+
+@keyframes crop-in { from { opacity: 0; scale: 0.92; } }
+@keyframes crop-size-in { from { opacity: 0; scale: 0.6; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .crop-stage, .crop-size { animation-name: fade-in; }
+}
+
 .name-question { text-align: center; }
 
 @media (min-width: 760px) {
@@ -191,6 +235,7 @@
   .profile-sheet:popover-open::backdrop { animation: dialog-fade var(--dur-popover-in) var(--ease-out); }
   .profile-top .avatar { --size: 60px; }
   .avatar-option .avatar { --size: 60px; }
+  .crop-actions .btn { flex: 1 1 0; }
   .profile-link { padding: 12px 8px; }
 
   @starting-style {
