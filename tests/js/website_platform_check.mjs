@@ -19,7 +19,7 @@ globalThis.localStorage = { getItem: () => null, setItem() {} };
 const device = { userAgent: "", platform: "", maxTouchPoints: 0, userAgentData: undefined };
 Object.defineProperty(globalThis, "navigator", { value: device, configurable: true, writable: true });
 
-const { detectPlatform, deviceName, ISERV_HOMEWORK, platformChoices } = await import(pathToFileURL(resolve(site, "js/lib/platform.js")).href);
+const { detectPlatform, deviceName, ISERV_HOMEWORK, PLATFORMS, megabytes, platformChoices } = await import(pathToFileURL(resolve(site, "js/lib/platform.js")).href);
 const { cta } = await import(pathToFileURL(resolve(site, "js/components/cta.js")).href);
 
 const MAC_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
@@ -82,7 +82,7 @@ const tests = {
     assert.match(button, /data-install="windows"/);
     assert.match(button, / download /);
     assert.ok(button.includes(`href="${brand.repository}/releases/download/v`), button);
-    assert.equal(note, "Für Windows, 187 MB. Auch für Mac, Linux, Android und iPhone.");
+    assert.equal(note, `Für Windows, ${megabytes(PLATFORMS.windows.bytes)} MB. Auch für Mac, Linux, Android und iPhone.`);
   },
   "iphone and ipad get the home screen sheet, chromebooks go straight to the web app"() {
     use("iphone");

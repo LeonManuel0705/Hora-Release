@@ -441,22 +441,22 @@
     ],
     "ios_note": "Die iPhone-Version ist die Web-App. Sie speichert alles im Browser und hat kein IServ. Erinnerungen zeigt sie, wenn sie auf dem Home-Bildschirm liegt, und nur, solange sie offen ist.",
     "new_title": "Im neuen {{BRAND_NAME}}",
-    "new_lede": "Neu in Version 0.5:",
+    "new_lede": "Neu in Version 0.6:",
     "new_items": [
       {
-        "title": "Eine Übersicht für den ganzen Tag",
-        "text": "Stunde, Raum, nächster Block und fällige Aufgaben auf dem ersten Bildschirm."
+        "title": "Ein Konto für alle Geräte",
+        "text": "Als Beta: Stundenplan, Vorname und Profilbild, jetzt auch als eigenes Foto, sind auf jedem Gerät gleich und verschlüsselt, bevor sie dein Gerät verlassen."
       },
       {
-        "title": "Fahrplan für ganz Deutschland, auch mobil",
-        "text": "Live über Transitous, mit Verspätungen und Gleis."
+        "title": "Leistungskurse und Räume pro Stunde",
+        "text": "In der Oberstufe fragt die Einrichtung nach deinen Leistungskursen. Hat ein Fach an manchen Tagen einen anderen Raum, trägst du ihn für diese Stunde ein."
       },
       {
-        "title": "Luna",
-        "text": "Luna ist deine Assistentin: Sie beantwortet Fragen zu deinem Tag, trägt Hausaufgaben ein und hilft beim Lernen."
+        "title": "Das Wetter für den ganzen Tag",
+        "text": "Die Stunden reichen über den ganzen Tag, den die Vorhersage kennt, statt nur über acht."
       }
     ],
-    "cta": "{{BRAND_NAME}} 0.5 laden",
+    "cta": "{{BRAND_NAME}} 0.6 laden",
     "matrix_title": "Welche Funktion auf welchem Gerät",
     "eyebrow": "Funktionen",
     "hero_title": "Was {{BRAND_NAME}} kann",
@@ -641,7 +641,7 @@
   },
   "download_page": {
     "lede": "{{BRAND_NAME}} bleibt kostenlos, auch wenn die Beta vorbei ist. Ein Konto brauchst du nicht, nach dem Download geht es direkt los.",
-    "name_note": "Version 0.5 gibt es für alle Plattformen unter dem neuen Namen. Bis September 2026 hieß {{BRAND_NAME}} Nexus.",
+    "name_note": "Version 0.6 gibt es für alle Plattformen. Bis September 2026 hieß {{BRAND_NAME}} Nexus.",
     "faq_title": "Fragen zum Laden",
     "faq": [
       {
@@ -721,7 +721,7 @@
     "other_privacy": "Datenschutzerklärung"
   },
   "footer": {
-    "version": "Version 0.5.2 Closed Beta, Build 38.",
+    "version": "Version 0.6.0 Beta.",
     "nav_label": "Fußzeile",
     "source": "Quellcode",
     "contact": "Kontakt",
@@ -848,7 +848,7 @@
   },
   "start": {
     "intro": "Das neue",
-    "title": "{{BRAND_NAME}} 0.5",
+    "title": "{{BRAND_NAME}} 0.6",
     "lede": "Morgens die erste Stunde mit Raum, nachmittags die Hausaufgaben aus IServ.¹",
     "lede_plain": "Morgens die erste Stunde mit Raum, abends alles, was morgen fällig ist.",
     "cta": "Kostenlos laden",
@@ -910,7 +910,7 @@
     "get_title": "Hol dir {{BRAND_NAME}}",
     "get_text": "Kostenlos für Mac, Windows, Linux und Android. Aufs iPhone kommt {{BRAND_NAME}} als Web-App.",
     "get_all": "Alle Downloads und Anleitungen",
-    "fine": "Version 0.5 gibt es für alle Plattformen. Alle Daten in den Bildern sind ausgedacht.",
+    "fine": "Version 0.6 gibt es für alle Plattformen. Alle Daten in den Bildern sind ausgedacht.",
     "footnote": "³ Gilt für den Mac: 24,0 MB in Version 0.5 statt 39,4 MB beim letzten Mac-Download (Nexus 0.3.0).",
     "high_title": "Was sonst noch drin ist",
     "high_label": "Weitere Funktionen",

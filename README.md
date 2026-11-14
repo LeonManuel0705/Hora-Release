@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://hora-app.netlify.app/download"><img src="https://img.shields.io/badge/version-0.5.2_closed_beta-2E3A2F?style=flat-square&labelColor=86A36F" alt="Version 0.5.2, closed beta"></a>
+  <a href="https://hora-app.netlify.app/download"><img src="https://img.shields.io/badge/version-0.6.0_beta-2E3A2F?style=flat-square&labelColor=86A36F" alt="Version 0.6.0, beta"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm_Noncommercial_or_commercial-2E3A2F?style=flat-square&labelColor=86A36F" alt="License: PolyForm Noncommercial or commercial"></a>
   <img src="https://img.shields.io/badge/platforms-macOS_·_Windows_·_Linux_·_Android_·_Web-2E3A2F?style=flat-square&labelColor=86A36F" alt="Platforms: macOS, Windows, Linux, Android, Web">
   <img src="https://img.shields.io/badge/account-optional-2E3A2F?style=flat-square&labelColor=C96F4F" alt="Account optional">
@@ -35,7 +35,7 @@ The interface is German. Up to version 0.4 Hora was called Nexus.
 
 ## Download
 
-The current version is 0.5.2, a closed beta released on 7 October 2026. Get it from the [download page](https://hora-app.netlify.app/download) or from [GitHub Releases](https://github.com/LeonManuel0705/Hora-Release/releases).
+The current version is 0.6.0, a beta. Get it from the [download page](https://hora-app.netlify.app/download) or from [GitHub Releases](https://github.com/LeonManuel0705/Hora-Release/releases).
 
 | Platform | What you get |
 |:---|:---|

@@ -1,8 +1,8 @@
 {
-  "version": "0.5.2",
-  "versionName": "0.5.2 Closed Beta",
-  "buildNumber": 40,
-  "releaseDate": "2026-10-14",
+  "version": "0.6.0",
+  "versionName": "0.6.0 Beta",
+  "buildNumber": "TODO_MAC_BUILD_NUMBER",
+  "releaseDate": "2026-11-14",
   "minSupportedVersion": "0.1",
   "updateUrl": "https://hora-app.netlify.app/download",
   "platformUrls": {
@@ -14,10 +14,21 @@
     "web": "https://hora-app.netlify.app/download#web"
   },
   "changelog": [
-    "Noten trägst du jetzt oben auf der Schulseite ein, gleich neben Tests",
-    "Selbst angelegte Fächer behalten ihre Noten, Tests und Aufgaben",
-    "Die Anmeldung bei Google für den Kalender funktioniert",
-    "IServ funktioniert wieder unter Windows und Linux und bei neuen Mac-Installationen",
-    "Auf dem iPhone erklärt die Web-App, wie Erinnerungen vom Home-Bildschirm aus gehen"
-  ]
+    "Neu als Beta: Mit einem Konto bleibt dein Stundenplan auf all deinen Geräten gleich, Ende-zu-Ende verschlüsselt",
+    "Vorname und Profilbild kommen mit, und als Profilbild geht jetzt auch ein eigenes Foto",
+    "Bei der Einrichtung markierst du deine Leistungskurse, und Räume trägst du auch für einzelne Stunden ein",
+    "Das Wetter zeigt die Stunden des ganzen Tages statt nur acht",
+    "Erinnerungen sind von Anfang an eingeschaltet, am Vorabend um 18 Uhr und bei Tests mit der Stunde",
+    "Stundenpläne teilst du per Link, QR-Code oder Datei",
+    "Am Computer verbindest du deinen Google Kalender",
+    "Die Mac-App braucht auf Macs mit Apple-Chip kein Python mehr",
+    "Die Web-App startet auch ohne Internet"
+  ],
+  "downloads": {
+    "android": {
+      "url": "https://github.com/LeonManuel0705/Hora-Release/releases/download/v0.6.0/Hora-0.6.0.apk",
+      "size": "TODO_BYTES_ANDROID_APK",
+      "sha256": "TODO_SHA256_ANDROID_APK"
+    }
+  }
 }

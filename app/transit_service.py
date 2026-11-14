@@ -14,7 +14,7 @@ from . import brand
 
 BASE = "https://api.transitous.org/api/v1/"
 FARES = "https://v6.vbb.transport.rest/"
-HEADERS = {"User-Agent": f"{brand.NAME}/0.5 (Schul-App)", "Accept": "application/json"}
+HEADERS = {"User-Agent": f"{brand.NAME}/0.6 (Schul-App)", "Accept": "application/json"}
 MAX_CACHE = 400
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 

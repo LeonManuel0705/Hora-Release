@@ -137,7 +137,7 @@ function moveScene() {
   return `<div class="sc sc-move" data-scene="move" role="img" aria-label="${s("move_alt")}">
     <div class="sc-move-from"><span class="sc-move-old">N</span><span class="sc-move-caption">${s("move_from")}</span></div>
     <svg class="sc-move-path" viewBox="0 0 200 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M4 56 C 60 -8, 140 -8, 196 56"/></svg>
-    <div class="sc-move-to"><span class="sc-move-icon">${mark("sc-move-mark")}</span><span class="sc-move-caption">${escapeHtml(brandName)} 0.5</span></div>
+    <div class="sc-move-to"><span class="sc-move-icon">${mark("sc-move-mark")}</span><span class="sc-move-caption">${escapeHtml(brandName)} 0.6</span></div>
     <ul class="sc-move-chips">${chips}</ul>
     <p class="sc-move-done">${icon("circle-check", { size: 17 })}${s("move_done")}</p>
   </div>`;
