@@ -42,7 +42,7 @@ globalThis.matchMedia = () => ({ matches: false, addEventListener() {} });
 globalThis.addEventListener = () => {};
 globalThis.dispatchEvent = () => true;
 
-const { dueItems, blockIn, testAhead, homeFirst } = await import(pathToFileURL(resolve(here, "../../app/static/app/js/home-rules.js")).href);
+const { dueItems, blockIn, testAhead, homeFirst, forecastRow } = await import(pathToFileURL(resolve(here, "../../app/static/app/js/home-rules.js")).href);
 
 const tuesday = new Date(2026, 10, 10, 7, 12);
 const lesson = (block, subject, start, end) => ({ block, subject, startMin: start, endMin: end });
@@ -97,6 +97,19 @@ const tests = {
     assert.equal(homeFirst(bus, { start: "17:00" }, 950), true);
     assert.equal(homeFirst({ time: "16:43" }, gym, 935), false);
   },
+};
+
+tests["the weather sheet holds every hour the forecast has for the day and opens on the hour now"] = () => {
+  const day = Array.from({ length: 24 }, (_, h) => ({ h, temp: h - 4, rain: 0 }));
+  const morning = forecastRow(day, 9);
+  assert.equal(morning.hours.length, 24, "the whole day, not eight hours");
+  assert.equal(morning.hours[morning.first].h, 9, "it opens on the hour now");
+  assert.deepEqual(morning.hours.map((item) => item.h), day.map((item) => item.h));
+  assert.equal(forecastRow([...day].reverse(), 20).hours[0].h, 0, "in order of the day");
+  assert.equal(forecastRow(day.slice(12), 7).first, 0, "before the first hour held: the first one");
+  assert.equal(forecastRow(day.slice(0, 22), 23).first, 21, "after the last one held: the last one");
+  assert.equal(forecastRow([{ h: 10, temp: 4 }, { h: 11 }, null, { h: "12", temp: 5 }], 10).hours.length, 1, "only hours with a temperature");
+  assert.deepEqual(forecastRow(undefined, 10), { hours: [], first: 0 });
 };
 
 let failed = 0;

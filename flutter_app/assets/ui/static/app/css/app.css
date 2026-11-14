@@ -1098,8 +1098,19 @@ label.switch:is(:active, .is-pressed) input:checked + .switch-track::after { tra
 .weather-sheet { width: min(380px, calc(100vw - 32px)); transform-origin: top left; }
 .weather-summary { font-size: var(--text-base); color: var(--ink-soft); }
 .weather-summary b { color: var(--ink); font-weight: var(--weight-strong); }
-.hours { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 2px; margin-top: 12px; }
-.hour { display: grid; grid-template-rows: 16px 20px 18px 16px; align-content: start; justify-items: center; align-items: center; gap: 6px; padding: 8px 0; border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+/* Eight hours at a time, the rest of the day a swipe away; the edges fade where more hours wait. */
+.hours { --fade: 18px; display: flex; gap: 2px; margin-top: 12px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; border-radius: var(--radius-sm); outline: none; -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); mask-image: linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); }
+.hours::-webkit-scrollbar { display: none; }
+.hours.is-start { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent); mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent); }
+.hours.is-end { -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade)); mask-image: linear-gradient(to right, transparent, #000 var(--fade)); }
+.hours.is-start.is-end { -webkit-mask-image: none; mask-image: none; }
+.hours:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+.hours.is-dragging { scroll-snap-type: none; cursor: grabbing; user-select: none; -webkit-user-select: none; }
+.hour { flex: 0 0 max(46px, calc((100% - 14px) / 8)); scroll-snap-align: start; display: grid; grid-template-rows: 16px 20px 18px 16px; align-content: start; justify-items: center; align-items: center; gap: 6px; padding: 8px 0; border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+
+@media (hover: hover) and (pointer: fine) {
+  .hours { cursor: grab; }
+}
 .hour b { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--ink); }
 .hour .icon { --s: 18; color: var(--ink-soft); }
 .hour.is-now { background: var(--surface-sunken); color: var(--ink); }

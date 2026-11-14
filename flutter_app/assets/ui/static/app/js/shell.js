@@ -433,7 +433,9 @@ export function placeNear(sheet, source, align = "right") {
     sheet.style.right = `${Math.max(12, Math.round(innerWidth - box.right))}px`;
     sheet.style.left = "auto";
   } else {
-    sheet.style.left = `${Math.max(12, Math.min(Math.round(box.left), innerWidth - sheet.offsetWidth - 12))}px`;
+    // A sheet about to open has no layout yet, but its width as styled keeps its right edge on a narrow screen.
+    const width = sheet.offsetWidth || parseFloat(getComputedStyle(sheet).width) || 0;
+    sheet.style.left = `${Math.max(12, Math.min(Math.round(box.left), innerWidth - width - 12))}px`;
     sheet.style.right = "auto";
   }
 }

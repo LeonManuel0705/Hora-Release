@@ -7,7 +7,7 @@ import { animates, travels, rich, level, flipKeyed, exitInPlace, enterInPlace, s
 import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
 import { toast, openPage, registerSearch, typing, shortcutsEnabled, overlayOpen, placeNear, clampSheet, parseNote, cleanTitle, syncTime } from "./shell.js";
 import { tasks as taskApi, deadlines as deadlineApi, serverId } from "./api.js";
-import { dueItems as dueLists, blockIn, testAhead, homeFirst, DUE_DAYS } from "./home-rules.js";
+import { dueItems as dueLists, blockIn, testAhead, homeFirst, forecastRow, DUE_DAYS } from "./home-rules.js";
 import { onPlanRefresh } from "./plan-refresh.js";
 
 const $ = (id) => document.getElementById(id);
@@ -855,15 +855,80 @@ function renderWeather() {
     summary += ` Ab ${rain} Uhr ${info.rain >= 50 ? "Regen" : "Niesel"} mit ${info.rain} % Wahrscheinlichkeit.`;
   }
   $("weatherSummary").innerHTML = summary;
-  const start = Math.max(6, Math.min(hour, 16));
-  $("weatherHours").innerHTML = Array.from({ length: 8 }, (_, index) => {
-    const item = weatherAt(start + index);
+  const { hours, first } = forecastRow(data.weather.hours, hour);
+  const row = $("weatherHours");
+  row.innerHTML = hours.map((item, index) => {
     const spokenRain = item.rain ? `, Regen ${item.rain} Prozent` : ", trocken";
-    return `<li class="hour${item.h === hour ? " is-now" : ""}${item.rain >= 30 ? " is-rain" : ""}" style="--d:${index}" aria-label="${item.h === hour ? "Jetzt" : `${item.h} Uhr`}, ${item.temp} Grad${spokenRain}">
-      <span class="hour-time" aria-hidden="true">${item.h === hour ? "Jetzt" : `${item.h} Uhr`}</span>${icon(hourIcon(item))}<b aria-hidden="true">${item.temp}°</b><span class="hour-rain" aria-hidden="true">${item.rain ? `${item.rain} %` : ""}</span>
+    return `<li class="hour${item.h === hour ? " is-now" : ""}${item.rain >= 30 ? " is-rain" : ""}" style="--d:${Math.max(0, Math.min(8, index - first))}" aria-label="${item.h === hour ? "Jetzt" : `${item.h} Uhr`}, ${item.temp} Grad${spokenRain}">
+      <span class="hour-time" aria-hidden="true">${item.h === hour ? "Jetzt" : `${item.h} Uhr`}</span>${icon(hourIcon(item))}<b aria-hidden="true">${item.temp}°</b><span class="hour-rain" aria-hidden="true">${item.rain ? `${item.rain} %` : ""}</span>
     </li>`;
   }).join("");
-  pop([...$("weatherHours").children]);
+  row.dataset.first = String(first);
+  pop([...row.children].slice(first, first + 8));
+}
+
+// The row opens on the hour now; before that the sheet has no layout to scroll in.
+function showWeatherNow() {
+  const row = $("weatherHours");
+  const item = row?.children[Number(row.dataset.first) || 0];
+  if (!item) return;
+  row.scrollLeft = item.offsetLeft - row.firstElementChild.offsetLeft;
+  edgeWeather();
+}
+
+function edgeWeather() {
+  const row = $("weatherHours");
+  if (!row) return;
+  const room = row.scrollWidth - row.clientWidth;
+  row.classList.toggle("is-start", row.scrollLeft <= 1);
+  row.classList.toggle("is-end", row.scrollLeft >= room - 1);
+}
+
+// Touch and trackpads scroll the row by themselves; a mouse wheel turns into sideways steps while the row has room
+// that way, and a mouse can drag it.
+function bindWeatherRow() {
+  const row = $("weatherHours");
+  if (!row || row.dataset.bound) return;
+  row.dataset.bound = "1";
+  row.tabIndex = 0;
+  row.setAttribute("aria-label", "Vorhersage nach Stunden");
+  row.addEventListener("scroll", edgeWeather, { passive: true });
+  row.addEventListener("wheel", (event) => {
+    if (event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+    const room = row.scrollWidth - row.clientWidth;
+    const step = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? row.clientWidth : 1);
+    const next = Math.max(0, Math.min(room, row.scrollLeft + step));
+    if (room <= 0 || Math.abs(next - row.scrollLeft) < 1) return;
+    event.preventDefault();
+    row.scrollLeft = next;
+  }, { passive: false });
+  let drag = null;
+  row.addEventListener("pointerdown", (event) => {
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    drag = { x: event.clientX, left: row.scrollLeft, moved: false, id: event.pointerId };
+  });
+  row.addEventListener("pointermove", (event) => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x;
+    if (!drag.moved && Math.abs(dx) < 4) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      row.setPointerCapture(event.pointerId);
+      row.classList.add("is-dragging");
+    }
+    row.scrollLeft = drag.left - dx;
+  });
+  const release = () => {
+    if (!drag) return;
+    drag = null;
+    row.classList.remove("is-dragging");
+  };
+  row.addEventListener("pointerup", release);
+  row.addEventListener("pointercancel", release);
+  row.addEventListener("lostpointercapture", release);
+  $("weatherSheet")?.addEventListener("toggle", (event) => {
+    if (event.newState === "open") showWeatherNow();
+  });
 }
 
 function renderWeatherChip() {
@@ -1365,6 +1430,7 @@ function bindEvents() {
     event.preventDefault();
     removeTask(id, "delete");
   });
+  bindWeatherRow();
   window.addEventListener("app:weather-open", renderWeather);
   window.addEventListener("app:note", (event) => {
     const detail = event.detail;

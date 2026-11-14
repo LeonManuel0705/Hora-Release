@@ -46,3 +46,12 @@ export function homeFirst(bus, event, nowMin) {
   const start = toMin(event.start);
   return start - nowMin > HOME_BEFORE_EVENT && toMin(bus.time) < start;
 }
+
+// The hours of the weather sheet: every hour the forecast holds for the day, in order, and where the row opens, on the
+// hour now or the next one there is.
+export function forecastRow(hours, hour) {
+  const list = (Array.isArray(hours) ? hours : []).filter((item) => Number.isInteger(item?.h) && Number.isFinite(item.temp)).sort((a, b) => a.h - b.h);
+  const next = list.findIndex((item) => item.h >= hour);
+  return { hours: list, first: next < 0 ? Math.max(0, list.length - 1) : next };
+}
+
