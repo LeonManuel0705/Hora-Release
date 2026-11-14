@@ -6,20 +6,19 @@
   <a href="https://hora-app.netlify.app/download"><img src="https://img.shields.io/badge/version-0.5.2_closed_beta-2E3A2F?style=flat-square&labelColor=86A36F" alt="Version 0.5.2, closed beta"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm_Noncommercial_or_commercial-2E3A2F?style=flat-square&labelColor=86A36F" alt="License: PolyForm Noncommercial or commercial"></a>
   <img src="https://img.shields.io/badge/platforms-macOS_·_Windows_·_Linux_·_Android_·_Web-2E3A2F?style=flat-square&labelColor=86A36F" alt="Platforms: macOS, Windows, Linux, Android, Web">
-  <img src="https://img.shields.io/badge/cloud-none-2E3A2F?style=flat-square&labelColor=C96F4F" alt="No cloud">
+  <img src="https://img.shields.io/badge/account-optional-2E3A2F?style=flat-square&labelColor=C96F4F" alt="Account optional">
 </p>
 
 <p align="center">
   <a href="#download">Download</a> ·
   <a href="#what-is-inside">What is inside</a> ·
-  <a href="#how-it-is-built">How it is built</a> ·
-  <a href="#getting-started">Getting started</a> ·
+  <a href="#privacy">Privacy</a> ·
   <a href="#license">License</a>
 </p>
 
 # Hora
 
-**One app for the school day.** Hora brings timetable, tasks, calendar, mail, transit and a local assistant together, and keeps all of it on your own device. No account, no cloud, no telemetry.
+**One app for the school day.** Hora brings timetable, tasks, calendar, mail, transit and a local assistant together, and keeps it on your own device. An account for sync is optional, and there is no telemetry.
 
 I built Hora because I was tired of switching between separate apps for school, calendar, transit and tasks. Instead of stitching together tools that don't talk to each other, I wanted one system that understands how these things connect: a cancelled class means a changed commute, a new homework assignment becomes a task with a deadline, and a calendar event shows the route to get there.
 
@@ -32,7 +31,7 @@ I built Hora because I was tired of switching between separate apps for school, 
   <img src="landing-page/public/screens/phone-heute.webp" alt="The same overview on a phone." width="21.4%">
 </p>
 
-The interface is German. The product name lives in one place, see [brand/README.md](brand/README.md). Up to version 0.4 Hora was called Nexus.
+The interface is German. Up to version 0.4 Hora was called Nexus.
 
 ## Download
 
@@ -71,163 +70,19 @@ It checks the checksum of the download, moves Hora into `/Applications` and remo
 | **Assistant** | A language model that runs on the device and can create tasks and homework for you. Works offline. |
 | **Focus** | A Pomodoro timer, notes, bookmarks, spaced repetition and a training tracker. |
 | **Backup** | One file carries timetable, subjects, grades, tests, tasks, events and places to another device, without doubling what is already there. |
+| **Sync** | With an optional account, your timetable, first name and profile picture reach all your devices, end to end encrypted. A beta for now. |
 
 <img src=".github/readme/luna.svg" alt="Luna, a small octopus" width="96" align="right">
 
 **And Luna.** The small octopus shows new users around, keeps you company while something loads and sleeps when the day is done.
 
-## How it is built
+## Privacy
 
-Hora spans phone, browser and desktop with one interface. The pages are written once, as server rendered HTML with plain CSS and JavaScript, and every platform shows the same ones.
+Everything you enter stays on your device. Hora has no analytics, no tracking and no crash reports, and it works offline once it is set up.
 
-**Backend** (Flask). Serves the interface and about 210 routes, backed by 16 SQLite tables and encrypted JSON files for school data. Handles Google Calendar sync, Gmail, IServ, CalDAV, transit routing and live updates over WebSockets. It only listens on 127.0.0.1.
+**The account is optional** and still a beta. With an account, Hora keeps your timetable, your first name and your profile picture the same on all your devices. The app encrypts them on the device with AES-256 before they leave it, using a key derived from your password that never leaves the device. The service at Cloudflare, with its database in the EU, stores your email address, a check value for your password and the encrypted entries, and cannot read them. Deleting the account removes all of it from the cloud.
 
-**Phone app** (Flutter). On a phone the same pages run without the Flask backend. On Android a small server written in Dart answers them from inside the app, backed by the phone's own database, and a WebView shows the result. The web app for iPhone and iPad answers them in the browser the same way.
-
-**Desktop apps**. On macOS the Flutter app runs natively and carries the Flask backend inside its bundle. On Windows and Linux an Electron shell bundles a frozen backend. The local assistant runs in a llama.cpp server that the backend installs on request and starts on 127.0.0.1 with a key of its own. The model leaves memory after five idle minutes and the server stops after thirty.
-
-**Landing page** (Vite). Marketing and download site in English and German, built as a static site for Netlify.
-
-### Decisions
-
-* **Privacy first.** All data stays on the device. Credentials and school data are encrypted at rest using Fernet with PBKDF2 (600k iterations, salts per file). No telemetry, no accounts required.
-* **Offline first.** The app works without network access. Background sync picks up when connectivity returns, and the assistant never needs a connection once it is installed.
-* **Security hardened.** OAuth CSRF protection, CSP headers with nonces, SSRF validation on CalDAV and mail hosts, CRLF header injection prevention, input sanitization across every endpoint. The desktop apps check the backend with an HMAC handshake before they hand it a token.
-* **Transparent migration.** `decrypt_file()` detects plaintext JSON and legacy encryption schemes, and re encrypts in place without user intervention. Data from the Nexus days is found and taken over.
-* **One name, one place.** Code never carries the product name. It lives in `brand/brand.json`, and a test fails when it leaks into code.
-
-### Project structure
-
-```
-Hora/
-  app/                  Flask backend
-    app.py              Main application and the classic pages
-    ui_pages.py         Pages and API of the interface
-    ui_data.py          What the pages show, read from the database
-    templates/app/      The pages themselves
-    static/app/         Their styles, scripts and Luna
-    assistant_service.py  What the assistant understands and may do
-    local_ai.py         On-demand install and runtime of the local assistant
-    database.py         SQLite/PostgreSQL models (16 tables)
-    crypto_utils.py     Fernet encryption with auto-migration
-    calendar_service.py CalDAV + macOS EventKit integration
-    email_service.py    IMAP/SMTP email client
-    iserv_service.py    German school system integration
-    vbb_service.py      Transit routing
-    transit_service.py  Fares, tickets and walking legs
-    google_oauth.py     Google Calendar + Gmail OAuth
-  flutter_app/          Flutter app for phone, web and macOS
-    lib/
-      web_ui/           The Dart server and WebView that show the pages on a phone
-      screens/          Classic native screens
-      providers/        State management
-      services/         Sync, notifications, database, IServ, ...
-      tutorial/         Luna's tour
-    scripts/            Build scripts for the apps
-  desktop/              Electron shell for Windows/Linux
-  landing-page/         Vite marketing site
-  site/                 Built landing page, published to Netlify
-  brand/                Product name (brand.json) and logo locations
-  scripts/              Backend freeze, brand and phone UI scripts
-  tests/                Backend test suite
-```
-
-## Getting started
-
-### Backend and interface
-
-```bash
-./setup.sh        # initial setup
-./start.sh         # starts on http://127.0.0.1:5050
-```
-
-### Phone app
-
-```bash
-cd flutter_app
-flutter pub get
-flutter run
-```
-
-After a change to the pages, `python3 scripts/build_mobile_ui.py` copies them into the app. A test fails when the copy has drifted.
-
-### Landing page
-
-```bash
-cd landing-page
-npm install
-npm run dev        # http://localhost:4321
-npm run build      # builds into dist/, copy it to ../site/ to publish
-```
-
-### Environment variables
-
-Copy `.env.example` to `.env`. For Google Calendar fill in:
-
-```
-GOOGLE_CLIENT_ID=<client id>
-GOOGLE_CLIENT_SECRET=<client secret>
-GOOGLE_PROJECT_ID=<project id>
-```
-
-Gmail through the Google sign-in is a restricted scope that Google opens to a published app only after a paid yearly security assessment, so it is off by default and Gmail connects with an app password. Set `GOOGLE_GMAIL=1` to offer it in an installation whose OAuth project may use it. An account that already holds Gmail keeps it either way.
-
-Release builds take a Google OAuth client of the type "Desktop app" from the repository secrets `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`. `scripts/write_google_client.py` writes it to `app/google_client.json`, which git ignores, and the desktop builds carry it. A local `flutter_app/scripts/build_macos.sh` reads the same two variables from the environment. Without them a build has no Google sign-in.
-
-Leave `SECRET_KEY` unset. Hora then generates a random key in `data/.secret_key` on the first start. Set it only to share one key across machines, and then use a real random value. Setting `DATABASE_URL` switches the backend from SQLite to PostgreSQL.
-
-### Building the apps
-
-```bash
-flutter_app/scripts/build_macos.sh     # macOS app with the backend inside
-
-bash scripts/build_backend.sh          # frozen backend, built on the target platform
-cd desktop
-npm install                            # needs Node 22.12 or newer
-npm run build:win                      # per-user installer for Windows
-npm run build:linux                    # AppImage and .deb
-```
-
-`build_macos.sh` needs Xcode. It first freezes the backend for Apple silicon with `scripts/build_backend_macos.sh`, which downloads a pinned, checksummed CPython and so needs the network; `MACOS_FROZEN_BACKEND=0` skips that for a quick local build. The app starts the frozen backend unless its project folder is a git checkout, and Intel Macs keep starting it with Python.
-
-<details>
-<summary>What the desktop build and the first start do in detail</summary>
-
-The build scripts copy the frozen backend into the package and stop if it is missing. `npm start` in `desktop/` runs the shell against the Python source of this checkout (`venv/` in the repo root, or `HUB_DEV_PYTHON`). Unpackaged runs also read `HUB_DEV_PORT`, `HUB_DEV_APP_DATA`, `HUB_DEV_UPDATE_URL` and `HUB_DEV_LEGACY_DOCUMENTS`, so a test run leaves the real port, profile and Documents folder alone. `npm test` checks the shell's URL and version rules and the takeover of old data. With `HUB_TEST_PYTHON` set to a Python that has python-dotenv and cryptography, it also checks the takeover against python-dotenv and the backend's key handling.
-
-On Windows and Linux the first start looks for data from the previous names in `brand/brand.json` under `Documents/<name>`, both where the old app kept it and where Windows or XDG puts the Documents folder. If the new profile holds no user data yet (no data folder, or only what a start created by itself), the app asks before it copies anything. It copies `data/` into the profile and writes the key the old app encrypted with into `data/.secret_key`: a `SECRET_KEY` from the environment, else one from `.env` or `.flaskenv` as Flask found them, else the old `data/.secret_key`. If that key is unclear, cannot be stored exactly, is missing or is one the backend refuses, and data is encrypted with it, it stops with a message instead of guessing and offers to take over everything except the encrypted files. The old folder is only ever read. After "Neu anfangen" the question comes back once the profile's `data` folder is removed while the app is closed. The packaged backend runs with `FLASK_SKIP_DOTENV=1` and `PYTHON_DOTENV_DISABLED=1`, so no `.env` file can change its key or settings.
-
-</details>
-
-## Tech stack
-
-| Layer | Technology |
-|:---|:---|
-| Interface | Server rendered HTML, plain CSS and JavaScript, Plus Jakarta Sans |
-| Backend | Flask, Flask SocketIO, SQLite/PostgreSQL, Fernet |
-| Phone | Flutter, Dart, SQLite, Hive, Provider, WorkManager |
-| Desktop | Flutter (macOS), Electron and electron builder (Windows, Linux) |
-| Assistant | Gemma 4 E2B on llama.cpp, on the device |
-| Integrations | Google Calendar API, Gmail API, IServ, CalDAV, VBB |
-| Landing page | Vite, DOMPurify |
-| CI | GitHub Actions (pytest, flutter analyze, flutter test, builds for every platform, release builds) |
-
-## Deployment
-
-**Landing page** deploys to Netlify as a static site (publish directory: `site/`).
-
-**Backend** runs locally, inside the desktop apps or through `start.sh`.
-
-**Releases** start with a version tag: pushing `v*` runs the release workflow in GitHub Actions, which builds the release packages.
-
-## Tests
-
-```bash
-pip install pytest
-python -m pytest tests/ -v      # close to 600 backend tests
-cd flutter_app && flutter test
-cd desktop && npm test
-```
+Logins for IServ, mail and Google stay encrypted on the device and are never synced. The [privacy page](https://hora-app.netlify.app/privacy-philosophy) lists every connection Hora makes and why, the [privacy policy](https://hora-app.netlify.app/datenschutz) has the details.
 
 ## License
 
