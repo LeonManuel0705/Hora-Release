@@ -50,9 +50,14 @@ export function syncLine(state) {
 
 export const UNREADABLE_NOTE = "Ältere Stände ließen sich nicht öffnen, weil dein Passwort auf einem anderen Gerät geändert wurde.";
 
+export const BETA_TAG = '<span class="beta-tag">Beta</span>';
+
+export const deleteButtonHtml = (cls = "") =>
+  `<button class="text-button is-danger${cls ? ` ${cls}` : ""}" type="button" data-account-open="delete">${icon("trash-2")}<span>Konto löschen</span></button>`;
+
 // The profile in the accounts section, built with the row of the settings page so it looks like IServ and Google.
 export function accountCardHtml(state, row) {
-  const label = `${esc(BRAND)}-Konto`;
+  const label = `${esc(BRAND)}-Konto ${BETA_TAG}`;
   if (!state?.signedIn) {
     return row({
       id: "rowAccount",
@@ -70,7 +75,7 @@ export function accountCardHtml(state, row) {
     cls: "is-stack",
     label: `${label} ${line.status}`,
     desc: `Angemeldet als ${esc(state.email || "")}. ${esc(line.text)}`,
-    after: unreadable,
+    after: `${unreadable}${deleteButtonHtml("row-action")}`,
     control: `${unlock}<button class="btn btn-quiet" type="button" id="accountSignOut">Abmelden</button>`,
   });
 }

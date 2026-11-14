@@ -33,6 +33,22 @@
   gap: 14px;
 }
 
+.form-note {
+  margin-top: -4px;
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.form-note .link {
+  --link-track: var(--line-strong);
+  color: var(--ink-soft);
+  font-weight: 560;
+  text-decoration: none;
+}
+
 .actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

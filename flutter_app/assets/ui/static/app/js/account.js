@@ -34,6 +34,7 @@ let checking = false;
 let offline = false;
 let retrying = false;
 let chooser = null;
+let deleting = null;
 const choosers = [];
 
 const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -121,18 +122,19 @@ function unlink() {
 }
 
 // Signing out on this device keeps every plan and all data here; only the session, the key and the sync state go.
-function forget({ ended }) {
+function forget({ ended, known = true, offered = saved.offered }) {
   entryKey = null;
   offline = false;
   checking = false;
-  keep({ token: null, account: null, known: true, guest: false, ended, offered: saved.offered });
+  keep({ token: null, account: null, known, guest: false, ended, offered });
   const removed = keyStore.remove();
   unlink();
   return removed;
 }
 
+// While the account is being deleted, a 401 from the sync is the deletion itself, not a session that ended.
 function sessionEnded(token) {
-  if (!saved?.token || saved.token !== token) return;
+  if (!saved?.token || saved.token !== token || deleting === token) return;
   forget({ ended: true });
   announce("session-ended");
 }
@@ -269,6 +271,29 @@ export async function signOut() {
   await forget({ ended: false });
   announce("signed-out");
   if (token) await auth.endSession(token).catch(() => {});
+  return accountState();
+}
+
+// Deletes the account and everything of it in the cloud. This device keeps every plan and all its data and forgets the
+// account as if it had never been signed in here, without offering one by itself again; the other devices find their
+// session gone at their next call.
+export async function deleteAccount(password) {
+  await ready();
+  const token = saved.token;
+  if (!token) throw new AuthError("no_session");
+  deleting = token;
+  try {
+    await auth.deleteAccount(saved.account.email, String(password ?? ""));
+  } catch (error) {
+    deleting = null;
+    if (error.status === 401) sessionEnded(token);
+    throw error;
+  }
+  deleting = null;
+  if (saved.token === token) {
+    await forget({ ended: false, known: false, offered: true });
+    announce("deleted");
+  }
   return accountState();
 }
 

@@ -111,3 +111,13 @@ assert.equal((await page.auth.getSession()).account.email, email, "the page's co
 await app.endSession(previous);
 await page.auth.signOut();
 console.log("ok   the app and the demo page share one account and open each other's entries");
+
+await page.auth.signIn(email, PASSWORD);
+held.token = (await app.signIn(email, PASSWORD)).token;
+await assert.rejects(app.deleteAccount(email, "Falsch-geraten-im-Herbst"), (error) => error.code === "invalid_credentials" && error.status === 403);
+assert.equal((await app.session()).account.email, email, "a wrong password deletes nothing and ends no session");
+assert.deepEqual(await app.deleteAccount(email, PASSWORD), {});
+await assert.rejects(app.session(), (error) => error.code === "no_session" && error.status === 401);
+assert.equal(await page.auth.getSession(), null, "the page's cookie session on the account ends too");
+await assert.rejects(app.signIn(email, PASSWORD), (error) => error.code === "invalid_credentials");
+console.log("ok   the app deletes the account on the real service with its password");
