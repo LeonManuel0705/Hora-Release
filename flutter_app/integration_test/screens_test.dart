@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:app/main.dart' as app;
+import 'package:app/web_ui/ui_pages.dart';
 
 const _screenCount = 15;
 
@@ -34,6 +35,7 @@ void _collect(WidgetTester tester, List<String> errors, String stage) {
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  UiPages.accountService = null;
 
   testWidgets('every screen renders without errors', (tester) async {
     final errors = <String>[];

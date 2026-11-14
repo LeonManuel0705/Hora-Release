@@ -57,8 +57,14 @@ class UiPages {
   final bool browser;
   final Map<String, String> _templates = {};
 
-  /// The account service, set with `--dart-define=HORA_ACCOUNT_SERVICE=<origin>`. Without it the pages keep the account core off.
-  static String? accountService = accountServiceOrigin(const String.fromEnvironment('HORA_ACCOUNT_SERVICE'));
+  /// The account service the build talks to: the one in brand.json, or the origin given with
+  /// `--dart-define=HORA_ACCOUNT_SERVICE=<origin>`. An empty value or `off` builds the app with accounts off.
+  static const builtAccountService = bool.hasEnvironment('HORA_ACCOUNT_SERVICE')
+      ? String.fromEnvironment('HORA_ACCOUNT_SERVICE')
+      : Brand.accountService;
+
+  /// The account service of the pages, null keeps the account core off.
+  static String? accountService = accountServiceOrigin(builtAccountService);
 
   static String policy(String nonce, {bool framed = false}) =>
       "default-src 'self'; script-src 'self' 'nonce-$nonce'; style-src 'self' 'unsafe-inline'; "

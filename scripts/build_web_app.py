@@ -17,6 +17,10 @@ publish next (any build, old or new; a folder without a worker gets one) and pub
 start each device removes the worker and every offline copy and loads from the network again; a
 later normal build turns it back on. Arguments the script does not know go to `flutter build web`.
 
+Accounts: a build talks to the account service in brand/brand.json. A build for tests takes
+--dart-define=HORA_ACCOUNT_SERVICE=off, or the origin of a local service, so it never reaches the live one.
+The live worker must list https://hora-app.netlify.app in WEB_APP_ORIGINS, or the web app cannot sign in.
+
 Fonts: the engine loads its default font and the fallbacks for glyphs the app fonts lack from
 fonts/ in the build, never from Google. The build ships Roboto, all 12 emoji parts and Noto Sans
 Math (about 2.3 MB). Other scripts (Arabic, Cyrillic, CJK and so on) have no fallback file, so such

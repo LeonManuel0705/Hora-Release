@@ -4,6 +4,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:app/brand.dart';
 import 'package:app/web_ui/ui_api.dart';
 import 'package:app/web_ui/ui_bridge.dart';
 import 'package:app/web_ui/ui_db.dart';
@@ -112,9 +113,11 @@ void main() {
     expect((await UiDb.store(db)).containsKey(UiDb.profileKey), isFalse);
   });
 
-  test('the account service comes only from the build and opens the page policy for it alone', () async {
+  test('the account service comes from brand.json unless the build names another, and opens the page policy for it alone', () async {
     String connect(String policy) => RegExp('connect-src ([^;]+)').firstMatch(policy)!.group(1)!;
-    expect(UiPages.accountService, isNull);
+    expect(UiPages.builtAccountService, Brand.accountService);
+    expect(accountServiceOrigin(Brand.accountService), Brand.accountService);
+    expect(UiPages.accountService, isNull, reason: 'flutter_test_config.dart keeps every test away from the live service');
     expect(connect(UiPages.policy('n', framed: true)), "'self'");
     expect((await pageJson('appData')).containsKey('accountService'), isFalse);
     addTearDown(() => UiPages.accountService = null);
@@ -124,7 +127,7 @@ void main() {
     expect(connect(UiPages.policy('n')), "'self' http://127.0.0.1:8794");
     expect((await pageJson('appData', '/hub'))['accountService'], 'http://127.0.0.1:8794');
     expect((await UiDb.store(await UiDb.open())).containsKey(UiDb.accountKey), isFalse, reason: 'a page load stores nothing');
-    for (final value in ['', 'konto.example.org', 'ftp://konto.example.org', 'https://konto.example.org/api', 'https://a:b@konto.example.org', 'https://konto.example.org?q=1']) {
+    for (final value in ['', 'off', 'konto.example.org', 'ftp://konto.example.org', 'https://konto.example.org/api', 'https://a:b@konto.example.org', 'https://konto.example.org?q=1']) {
       expect(accountServiceOrigin(value), isNull, reason: value);
     }
     expect(accountServiceOrigin(' https://konto.example.org '), 'https://konto.example.org');

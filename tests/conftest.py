@@ -13,6 +13,8 @@ import pytest
 
 _TEST_ROOT = tempfile.mkdtemp(prefix="hub-tests-")
 os.environ["HUB_DATA_DIR"] = str(Path(_TEST_ROOT) / "data")
+# Tests and every backend they start keep accounts off, so none reaches the live account service.
+os.environ["HORA_ACCOUNT_SERVICE"] = "off"
 atexit.register(shutil.rmtree, _TEST_ROOT, True)
 
 

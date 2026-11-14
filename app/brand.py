@@ -4,4 +4,5 @@
 NAME = "Hora"
 REPOSITORY = "https://github.com/LeonManuel0705/Hora-Release"
 WEBSITE = "https://hora-app.netlify.app"
+ACCOUNT_SERVICE = "https://hora-konto.horaapp.workers.dev"
 PREVIOUS_NAMES = ("Nexus",)

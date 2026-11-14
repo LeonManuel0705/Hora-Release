@@ -66,12 +66,14 @@ def generated_files(brand):
     name = json.dumps(brand["name"], ensure_ascii=False)
     repository = json.dumps(brand["repository"], ensure_ascii=False)
     website = json.dumps(brand["website"], ensure_ascii=False)
+    account_service = brand.get("accountService", "")
     previous = brand.get("previousNames", [])
     python_previous = "(" + ", ".join(json.dumps(item, ensure_ascii=False) for item in previous) + ("," if len(previous) == 1 else "") + ")"
     dart_previous = "<String>[" + ", ".join(dart_literal(item) for item in previous) + "]"
     return {
         "app/brand.py": SPDX_HASH
-        + f"NAME = {name}\nREPOSITORY = {repository}\nWEBSITE = {website}\nPREVIOUS_NAMES = {python_previous}\n",
+        + f"NAME = {name}\nREPOSITORY = {repository}\nWEBSITE = {website}\n"
+        + f"ACCOUNT_SERVICE = {json.dumps(account_service, ensure_ascii=False)}\nPREVIOUS_NAMES = {python_previous}\n",
         "app/static/js/brand.js": SPDX_SLASH
         + f"self.BRAND_NAME = {name};\nself.BRAND_REPOSITORY = {repository};\nself.BRAND_WEBSITE = {website};\n"
         + f"self.BRAND_PREVIOUS_NAMES = {json.dumps(previous, ensure_ascii=False)};\n",
@@ -80,6 +82,7 @@ def generated_files(brand):
         + f"  static const name = {dart_literal(brand['name'])};\n"
         + f"  static const repository = {dart_literal(brand['repository'])};\n"
         + f"  static const website = {dart_literal(brand['website'])};\n"
+        + f"  static const accountService = {dart_literal(account_service)};\n"
         + f"  static const previousNames = {dart_previous};\n}}\n",
         "desktop/brand.json": json.dumps({"name": brand["name"], "repository": brand["repository"], "website": brand["website"], "previousNames": previous}, ensure_ascii=False, indent=2) + "\n",
         "promo-video/src/brand.ts": f"export const BRAND_NAME = {name};\nexport const BRAND_WEBSITE = {website};\n",

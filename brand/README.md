@@ -1,10 +1,19 @@
 # Brand
 
-`brand.json` holds the product name, the repository and the website. Everything a user sees reads them from there.
+`brand.json` holds the product name, the repository, the website and the account service. Everything a user sees reads them from there.
+
+## Account service
+
+`accountService` is the origin of the live account service, the Cloudflare worker that keeps accounts and the encrypted sync entries. Every build talks to it without a setting: the backend reads `brand.ACCOUNT_SERVICE` (desktop apps, frozen or from a git checkout), the Flutter app compiles `Brand.accountService` in (Android, web app). The page CSP opens `connect-src` for it and for nothing else.
+
+- `HORA_ACCOUNT_SERVICE` in the backend's environment, or `--dart-define=HORA_ACCOUNT_SERVICE=<origin>` for a Flutter build, names another service, for example a local one on `http://127.0.0.1:8794`.
+- An empty value or `off` switches accounts off: no account screens, no sync, no request to any service.
+- The tests run with accounts off: `tests/conftest.py` sets `HORA_ACCOUNT_SERVICE=off` for pytest and every backend it starts, `flutter_app/test/flutter_test_config.dart` clears `UiPages.accountService` before each Flutter test file, and the integration test does the same. A test that needs a service sets one itself.
+- The web app at `https://hora-app.netlify.app/pwa/` calls the service from its own origin, so the worker must list `https://hora-app.netlify.app` in `WEB_APP_ORIGINS`. The apps call it from loopback origins, which the worker always allows.
 
 ## Renaming
 
-1. Change `name` in `brand.json`, and `repository` or `website` if those move too.
+1. Change `name` in `brand.json`, and `repository`, `website` or `accountService` if those move too.
 2. Run `python3 scripts/apply_brand.py`. It regenerates the constants, writes the values into the platform files that cannot read JSON themselves and swaps the old name for the new one in `README.md`, `NOTICE`, `COMMERCIAL-LICENSE.md`, `CONTRIBUTING.md` and `licensing/*.md`.
 3. Read the diff of the license texts before you publish.
 4. Rebuild what ships: the apps, the PWA copy in `landing-page/public/pwa`, the landing page into `site/`, the promo renders.
@@ -17,9 +26,9 @@
 | Place | Source |
 |---|---|
 | Flask templates | `{{ brand_name }}` and `{{ brand_repository }}`, injected by `inject_globals` in `app/app.py` |
-| Python | `brand.NAME`, `brand.REPOSITORY`, `brand.WEBSITE` from the generated `app/brand.py` |
+| Python | `brand.NAME`, `brand.REPOSITORY`, `brand.WEBSITE`, `brand.ACCOUNT_SERVICE` from the generated `app/brand.py` |
 | Web UI scripts and service worker | `BRAND_NAME`, `BRAND_REPOSITORY`, `BRAND_WEBSITE` from the generated `app/static/js/brand.js` |
-| Flutter | `Brand.name`, `Brand.repository`, `Brand.website` from the generated `flutter_app/lib/brand.dart` |
+| Flutter | `Brand.name`, `Brand.repository`, `Brand.website`, `Brand.accountService` from the generated `flutter_app/lib/brand.dart` |
 | Native app shells | written by `apply_brand.py`: Android label, iOS `Info.plist`, macOS product name, scheme and test host, the trusted notification host in `AppDelegate.swift`, Windows and Linux window titles, binary names and version info, Flutter web `index.html` and `manifest.json`, Flask `manifest.json` |
 | Electron | the generated `desktop/brand.json` (name, website for the update check, earlier names); `appId`, `productName`, `desktopName`, `homepage`, the Linux executable and package name, shortcut and installer names in `desktop/package.json` |
 | Landing page | `{{BRAND_NAME}}`, `{{BRAND_REPOSITORY}}`, `{{BRAND_WEBSITE}}` and `{{BRAND_WEBSITE_HOST}}`, replaced at build time by `landing-page/integrations/brand-placeholder.js`; download URLs in `public/version.json` are written by `apply_brand.py` |

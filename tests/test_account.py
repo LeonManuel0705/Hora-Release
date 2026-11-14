@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from app import account_service
+from app import account_service, brand
 from app import database as db
 from app import ui_data
 
@@ -20,7 +20,6 @@ ACCOUNT = {"service": "http://127.0.0.1:8794", "token": "t" * 43, "account": {"i
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DATABASE_PATH", str(tmp_path / "hub.db"))
-    monkeypatch.delenv(account_service.ENV_NAME, raising=False)
     db.init_db()
     monkeypatch.setattr(ui_data, "refresh_weather_soon", lambda location: None)
     from app import app as app_module
@@ -85,11 +84,32 @@ def test_the_service_address_is_a_bare_origin_or_nothing(value, origin):
     assert account_service.service_origin(value) == origin
 
 
-def test_without_an_address_the_pages_carry_nothing_of_the_account_core(client):
+def test_without_the_variable_the_backend_talks_to_the_service_in_brand_json(monkeypatch):
+    monkeypatch.delenv(account_service.ENV_NAME)
+    assert brand.ACCOUNT_SERVICE.startswith("https://")
+    assert account_service.service_origin() == brand.ACCOUNT_SERVICE
+    monkeypatch.setenv(account_service.ENV_NAME, "http://127.0.0.1:8794")
+    assert account_service.service_origin() == "http://127.0.0.1:8794"
+
+
+@pytest.mark.parametrize("value", ["off", "OFF", "", "  "])
+def test_an_empty_value_or_off_switches_accounts_off(monkeypatch, value):
+    monkeypatch.setenv(account_service.ENV_NAME, value)
+    assert account_service.service_origin() is None
+
+
+@pytest.mark.parametrize("value", ["off", ""])
+def test_with_accounts_off_the_pages_carry_nothing_of_the_account_core(client, monkeypatch, value):
+    monkeypatch.setenv(account_service.ENV_NAME, value)
     response = client.get("/hub/settings")
     assert connect_src(response) == ["'self'"]
     assert "accountService" not in page_json(client, "appData")
     assert "app-account" not in db.get_ui_store()
+
+
+def test_tests_never_reach_the_live_service(client):
+    assert account_service.service_origin() is None
+    assert brand.ACCOUNT_SERVICE not in client.get("/hub").get_data(as_text=True)
 
 
 def test_with_an_address_the_pages_name_it_and_may_reach_it(client, monkeypatch):

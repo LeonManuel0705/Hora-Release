@@ -2,6 +2,7 @@
   "name": "Hora",
   "repository": "https://github.com/LeonManuel0705/Hora-Release",
   "website": "https://hora-app.netlify.app",
+  "accountService": "https://hora-konto.horaapp.workers.dev",
   "previousNames": [
     "Nexus"
   ]

@@ -4,13 +4,21 @@
 import os
 from urllib.parse import urlsplit
 
+from . import brand
+
 ENV_NAME = 'HORA_ACCOUNT_SERVICE'
 DEFAULT_PORTS = {'http': 80, 'https': 443}
 
 
 def service_origin(value=None):
-    """The origin of the account service from HORA_ACCOUNT_SERVICE, or None. Without one the account core stays off."""
-    text = (os.environ.get(ENV_NAME, '') if value is None else value).strip()
+    """The origin of the account service, or None to keep the account core off.
+
+    Without HORA_ACCOUNT_SERVICE it is the service in brand/brand.json. The variable overrides it, and an
+    empty value, `off` or anything else that is not a bare http or https origin switches accounts off.
+    """
+    if value is None:
+        value = os.environ.get(ENV_NAME, brand.ACCOUNT_SERVICE)
+    text = value.strip()
     if not text:
         return None
     try:

@@ -7,5 +7,6 @@ class Brand {
   static const name = 'Hora';
   static const repository = 'https://github.com/LeonManuel0705/Hora-Release';
   static const website = 'https://hora-app.netlify.app';
+  static const accountService = 'https://hora-konto.horaapp.workers.dev';
   static const previousNames = <String>['Nexus'];
 }
