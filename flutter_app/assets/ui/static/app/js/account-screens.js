@@ -21,7 +21,7 @@ import { SCREENS } from "./account-screens/screens/index.js";
 const STYLES = ["tokens", "base", "layout", "components", "screens", "mascot", "scene", "luna", "phone", "stage"];
 const styleUrl = (name) => new URL(`../css/account-screens/${name}.css`, import.meta.url).href;
 const MARK = '<svg class="brand-mark" viewBox="14 18 72 66" aria-hidden="true" focusable="false"><circle class="mark-a" cx="40" cy="44" r="26"/><rect class="mark-b" x="44" y="42" width="42" height="42" rx="12"/><path class="mark-c" d="M44 69.69V54A12 12 0 0 1 56 42H65.92A26 26 0 0 1 44 69.69Z"/></svg>';
-const RANK = { signin: 1, unlock: 1, create: 2, forgot: 2, code: 3, reset: 3, guest: 3, success: 4, name: 4 };
+const RANK = { signin: 1, unlock: 1, delete: 1, create: 2, forgot: 2, code: 3, reset: 3, guest: 3, success: 4, name: 4 };
 const STRIPPED = ["id", "name", "autocomplete", "aria-live", "role", "for"];
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
@@ -357,7 +357,7 @@ function mount({ screen, email }) {
 
     async function close(result = {}) {
       if (state.closing || state.closed) return;
-      if (layer.querySelector('form[aria-busy="true"]') && !result.opened) return;
+      if (layer.querySelector('form[aria-busy="true"]') && !result.opened && !result.deleted) return;
       state.closing = true;
       nav.cleanup?.();
       nav.cleanup = null;

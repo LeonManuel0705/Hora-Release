@@ -220,6 +220,7 @@ svg { display: block; }
 
 .text-button:is(:active, .is-pressed):where(:not(:disabled)) { color: var(--ink); transition-duration: var(--dur-press); }
 .text-button:is(:active, .is-pressed):where(:not(:disabled)) > span { background-size: 100% 1.5px; transition-duration: var(--dur-press); }
+.text-button.is-danger { color: var(--urgent-ink); }
 
 .main { min-width: 0; padding-top: var(--safe-top); background: var(--surface); outline: none; }
 

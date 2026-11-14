@@ -2,12 +2,27 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { icon } from "../icons.js";
-import { sleep } from "../dom.js";
+import { esc, sleep } from "../dom.js";
 import { pending } from "../flow.js";
 import { messageFor, normalizeError } from "../messages.js";
 import { emailFieldMarkup, passwordFieldMarkup, mountEmailField, mountPasswordField } from "../ui/fields.js";
 import { slotMarkup } from "../ui/notice.js";
 import { createFormKit } from "../ui/form-kit.js";
+
+const PRIVACY_PATH = "/datenschutz";
+
+// The privacy policy on the website, linked where the address and the password are asked for. The shells open it in the
+// system browser like every other link to a new window.
+export function privacyUrl() {
+  const site = (document.documentElement.dataset.brandWebsite || "").replace(/\/$/, "");
+  return /^https:\/\/[^/]+$/.test(site) ? `${site}${PRIVACY_PATH}` : "";
+}
+
+function privacyNote() {
+  const url = privacyUrl();
+  if (!url) return "";
+  return `<p class="form-note">Was mit deinen Daten passiert, steht in der <a class="link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Datenschutzerklärung<span class="visually-hidden">, öffnet im Browser</span></a>.</p>`;
+}
 
 export default {
   id: "create",
@@ -23,13 +38,14 @@ export default {
     return {
       html: `
         <div class="head">
-          <h1 class="title" tabindex="-1">Konto erstellen</h1>
+          <h1 class="title" tabindex="-1">Konto erstellen <span class="beta-tag">Beta</span></h1>
         </div>
         <form class="form" novalidate>
           ${emailFieldMarkup({ value: params.email || "" })}
           ${passwordFieldMarkup({ id: "password", autocomplete: "new-password", meter: true })}
           ${slotMarkup()}
           <button class="btn btn-primary btn-block" type="submit">Konto anlegen ${icon("arrow-right", { size: 20, className: "icon-nudge" })}</button>
+          ${privacyNote()}
         </form>`,
       focus: params.email ? "#password" : "#email",
     };

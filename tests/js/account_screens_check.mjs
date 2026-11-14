@@ -510,7 +510,8 @@ CASES["the card: signed out, guest, signed in with its sync states, the password
   const base = { available: true, ready: true, signedIn: false, email: null, needsPassword: false, guest: false, offline: false, checking: false, sync: { connected: false, ready: false, busy: false, error: null, unreadable: 0, syncedAt: null } };
 
   const out = card.accountCardHtml(base, row);
-  assert.match(text(out), /^App-Konto Nicht angemeldet Mit einem Konto ist dein Stundenplan auf all deinen Geräten gleich\./);
+  assert.match(text(out), /^App-Konto Beta Nicht angemeldet Mit einem Konto ist dein Stundenplan auf all deinen Geräten gleich\./);
+  assert.match(out, /<p class="set-row-label">App-Konto <span class="beta-tag">Beta<\/span> <span class="status is-off">/, "a small Beta beside the name");
   assert.deepEqual(opens(out), ["signin", "create"]);
   assert.match(out, /btn btn-quiet[^>]*data-account-open="signin">Anmelden</);
   assert.match(out, /btn btn-primary[^>]*data-account-open="create">Konto erstellen</);
@@ -518,9 +519,11 @@ CASES["the card: signed out, guest, signed in with its sync states, the password
 
   const signedIn = { ...base, signedIn: true, email: "lina@example.org", sync: { ...base.sync, connected: true, ready: true, syncedAt: now } };
   const fine = card.accountCardHtml(signedIn, row);
-  assert.equal(text(fine), `App-Konto Angemeldet Angemeldet als lina@example.org. Stundenplan abgeglichen um ${clock(now)} Uhr. Abmelden`);
+  assert.equal(text(fine), `App-Konto Beta Angemeldet Angemeldet als lina@example.org. Stundenplan abgeglichen um ${clock(now)} Uhr. Konto löschen Abmelden`);
   assert.match(fine, /id="accountSignOut">Abmelden</);
-  assert.deepEqual(opens(fine), []);
+  assert.deepEqual(opens(fine), ["delete"]);
+  assert.match(fine, /<\/p><button class="text-button is-danger row-action" type="button" data-account-open="delete"><svg class="icon " aria-hidden="true"><use href="#i-trash-2"\/><\/svg><span>Konto löschen<\/span><\/button><div class="set-row-control">/, "a quiet Konto löschen under the text, apart from Abmelden");
+  assert.doesNotMatch(out, /Konto löschen/, "only when signed in");
   assert.match(text(card.accountCardHtml({ ...signedIn, sync: { ...signedIn.sync, busy: true } }, row)), /Gleicht ab .*gerade abgeglichen/);
   assert.match(text(card.accountCardHtml({ ...signedIn, offline: true }, row)), new RegExp(`Offline .*Gerade keine Verbindung, abgeglichen um ${clock(now)} Uhr\\. Sobald du wieder online bist, gleicht App ab\\.`));
   assert.match(text(card.accountCardHtml({ ...signedIn, sync: { ...signedIn.sync, error: "network" } }, row)), /Offline/);
@@ -529,7 +532,7 @@ CASES["the card: signed out, guest, signed in with its sync states, the password
 
   const locked = card.accountCardHtml({ ...signedIn, needsPassword: true, sync: { ...base.sync } }, row);
   assert.match(text(locked), /Passwort fehlt .*Gib dein Passwort ein, dann gleicht App wieder ab\./);
-  assert.deepEqual(opens(locked), ["unlock"]);
+  assert.deepEqual(opens(locked), ["delete", "unlock"], "deleting needs the password, not the key");
   assert.match(locked, /btn btn-primary[^>]*data-account-open="unlock">Passwort eingeben</);
 
   const unreadable = card.accountCardHtml({ ...signedIn, sync: { ...signedIn.sync, unreadable: 2 } }, row);
@@ -670,6 +673,56 @@ CASES["forgetting the password: the padlock of the scene beside the note, the co
   assert.match(note, /fill="#C96F4F"/, "in the terracotta of the scene");
   assert.match(note, /<p>Deine Daten im Konto sind mit deinem Passwort verschlüsselt\. <strong>Nach dem Zurücksetzen lassen sie sich nicht mehr öffnen\.<\/strong> Was auf deinen Geräten liegt, bleibt erhalten\.<\/p>$/);
   assert.equal(words(note), "Deine Daten im Konto sind mit deinem Passwort verschlüsselt. Nach dem Zurücksetzen lassen sie sich nicht mehr öffnen. Was auf deinen Geräten liegt, bleibt erhalten.");
+};
+
+CASES["deleting the account: its own screen with the password, what happens in two sentences, a destructive button"] = async () => {
+  const device = new Device(new AccountService(), { address: null });
+  await device.load({ quiet: false });
+  const load = async (name) => (await import(`${script(`account-screens/screens/${name}.js`)}?page=${device.page.number}`)).default;
+  const [remove, create, index] = [await load("delete"), await load("create"), await import(`${script("account-screens/screens/index.js")}?page=${device.page.number}`)];
+  assert.equal(index.SCREENS.delete, remove, "the screen is part of the scene");
+  assert.deepEqual([remove.id, remove.title, remove.guard({ session: null }), remove.guard({ session: { email: "lina@example.org" } })], ["delete", "Konto löschen", { id: "signin" }, null]);
+  assert.equal(remove.panel().guest, undefined, "no way out without an account on this screen");
+  const { html, focus } = remove.render({ session: { email: "<b>lina</b>@example.org" } }, {});
+  assert.equal(
+    words(html),
+    "Konto löschen Das Konto &lt;b&gt;lina&lt;/b&gt;@example.org und alles in der Cloud werden sofort gelöscht. Auf diesem Gerät bleibt alles, deine anderen Geräte werden abgemeldet. Passwort Konto löschen",
+  );
+  assert.match(html, /<input id="password" name="password" type="password" autocomplete="current-password"/);
+  assert.match(html, /autocomplete="username" value="&lt;b&gt;lina&lt;\/b&gt;@example\.org"/, "the address for the password manager");
+  assert.match(html, /<button class="btn btn-danger btn-block" type="submit" aria-describedby="delete-lede">/);
+  assert.equal(focus, "#password");
+  const module = await import(`${script("account-screens/screens/delete.js")}?page=${device.page.number}`);
+  assert.equal(module.DELETED_NOTE, "Konto gelöscht. Deine Daten bleiben auf diesem Gerät.");
+  const source = (await import("node:fs")).readFileSync(new URL(script("account-screens/screens/delete.js")), "utf8");
+  assert.match(source, /"Das Löschen hat gerade nicht geklappt\. Dein Konto ist noch da, versuch es später noch einmal\."/);
+  assert.match(source, /await auth\.deleteAccount\(password\.value\)/);
+  assert.match(source, /ctx\.close\(\{ deleted: true, note: DELETED_NOTE \}\)/, "closes without the celebration of signing in");
+  assert.match(create.render({}, {}).html, /<h1 class="title" tabindex="-1">Konto erstellen <span class="beta-tag">Beta<\/span><\/h1>/, "the scene says Beta once, where an account is made");
+};
+
+CASES["the sign-up step links the privacy policy of the website, quietly under the button, opened outside the app"] = async () => {
+  const device = new Device(new AccountService(), { address: null });
+  await device.load({ quiet: false });
+  const module = await import(`${script("account-screens/screens/create.js")}?page=${device.page.number}`);
+  const { dataset } = document.documentElement;
+  dataset.brandWebsite = "https://hora-app.netlify.app";
+  const { html } = module.default.render({}, {});
+  assert.equal(module.privacyUrl(), "https://hora-app.netlify.app/datenschutz", "the route of the website's privacy policy");
+  assert.match(
+    html,
+    /Konto anlegen <svg[^>]*>.*?<\/svg><\/button>\s*<p class="form-note">Was mit deinen Daten passiert, steht in der <a class="link" href="https:\/\/hora-app\.netlify\.app\/datenschutz" target="_blank" rel="noopener noreferrer">Datenschutzerklärung<span class="visually-hidden">, öffnet im Browser<\/span><\/a>\.<\/p>\s*<\/form>/s,
+  );
+  dataset.brandWebsite = "https://hora-app.netlify.app/";
+  assert.equal(module.privacyUrl(), "https://hora-app.netlify.app/datenschutz");
+  for (const site of ["", "http://hora-app.netlify.app", "javascript:alert(1)", "https://hora-app.netlify.app/pfad"]) {
+    dataset.brandWebsite = site;
+    assert.equal(module.privacyUrl(), "", `no link for ${JSON.stringify(site)}`);
+    assert.doesNotMatch(module.default.render({}, {}).html, /form-note/);
+  }
+  delete dataset.brandWebsite;
+  const source = await import("node:fs").then((fs) => fs.readFileSync(new URL("../../landing-page/src/js/main.js", import.meta.url), "utf8"));
+  assert.match(source, /"\/datenschutz": privacyPolicy/, "the website has this route");
 };
 
 CASES["an unverified address: the envelope of the scene beside the note, the new code in bold, the words unchanged"] = async () => {

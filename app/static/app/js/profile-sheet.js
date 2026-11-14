@@ -61,6 +61,7 @@ function accountHtml(state) {
     <div class="profile-account-head">${title}${line.status}</div>
     <p class="profile-account-text">${esc(line.text)}</p>
     <div class="profile-actions">${unlock}<button class="btn btn-quiet" type="button" data-profile-sign-out>${icon("log-out")}<span>Abmelden</span></button></div>
+    ${account ? account.card.deleteButtonHtml("profile-delete") : ""}
   </section>`;
 }
 

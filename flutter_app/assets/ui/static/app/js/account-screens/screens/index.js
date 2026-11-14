@@ -10,5 +10,6 @@ import reset from "./reset.js";
 import unlock from "./unlock.js";
 import guest from "./guest.js";
 import name from "./name.js";
+import remove from "./delete.js";
 
-export const SCREENS = { create, code, success, signin, forgot, reset, unlock, guest, name };
+export const SCREENS = { create, code, success, signin, forgot, reset, unlock, guest, name, delete: remove };

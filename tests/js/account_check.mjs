@@ -88,6 +88,9 @@ class AccountService {
     this.streams = new Map();
     this.requests = [];
     this.offline = false;
+    this.down = false;
+    this.beforeDelete = null;
+    this.made = 0;
     this.count = 0;
   }
 
@@ -119,6 +122,7 @@ class AccountService {
 
   async fetch(url, options = {}) {
     if (this.offline) throw new TypeError("fetch failed");
+    if (this.down) return new Response("Service Unavailable", { status: 503 });
     const address = new URL(url);
     const method = options.method || "GET";
     const body = options.body ? JSON.parse(options.body) : {};
@@ -131,7 +135,7 @@ class AccountService {
     if (route === "POST /api/prelogin") return reply(200, account ? { salt: account.salt, iterations: account.iterations } : { salt: VECTOR.salt, iterations: 600000 });
     if (route === "POST /api/signup") {
       if (account?.verified) return reply(409, { error: "email_taken" });
-      this.accounts.set(body.email, { id: account?.id || `acc-${this.accounts.size + 1}`, email: body.email, salt: body.salt, iterations: body.iterations, verifier: body.authKey, verified: false });
+      this.accounts.set(body.email, { id: account?.id || `acc-${(this.made += 1)}`, email: body.email, salt: body.salt, iterations: body.iterations, verifier: body.authKey, verified: false });
       return reply(200, this.issue(body.email, "signup"));
     }
     if (route === "POST /api/verify") {
@@ -160,6 +164,15 @@ class AccountService {
     }
     if (!session) return reply(401, { error: "no_session" });
     if (route === "GET /api/session") return reply(200, { account: { id: session.id, email: session.email } });
+    // Like the real one: the password as well as the session, 403 for a wrong one, then the account with all it has.
+    if (route === "POST /api/account/delete") {
+      if (session.verifier !== body.authKey) return reply(403, { error: "invalid_credentials" });
+      this.endSessions(session.email);
+      this.streams.delete(session.id);
+      this.accounts.delete(session.email);
+      await this.beforeDelete?.();
+      return reply(200, {});
+    }
     const stream = this.stream(session.id);
     if (route === "POST /api/entries") {
       stream.last += 1;
@@ -583,6 +596,113 @@ CASES["signing out keeps the plan, forgets the key first and ends the session"] 
   service.offline = true;
   const offline = await page.account.signOut();
   assert.deepEqual([offline.signedIn, device.storedAccount()], [false, { known: true }], "offline the device signs out all the same");
+};
+
+CASES["deleting the account needs the password, signs out here, keeps every plan and the profile, and forgets the account"] = async () => {
+  const service = new AccountService();
+  const device = new Device(service);
+  const page = await device.load();
+  await device.edit(MATHE);
+  await signedUp(device);
+  const profile = { name: "Lina", avatar: "musik", asked: true };
+  page.core.profileStore.set(profile);
+  await settle(page);
+  const { token, account } = device.storedAccount();
+  const still = () => {
+    const state = page.account.accountState();
+    return [state.signedIn, state.sessionEnded, device.storedAccount().token, service.accounts.has("lina@example.org")];
+  };
+
+  await rejects(page.account.deleteAccount("Falsches-Passwort-123"), "invalid_credentials");
+  assert.deepEqual(still(), [true, false, token, true], "a wrong password deletes nothing and signs nothing out");
+  service.offline = true;
+  await rejects(page.account.deleteAccount(PASSWORD), "network");
+  service.offline = false;
+  assert.deepEqual(still(), [true, false, token, true], "offline nothing happens");
+  service.down = true;
+  const down = await rejects(page.account.deleteAccount(PASSWORD), "server");
+  service.down = false;
+  assert.equal(down.status, 503);
+  assert.deepEqual(still(), [true, false, token, true], "nor with the service unavailable");
+  assert.ok(!page.announced.some((item) => item.change === "session-ended"));
+
+  const state = await page.account.deleteAccount(PASSWORD);
+  await settle(page);
+  assert.deepEqual(
+    [state.signedIn, state.email, state.knownDevice, state.sessionEnded, state.guest, state.offered, state.sync.connected],
+    [false, null, false, false, false, true, false],
+  );
+  assert.deepEqual(device.storedAccount(), { offered: true }, "token, account and the known device are gone, the screens do not offer one by themselves");
+  assert.equal(device.store[SYNC], undefined, "the sync state is gone");
+  assert.deepEqual([...device.databases.get("hora-sync").get("keys").keys()], [], "and the key");
+  assert.deepEqual([device.lessons(), device.store["app-profile"]], [MATHE, profile], "the plan and the profile stay");
+  assert.deepEqual([service.accounts.has("lina@example.org"), service.sessions.has(token), service.streams.has(account.id)], [false, false, false]);
+  const call = service.calls("/api/account/delete").at(-1);
+  assert.deepEqual([call.bearer, call.app, call.credentials], [token, true, "omit"], "with the token as a bearer");
+  assert.equal(page.announced.at(-1).change, "deleted");
+  assert.ok(!page.announced.some((item) => item.change === "session-ended"));
+  await rejects(page.account.deleteAccount(PASSWORD), "no_session");
+
+  const before = service.requests.length;
+  const reloaded = await device.load({ app: true });
+  const after = await reloaded.account.startAccount();
+  await settle(reloaded);
+  assert.deepEqual([after.signedIn, after.knownDevice, after.sessionEnded, service.requests.length], [false, false, false, before], "the next start knows no account and asks nothing");
+};
+
+CASES["after deleting, the other devices fall into the ended session at their next call, and the address is free again"] = async () => {
+  const service = new AccountService();
+  const first = new Device(service);
+  await first.load();
+  await first.edit(MATHE);
+  await signedUp(first);
+  const id = first.storedAccount().account.id;
+  const second = new Device(service, { id: "b".repeat(32) });
+  await second.load();
+  await second.page.account.signIn("lina@example.org", PASSWORD);
+  await settle(second.page);
+
+  await first.load();
+  await first.page.account.startAccount();
+  await first.page.account.deleteAccount(PASSWORD);
+  await settle(first.page);
+
+  const page = await second.load({ app: true });
+  const state = await page.account.startAccount();
+  assert.deepEqual([state.signedIn, state.sessionEnded, state.knownDevice], [false, true, true], "the notice of an ended session");
+  assert.equal(page.announced.at(-1).change, "session-ended");
+  assert.deepEqual(second.lessons(), MATHE, "the plan stays there too");
+
+  const again = await first.load();
+  await again.account.signUp("lina@example.org", PASSWORD);
+  await again.account.verifyEmail("lina@example.org", service.code("lina@example.org"));
+  await settle(again);
+  assert.notEqual(first.storedAccount().account.id, id, "a new account on the same address");
+  assert.deepEqual([again.account.accountState().signedIn, again.account.accountState().knownDevice], [true, true]);
+};
+
+CASES["while the account is being deleted a 401 to the sync is the deletion, and a session that had ended still ends here"] = async () => {
+  const service = new AccountService();
+  const device = new Device(service);
+  const page = await device.load();
+  await device.edit(MATHE);
+  await signedUp(device);
+  const pulls = service.calls("/api/entries").length;
+  service.beforeDelete = () => device.show();
+  await page.account.deleteAccount(PASSWORD);
+  await settle(page);
+  assert.ok(service.calls("/api/entries").length > pulls, "the sync asked while the deletion went through");
+  assert.deepEqual([page.announced.at(-1).change, device.storedAccount()], ["deleted", { offered: true }]);
+  assert.ok(!page.announced.some((item) => item.change === "session-ended"));
+
+  const other = new Device(service, { id: "b".repeat(32) });
+  const second = await other.load();
+  await signedUp(other, "mia@example.org");
+  service.endSessions("mia@example.org");
+  await rejects(second.account.deleteAccount(PASSWORD), "no_session");
+  const ended = second.account.accountState();
+  assert.deepEqual([ended.signedIn, ended.sessionEnded, ended.knownDevice], [false, true, true]);
+  assert.equal(service.accounts.has("mia@example.org"), true, "nothing was deleted");
 };
 
 CASES["a second device takes over the plan in place, and a password reset seals it anew"] = async () => {

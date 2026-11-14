@@ -121,6 +121,7 @@
 .profile-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .profile-actions .btn { flex: 1 1 auto; }
 .profile-actions .danger-button { color: var(--urgent-ink); }
+.profile-delete { justify-self: start; margin: 0 0 -4px -10px; }
 
 .profile-sheet .status { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px 0 7px; border-radius: var(--radius-pill); font-size: var(--text-xs); font-weight: var(--weight-medium); line-height: 1; white-space: nowrap; }
 .profile-sheet .status .icon { --s: 14; }

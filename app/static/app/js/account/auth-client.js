@@ -129,6 +129,13 @@ export function createAuthClient({ baseUrl, fetchImpl }) {
       return call("/api/logout", {}, { token });
     },
 
+    // The service asks for the password as well as the session, so a token alone can not delete the account.
+    async deleteAccount(email, password) {
+      const parameters = await call("/api/prelogin", { email: normalizeEmail(email) });
+      const { authKey } = await deriveKeys(password, fromBase64(parameters.salt), parameters.iterations);
+      return call("/api/account/delete", { authKey }, { bearer: true });
+    },
+
     requestPasswordReset(email) {
       return call("/api/reset/request", { email: normalizeEmail(email) });
     },
