@@ -28,6 +28,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: "3.38.6"
 
       # Reconstruct the keystore from the base64 secret into an ABSOLUTE path.
       # storeFile in build.gradle.kts resolves relative paths against the app
