@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
-   SPDX-License-Identifier: AGPL-3.0-only */
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
 
-.tinte-guide {
+.luna-guide {
     position: fixed;
     left: 0;
     top: 0;
@@ -40,7 +40,7 @@
     --card-border: var(--line);
 }
 
-[data-theme="dark"] .tinte-guide {
+[data-theme="dark"] .luna-guide {
     --lav: #AE9CF5;
     --lav-s: #9380EA;
     --lav-h: #CFC4FB;
@@ -48,63 +48,68 @@
     --ink-soft: #C9BEFA;
 }
 
-.tinte-guide.is-gone {
+/* While Luna guides, she is the only one on screen. */
+.tour-on .empty-state > .luna {
+    visibility: hidden;
+}
+
+.luna-guide.is-gone {
     opacity: 0 !important;
     transition: opacity .26s ease;
 }
 
-.tinte-guide .tinte-art {
+.luna-guide .luna-art {
     display: block;
     width: 100%;
     height: 100%;
     overflow: visible;
 }
 
-.tinte-guide .t-wrap {
+.luna-guide .t-wrap {
     pointer-events: visiblePainted;
     cursor: pointer;
 }
 
-.tinte-guide :is(.t-wrap, .t-mantle, .t-brows, .t-look, .t-eye, .t-talk, .t-confetti, .t-spark, .t-tip) {
+.luna-guide :is(.t-wrap, .t-mantle, .t-brows, .t-look, .t-eye, .t-talk, .t-confetti, .t-spark, .t-tip) {
     transform-box: view-box;
     transform-origin: 0 0;
 }
 
-.tinte-guide .t-lav { fill: var(--lav); }
-.tinte-guide .t-lav-s { fill: var(--lav-s); }
-.tinte-guide .t-lav-h { fill: var(--lav-h); }
-.tinte-guide .t-mint { fill: var(--mint); }
-.tinte-guide .t-mint-s { fill: var(--mint-s); }
-.tinte-guide .t-rose { fill: var(--rose); }
-.tinte-guide .t-apri { fill: var(--apri); }
-.tinte-guide .t-ink-f { fill: var(--ink); }
-.tinte-guide .t-white { fill: #FFFFFF; }
-.tinte-guide .t-sucker { fill: var(--rose); opacity: .8; }
-.tinte-guide .t-eye ellipse { fill: var(--ink); }
-.tinte-guide :is(.t-eye-happy, .t-eye-closed, .t-mouth) {
+.luna-guide .t-lav { fill: var(--lav); }
+.luna-guide .t-lav-s { fill: var(--lav-s); }
+.luna-guide .t-lav-h { fill: var(--lav-h); }
+.luna-guide .t-mint { fill: var(--mint); }
+.luna-guide .t-mint-s { fill: var(--mint-s); }
+.luna-guide .t-rose { fill: var(--rose); }
+.luna-guide .t-apri { fill: var(--apri); }
+.luna-guide .t-ink-f { fill: var(--ink); }
+.luna-guide .t-white { fill: #FFFFFF; }
+.luna-guide .t-sucker { fill: var(--rose); opacity: .8; }
+.luna-guide .t-eye ellipse { fill: var(--ink); }
+.luna-guide :is(.t-eye-happy, .t-eye-closed, .t-mouth) {
     fill: none;
     stroke: var(--ink);
     stroke-width: 2.1;
     stroke-linecap: round;
     stroke-linejoin: round;
 }
-.tinte-guide .t-mouth-open { fill: var(--ink); }
-.tinte-guide :is(.t-eye-happy, .t-eye-closed, .t-mouth-open, .t-talk) { opacity: 0; }
-.tinte-guide .t-blush { fill: var(--rose); opacity: .62; }
-.tinte-guide .t-brow {
+.luna-guide .t-mouth-open { fill: var(--ink); }
+.luna-guide :is(.t-eye-happy, .t-eye-closed, .t-mouth-open, .t-talk) { opacity: 0; }
+.luna-guide .t-blush { fill: var(--rose); opacity: .62; }
+.luna-guide .t-brow {
     fill: none;
     stroke: var(--ink);
     stroke-width: 1.9;
     stroke-linecap: round;
 }
-.tinte-guide :is(.t-spark, .t-tip) { transform: scale(0); }
-.tinte-guide .t-spark.t-l { fill: var(--lav-s); }
-.tinte-guide .t-spark.t-t { fill: var(--mint); }
-.tinte-guide .t-ink-cloud { fill: var(--ink-cloud); }
-.tinte-guide .t-ink-soft { fill: var(--ink-soft); }
-.tinte-guide .t-ink-shine { fill: #FFFFFF; }
+.luna-guide :is(.t-spark, .t-tip) { transform: scale(0); }
+.luna-guide .t-spark.t-l { fill: var(--lav-s); }
+.luna-guide .t-spark.t-t { fill: var(--mint); }
+.luna-guide .t-ink-cloud { fill: var(--ink-cloud); }
+.luna-guide .t-ink-soft { fill: var(--ink-soft); }
+.luna-guide .t-ink-shine { fill: #FFFFFF; }
 
-.tinte-bubbles {
+.luna-bubbles {
     position: fixed;
     inset: 0;
     z-index: 10044;
@@ -112,19 +117,19 @@
     overflow: hidden;
 }
 
-.tinte-bubbles i {
+.luna-bubbles i {
     position: absolute;
     border-radius: 50%;
     border: 1.5px solid rgba(149, 128, 232, .6);
     background: radial-gradient(circle at 32% 30%, rgba(255, 255, 255, .85) 0 18%, rgba(218, 209, 252, .22) 42%, rgba(218, 209, 252, 0) 70%);
-    animation: tinte-bubble .95s cubic-bezier(.2, .8, .2, 1) forwards;
+    animation: luna-bubble .95s cubic-bezier(.2, .8, .2, 1) forwards;
 }
 
-[data-theme="dark"] .tinte-bubbles i {
+[data-theme="dark"] .luna-bubbles i {
     border-color: rgba(207, 196, 251, .55);
 }
 
-@keyframes tinte-bubble {
+@keyframes luna-bubble {
     from { opacity: .95; transform: translate(0, 0) scale(.45); }
     to { opacity: 0; transform: translate(var(--drift, 0), -28px) scale(1.05); }
 }
@@ -175,6 +180,32 @@
 @keyframes tour-pulse {
     0% { opacity: .95; transform: scale(1); }
     70%, 100% { opacity: 0; transform: scale(1.06); }
+}
+
+/* The field to type into: a ring around it while the page around stays bright. */
+.tour-spot.is-outline {
+    box-shadow: none;
+}
+
+.tour-spot.is-outline::after {
+    animation: tour-ring .45s cubic-bezier(.23, 1, .32, 1) both;
+}
+
+/* Luna's tap on a tab: one ripple from where her tentacle touches it. */
+.tour-tap {
+    position: absolute;
+    width: 56px;
+    height: 56px;
+    margin: -28px 0 0 -28px;
+    border-radius: 50%;
+    background: color-mix(in oklab, var(--tour-ring) 22%, transparent);
+    opacity: 0;
+    animation: tour-tap .42s cubic-bezier(.2, .8, .2, 1) forwards;
+}
+
+@keyframes tour-tap {
+    0% { opacity: .9; transform: scale(.2); }
+    100% { opacity: 0; transform: scale(1.4); }
 }
 
 .tour-rings {
@@ -468,8 +499,10 @@
     }
 
     .tour-spot.is-ring::after,
+    .tour-spot.is-outline::after,
     .tour-bubble.is-nudged,
-    .tinte-bubbles i {
+    .luna-bubbles i,
+    .tour-tap {
         animation: none;
     }
 

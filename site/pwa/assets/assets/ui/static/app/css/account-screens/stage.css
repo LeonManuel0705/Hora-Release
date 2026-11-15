@@ -1,0 +1,109 @@
+/* SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
+
+@media (min-width: 600px) {
+  .topbar {
+    height: 26px;
+  }
+
+  .title {
+    font-size: 2.125rem;
+  }
+
+  .title.luna-line {
+    font-size: 1.5rem;
+  }
+
+  .forms {
+    border-radius: 36px;
+    overflow: clip;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.8),
+      0 0 0 1px rgb(214 202 180 / 0.5),
+      0 40px 80px -40px rgb(var(--shadow-pine) / 0.45),
+      0 12px 24px -16px rgb(var(--shadow-pine) / 0.18);
+  }
+
+  .acct[data-look="tanne"] .forms {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.08),
+      0 0 0 1px rgb(255 255 255 / 0.06),
+      0 44px 90px -36px rgb(10 16 11 / 0.75),
+      0 14px 28px -16px rgb(10 16 11 / 0.5);
+  }
+}
+
+@media (min-width: 600px) and (orientation: portrait) {
+  .app {
+    --sheet-gap: max(32px, calc(var(--bottom-inset) + 20px));
+    --sheet-pt: 32px;
+    --sheet-px: 32px;
+    --sheet-pb: 30px;
+    --layer-max: calc(100dvh - var(--top-inset) - 80px - var(--sheet-gap) - var(--sheet-pt) - var(--sheet-pb) + 8px);
+  }
+
+  .topbar {
+    top: calc(var(--top-inset) + 14px);
+    left: 32px;
+    right: 24px;
+  }
+
+  .panel {
+    inset: calc(var(--top-inset) + 60px) 0 calc(var(--sheet-h, 520px) + var(--sheet-gap) - 30px) 0;
+    transform-origin: 50% 100%;
+  }
+
+  .forms {
+    left: 0;
+    right: 0;
+    bottom: var(--sheet-gap);
+    width: min(540px, 100% - 64px);
+    margin-inline: auto;
+  }
+}
+
+@media (min-width: 600px) and (orientation: landscape) {
+  .app {
+    --stage-top: clamp(64px, 11dvh, 96px);
+    --stage-bottom: clamp(20px, 6dvh, 56px);
+    --gutter: clamp(24px, 5%, 80px);
+    --stage-gap: clamp(24px, 4%, 64px);
+    --card-w: clamp(340px, 40% - 20px, 452px);
+    --sheet-pt: 34px;
+    --sheet-px: 34px;
+    --sheet-pb: 30px;
+    --layer-max: calc(100dvh - var(--stage-top) - var(--stage-bottom) - var(--sheet-pt) - var(--sheet-pb) + 8px);
+  }
+
+  .topbar {
+    top: calc(max(10px, var(--safe-top, env(safe-area-inset-top, 0px))) + 9px);
+    left: var(--gutter);
+    right: calc(var(--gutter) - 8px);
+  }
+
+  .panel {
+    top: var(--stage-top);
+    bottom: var(--stage-bottom);
+    left: var(--gutter);
+    right: calc(var(--gutter) + var(--card-w) + var(--stage-gap));
+    transform-origin: 50% 55%;
+  }
+
+  .panel .scene-frame {
+    top: 50%;
+    bottom: auto;
+    width: min(108cqw, calc(112cqh * var(--ratio-n)));
+    transform: translate(-50%, -50%);
+  }
+
+  .acct[data-step="auth"] .backdrop-glow {
+    translate: -20vw 8dvh;
+  }
+
+  .forms {
+    top: calc(var(--stage-top) + (100% - var(--stage-top) - var(--stage-bottom)) / 2);
+    right: var(--gutter);
+    width: var(--card-w);
+    translate: 0 -50%;
+  }
+}

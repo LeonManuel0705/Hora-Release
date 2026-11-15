@@ -1,15 +1,71 @@
 <!doctype html>
-<html lang="de" data-brand="__APP_BRAND__" data-brand-previous="Nexus" data-motion="__APP_MOTION__" data-palette="pinned" data-theme="__APP_SCHEME__" data-theme-mode="__APP_THEME__" data-variant="palette">
+<html lang="de" data-brand="__APP_BRAND__" data-brand-previous="Nexus" data-brand-website="https://hora-app.netlify.app" data-motion="__APP_MOTION__" data-palette="pinned" data-theme="__APP_SCHEME__" data-theme-mode="__APP_THEME__" data-variant="palette">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>E-Mail · __APP_BRAND__</title>
+    
+    <script nonce="__APP_NONCE__">
+        (function () {
+            var root = document.documentElement;
+            var tab = 4;
+            var here = location.pathname;
+            var last = null;
+            var remember = function () {
+                try { sessionStorage.setItem("app-nav", tab + " " + here); } catch (error) {}
+            };
+            var settle = function () {
+                delete root.dataset.navFrom;
+                delete root.dataset.navDir;
+                delete root.dataset.navVt;
+            };
+            try { last = sessionStorage.getItem("app-nav"); } catch (error) {}
+            var from = last ? parseInt(last, 10) : -1;
+            if (from >= 0 && from <= 4 && last.slice(2) !== here) {
+                root.dataset.navFrom = from;
+                if (from !== tab) root.dataset.navDir = tab > from ? "forward" : "back";
+            }
+            remember();
+            addEventListener("pagereveal", function (event) {
+                var transition = event.viewTransition;
+                if (!transition) return;
+                root.dataset.navVt = "1";
+                transition.ready.then(function () {
+                    transition.finished.then(settle, settle);
+                }, function () {
+                    delete root.dataset.navVt;
+                    setTimeout(settle, 1200);
+                });
+            });
+            addEventListener("pageshow", function () {
+                remember();
+                setTimeout(function () {
+                    if (!root.dataset.navVt) settle();
+                }, 1200);
+            });
+            // A page outside this interface has no opt-in, so the browser would abort the transition there and report it as an error.
+            var ownPages = /^\/hub(?:\/(?:tasks|calendar|school|vbb|email|pomodoro|bookmarks|settings|assistant))?\/?$/;
+            addEventListener("pageswap", function (event) {
+                var transition = event.viewTransition;
+                var entry = event.activation && event.activation.entry;
+                if (!transition || !entry || !entry.url || ownPages.test(new URL(entry.url).pathname)) return;
+                transition.ready.catch(function () {});
+                transition.skipTransition();
+            });
+        })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/static/app/img/hora-favicon.svg">
-    <link rel="preload" href="/static/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/static/app/css/tokens.css?v=f353798000">
-    <link rel="stylesheet" href="/static/app/css/app.css?v=f353798000">
-    <link rel="stylesheet" href="/static/css/tour.css?v=f353798000">
-    <link rel="stylesheet" href="/static/app/css/pages/email.css?v=f353798000">
+    
+    <link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
+    
+    <link rel="stylesheet" href="/static/app/css/tokens.css?v=092b92593a">
+    <link rel="stylesheet" href="/static/app/css/app.css?v=092b92593a">
+    <link rel="stylesheet" href="/static/app/css/dialog.css?v=092b92593a">
+    <link rel="stylesheet" href="/static/app/css/profile.css?v=092b92593a">
+    <link rel="stylesheet" href="/static/css/tour.css?v=092b92593a">
+    <link rel="stylesheet" href="/static/app/css/setup.css?v=092b92593a">
+    <link rel="stylesheet" href="/static/app/css/pages/email.css?v=092b92593a">
+    <link rel="stylesheet" href="/static/app/css/touch.css?v=092b92593a">
     <script nonce="__APP_NONCE__">
         (function () {
             var root = document.documentElement;
@@ -24,9 +80,9 @@
             if (root.dataset.themeMode === "auto") root.dataset.theme = system.matches ? "dark" : "light";
         })();
     </script>
-    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=f353798000"></script>
+    <script type="module" blocking="render" nonce="__APP_NONCE__" src="/static/app/js/main.js?v=092b92593a"></script>
 </head>
-<body data-tour-auto="__APP_TOUR__">
+<body data-tour-auto="__APP_TOUR__" data-server-behind="0" data-app-version="__APP_VERSION__">
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
 <!-- Lucide icons (lucide-static 0.544.0), ISC License, Copyright (c) Lucide Contributors -->
 <symbol id="i-house" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></symbol>
@@ -49,7 +105,7 @@
 <symbol id="i-arrow-big-up" viewBox="0 0 24 24"><path d="M9 18v-6H5l7-7 7 7h-4v6H9z" /></symbol>
 <symbol id="i-corner-down-left" viewBox="0 0 24 24"><path d="M20 4v7a4 4 0 0 1-4 4H4" /> <path d="m9 10-5 5 5 5" /></symbol>
 <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
-<symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+<symbol id="i-pencil" viewBox="0 0 24 24"><g class="icon-line"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></g><g class="icon-solid"><path d="M16.556 3.444 17.188 2.825A2.819 2.819 0 0 1 21.174 6.812L20.556 7.444z"/><path d="M13.444 6.556 3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497L17.444 10.556z"/></g></symbol>
 <symbol id="i-tram-front" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h.01"/><path d="M16 15h.01"/></symbol>
 <symbol id="i-train-front-tunnel" viewBox="0 0 24 24"><path d="M2 22V12a10 10 0 1 1 20 0v10"/><path d="M15 6.8v1.4a3 2.8 0 1 1-6 0V6.8"/><path d="M10 15h.01"/><path d="M14 15h.01"/><path d="M10 19a4 4 0 0 1-4-4v-3a6 6 0 1 1 12 0v3a4 4 0 0 1-4 4Z"/><path d="m9 19-2 3"/><path d="m15 19 2 3"/></symbol>
 <symbol id="i-ship" viewBox="0 0 24 24"><path d="M12 10.189V14"/><path d="M12 2v3"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-8.188-3.639a2 2 0 0 0-1.624 0L3 14a11.6 11.6 0 0 0 2.81 7.76"/><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1s1.2 1 2.5 1c2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></symbol>
@@ -62,6 +118,9 @@
 <symbol id="i-map-pin" viewBox="0 0 24 24"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" /> <circle cx="12" cy="10" r="3" /></symbol>
 <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /></symbol>
 <symbol id="i-cloud-sun" viewBox="0 0 24 24"><path d="M12 2v2" /> <path d="m4.93 4.93 1.41 1.41" /> <path d="M20 12h2" /> <path d="m19.07 4.93-1.41 1.41" /> <path d="M15.947 12.65a4 4 0 0 0-5.925-4.128" /> <path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z" /></symbol>
+<symbol id="i-cloud-snow" viewBox="0 0 24 24"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /> <path d="M8 15h.01" /> <path d="M8 19h.01" /> <path d="M12 17h.01" /> <path d="M12 21h.01" /> <path d="M16 15h.01" /> <path d="M16 19h.01" /></symbol>
+<symbol id="i-cloud-lightning" viewBox="0 0 24 24"><path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973" /> <path d="m13 12-3 5h4l-3 5" /></symbol>
+<symbol id="i-cloud-fog" viewBox="0 0 24 24"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /> <path d="M16 17H7" /> <path d="M17 21H9" /></symbol>
 <symbol id="i-cloud-rain" viewBox="0 0 24 24"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /> <path d="M16 14v6" /> <path d="M8 14v6" /> <path d="M12 16v6" /></symbol>
 <symbol id="i-cloud-drizzle" viewBox="0 0 24 24"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /> <path d="M8 19v1" /> <path d="M8 14v1" /> <path d="M16 19v1" /> <path d="M16 14v1" /> <path d="M12 21v1" /> <path d="M12 16v1" /></symbol>
 <symbol id="i-cloud-moon" viewBox="0 0 24 24"><path d="M13 16a3 3 0 0 1 0 6H7a5 5 0 1 1 4.9-6z" /> <path d="M18.376 14.512a6 6 0 0 0 3.461-4.127c.148-.625-.659-.97-1.248-.714a4 4 0 0 1-5.259-5.26c.255-.589-.09-1.395-.716-1.248a6 6 0 0 0-4.594 5.36" /></symbol>
@@ -70,6 +129,7 @@
 <symbol id="i-bus" viewBox="0 0 24 24"><path d="M8 6v6" /> <path d="M15 6v6" /> <path d="M2 12h19.6" /> <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3" /> <circle cx="7" cy="18" r="2" /> <path d="M9 18h5" /> <circle cx="16" cy="18" r="2" /></symbol>
 <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0" /> <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></symbol>
 <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528" /></symbol>
+<symbol id="i-video" viewBox="0 0 24 24"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" /> <rect x="2" y="6" width="14" height="12" rx="2" /></symbol>
 <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /></symbol>
 <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M12 20h.01" /> <path d="M8.5 16.429a5 5 0 0 1 7 0" /> <path d="M5 12.859a10 10 0 0 1 5.17-2.69" /> <path d="M19 12.859a10 10 0 0 0-2.007-1.523" /> <path d="M2 8.82a15 15 0 0 1 4.177-2.643" /> <path d="M22 8.82a15 15 0 0 0-11.288-3.764" /> <path d="m2 2 20 20" /></symbol>
 <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol>
@@ -80,8 +140,9 @@
 <symbol id="i-circle-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="m9 12 2 2 4-4" /></symbol>
 <symbol id="i-calendar-clock" viewBox="0 0 24 24"><path d="M16 14v2.2l1.6 1" /> <path d="M16 2v4" /> <path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5" /> <path d="M3 10h5" /> <path d="M8 2v4" /> <circle cx="16" cy="16" r="6" /></symbol>
 <symbol id="i-umbrella" viewBox="0 0 24 24"><path d="M12 13v7a2 2 0 0 0 4 0" /> <path d="M12 2v2" /> <path d="M20.992 13a1 1 0 0 0 .97-1.274 10.284 10.284 0 0 0-19.923 0A1 1 0 0 0 3 13z" /></symbol>
-<symbol id="i-trash-2" viewBox="0 0 24 24"><path d="M10 11v6" /> <path d="M14 11v6" /> <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /> <path d="M3 6h18" /> <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></symbol>
-<symbol id="i-calendar-plus" viewBox="0 0 24 24"><path d="M16 19h6" /> <path d="M16 2v4" /> <path d="M19 16v6" /> <path d="M21 12.598V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8.5" /> <path d="M3 10h18" /> <path d="M8 2v4" /></symbol>
+<symbol id="i-lightbulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" /> <path d="M9 18h6" /> <path d="M10 22h4" /></symbol>
+<symbol id="i-trash-2" viewBox="0 0 24 24"><path class="icon-line" d="M10 11v6" /> <path class="icon-line" d="M14 11v6" /> <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /> <path d="M3 6h18" /> <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /> <path class="icon-fill" stroke="none" fill-rule="evenodd" d="M5 6h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zM9 11a1 1 0 0 1 2 0v6a1 1 0 0 1-2 0zM13 11a1 1 0 0 1 2 0v6a1 1 0 0 1-2 0z" /></symbol>
+<symbol id="i-calendar-plus" viewBox="0 0 24 24"><path d="M16 19h6" /> <path d="M16 2v4" /> <path d="M19 16v6" /> <path d="M21 12.598V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8.5" /> <path class="icon-line" d="M3 10h18" /> <path d="M8 2v4" /> <path class="icon-fill" stroke="none" d="M3 9V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3zM3 11h18v1.598A6.5 6.5 0 0 0 13.5 22H5a2 2 0 0 1-2-2z" /></symbol>
 <symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" /></symbol>
 <symbol id="i-keyboard" viewBox="0 0 24 24"><path d="M10 8h.01" /> <path d="M12 12h.01" /> <path d="M14 8h.01" /> <path d="M16 12h.01" /> <path d="M18 8h.01" /> <path d="M6 8h.01" /> <path d="M7 16h10" /> <path d="M8 12h.01" /> <rect width="20" height="16" x="2" y="4" rx="2" /></symbol>
 <symbol id="i-undo-2" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /> <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" /></symbol>
@@ -96,12 +157,13 @@
 <symbol id="i-nx-room" viewBox="0 0 24 24"><path d="M5 20.5h14"/><path d="M7 20.5V4.5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16"/><path d="M13.5 12.5h.01"/></symbol>
 <symbol id="i-nx-bus" viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="15" rx="3"/><path d="M5 11h14"/><path d="M8.5 15h.01"/><path d="M15.5 15h.01"/><path d="M7.5 18.5v2"/><path d="M16.5 18.5v2"/></symbol>
 <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-log-out" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></symbol>
 <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
 <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></symbol>
-<symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path class="icon-fill" stroke="none" d="M2 12h6l2 3h4l2-3h6v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></symbol>
 <symbol id="i-send" viewBox="0 0 24 24"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></symbol>
 <symbol id="i-file-pen-line" viewBox="0 0 24 24"><path d="m18 5-2.414-2.414A2 2 0 0 0 14.172 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2"/><path d="M21.378 12.626a1 1 0 0 0-3.004-3.004l-4.01 4.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/><path d="M8 18h1"/></symbol>
-<symbol id="i-archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+<symbol id="i-archive" viewBox="0 0 24 24"><rect class="icon-fill" width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path class="icon-line" d="M10 12h4"/><path class="icon-fill" stroke="none" fill-rule="evenodd" d="M4 8h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM10 11h4a1 1 0 0 1 0 2h-4a1 1 0 0 1 0-2z"/></symbol>
 <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></symbol>
 <symbol id="i-mail-open" viewBox="0 0 24 24"><path d="M21.2 8.4c.5.38.8.97.8 1.6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 .8-1.6l8-6a2 2 0 0 1 2.4 0l8 6Z"/><path d="m22 10-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 10"/></symbol>
 <symbol id="i-reply" viewBox="0 0 24 24"><path d="M20 18v-2a4 4 0 0 0-4-4H4"/><path d="m9 17-5-5 5-5"/></symbol>
@@ -117,6 +179,11 @@
 <symbol id="i-sun-moon" viewBox="0 0 24 24"><path d="M12 2v2"/><path d="M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715"/><path d="M16 12a4 4 0 0 0-4-4"/><path d="m19 5-1.256 1.256"/><path d="M20 12h2"/></symbol>
 <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></symbol>
 <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+<symbol id="i-share-2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+<symbol id="i-scan-qr-code" viewBox="0 0 24 24"><path d="M17 12v4a1 1 0 0 1-1 1h-4"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M17 8V7"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M7 17h.01"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="5" height="5" rx="1"/></symbol>
+<symbol id="i-clipboard-paste" viewBox="0 0 24 24"><path d="M11 14h10"/><path d="M16 4h2a2 2 0 0 1 2 2v1.344"/><path d="m17 18 4-4-4-4"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113"/><rect x="8" y="2" width="8" height="4" rx="1"/></symbol>
+<symbol id="i-file-up" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 12v6"/><path d="m15 15-3-3-3 3"/></symbol>
 <symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
 <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
 <symbol id="i-hard-drive" viewBox="0 0 24 24"><path d="M10 16h.01"/><path d="M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path d="M21.946 12.013H2.054"/><path d="M6 16h.01"/></symbol>
@@ -127,6 +194,11 @@
 <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></symbol>
 <symbol id="i-table-2" viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></symbol>
 <symbol id="i-library" viewBox="0 0 24 24"><path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></symbol>
+<symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+<symbol id="i-coffee" viewBox="0 0 24 24"><path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/><path d="M6 2v2"/></symbol>
+<symbol id="i-skip-forward" viewBox="0 0 24 24"><path d="M21 4v16"/><path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/></symbol>
 </svg>
 <a class="skip" href="#main">Zum Inhalt springen</a>
 
@@ -143,9 +215,8 @@
         <button class="icon-button topbar-search" type="button" data-open-palette aria-label="Suchen">
             <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
         </button>
-        <button class="btn btn-primary" type="button" data-open-note>
-            <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Notiz
-        </button>
+        
+<button class="profile-button" type="button" popovertarget="profileSheet" data-profile-open aria-haspopup="dialog" aria-expanded="false" aria-label="Profil"><span class="avatar" data-avatar aria-hidden="true"></span></button>
     </div>
 </header>
 
@@ -215,26 +286,16 @@
                         <span>Pomodoro</span>
                     </a>
                     
-                    <a class="nav-item" href="/hub/training" data-page="training">
-                        <svg class="icon"><use href="#i-dumbbell"/></svg>
-                        <span>Training</span>
-                    </a>
-                    
                     <a class="nav-item" href="/hub/bookmarks" data-page="bookmarks">
                         <svg class="icon"><use href="#i-bookmark"/></svg>
                         <span>Lesezeichen</span>
-                    </a>
-                    
-                    <a class="nav-item" href="/hub/review" data-page="review">
-                        <svg class="icon"><use href="#i-activity"/></svg>
-                        <span>Review</span>
                     </a>
                     
                 </div>
             </div>
         </nav>
         <div class="sidebar-foot">
-            <p class="sync-line" id="syncLine"><svg class="icon"><use href="#i-refresh-cw"/></svg><span id="syncText">IServ abgeglichen</span></p>
+            <p class="sync-line" id="syncLine" hidden><svg class="icon"><use href="#i-refresh-cw"/></svg><span id="syncText"></span></p>
             <a class="nav-item" href="/hub/settings" data-page="settings">
                 <svg class="icon"><use href="#i-settings"/></svg>
                 <span>Einstellungen</span>
@@ -252,12 +313,17 @@
                 <span class="head-week" id="mailCount"></span>
             </div>
             <div class="head-actions">
-                <button class="icon-button" type="button" id="mailSync" aria-label="Mails aus IServ neu laden" data-tip="Aus IServ neu laden">
+                <button class="icon-button" type="button" id="mailSync" aria-label="Mails neu laden" data-tip="Neu laden">
                     <svg class="icon" aria-hidden="true"><use href="#i-refresh-cw"/></svg>
+                </button>
+                <button class="icon-button" type="button" id="mailBoxes" aria-label="Postfächer" data-tip="Postfächer">
+                    <svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>
                 </button>
                 <button class="btn btn-primary" type="button" id="mailCompose" aria-label="Neue Mail schreiben">
                     <svg class="icon" aria-hidden="true"><use href="#i-square-pen"/></svg><span class="btn-label">Schreiben</span>
                 </button>
+                
+<button class="profile-button" type="button" popovertarget="profileSheet" data-profile-open aria-haspopup="dialog" aria-expanded="false" aria-label="Profil"><span class="avatar" data-avatar aria-hidden="true"></span></button>
             </div>
         </div>
         <p class="head-alert" id="mailAlert" hidden><svg class="icon" aria-hidden="true"><use href="#i-wifi-off"/></svg><span id="mailAlertText"></span></p>
@@ -305,7 +371,8 @@
     </main>
 </div>
 
-<nav class="tabbar" aria-label="Navigation">
+<nav class="tabbar" aria-label="Navigation" data-tab="4">
+    <span class="tab-indicator" aria-hidden="true"></span>
     
     <a class="tab" href="/hub" data-page="home">
         <svg class="icon"><use href="#i-house"/></svg><span>Übersicht</span>
@@ -323,7 +390,7 @@
         <svg class="icon"><use href="#i-graduation-cap"/></svg><span>Schule</span>
     </a>
     
-    <button class="tab" type="button" popovertarget="moreSheet">
+    <button class="tab is-current" type="button" popovertarget="moreSheet">
         <svg class="icon"><use href="#i-ellipsis"/></svg><span>Mehr</span>
     </button>
 </nav>
@@ -347,16 +414,8 @@
             <svg class="icon"><use href="#i-timer"/></svg><span>Pomodoro</span>
         </a>
         
-        <a class="more-tile" href="/hub/training" data-page="training">
-            <svg class="icon"><use href="#i-dumbbell"/></svg><span>Training</span>
-        </a>
-        
         <a class="more-tile" href="/hub/bookmarks" data-page="bookmarks">
             <svg class="icon"><use href="#i-bookmark"/></svg><span>Lesezeichen</span>
-        </a>
-        
-        <a class="more-tile" href="/hub/review" data-page="review">
-            <svg class="icon"><use href="#i-activity"/></svg><span>Review</span>
         </a>
         
         <a class="more-tile" href="/hub/settings" data-page="settings">
@@ -365,9 +424,12 @@
         
     </div>
     <div class="more-foot">
-        <p class="sync-line" data-sync-mirror><svg class="icon"><use href="#i-refresh-cw"/></svg><span>IServ abgeglichen</span></p>
+        <p class="sync-line" data-sync-mirror hidden><svg class="icon"><use href="#i-refresh-cw"/></svg><span></span></p>
         <button class="text-button" type="button" data-notify>
             <svg class="icon"><use href="#i-bell"/></svg><span data-notify-text>Erinnerungen aktivieren</span>
+        </button>
+        <button class="text-button" type="button" data-feedback>
+            <svg class="icon"><use href="#i-send"/></svg><span>Rückmeldung geben</span>
         </button>
     </div>
 </div>
@@ -375,7 +437,7 @@
 <div class="sheet is-glass" id="noteSheet" popover role="dialog" aria-labelledby="noteTitle">
     <form id="noteForm" novalidate autocomplete="off">
         <div class="sheet-head">
-            <h2 class="sheet-title" id="noteTitle">Schnelle Notiz</h2>
+            <h2 class="sheet-title" id="noteTitle">Neu eintragen</h2>
             <button class="icon-button" type="button" popovertarget="noteSheet" popovertargetaction="hide" aria-label="Schließen">
                 <svg class="icon"><use href="#i-x"/></svg>
             </button>
@@ -384,6 +446,7 @@
             <span class="seg-thumb" aria-hidden="true"></span>
             <label><input type="radio" name="type" value="task" checked>Aufgabe</label>
             <label><input type="radio" name="type" value="homework">Hausaufgabe</label>
+            <label><input type="radio" name="type" value="event">Termin</label>
             <label><input type="radio" name="type" value="note">Notiz</label>
             <label><input type="radio" name="type" value="idea">Idee</label>
         </div>
@@ -395,7 +458,7 @@
         <p class="note-preview" id="notePreview" hidden></p>
         <label class="field">
             <span>Details</span>
-            <textarea class="textarea" name="details" rows="2" placeholder="z. B. mit Tafelwerk, zusammen mit Tim …"></textarea>
+            <textarea class="textarea" name="details" rows="2" placeholder="z. B. mit Tafelwerk, zusammen mit Ben …"></textarea>
         </label>
         <div class="sheet-actions">
             <p class="sheet-hint"><kbd data-key="mod">Strg</kbd><kbd data-key="enter">Enter</kbd> speichert</p>
@@ -404,6 +467,8 @@
         </div>
     </form>
 </div>
+
+<div class="sheet profile-sheet is-glass" id="profileSheet" popover role="dialog" tabindex="-1" aria-labelledby="profileTitle"></div>
 
 <div class="sheet weather-sheet is-glass" id="weatherSheet" popover aria-labelledby="weatherTitle">
     <div class="sheet-head">
@@ -442,6 +507,7 @@
         <dt>Nächste Zeile in Heute oder Fällig</dt><dd><kbd>J</kbd></dd>
         <dt>Vorherige Zeile</dt><dd><kbd>K</kbd></dd>
         <dt>Fokussierte Aufgabe abhaken</dt><dd><kbd>X</kbd></dd>
+        <dt>Fokussierte Aufgabe löschen</dt><dd><kbd>⌫</kbd></dd>
         <dt>Neue Aufgabe für heute</dt><dd><kbd>A</kbd></dd>
         <dt>Diese Übersicht</dt><dd><kbd>?</kbd></dd>
     </dl>
@@ -457,8 +523,8 @@
 <div class="tooltip" id="tooltip" role="tooltip"></div>
 
 <script type="application/json" id="appStore">__APP_STORE__</script>
-<script nonce="__APP_NONCE__" src="/static/js/tinte.js?v=f353798000" defer></script>
-<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=f353798000" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/luna.js?v=092b92593a" defer></script>
+<script nonce="__APP_NONCE__" src="/static/js/tour.js?v=092b92593a" defer></script>
 
 
 <script type="application/json" id="appData">__APP_DATA__</script>

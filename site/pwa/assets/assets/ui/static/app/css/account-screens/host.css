@@ -1,0 +1,24 @@
+/* SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */
+
+.account-scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: transparent;
+  color: var(--ink);
+  color-scheme: light;
+  outline: none;
+}
+
+.account-scene::backdrop { background: transparent; }
+.account-scene-host { position: absolute; inset: 0; }
+:root.account-open { overflow: hidden; }

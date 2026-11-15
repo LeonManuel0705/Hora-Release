@@ -1,9 +1,17 @@
 import {
-  data, root, variant, flags, platform, esc, icon, tinte, storage, now, subject, hueVar, toMin, clock, hm, weekType, isoWeek,
-  isoDate, minutesOf, lessonsFor, nextSchoolDay, WEEKDAYS, WEEKDAYS_SHORT,
-  LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, activeSubjectKeys, motionDefault, slug, teacherLabel, BRAND, BRAND_NAMES } from "../core.js";
+  data, root, variant, flags, platform, esc, icon, luna, storage, now, subject, hueVar, toMin, clock, hm, weekType, isoWeek,
+  isoDate, shortDate, WEEKDAYS, WEEKDAYS_SHORT,
+  LOCAL_KEYS, HUES, COURSE_TYPES, NO_TEACHER, MAX_BLOCKS, schoolDefaults, applySchoolEdits, saveBlocks, abWeeks, abAnswered, hasPlan, activeSubjectKeys, motionDefault, slug, teacherLabel, periodWords, planChange, planRevert, planMeta, BRAND, BRAND_NAMES } from "../core.js";
 import { animates, travels, reduced, token, flipKeyed, enterInPlace } from "../motion.js";
-import { toast, setTheme, pageUrl, syncTime } from "../shell.js";
+import { toast, setTheme, syncTime, renderSync, typing, overlayOpen } from "../shell.js";
+import { VERSION, KINDS, BODIES, wholeSchool, fileKeys, fileSubjects, fileRecords, fitSchool, recordPlan, planSize, subjectsInUse, summary, contents, offerFile } from "../backup.js";
+import { askBackup, importFlow } from "../plan-share.js";
+import { readProfile, replaceProfile } from "../profile.js";
+import { platformName } from "../feedback.js";
+import { suggestShort, pickHue, followRoom } from "../setup-data.js";
+import { storageNote, safariOnMac, tabReminderNote } from "../persistence.js";
+import { remindersOn, sampleReminder, blockedHere } from "../reminders.js";
+import { onPlanRefresh } from "../plan-refresh.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
@@ -14,7 +22,6 @@ const KEYS_KEY = "app-single-keys";
 const phone = matchMedia("(max-width: 759px)");
 const COURSE_GROUPS = [["LK", "Leistungskurse"], ["GK", "Grundkurse"], ["SK", "Seminarkurs"]];
 const COURSE_WORDS = { LK: "Leistungskurs", GK: "Grundkurs", SK: "Seminarkurs" };
-const KIND_COLORS = { private: "var(--kind-private)", training: "var(--kind-training)", school: "var(--kind-school)" };
 const GRADES = [5, 6, 7, 8, 9, 10, 11, 12, 13];
 const HUE_NAMES = { rose: "Rosa", ochre: "Ocker", olive: "Oliv", moss: "Moos", jade: "Jade", teal: "Petrol", lake: "Seeblau", slate: "Taubenblau", iris: "Iris", orchid: "Orchidee", brick: "Ziegelrot", plum: "Pflaume" };
 const TITLES = [["Frau", "Frau"], ["Herr", "Herr"], ["", "Ohne Anrede"]];
@@ -22,6 +29,7 @@ const TYPE_ORDER = { LK: 0, GK: 1, SK: 2 };
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const plural = (count, one, many) => `${count}\u00a0${count === 1 ? one : many}`;
+const period = () => periodWords().one;
 const minutesText = (minutes) => `${minutes}\u00a0Min.`;
 const isClock = (value) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value || "");
 const joinWords = (words) => (words.length > 1 ? `${words.slice(0, -1).join(", ")} und ${words.at(-1)}` : words.join(""));
@@ -44,18 +52,18 @@ function keepFocus(container, paint) {
   if (id && !container.contains(document.activeElement)) $(id)?.focus({ preventScroll: true });
 }
 
-function row({ id, label, desc = "", control = "", cls = "", forId = "" }) {
+function row({ id, label, desc = "", control = "", cls = "", forId = "", after = "" }) {
   const name = forId
     ? `<label class="set-row-label" id="${id}Label" for="${forId}">${label}</label>`
     : `<p class="set-row-label" id="${id}Label">${label}</p>`;
-  return `<div class="set-row${cls ? ` ${cls}` : ""}" id="${id}"><div class="set-row-text">${name}${desc ? `<p class="set-row-desc" id="${id}Desc">${desc}</p>` : ""}</div><div class="set-row-control">${control}</div></div>`;
+  return `<div class="set-row${cls ? ` ${cls}` : ""}" id="${id}"><div class="set-row-text">${name}${desc ? `<p class="set-row-desc" id="${id}Desc">${desc}</p>` : ""}${after}</div><div class="set-row-control">${control}</div></div>`;
 }
 
 const switchHtml = (id, on, labelId, { disabled = false, describedBy = "" } = {}) =>
   `<button type="button" class="switch" role="switch" id="${id}" aria-checked="${on}" aria-labelledby="${labelId}"${describedBy ? ` aria-describedby="${describedBy}"` : ""}${disabled ? " disabled" : ""}><span></span></button>`;
 
 const loadingHtml = (title, text) =>
-  `<div class="loading-card set-loading" role="status">${tinte("laedt", 96)}<div><p class="empty-title">${esc(title)}</p><p class="empty-text">${esc(text)}</p></div></div>`;
+  `<div class="loading-card set-loading" role="status">${luna("laedt", 96)}<div><p class="empty-title">${esc(title)}</p><p class="empty-text">${esc(text)}</p></div></div>`;
 
 const errorHtml = (id, text) => `<p class="field-error" id="${id}"${text ? "" : " hidden"}>${text ? `${icon("circle-alert")}<span>${esc(text)}</span>` : ""}</p>`;
 
@@ -68,12 +76,18 @@ function setError(input, box, text) {
   else input.removeAttribute("aria-invalid");
 }
 
+const PASS_NETS = [["Berlin", "Berlin"], ["Brandenburg a.d.H", "Brandenburg an der Havel"], ["Cottbus", "Cottbus"], ["Frankfurt (Oder)", "Frankfurt (Oder)"], ["Potsdam", "Potsdam"]];
+const PASS_ZONES = ["AB", "ABC"];
+const MAP_APPS = [["auto", "Automatisch", ""], ["apple", "Apple", " Karten"], ["google", "Google", " Maps"]];
+const knownPass = (pass) => PASS_NETS.some(([net]) => net === pass?.net) && PASS_ZONES.includes(pass?.zones);
+const passLabel = (pass) => `${PASS_NETS.find(([net]) => net === pass.net)[1]} ${pass.zones}`;
+
 function prefDefaults() {
   const notify = page.notifications || {};
   const categories = {};
   (notify.categories || []).forEach((item) => (categories[item.key] = { on: item.on !== false, lead: item.lead ?? null }));
   return {
-    school: { grade: page.school?.grade ?? 12, state: page.school?.state ?? "BB", birthday: "" },
+    school: { grade: page.school?.grade ?? null, state: page.school?.state ?? "", birthday: "" },
     iserv: { connected: page.accounts?.iserv?.connected !== false },
     google: {
       connected: page.accounts?.google?.connected !== false,
@@ -86,6 +100,7 @@ function prefDefaults() {
       categories,
     },
     places: { weather: page.places?.weather || "" },
+    transit: { deutschlandticket: false, passes: [], maps: "auto" },
   };
 }
 
@@ -99,15 +114,16 @@ function loadPrefs() {
     school: { ...base.school, ...(saved.school || {}) },
     iserv: { ...base.iserv, ...(saved.iserv || {}) },
     google: { ...base.google, ...(saved.google || {}), calendars: { ...base.google.calendars, ...(saved.google?.calendars || {}) } },
-    notify: { ...base.notify, ...(saved.notify || {}), quiet: { ...base.notify.quiet, ...(saved.notify?.quiet || {}) }, categories },
+    notify: { ...base.notify, ...(saved.notify || {}), enabled: remindersOn(saved.notify), quiet: { ...base.notify.quiet, ...(saved.notify?.quiet || {}) }, categories },
     places: { ...base.places, ...(saved.places || {}) },
+    transit: { ...base.transit, ...(saved.transit || {}), passes: (Array.isArray(saved.transit?.passes) ? saved.transit.passes : []).filter(knownPass) },
   };
 }
 
 function withServerTruth(value) {
   value.iserv.connected = !!page.accounts?.iserv?.connected;
   value.google.connected = !!page.accounts?.google?.connected;
-  if (page.school?.state) value.school.state = page.school.state;
+  if (page.school) value.school.state = page.school.state || "";
   if (page.school?.grade) value.school.grade = page.school.grade;
   if (page.school && "birthday" in page.school) value.school.birthday = page.school.birthday || "";
   if (typeof page.places?.weather === "string") value.places.weather = page.places.weather;
@@ -194,6 +210,8 @@ const sameLesson = (a, b) => (!a && !b) || (!!a && !!b && a.subject === b.subjec
 const courseType = (key) => data.subjects[key]?.type || "GK";
 const plainName = (text) => String(text || "").replace(/\s+(LK|GK)$/, "");
 const sortedTeachers = () => [...data.teachers].sort((a, b) => a.name.localeCompare(b.name, "de") || a.label.localeCompare(b.label, "de"));
+// Only a plan that came in from elsewhere has a state to compare against. A plan typed in here is the user's own throughout.
+const imported = Object.values(schoolDefaults?.timetable || {}).some((days) => Object.values(days || {}).some((entries) => (entries || []).length));
 
 function readEdits() {
   const value = storage.get(LOCAL_KEYS.lessons);
@@ -201,6 +219,7 @@ function readEdits() {
 }
 
 function writeEdits(edits) {
+  if (!abAnswered()) planChange(null, () => storage.set(LOCAL_KEYS.abWeeks, abWeeks()));
   if (Object.keys(edits).length) storage.set(LOCAL_KEYS.lessons, edits);
   else removeKey(LOCAL_KEYS.lessons);
   applySchoolEdits();
@@ -257,15 +276,15 @@ function commitPlan(mutate, message, glyph) {
 }
 
 function cellLabel(dow, block, entry, edited) {
-  const when = `${WEEKDAYS[dow]}, ${block.n}. Block, ${hm(block.start)} bis ${hm(block.end)}`;
-  const what = entry ? `${subject(entry.subject).name}, Raum ${entry.room}` : "frei";
+  const when = `${WEEKDAYS[dow]}, ${block.n}. ${period()}, ${hm(block.start)} bis ${hm(block.end)}`;
+  const what = entry ? `${subject(entry.subject).name}${entry.room ? `, Raum ${entry.room}` : ""}` : "frei";
   return `${when}: ${what}${edited ? ", selbst geändert" : ""}`;
 }
 
 function cellHtml(week, dow, block, row, col, edits) {
   const key = cellKey(week, dow, block.n);
   const entry = lessonAt(week, dow, block.n);
-  const edited = Object.hasOwn(edits, key);
+  const edited = imported && Object.hasOwn(edits, key);
   const classes = ["plan-cell"];
   if (!entry) classes.push("is-free");
   if (edited) classes.push("is-edited");
@@ -282,8 +301,9 @@ function cellHtml(week, dow, block, row, col, edits) {
 function gridHtml() {
   const edits = readEdits();
   const head = DAYS.map((dow) => `<th scope="col" class="plan-day"><span aria-hidden="true">${WEEKDAYS_SHORT[dow]}</span><span class="visually-hidden">${WEEKDAYS[dow]}</span></th>`).join("");
-  const body = planBlocks().map((block, row) => `<tr><th scope="row" class="plan-block"><span class="plan-block-num" aria-hidden="true">${block.n}</span><span class="plan-block-time" aria-hidden="true">${hm(block.start)}<br>${hm(block.end)}</span><span class="visually-hidden">${block.n}. Block, ${hm(block.start)} bis ${hm(block.end)}</span></th>${DAYS.map((dow, col) => cellHtml(plan.week, dow, block, row, col, edits)).join("")}</tr>`).join("");
-  return `<thead><tr><th scope="col" class="plan-corner"><span class="visually-hidden">Block</span></th>${head}</tr></thead><tbody>${body}</tbody>`;
+  const word = period();
+  const body = planBlocks().map((block, row) => `<tr><th scope="row" class="plan-block"><span class="plan-block-num" aria-hidden="true">${block.n}</span><span class="plan-block-time" aria-hidden="true">${hm(block.start)}<br>${hm(block.end)}</span><span class="visually-hidden">${block.n}. ${word}, ${hm(block.start)} bis ${hm(block.end)}</span></th>${DAYS.map((dow, col) => cellHtml(plan.week, dow, block, row, col, edits)).join("")}</tr>`).join("");
+  return `<thead><tr><th scope="col" class="plan-corner"><span class="visually-hidden">${word}</span></th>${head}</tr></thead><tbody>${body}</tbody>`;
 }
 
 const currentCell = () => $("planGrid").querySelector(`.plan-cell[data-row="${plan.row}"][data-col="${plan.col}"]`);
@@ -336,8 +356,7 @@ function renderAb() {
 }
 
 function setAbWeeks(on) {
-  if (on) removeKey(LOCAL_KEYS.abWeeks);
-  else storage.set(LOCAL_KEYS.abWeeks, false);
+  storage.set(LOCAL_KEYS.abWeeks, on);
   plan.week = on ? weekType(now()) : "A";
   applySchoolEdits();
   renderPlan();
@@ -375,15 +394,19 @@ function renderRhythm() {
     : "Jede Woche gilt derselbe Plan. Der Plan der B-Woche bleibt gespeichert und ist beim Einschalten wieder da.";
   const card = $("rhythmCard");
   keepFocus(card, () => {
-    card.innerHTML = `<div class="set-row" id="rowAb"><div class="set-row-text"><p class="set-row-label" id="rowAbLabel">A/B-Wochen</p><p class="set-row-desc" id="rowAbDesc">${desc}</p>${on ? `<button class="text-button row-action" type="button" id="abSwap">${icon("arrow-left-right")}A und B tauschen</button>` : ""}</div><div class="set-row-control">${switchHtml("abToggle", on, "rowAbLabel", { describedBy: "rowAbDesc" })}</div></div>`;
+    card.innerHTML = `<div class="set-row" id="rowAb"><div class="set-row-text"><p class="set-row-label" id="rowAbLabel">A/B-Wochen</p><p class="set-row-desc" id="rowAbDesc">${desc}</p>${on ? `<button class="text-button row-action" type="button" id="abSwap">${icon("arrow-left-right")}<span>A und B tauschen</span></button>` : ""}</div><div class="set-row-control">${switchHtml("abToggle", on, "rowAbLabel", { describedBy: "rowAbDesc" })}</div></div>`;
   });
 }
 
 function renderPlanMeta() {
-  const count = Object.keys(readEdits()).filter(visibleEdit).length;
-  $("planMeta").textContent = count ? `${plural(count, "Stunde", "Stunden")} selbst geändert` : "Wie in IServ";
+  const count = imported ? Object.keys(readEdits()).filter(visibleEdit).length : 0;
+  const lessons = shownWeeks().map((week) => Object.values(data.timetable[week] || {}).reduce((all, entries) => all + entries.length, 0));
+  const total = lessons.length > 1 ? `${plural(lessons[0], "Stunde", "Stunden")} in der A-Woche, ${lessons[1]} in der B-Woche` : plural(lessons[0], "Stunde", "Stunden");
+  $("planMeta").textContent = count ? `${plural(count, "Stunde", "Stunden")} selbst geändert` : lessons.some(Boolean) ? total : "Noch leer";
   $("planLegend").hidden = !count;
   $("resetPlan").hidden = !count;
+  const empty = $("planEmpty");
+  if (empty) empty.hidden = hasPlan();
 }
 
 function swapGrid(direction, paint) {
@@ -440,7 +463,7 @@ function clearCell(row, col) {
   const week = plan.week;
   commitPlan(
     (edits) => setLesson(edits, week, dow, block.n, null),
-    () => `${WEEKDAYS_SHORT[dow]}., ${block.n}.\u00a0Block${weekTag(week)} ist jetzt frei`,
+    () => `${WEEKDAYS_SHORT[dow]}., ${block.n}.\u00a0${period()}${weekTag(week)} ist jetzt frei`,
     "eraser",
   );
   currentCell()?.focus({ preventScroll: true });
@@ -490,7 +513,7 @@ function copyWeek() {
 function resetPlan() {
   const changed = commitPlan(
     (edits) => Object.keys(edits).filter(visibleEdit).forEach((key) => delete edits[key]),
-    (keys) => `Stundenplan wie in IServ, ${plural(keys.length, "Änderung", "Änderungen")} verworfen`,
+    (keys) => `Stundenplan zurückgesetzt, ${plural(keys.length, "Änderung", "Änderungen")} verworfen`,
     "rotate-ccw",
   );
   if (changed.length) (abWeeks() ? $("copyWeek") : currentCell())?.focus({ preventScroll: true });
@@ -546,16 +569,17 @@ function editorHtml({ week, dow, block, entry, base, edited }) {
   const override = own && entry && own.subject === entry.subject && data.teachers.some((teacher) => teacher.id === own.teacher) ? own.teacher : "";
   const baseName = base ? `${schoolDefaults.subjects[base.subject]?.label || subject(base.subject).label}${data.subjects[base.subject]?.retired ? ", gelöscht" : ""}` : "";
   const groups = subjectGroups().map((group) => `<fieldset class="pick-group"><legend class="pick-title${group.keys.length === 1 && subject(group.keys[0]).label === group.title ? " visually-hidden" : ""}">${esc(group.title)}</legend><div class="pick-grid">${group.keys.map((key) => `<label class="pick" style="--hue:${hueVar(key)}"><input type="radio" name="subject" value="${esc(key)}"${key === chosen ? " checked" : ""}><i class="subject-dot" aria-hidden="true"></i><span class="pick-name">${esc(subject(key).label)}</span>${icon("check", "pick-tick")}</label>`).join("")}</div></fieldset>`).join("");
-  const origin = edited
-    ? `<p class="cell-origin">${icon("graduation-cap")}<span>In IServ: ${base ? `${esc(baseName)}, ${esc(base.room)}` : "frei"}</span><button type="button" class="text-button" data-cell-origin>Wiederherstellen</button></p>`
+  const origin = edited && imported
+    ? `<p class="cell-origin">${icon("rotate-ccw")}<span>Vorher: ${base ? `${esc(baseName)}${base.room ? `, ${esc(base.room)}` : ""}` : "frei"}</span><button type="button" class="text-button" data-cell-origin><span>Wiederherstellen</span></button></p>`
     : "";
+  const create = `<div class="cell-new"><label class="visually-hidden" for="cellNewSubject">Neues Fach</label><input class="field-control" id="cellNewSubject" maxlength="32" placeholder="${groups ? "Anderes Fach anlegen" : "Fach anlegen, z. B. Mathematik"}" autocomplete="off" enterkeyhint="done" aria-describedby="cellSubjectError"><button type="button" class="btn btn-quiet" data-cell-new>${icon("plus")}Anlegen</button></div>`;
   return `<div class="sheet-head cell-head">
-      <div><h2 class="sheet-title" id="cellTitle">${WEEKDAYS[dow]}, ${block.n}.\u00a0Block</h2><p class="cell-when">${abWeeks() ? `${week}-Woche, ` : ""}${hm(block.start)} bis ${hm(block.end)}</p></div>
+      <div><h2 class="sheet-title" id="cellTitle">${WEEKDAYS[dow]}, ${block.n}.\u00a0${period()}</h2><p class="cell-when">${abWeeks() ? `${week}-Woche, ` : ""}${hm(block.start)} bis ${hm(block.end)}</p></div>
       <button class="icon-button" type="button" data-cell-close aria-label="Schließen">${icon("x")}</button>
     </div>
-    <fieldset class="cell-subjects" aria-describedby="cellSubjectError"><legend class="cell-label">Fach</legend>${groups}${errorHtml("cellSubjectError", "")}</fieldset>
+    <fieldset class="cell-subjects" aria-describedby="cellSubjectError"><legend class="cell-label">Fach</legend>${groups}${create}${errorHtml("cellSubjectError", "")}</fieldset>
     <div class="cell-room">
-      <label class="cell-label" for="cellRoom">Raum</label>
+      <label class="cell-label" for="cellRoom">Raum <small>freiwillig</small></label>
       <div class="cell-room-row"><input class="field-control cell-room-input" id="cellRoom" name="room" value="${esc(entry?.room || "")}" maxlength="12" list="roomOptions" autocomplete="off" spellcheck="false" autocapitalize="characters" enterkeyhint="done" aria-describedby="cellRoomError"><div class="room-picks" id="roomPicks" role="group" aria-label="Räume dieses Fachs"></div></div>
       ${errorHtml("cellRoomError", "")}
     </div>
@@ -671,25 +695,48 @@ function submitEditor() {
   const input = $("cellRoom");
   const room = normalizeRoom(input.value);
   input.value = room;
-  const subjectError = key ? "" : "Wähl ein Fach aus.";
-  const roomError = room ? "" : "Trag einen Raum ein, zum Beispiel R101.";
+  const subjectError = key ? "" : form.querySelector('input[name="subject"]') ? "Wähl ein Fach aus." : "Leg zuerst ein Fach an.";
   setError(null, $("cellSubjectError"), subjectError);
-  setError(input, $("cellRoomError"), roomError);
   if (subjectError) {
-    form.querySelector('input[name="subject"]')?.focus();
+    (form.querySelector('input[name="subject"]') || $("cellNewSubject"))?.focus();
     say(subjectError);
-    return;
-  }
-  if (roomError) {
-    input.focus();
-    say(roomError);
     return;
   }
   const label = subject(key).label;
   const chosenTeacher = $("cellTeacher")?.value || "";
   const teacher = chosenTeacher && chosenTeacher !== data.subjects[key]?.teacherId ? chosenTeacher : "";
   rememberRoom(room);
-  applyEditor({ subject: key, room, teacher }, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0Block${weekTag(editing.week)}: ${esc(label)} in ${esc(room)}`, "check");
+  applyEditor({ subject: key, room, teacher }, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0${period()}${weekTag(editing.week)}: ${esc(label)}${room ? ` in ${esc(room)}` : ""}`, "check");
+}
+
+function addSubjectInEditor() {
+  const editing = plan.editing;
+  const input = $("cellNewSubject");
+  if (!editing || !input) return;
+  const name = input.value.replace(/\s+/g, " ").trim().slice(0, 32);
+  if (!name) {
+    setError(input, $("cellSubjectError"), "Gib dem Fach einen Namen, zum Beispiel Mathematik.");
+    input.focus();
+    return;
+  }
+  const active = activeSubjectKeys();
+  let key = active.find((item) => plainName(data.subjects[item].label).toLowerCase() === name.toLowerCase()) || null;
+  if (!key) {
+    const hues = active.map((item) => data.subjects[item].hue);
+    const shorts = active.map((item) => data.subjects[item].short);
+    commitCatalog((draft) => {
+      key = uniqueSubjectKey(draft, name);
+      draft.subjects.items[key] = { custom: true, name, short: suggestShort(name, shorts), hue: pickHue(HUES[active.length % HUES.length], hues, HUES), type: "GK", teacher: "", room: "" };
+    }, `${esc(name)} angelegt`, "plus");
+  }
+  const block = planBlocks().find((item) => item.n === editing.n);
+  const room = $("cellRoom")?.value || "";
+  form.innerHTML = editorHtml({ week: editing.week, dow: editing.dow, block, entry: { subject: key, room }, base: baseLesson(editing.week, editing.dow, editing.n), edited: Object.hasOwn(readEdits(), editing.key) });
+  if (!lessonAt(editing.week, editing.dow, editing.n)) form.querySelector("[data-cell-clear]")?.remove();
+  plan.roomTouched = !!room;
+  syncEditor({ fill: true });
+  form.querySelector(`input[name="subject"][value="${CSS.escape(key)}"]`)?.focus();
+  say(`${name} gewählt`);
 }
 
 function bindEditor() {
@@ -708,6 +755,11 @@ function bindEditor() {
   });
   form.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
+    if (event.target.id === "cellNewSubject") {
+      event.preventDefault();
+      addSubjectInEditor();
+      return;
+    }
     if (event.target.matches('input[type="radio"]') || event.ctrlKey || event.metaKey) {
       event.preventDefault();
       submitEditor();
@@ -730,6 +782,10 @@ function bindEditor() {
       closeEditor();
       return;
     }
+    if (event.target.closest("[data-cell-new]")) {
+      addSubjectInEditor();
+      return;
+    }
     const pick = event.target.closest(".room-pick");
     if (pick) {
       const input = $("cellRoom");
@@ -742,10 +798,10 @@ function bindEditor() {
     const editing = plan.editing;
     if (!editing) return;
     if (event.target.closest("[data-cell-clear]")) {
-      applyEditor(null, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0Block${weekTag(editing.week)} ist jetzt frei`, "eraser");
+      applyEditor(null, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0${period()}${weekTag(editing.week)} ist jetzt frei`, "eraser");
     } else if (event.target.closest("[data-cell-origin]")) {
       const base = baseLesson(editing.week, editing.dow, editing.n);
-      applyEditor(base ? { subject: base.subject, room: base.room } : null, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0Block wieder wie in IServ`, "rotate-ccw");
+      applyEditor(base ? { subject: base.subject, room: base.room } : null, () => `${WEEKDAYS_SHORT[editing.dow]}., ${editing.n}.\u00a0${period()} wiederhergestellt`, "rotate-ccw");
     }
   });
   let frame = 0;
@@ -845,8 +901,9 @@ function axisHtml(blocks) {
 }
 
 function rasterMeta(blocks) {
-  if (!blocks.length) return "Noch keine Blöcke";
-  return `${plural(blocks.length, "Block", "Blöcke")}, ${hm(blocks[0].start)} bis ${hm(blocks.at(-1).end)}`;
+  const words = periodWords(blocks);
+  if (!blocks.length) return `Noch keine ${words.many}`;
+  return `${plural(blocks.length, words.one, words.many)}, ${hm(blocks[0].start)} bis ${hm(blocks.at(-1).end)}`;
 }
 
 function pauseText(block, next) {
@@ -861,7 +918,7 @@ function rasterRowHtml(block, next) {
   const pause = pauseText(block, next);
   return `<div class="raster-row" role="group" aria-labelledby="rasterName${n}" data-n="${n}">
       <span class="raster-num" aria-hidden="true">${n}</span>
-      <span class="visually-hidden" id="rasterName${n}">${n}. Block</span>
+      <span class="visually-hidden" id="rasterName${n}">${n}. ${period()}</span>
       <input class="field-control raster-input" type="time" id="rasterStart${n}" value="${block.start}" data-n="${n}" data-edge="start" aria-label="Beginn" aria-describedby="rasterError${n}" required>
       <span class="raster-to" aria-hidden="true">bis</span>
       <input class="field-control raster-input" type="time" id="rasterEnd${n}" value="${block.end}" data-n="${n}" data-edge="end" aria-label="Ende" aria-describedby="rasterError${n}" required>
@@ -871,12 +928,15 @@ function rasterRowHtml(block, next) {
 }
 
 function addState(blocks) {
-  if (blocks.length >= MAX_BLOCKS) return { block: null, hint: `Höchstens ${MAX_BLOCKS} Blöcke am Tag.` };
+  const words = periodWords(blocks);
+  if (blocks.length >= MAX_BLOCKS) return { block: null, hint: `Höchstens ${MAX_BLOCKS}\u00a0${words.many} am Tag.` };
   const last = blocks.at(-1);
   if (!last) return { block: { n: 1, start: "08:00", end: "09:30" }, hint: "" };
-  const start = toMin(last.end) + 10;
-  const end = start + 90;
-  if (end > DAY_END) return { block: null, hint: `Nach ${hm(last.end)} passt kein Block mit 90 Minuten mehr in den Tag.` };
+  const length = toMin(last.end) - toMin(last.start);
+  const gaps = blocks.slice(1).map((block, index) => toMin(block.start) - toMin(blocks[index].end)).filter((gap) => gap >= 0);
+  const start = toMin(last.end) + (gaps.length ? Math.min(...gaps) : 10);
+  const end = start + length;
+  if (end > DAY_END) return { block: null, hint: `Nach ${hm(last.end)} passt ${words.none} ${words.one} mit ${length}\u00a0Minuten mehr in den Tag.` };
   return { block: { n: last.n + 1, start: timeOf(start), end: timeOf(end) }, hint: "" };
 }
 
@@ -884,21 +944,22 @@ function removeText(block) {
   const counts = blockLessons(block.n);
   const [a = 0, b = 0] = counts;
   const total = a + b;
-  if (!total) return `Im ${block.n}. Block steht keine Stunde. Er verschwindet aus Stundenplan, Übersicht und Kalender.`;
+  const words = periodWords();
+  if (!total) return `${words.inside} ${block.n}.\u00a0${words.one} steht nichts. ${words.it} verschwindet aus Stundenplan, Übersicht und Kalender.`;
   const one = total === 1;
   let where = "";
   if (counts.length > 1) where = a && b ? `, ${a} in der A-Woche und ${b} in der B-Woche` : one ? ` in der ${a ? "A" : "B"}-Woche` : `, alle in der ${a ? "A" : "B"}-Woche`;
-  return `Im ${block.n}. Block ${one ? "steht" : "stehen"} ${plural(total, "Stunde", "Stunden")}${where}. Beim Entfernen ${one ? "wird sie" : "werden sie"} geleert.`;
+  return `${words.inside} ${block.n}.\u00a0${words.one} ${one ? "steht" : "stehen"} ${plural(total, "Eintrag", "Einträge")}${where}. Beim Entfernen ${one ? "wird er" : "werden sie"} gelöscht.`;
 }
 
 function rasterFootHtml(blocks) {
   const last = blocks.at(-1);
   const add = addState(blocks);
   if (raster.confirm && blocks.length > 1) {
-    return `<div class="form-confirm raster-confirm" id="rasterConfirm" role="alert"><p>${removeText(last)}</p><div class="set-form-actions"><button type="button" class="btn btn-quiet" id="rasterKeep">Behalten</button><button type="button" class="btn btn-quiet danger-button" id="rasterConfirmRemove">${icon("trash-2")}${last.n}. Block entfernen</button></div></div>`;
+    return `<div class="form-confirm raster-confirm" id="rasterConfirm" role="alert"><p>${removeText(last)}</p><div class="set-form-actions"><button type="button" class="btn btn-quiet" id="rasterKeep">Behalten</button><button type="button" class="btn btn-quiet danger-button" id="rasterConfirmRemove">${icon("trash-2")}${last.n}.\u00a0${period()} entfernen</button></div></div>`;
   }
-  const remove = blocks.length > 1 ? `<button class="btn btn-quiet raster-remove" type="button" id="rasterRemove" aria-expanded="false">${icon("trash-2")}${last.n}. Block entfernen</button>` : "";
-  return `<button class="btn btn-quiet raster-add" type="button" id="rasterAdd"${add.block ? "" : ` aria-disabled="true" aria-describedby="rasterAddHint"`}>${icon("plus")}Block hinzufügen</button>${remove}<p class="raster-hint" id="rasterAddHint"${add.hint ? "" : " hidden"}>${add.hint}</p>`;
+  const remove = blocks.length > 1 ? `<button class="btn btn-quiet raster-remove" type="button" id="rasterRemove" aria-expanded="false">${icon("trash-2")}${last.n}.\u00a0${period()} entfernen</button>` : "";
+  return `<button class="btn btn-quiet raster-add" type="button" id="rasterAdd"${add.block ? "" : ` aria-disabled="true" aria-describedby="rasterAddHint"`}>${icon("plus")}${period()} hinzufügen</button>${remove}<p class="raster-hint" id="rasterAddHint"${add.hint ? "" : " hidden"}>${add.hint}</p>`;
 }
 
 function renderRasterFoot() {
@@ -918,7 +979,7 @@ function renderRaster() {
   keepFocus(card, () => {
     card.innerHTML = `<div class="set-card-head">
         <div><h3 class="set-card-title" id="rasterTitle">Stundenraster</h3><p class="set-card-meta" id="rasterMeta">${rasterMeta(blocks)}</p></div>
-        <button class="text-button" type="button" id="rasterReset"${custom ? "" : " disabled"}>${icon("rotate-ccw")}Standardraster</button>
+        <button class="text-button" type="button" id="rasterReset"${custom ? "" : " disabled"}>${icon("rotate-ccw")}<span>Standardraster</span></button>
       </div>
       <div class="raster-axis" id="rasterAxis" aria-hidden="true">${axisHtml(blocks)}</div>
       <div class="raster-list">${blocks.map((block, index) => rasterRowHtml(block, blocks[index + 1])).join("")}</div>
@@ -933,6 +994,13 @@ function refreshRaster() {
   renderDataMeta();
 }
 
+// The plan cards wait while a lesson, a subject, a teacher or the block times are being edited, or a field in them has the focus.
+function planInUse() {
+  const active = document.activeElement;
+  const typed = !!active && !!typing(active) && ["stundenplan", "faecher"].some((id) => $(id)?.contains(active));
+  return overlayOpen() || typed || !!catalog.subject || !!catalog.teacher || raster.confirm || raster.errors.size > 0;
+}
+
 function draftTimes() {
   return sortedBlocks().map((block) => ({ n: block.n, start: $(`rasterStart${block.n}`)?.value || "", end: $(`rasterEnd${block.n}`)?.value || "" }));
 }
@@ -940,6 +1008,7 @@ function draftTimes() {
 function timeErrors(list, edited) {
   const errors = new Map();
   const blame = new Map();
+  const words = periodWords();
   const put = (n, edge, text) => {
     if (!errors.has(n)) errors.set(n, { edge, text });
   };
@@ -958,8 +1027,8 @@ function timeErrors(list, edited) {
       else put(block.n, "end", `Das Ende muss nach dem Beginn um ${hm(block.start)} liegen.`);
     }
     if (prev && isClock(prev.end) && isClock(block.start) && toMin(block.start) < toMin(prev.end)) {
-      if (side(`pair-${prev.n}`, edited?.n === prev.n && edited.edge === "end" ? "prev" : "next") === "prev") put(prev.n, "end", `Überschneidet sich mit dem ${block.n}. Block, der um ${hm(block.start)} beginnt.`);
-      else put(block.n, "start", `Überschneidet sich mit dem ${prev.n}. Block, der bis ${hm(prev.end)} geht.`);
+      if (side(`pair-${prev.n}`, edited?.n === prev.n && edited.edge === "end" ? "prev" : "next") === "prev") put(prev.n, "end", `Überschneidet sich mit ${words.dative} ${block.n}. ${words.one}, ${words.which} um ${hm(block.start)} beginnt.`);
+      else put(block.n, "start", `Überschneidet sich mit ${words.dative} ${prev.n}. ${words.one}, ${words.which} bis ${hm(prev.end)} geht.`);
     }
   });
   errors.blame = blame;
@@ -1037,7 +1106,7 @@ function commitTimes(edited) {
   renderDataMeta();
   const block = list.find((item) => item.n === edited.n);
   if (block) {
-    say(`${block.n}. Block, ${hm(block.start)} bis ${hm(block.end)}, gespeichert`);
+    say(`${block.n}. ${period()}, ${hm(block.start)} bis ${hm(block.end)}, gespeichert`);
     savedTick(block.n);
   }
 }
@@ -1073,7 +1142,7 @@ function addBlock({ keyboard = false } = {}) {
   enterInPlace(row);
   if (keyboard) $(`rasterStart${block.n}`)?.focus();
   const lessons = blockCount(block.n);
-  toast(`${block.n}. Block angelegt, ${hm(block.start)} bis ${hm(block.end)}${lessons ? `, mit ${plural(lessons, "Stunde", "Stunden")} aus IServ` : ""}`, {
+  toast(`${block.n}. ${period()} angelegt, ${hm(block.start)} bis ${hm(block.end)}${lessons ? `, mit ${plural(lessons, "Eintrag", "Einträgen")}` : ""}`, {
     icon: "plus",
     action: { label: "Rückgängig", undo: true, run: () => undoRaster(before) },
   });
@@ -1090,6 +1159,7 @@ function removeBlock() {
   if (blocks.length < 2) return;
   const last = blocks.at(-1);
   const lessons = blockCount(last.n);
+  const word = period();
   const before = rawOf([LOCAL_KEYS.blocks, LOCAL_KEYS.lessons]);
   const edits = dropBlockEdits(readEdits(), [last.n]);
   saveBlocks(blocks.slice(0, -1));
@@ -1097,7 +1167,7 @@ function removeBlock() {
   raster.confirm = false;
   refreshRaster();
   ($("rasterRemove") || $("rasterAdd"))?.focus({ preventScroll: true });
-  toast(`${last.n}. Block entfernt${lessons ? `, ${plural(lessons, "Stunde", "Stunden")} geleert` : ""}`, {
+  toast(`${last.n}.\u00a0${word} entfernt${lessons ? `, ${plural(lessons, "Eintrag", "Einträge")} gelöscht` : ""}`, {
     icon: "trash-2",
     action: { label: "Rückgängig", undo: true, run: () => undoRaster(before) },
   });
@@ -1113,7 +1183,8 @@ function resetTimes() {
   refreshRaster();
   $(`rasterStart${sortedBlocks()[0].n}`)?.focus({ preventScroll: true });
   const blocks = sortedBlocks();
-  toast(`Standardraster, ${plural(blocks.length, "Block", "Blöcke")} von ${hm(blocks[0].start)} bis ${hm(blocks.at(-1).end)}${lost ? `, ${plural(lost, "Stunde", "Stunden")} geleert` : ""}`, {
+  const words = periodWords(blocks);
+  toast(`Standardraster, ${plural(blocks.length, words.one, words.many)} von ${hm(blocks[0].start)} bis ${hm(blocks.at(-1).end)}${lost ? `, ${plural(lost, "Eintrag", "Einträge")} gelöscht` : ""}`, {
     icon: "rotate-ccw",
     action: { label: "Rückgängig", undo: true, run: () => undoRaster(before) },
   });
@@ -1158,19 +1229,24 @@ const school = { loading: null };
 const stateName = (code) => (page.states || []).find((item) => item.code === code)?.name || code;
 
 function gradeDesc(grade) {
+  if (!grade) return "Daran hängt, ob du Noten oder Punkte bekommst";
   if (grade >= 11) return `${grade === page.school?.grade && page.school?.semester ? `${page.school.semester}, ` : ""}Bewertung in Punkten von 0 bis 15`;
   return "Bewertung in Noten von 1 bis 6";
 }
 
+// The server sends no grade while nobody said which class it is. Then only a saved choice counts.
+const gradeKnown = () => !!page.school?.grade || Number.isInteger(storage.get(PREFS_KEY)?.school?.grade);
+
 function renderSchool() {
   const card = $("schoolCard");
   const info = page.school || {};
-  const grade = Number(prefs.school.grade);
+  const grade = gradeKnown() ? Number(prefs.school.grade) : 0;
   const state = school.loading || prefs.school.state;
+  const known = (page.states || []).some((item) => item.code === state);
   const rows = [
-    row({ id: "rowSchoolName", label: "Schule", desc: "Kommt aus IServ", control: `<span class="set-value">${esc(info.name || "")}<small>${esc(info.town || "")}</small></span>`, cls: "is-stack" }),
-    row({ id: "rowGrade", label: "Klassenstufe", forId: "gradeSelect", desc: gradeDesc(grade), control: `<select class="field-control" id="gradeSelect" aria-describedby="rowGradeDesc">${GRADES.map((value) => `<option value="${value}"${value === grade ? " selected" : ""}>Klasse ${value}</option>`).join("")}</select>` }),
-    row({ id: "rowState", label: "Bundesland", forId: "stateSelect", desc: "Für Ferien und Feiertage im Kalender", control: `<select class="field-control" id="stateSelect" aria-describedby="rowStateDesc"${school.loading ? " disabled" : ""}>${(page.states || []).map((item) => `<option value="${item.code}"${item.code === state ? " selected" : ""}>${esc(item.name)}</option>`).join("")}</select>`, cls: "is-stack" }),
+    info.name || info.town ? row({ id: "rowSchoolName", label: "Schule", desc: info.name ? "Aus deinem IServ-Konto" : "", control: `<span class="set-value">${esc(info.name || "")}<small>${esc(info.town || "")}</small></span>`, cls: "is-stack" }) : "",
+    row({ id: "rowGrade", label: "Klassenstufe", forId: "gradeSelect", desc: gradeDesc(grade), control: `<select class="field-control" id="gradeSelect" aria-describedby="rowGradeDesc">${grade ? "" : '<option value="" selected disabled>Bitte wählen</option>'}${GRADES.map((value) => `<option value="${value}"${value === grade ? " selected" : ""}>Klasse ${value}</option>`).join("")}</select>` }),
+    row({ id: "rowState", label: "Bundesland", forId: "stateSelect", desc: "Für Ferien und Feiertage im Kalender", control: `<select class="field-control" id="stateSelect" aria-describedby="rowStateDesc"${school.loading ? " disabled" : ""}>${known ? "" : '<option value="" selected disabled>Bitte wählen</option>'}${(page.states || []).map((item) => `<option value="${item.code}"${item.code === state ? " selected" : ""}>${esc(item.name)}</option>`).join("")}</select>`, cls: "is-stack" }),
     school.loading ? loadingHtml(`Lade Ferien und Feiertage für ${stateName(school.loading)}`, "Dauert nur einen Moment.") : "",
     row({ id: "rowBirthday", label: "Geburtstag", forId: "birthdayInput", desc: "Für passende Ticket-Empfehlungen im Fahrplan", cls: "is-stack", control: `<input class="field-control" type="date" id="birthdayInput" value="${esc(prefs.school.birthday || "")}" max="${isoDate(now())}" aria-describedby="rowBirthdayDesc">` }),
   ];
@@ -1178,10 +1254,10 @@ function renderSchool() {
 }
 
 function changeGrade(value) {
-  const before = Number(prefs.school.grade);
+  const before = gradeKnown() ? Number(prefs.school.grade) : 0;
   const grade = Number(value);
-  if (grade === before) return;
-  const switched = (before >= 11) !== (grade >= 11);
+  if (!grade || grade === before) return;
+  const switched = !!before && (before >= 11) !== (grade >= 11);
   commitPrefs(
     (draft) => (draft.school.grade = grade),
     renderSchool,
@@ -1224,7 +1300,7 @@ function bindSchool() {
   });
 }
 
-const accounts = { connecting: null, syncing: false, syncedAt: null, formOpen: false };
+const accounts = { connecting: null, syncing: false, report: null, formOpen: false };
 
 function iservFormHtml() {
   const field = (name, label, attrs) => `<div class="form-field"><label class="form-label" for="iserv-${name}">${label}</label><input class="field-control" id="iserv-${name}" name="${name}" ${attrs} aria-describedby="iserv-${name}-error">${errorHtml(`iserv-${name}-error`, "")}</div>`;
@@ -1240,36 +1316,62 @@ function iservFormHtml() {
     </form>`;
 }
 
+// What IServ gives in this app for sure, as the account card names it. Homework counts only once a sync brought some.
+const ISERV_WORDS = { Vertretungsplan: "den Vertretungsplan", "E-Mail": "deine Mails" };
+
+function partSentence(part, answer) {
+  if (!answer) return "";
+  // A failed part, and also a plan IServ has not or only as PDF, says so in the server's words.
+  if (!answer.ok || answer.problem) return answer.message || "";
+  const count = answer.count || 0;
+  if (part === "plan") return `Der Vertretungsplan hat ${count === 1 ? "eine Seite" : `${count} Seiten`}.`;
+  if (part === "homework") return count ? `${count === 1 ? "Eine offene Hausaufgabe" : `${count} offene Hausaufgaben`} aus IServ.` : "In IServ stehen keine offenen Hausaufgaben.";
+  return count ? `${count === 1 ? "Eine ungelesene Mail" : `${count} ungelesene Mails`} in IServ.` : "Keine ungelesenen Mails in IServ.";
+}
+
 function renderIserv() {
   const card = $("iservCard");
   const info = page.accounts?.iserv || {};
   let html;
   if (accounts.connecting === "iserv") {
-    html = loadingHtml("Verbinde mit IServ", "Stundenplan, Aufgaben und Mails kommen gleich.");
+    html = loadingHtml("Verbinde mit IServ", "Das dauert ein paar Sekunden.");
   } else if (info.unavailable) {
-    html = `<div class="empty-state set-empty">${tinte("ruhe", 110)}<p class="empty-title">IServ geht im Browser nicht.</p><p class="empty-text">Stundenplan, Aufgaben und Mails holt ${BRAND} aus IServ in der App für Mac, Windows, Linux und Android.</p></div>`;
+    html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">IServ geht im Browser nicht.</p><p class="empty-text">In der App für Mac, Windows, Linux und Android holt ${BRAND} den Vertretungsplan aus IServ.</p></div>`;
   } else if (prefs.iserv.connected) {
-    const stand = accounts.syncedAt || syncTime();
     const offline = flags.offline;
-    const status = offline ? `<span class="status is-offline">${icon("wifi-off")}Offline</span>` : `<span class="status is-ok">${icon("circle-check")}Verbunden</span>`;
+    const stand = syncTime("iserv");
+    // The phone names a failed sign-in as Google does; there the data is only as old as the last one that worked.
+    const since = stand ? `, du siehst den Stand von ${stand} Uhr` : "";
+    const status = offline ? `<span class="status is-offline">${icon("wifi-off")}Offline</span>`
+      : info.state === "login" ? `<span class="status is-warn">${icon("circle-alert")}Abgelaufen</span>`
+        : info.state === "offline" ? `<span class="status is-offline">${icon("wifi-off")}Nicht erreichbar</span>`
+          : `<span class="status is-ok">${icon("circle-check")}Verbunden</span>`;
+    const parts = ["plan", "homework", "mail"].map((part) => [part, accounts.report?.[part]]).filter(([, answer]) => answer);
+    // When IServ was out of reach, every part says so: once is enough.
+    const report = !parts.length ? "" : !parts.some(([, answer]) => answer.ok)
+      ? parts[0][1].message || "IServ ist gerade nicht erreichbar."
+      : [...new Set(parts.map(([part, answer]) => partSentence(part, answer)).filter(Boolean))].join(" ");
     const detail = offline
-      ? `Stand ${stand} Uhr. ${BRAND} gleicht wieder ab, sobald IServ erreichbar ist.`
-      : `Abgleich um ${stand} Uhr: ${joinWords(info.features || ["Stundenplan", "Aufgaben", "E-Mail"])}.`;
+      ? `Abgleichen geht erst wieder, wenn ${BRAND} läuft.`
+      : info.state === "login" ? `Die Anmeldung klappt nicht mehr${since}. Trenn IServ und verbinde es neu.`
+        : info.state === "offline" ? `IServ ist gerade nicht erreichbar${since}.`
+          : `${stand ? `Stand ${stand} Uhr.` : "Noch nicht abgeglichen."}${report ? ` ${report}` : ""}`;
     html = row({
       id: "rowIserv",
       cls: "is-stack",
       label: `IServ ${status}`,
-      desc: `Angemeldet als ${esc(info.name || "")}${info.school ? `, ${esc(info.school)}` : ""}. ${detail}`,
+      desc: `Angemeldet als ${esc(info.name || "")}${info.school ? `, ${esc(info.school)}` : ""}. ${esc(detail)}`,
       control: `<button class="icon-button${accounts.syncing ? " is-spinning" : ""}" type="button" id="iservSync" aria-label="Jetzt mit IServ abgleichen" data-tip="Jetzt abgleichen"${offline || accounts.syncing ? " disabled" : ""}>${icon("refresh-cw")}</button><button class="btn btn-quiet" type="button" id="iservDisconnect">Trennen</button>`,
     });
   } else if (accounts.formOpen) {
     html = iservFormHtml();
   } else {
+    const gives = (info.features || []).map((word) => ISERV_WORDS[word]).filter(Boolean);
     html = row({
       id: "rowIserv",
       cls: "is-stack",
       label: `IServ <span class="status is-off">Nicht verbunden</span>`,
-      desc: "Ohne IServ kommen Stundenplan, Vertretungen, Aufgaben und Mails nicht mehr von selbst.",
+      desc: gives.length ? `Damit holt ${BRAND} ${joinWords(gives)} von selbst.` : "",
       control: `<button class="btn btn-primary" type="button" id="iservConnect">Verbinden</button>`,
     });
   }
@@ -1277,25 +1379,164 @@ function renderIserv() {
   renderAccountsMeta();
 }
 
+// The account and its card exist only when the backend names an account service.
+const profile = { api: null, card: null, view: null };
+
+function renderAccount() {
+  const card = profile.card;
+  if (!card || !profile.api || !profile.view) return;
+  keepFocus(card, () => (card.innerHTML = profile.view.accountCardHtml(profile.api.accountState(), row)));
+  renderAccountsMeta();
+}
+
+async function signOutHere(button) {
+  if (!confirmTwice("account", button, "Wirklich abmelden?", "Zum Abmelden noch einmal drücken")) return;
+  button.disabled = true;
+  try {
+    await profile.api.signOut();
+  } catch {
+    button.disabled = false;
+    toast("Abmelden hat nicht geklappt. Versuch es noch einmal.", { icon: "circle-alert" });
+    return;
+  }
+  renderAccount();
+  toast("Abgemeldet. Dein Stundenplan bleibt auf diesem Gerät.", { icon: "user" });
+  profile.card?.querySelector("[data-account-open]")?.focus({ preventScroll: true });
+}
+
+function bindAccount() {
+  if (!data?.accountService) return;
+  Promise.all([import("../account.js"), import("../account-card.js")]).then(async ([api, card]) => {
+    profile.api = api;
+    profile.view = card;
+    profile.card = document.createElement("div");
+    profile.card.className = "set-card";
+    profile.card.id = "accountCard";
+    $("iservCard").before(profile.card);
+    profile.card.addEventListener("click", (event) => {
+      const button = event.target.closest("#accountSignOut");
+      if (button && !button.disabled) signOutHere(button);
+    });
+    addEventListener("app:account", renderAccount);
+    renderAccount();
+    await api.startAccount();
+    renderAccount();
+  }).catch(() => {});
+}
+
+const googleInfo = () => page.accounts?.google || {};
+const schoolUi = { choice: false, busy: false };
+const SAFE_COLOR = /^#[0-9a-f]{3,8}$/i;
+
+function standText(stamp) {
+  const when = stamp ? new Date(stamp) : null;
+  if (!when || Number.isNaN(when.getTime())) return "";
+  const time = `${clock(when.getHours() * 60 + when.getMinutes())} Uhr`;
+  return isoDate(when) === isoDate(now()) ? time : `${shortDate(when)}, ${time}`;
+}
+
+function googleHeader(info) {
+  const stand = standText(info.stand);
+  const states = {
+    ok: [`<span class="status is-ok">${icon("circle-check")}Verbunden</span>`, stand ? `Stand ${stand}.` : "Der erste Abgleich läuft."],
+    login: [
+      `<span class="status is-warn">${icon("circle-alert")}Abgelaufen</span>`,
+      `Die Anmeldung ist abgelaufen${stand ? `, du siehst den Stand von ${stand}` : ""}. ${info.configured ? `Verbinde Google neu, dann gleicht ${BRAND} wieder ab.` : "Neu verbinden geht in dieser Version nicht."}`,
+    ],
+    offline: [`<span class="status is-offline">${icon("wifi-off")}Offline</span>`, `Google ist gerade nicht erreichbar${stand ? `, du siehst den Stand von ${stand}` : ""}.`],
+  };
+  const [status, detail] = states[info.state] || states.ok;
+  const renew = info.state === "login" && info.configured ? `<button class="btn btn-primary" type="button" id="googleRenew">Neu verbinden</button>` : "";
+  return row({
+    id: "rowGoogle",
+    cls: "is-stack",
+    label: `Google-Kalender ${status}`,
+    desc: `${info.account ? `Angemeldet als ${esc(info.account)}. ` : ""}${detail}`,
+    control: `${renew}<button class="btn btn-quiet" type="button" id="googleDisconnect">Trennen</button>`,
+  });
+}
+
+function targetRow(info) {
+  const writable = (info.calendars || []).filter((item) => item.writable);
+  if (prefs.google.write === false || writable.length < 2) return "";
+  const chosen = writable.some((item) => item.id === prefs.google.target) ? prefs.google.target : info.target;
+  const options = writable.map((item) => `<option value="${esc(item.id)}"${item.id === chosen ? " selected" : ""}>${esc(item.name)}</option>`).join("");
+  return row({ id: "rowGoogleTarget", cls: "is-stack", label: "Kalender für neue Termine", forId: "googleTarget", control: `<select class="field-control" id="googleTarget">${options}</select>` });
+}
+
+function schoolDesc(info, school) {
+  const name = `„${esc(school.name)}“`;
+  if (schoolUi.choice) return `Soll der Kalender ${name} in Google bleiben?`;
+  if (!school.on) {
+    if (school.removing) return `Der Kalender ${name} wird gelöscht, sobald Google erreichbar ist.`;
+    if (school.notice === "gone") return `Du hast den Kalender ${name} in Google gelöscht. Schalte das wieder ein, dann legt ${BRAND} ihn neu an.`;
+    if (school.notice === "kept") return `Google hat das Löschen abgelehnt. Der Kalender ${name} bleibt in Google, dort kannst du ihn selbst löschen.`;
+    if (!info.configured && !info.may_make_calendars) return "Geht in dieser Version nicht.";
+    if (info.state === "login") return "Geht wieder, sobald Google neu verbunden ist.";
+    return `${BRAND} legt dafür den Kalender ${name} an und trägt die nächsten vier Wochen ein.`;
+  }
+  if (school.problem === "limit") return `Google bremst gerade. Den Rest trägt ${BRAND} etwas später ein.`;
+  if (school.problem === "offline") return `Google ist gerade nicht erreichbar. ${BRAND} versucht es weiter.`;
+  if (school.problem === "scope") return "Google erlaubt den eigenen Kalender nicht mehr. Schalte das aus und wieder ein.";
+  if (school.busy) return `Wird in ${name} eingetragen …`;
+  return `${plural(school.count, "Eintrag", "Einträge")} in ${name}${school.stand ? `, Stand ${standText(school.stand)}` : ""}.`;
+}
+
+function schoolRow(info) {
+  const school = info.school || { on: false, name: `${BRAND} Schule` };
+  const blocked = !school.on && (info.state === "login" || (!info.configured && !info.may_make_calendars));
+  const choice = schoolUi.choice
+    ? `<div class="set-form-actions"><button type="button" class="btn btn-quiet" id="schoolCancel">Abbrechen</button><button type="button" class="btn btn-quiet danger-button" id="schoolDelete">Löschen</button><button type="button" class="btn btn-primary" id="schoolKeep">Behalten</button></div>`
+    : "";
+  return row({
+    id: "rowGoogleSchool",
+    cls: schoolUi.choice ? "is-stack" : "",
+    label: "Stundenplan und Tests in Google eintragen",
+    desc: schoolDesc(info, school),
+    control: choice || switchHtml("googleSchool", !!school.on, "rowGoogleSchoolLabel", { describedBy: "rowGoogleSchoolDesc", disabled: blocked || schoolUi.busy }),
+  });
+}
+
+function gmailRow(info) {
+  if (info.gmail) {
+    return row({ id: "rowGmail", label: `Gmail <span class="status is-ok">${icon("circle-check")}Verbunden</span>`, desc: "Deine Mails stehen unter E-Mail." });
+  }
+  if (!info.configured || info.state === "login" || data.status?.gmailViaGoogle !== true) return "";
+  return row({
+    id: "rowGmail",
+    cls: "is-stack",
+    label: "Gmail",
+    desc: `Lies und schreib deine Gmail-Mails in ${BRAND}. Dafür fragt Google einmal nach.`,
+    control: `<button class="btn btn-quiet" type="button" id="gmailAdd">Gmail hinzufügen</button>`,
+  });
+}
+
+function calendarList(info) {
+  const calendars = info.calendars || [];
+  if (!calendars.length) return "";
+  const swatch = (item) => (SAFE_COLOR.test(item.color || "") ? item.color : "var(--line-strong)");
+  return `<div class="set-sub" role="group" aria-label="Kalender">${calendars.map((item) => `<div class="set-row"><span class="cal-swatch" style="--k:${swatch(item)}" aria-hidden="true"></span><span class="set-row-label" id="gcal-${esc(item.id)}-label">${esc(item.name)}</span>${switchHtml(`gcal-${esc(item.id)}`, prefs.google.calendars[item.id] !== false, `gcal-${esc(item.id)}-label`)}</div>`).join("")}</div>`;
+}
+
 function renderGoogle() {
   const card = $("googleCard");
-  const calendars = page.accounts?.google?.calendars || [];
+  const info = googleInfo();
   let html;
   if (accounts.connecting === "google") {
     html = `${loadingHtml("Warte auf Google", "Melde dich im Browser an. Danach geht es hier von selbst weiter.")}<div class="set-form-actions"><button type="button" class="btn btn-quiet" id="googleCancel">Abbrechen</button></div>`;
-  } else if (page.accounts?.google?.unavailable) {
-    html = `<div class="empty-state set-empty">${tinte("ruhe", 110)}<p class="empty-title">Google-Kalender gibt es in der App noch nicht.</p><p class="empty-text">Termine, die du hier einträgst, bleiben auf diesem Gerät.</p></div>`;
+  } else if (info.unavailable) {
+    html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">Google-Kalender gibt es in der App noch nicht.</p><p class="empty-text">Termine, die du hier einträgst, bleiben auf diesem Gerät.</p></div>`;
+  } else if (!prefs.google.connected && !info.configured) {
+    html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">Google-Kalender gibt es in dieser Version nicht.</p><p class="empty-text">Termine, die du in ${BRAND} einträgst, bleiben auf diesem Gerät.</p></div>`;
   } else if (!prefs.google.connected) {
-    html = `<div class="empty-state set-empty">${tinte("ruhe", 110)}<p class="empty-title">Kein Google-Kalender verbunden.</p><p class="empty-text">Gym, Fahrstunden und private Termine stehen dann neben dem Stundenplan.</p><button type="button" class="empty-action" id="googleConnect">Konto verbinden${icon("chevron-right")}</button></div>`;
+    html = `<div class="empty-state set-empty">${luna("ruhe", 110)}<p class="empty-title">Kein Google-Kalender verbunden.</p><p class="empty-text">Gym, Fahrstunden und private Termine stehen dann neben dem Stundenplan.</p><button type="button" class="empty-action" id="googleConnect">Konto verbinden${icon("chevron-right")}</button></div>`;
   } else {
-    const shown = calendars.filter((item) => prefs.google.calendars[item.id] !== false).length;
-    html = row({
-      id: "rowGoogle",
-      cls: "is-stack",
-      label: `Google-Kalender <span class="status is-ok">${icon("circle-check")}Verbunden</span>`,
-      desc: `${shown} von ${plural(calendars.length, "Kalender", "Kalendern")} erscheinen im Kalender von ${BRAND}.`,
-      control: `<button class="btn btn-quiet" type="button" id="googleDisconnect">Trennen</button>`,
-    }) + `<div class="set-sub" role="group" aria-label="Kalender">${calendars.map((item) => `<div class="set-row"><span class="cal-swatch" style="--k:${KIND_COLORS[item.kind] || "var(--line-strong)"}" aria-hidden="true"></span><span class="set-row-label" id="gcal-${item.id}-label">${esc(item.name)}</span>${switchHtml(`gcal-${item.id}`, prefs.google.calendars[item.id] !== false, `gcal-${item.id}-label`)}</div>`).join("")}</div>`;
+    html = googleHeader(info) + row({
+      id: "rowGoogleWrite",
+      label: "Eigene Termine eintragen",
+      desc: `Was du in ${BRAND} einträgst oder änderst, steht auch in deinem Google-Kalender.`,
+      control: switchHtml("googleWrite", prefs.google.write !== false, "rowGoogleWriteLabel", { describedBy: "rowGoogleWriteDesc" }),
+    }) + targetRow(info) + schoolRow(info) + gmailRow(info) + calendarList(info);
   }
   keepFocus(card, () => (card.innerHTML = html));
   renderAccountsMeta();
@@ -1304,7 +1545,12 @@ function renderGoogle() {
 function renderAccountsMeta() {
   const iserv = prefs.iserv.connected;
   const google = prefs.google.connected;
-  $("accountsMeta").textContent = iserv && google ? "IServ und Google verbunden" : iserv ? "IServ verbunden, Google nicht" : google ? "Google verbunden, IServ nicht" : "Nichts verbunden";
+  const offered = google || googleInfo().configured;
+  const expired = google && googleInfo().state === "login";
+  const text = expired
+    ? (iserv ? "IServ verbunden, Google abgelaufen" : "Google abgelaufen, IServ nicht")
+    : iserv && google ? "IServ und Google verbunden" : iserv ? (offered ? "IServ verbunden, Google nicht" : "IServ verbunden") : google ? "Google verbunden, IServ nicht" : "Nichts verbunden";
+  $("accountsMeta").textContent = profile.api?.accountState().signedIn ? profile.view.withAccount(text) : text;
 }
 
 function validateIserv(formNode) {
@@ -1334,12 +1580,14 @@ async function connectIserv(formNode) {
     const result = await request("POST", "/api/iserv/connect", body);
     accounts.connecting = null;
     accounts.formOpen = false;
-    accounts.syncedAt = clock(minutesOf(now()));
+    accounts.report = null;
     page.accounts.iserv = { ...(page.accounts.iserv || {}), connected: true, name: result.user?.name || body.username, school: server };
     prefs.iserv.connected = true;
+    data.status = { ...(data.status || {}), iserv: true };
     renderIserv();
     toast("Mit IServ verbunden", { icon: "circle-check" });
     $("iservSync")?.focus({ preventScroll: true });
+    syncIserv();
   } catch (error) {
     accounts.connecting = null;
     accounts.formOpen = true;
@@ -1349,35 +1597,38 @@ async function connectIserv(formNode) {
   }
 }
 
+// Fetches what IServ gives here and tells what came of each part. The time is the one the server noted.
 async function syncIserv() {
   if (accounts.syncing) return;
   accounts.syncing = true;
   renderIserv();
-  let ok = false;
+  let result = null;
   try {
-    const status = await request("GET", "/api/iserv/status");
-    ok = !!status.connected || !!status.has_credentials;
+    result = await request("POST", "/api/ui/iserv/sync", {});
   } catch {}
   accounts.syncing = false;
-  accounts.syncedAt = clock(minutesOf(now()));
-  renderIserv();
-  if (!ok) {
-    toast("IServ ist gerade nicht erreichbar.", { icon: "wifi-off" });
-    return;
+  if (result?.status) {
+    data.status = result.status;
+    renderSync();
   }
-  const text = `IServ, Stand ${accounts.syncedAt} Uhr`;
-  const line = $("syncText");
-  if (line) line.textContent = text;
-  document.querySelectorAll("[data-sync-mirror] span").forEach((node) => (node.textContent = text));
-  say(`Abgeglichen um ${accounts.syncedAt} Uhr`);
+  accounts.report = result?.parts || null;
+  renderIserv();
+  const reached = Object.values(result?.parts || {}).some((part) => part.ok);
+  const stand = syncTime("iserv");
+  const text = reached ? `Mit IServ abgeglichen${stand ? `, Stand ${stand} Uhr` : ""}` : "IServ ist gerade nicht erreichbar.";
+  toast(text, { icon: reached ? "circle-check" : "wifi-off" });
+  say(text);
   $("iservSync")?.focus({ preventScroll: true });
 }
 
 async function disconnectIserv() {
   try {
     await request("POST", "/api/iserv/disconnect", {});
-    page.accounts.iserv = { connected: false, name: "", school: "", features: [] };
+    page.accounts.iserv = { ...(page.accounts.iserv || {}), connected: false, name: "", school: "" };
     prefs.iserv.connected = false;
+    accounts.report = null;
+    data.status = { ...(data.status || {}), iserv: false, synced: { ...(data.status?.synced || {}), iserv: null } };
+    renderSync();
     renderIserv();
     toast("IServ getrennt", { icon: "wifi-off" });
     $("iservConnect")?.focus({ preventScroll: true });
@@ -1387,14 +1638,17 @@ async function disconnectIserv() {
 }
 
 async function loadGoogleCalendars() {
-  if (!prefs.google.connected) return;
+  const info = googleInfo();
+  if (!prefs.google.connected || info.calendars?.length) return;
   try {
     const result = await request("GET", "/api/calendar/google/calendars");
-    page.accounts.google.calendars = (result.calendars || []).map((item) => ({
+    const school = info.school?.on ? info.school.name : null;
+    info.calendars = (result.calendars || []).filter((item) => item.name !== school).map((item) => ({
       id: item.id,
       name: item.name,
-      kind: /schule|school|iserv|kurs/i.test(item.name) ? "school" : /training|sport|gym|fitness/i.test(item.name) ? "training" : "private",
-      on: true,
+      color: item.color,
+      primary: !!item.primary,
+      writable: item.access_role === "owner" || item.access_role === "writer",
     }));
     renderGoogle();
   } catch {}
@@ -1407,7 +1661,7 @@ function stopGoogleWait() {
   googleWait = null;
 }
 
-function waitForGoogle(state) {
+function waitForGoogle(state, done) {
   const until = Date.now() + 10 * 60 * 1000;
   const check = async () => {
     googleWait = null;
@@ -1420,7 +1674,7 @@ function waitForGoogle(state) {
     if (!progress?.done && Date.now() < until) {
       googleWait = setTimeout(check, 1500);
     } else if (progress?.ok) {
-      googleConnected();
+      granted(done, progress.email);
     } else {
       stopGoogleWait();
       accounts.connecting = null;
@@ -1431,15 +1685,58 @@ function waitForGoogle(state) {
   googleWait = setTimeout(check, 1500);
 }
 
-function googleConnected() {
-  if (accounts.connecting !== "google") return;
+function granted(done, email) {
   stopGoogleWait();
   accounts.connecting = null;
-  page.accounts.google = { connected: true, calendars: [] };
-  prefs.google.connected = true;
+  fetch("/api/ui/google/nudge", { method: "POST", credentials: "same-origin" }).catch(() => {});
+  done(email);
+}
+
+async function grantGoogle(features, done) {
+  stopGoogleWait();
+  accounts.connecting = "google";
   renderGoogle();
-  toast("Google-Kalender verbunden", { icon: "calendar-days" });
+  try {
+    const result = await request("POST", "/api/email/google/auth", { features });
+    if (result.granted) {
+      granted(done, result.email);
+      return;
+    }
+    if (platform.desktop || !window.open(result.auth_url, "google-login", "width=600,height=700,popup=yes")) location.assign(result.auth_url);
+    waitForGoogle(result.state, done);
+  } catch (error) {
+    accounts.connecting = null;
+    renderGoogle();
+    toast(`Google-Anmeldung ließ sich nicht starten${error.message ? `: ${esc(error.message)}` : ""}.`, { icon: "circle-alert" });
+  }
+}
+
+async function reloadGoogle() {
+  try {
+    const result = await request("GET", "/api/ui/google/account");
+    page.accounts.google = result.account;
+    prefs.google.connected = !!result.account.connected;
+  } catch {}
+}
+
+async function googleConnected() {
+  const before = googleInfo();
+  await reloadGoogle();
+  const after = googleInfo();
+  const lost = [
+    before.gmail && !after.gmail ? "Gmail" : "",
+    before.may_make_calendars && !after.may_make_calendars && before.school?.on ? "den Kalender für den Stundenplan" : "",
+  ].filter(Boolean);
+  renderGoogle();
+  toast(lost.length ? `Google-Kalender verbunden, aber ohne ${joinWords(lost)}.` : "Google-Kalender verbunden", { icon: lost.length ? "circle-alert" : "calendar-days" });
   loadGoogleCalendars();
+}
+
+async function gmailAdded() {
+  await reloadGoogle();
+  renderGoogle();
+  toast(googleInfo().gmail ? "Gmail ist verbunden" : "Google hat Gmail nicht freigegeben.", { icon: googleInfo().gmail ? "mail" : "circle-alert" });
+  $("rowGmail")?.scrollIntoView({ block: "nearest" });
 }
 
 function cancelGoogle() {
@@ -1449,25 +1746,64 @@ function cancelGoogle() {
   $("googleConnect")?.focus({ preventScroll: true });
 }
 
-async function connectGoogle() {
-  stopGoogleWait();
-  accounts.connecting = "google";
+addEventListener("message", (event) => {
+  if (event.origin !== location.origin || event.data?.type !== "google-oauth-success") return;
+  if (accounts.connecting === "google" && !prefs.google.connected) granted(googleConnected, event.data.email);
+});
+
+let schoolWatch = null;
+
+function setSchool(school) {
+  page.accounts.google = { ...googleInfo(), school };
   renderGoogle();
+  clearTimeout(schoolWatch);
+  if (school.busy) schoolWatch = setTimeout(watchSchool, 2000);
+}
+
+async function watchSchool() {
   try {
-    const result = await request("POST", "/api/email/google/auth");
-    if (platform.desktop || !window.open(result.auth_url, "google-login", "width=600,height=700,popup=yes")) location.assign(result.auth_url);
-    waitForGoogle(result.state);
-  } catch (error) {
-    accounts.connecting = null;
+    const result = await request("GET", "/api/ui/google/school");
+    setSchool(result.school);
+  } catch {}
+}
+
+async function startSchool() {
+  schoolUi.busy = true;
+  renderGoogle();
+  const response = await fetch("/api/ui/google/school", { method: "POST", credentials: "same-origin" }).catch(() => null);
+  const payload = response ? await response.json().catch(() => ({})) : {};
+  schoolUi.busy = false;
+  if (response?.ok && payload.school) {
+    setSchool(payload.school);
+    say("Stundenplan und Tests werden in Google eingetragen");
+  } else if (payload.needs === "school") {
+    grantGoogle(["school"], () => startSchool());
+  } else {
     renderGoogle();
-    toast(`Google-Anmeldung ließ sich nicht starten${error.message ? `: ${esc(error.message)}` : ""}.`, { icon: "circle-alert" });
+    toast(esc(payload.error || "Google ist gerade nicht erreichbar."), { icon: "circle-alert" });
   }
 }
 
-addEventListener("message", (event) => {
-  if (event.origin !== location.origin || event.data?.type !== "google-oauth-success") return;
-  googleConnected();
-});
+async function stopSchool(keep) {
+  schoolUi.choice = false;
+  schoolUi.busy = true;
+  renderGoogle();
+  try {
+    const result = await request("DELETE", "/api/ui/google/school", { keep });
+    if (keep && result.calendar) {
+      prefs.google.calendars[result.calendar] = false;
+      savePrefs();
+    }
+    schoolUi.busy = false;
+    setSchool(result.school);
+    toast(keep ? "Der Kalender bleibt in Google, eingetragen wird nichts mehr." : "Der Kalender wird in Google gelöscht.", { icon: "calendar-days" });
+  } catch {
+    schoolUi.busy = false;
+    renderGoogle();
+    toast("Das ließ sich gerade nicht ausschalten.", { icon: "circle-alert" });
+  }
+  $("googleSchool")?.focus({ preventScroll: true });
+}
 
 async function disconnectGoogle() {
   try {
@@ -1475,7 +1811,7 @@ async function disconnectGoogle() {
     for (const account of result.accounts || []) {
       await request("DELETE", `/api/email/google/remove/${encodeURIComponent(account.email)}`);
     }
-    page.accounts.google = { connected: false, calendars: [] };
+    page.accounts.google = { configured: googleInfo().configured, connected: false, calendars: [] };
     prefs.google.connected = false;
     renderGoogle();
     toast("Google-Kalender getrennt", { icon: "calendar-days" });
@@ -1506,16 +1842,44 @@ function bindAccounts() {
     event.preventDefault();
     if (validateIserv(event.target)) connectIserv(event.target);
   });
+  $("googleCard").addEventListener("change", (event) => {
+    if (event.target.id !== "googleTarget") return;
+    prefs.google.target = event.target.value;
+    savePrefs();
+    const name = googleInfo().calendars?.find((item) => item.id === event.target.value)?.name || "";
+    say(`Neue Termine landen in ${name}`);
+  });
   iservCard.addEventListener("input", (event) => {
     const input = event.target.closest("#iservForm .field-control");
     if (input?.getAttribute("aria-invalid") === "true" && input.value.trim()) setError(input, $(`iserv-${input.name}-error`), "");
   });
   const googleCard = $("googleCard");
   googleCard.addEventListener("click", (event) => {
-    if (event.target.closest("#googleConnect")) connectGoogle();
+    if (event.target.closest("#googleConnect, #googleRenew")) grantGoogle(["calendar"], googleConnected);
+    else if (event.target.closest("#gmailAdd")) grantGoogle(["gmail"], gmailAdded);
     else if (event.target.closest("#googleCancel")) cancelGoogle();
     else if (event.target.closest("#googleDisconnect")) {
       if (confirmTwice("google", event.target.closest("#googleDisconnect"))) disconnectGoogle();
+    } else if (event.target.closest("#googleWrite")) {
+      prefs.google.write = prefs.google.write === false;
+      savePrefs();
+      renderGoogle();
+      $("googleWrite")?.focus({ preventScroll: true });
+      say(prefs.google.write ? "Eigene Termine werden in Google eingetragen" : "Eigene Termine bleiben in der App");
+    } else if (event.target.closest("#googleSchool")) {
+      if (googleInfo().school?.on) {
+        schoolUi.choice = true;
+        renderGoogle();
+        $("schoolKeep")?.focus({ preventScroll: true });
+      } else {
+        startSchool();
+      }
+    } else if (event.target.closest("#schoolKeep, #schoolDelete")) {
+      stopSchool(!!event.target.closest("#schoolKeep"));
+    } else if (event.target.closest("#schoolCancel")) {
+      schoolUi.choice = false;
+      renderGoogle();
+      $("googleSchool")?.focus({ preventScroll: true });
     } else {
       const toggle = event.target.closest('[role="switch"][id^="gcal-"]');
       if (!toggle) return;
@@ -1555,20 +1919,22 @@ function unsupportedText() {
   const device = appleDevice();
   if (!device) return "Dieser Browser kann keine Erinnerungen zeigen.";
   if (onHomeScreen()) return `Für Erinnerungen braucht das ${device} iOS 16.4 oder neuer.`;
-  return `Auf dem ${device} erinnert ${BRAND} nur vom Home-Bildschirm aus: In Safari auf Teilen tippen, dann „Zum Home-Bildschirm“.`;
+  return tabReminderNote({ agent: navigator.userAgent, brand: BRAND });
 }
 
 function permissionRow() {
   const state = permission();
   const native = !!page.native || !!window.hubShell?.nativeNotifications;
   const device = appleDevice();
+  const blocked = blockedHere();
   const words = {
     granted: [device ? `${BRAND} darf Erinnerungen zeigen, auf dem ${device} aber nur, solange die App geöffnet ist.` : `${BRAND} darf Erinnerungen zeigen.`, `<span class="status is-ok">${icon("circle-check")}Erlaubt</span>`],
     default: [device ? `Das ${device} fragt einmal nach. Erinnerungen kommen nur, solange die App geöffnet ist.` : `${native ? "Das Gerät" : "Der Browser"} fragt einmal nach, danach meldet sich ${BRAND} vor Stunden, Tests und Abgaben.`, `<button class="btn btn-quiet" type="button" id="notifyAllow">${icon("bell")}Erlauben</button>`],
-    denied: [native ? `Blockiert. Freigeben kannst du das in den Einstellungen des Geräts unter Mitteilungen für ${BRAND}.` : device ? `Blockiert. Freigeben kannst du das in den Einstellungen des ${device}s unter Mitteilungen für ${BRAND}.` : "Blockiert. Freigeben kannst du das in den Website-Einstellungen des Browsers.", `<span class="status is-warn">Blockiert</span>`],
+    denied: [`Blockiert. Freigeben kannst du das ${blocked.where}.`, `<span class="status is-warn">Blockiert</span>`],
     unsupported: [native ? "Dieses Gerät kann gerade keine Erinnerungen zeigen." : unsupportedText(), `<span class="status is-off">Nicht verfügbar</span>`],
   }[state];
-  return row({ id: "rowPermission", label: native ? "Auf diesem Gerät" : device ? `Auf dem ${device}` : "Im Browser", desc: words[0], control: words[1] });
+  const open = state === "denied" && blocked.open ? `<button class="text-button row-action" type="button" id="notifySettings">${icon("settings")}<span>${blocked.settings} öffnen</span></button>` : "";
+  return row({ id: "rowPermission", label: native ? "Auf diesem Gerät" : device ? `Auf dem ${device}` : "Im Browser", desc: words[0], control: words[1], after: open });
 }
 
 function renderNotify() {
@@ -1581,7 +1947,7 @@ function renderNotify() {
       row({ id: "rowNotifyAll", label: "Erinnerungen", desc: `Alle Erinnerungen von ${BRAND} an oder aus`, control: switchHtml("notifyEnabled", notify.enabled, "rowNotifyAllLabel", { describedBy: "rowNotifyAllDesc" }) }),
       row({ id: "rowNotifySound", label: "Ton", desc: "Kurzer Ton bei jeder Erinnerung", cls: off ? "is-muted" : "", control: switchHtml("notifySound", notify.sound, "rowNotifySoundLabel", { disabled: off, describedBy: "rowNotifySoundDesc" }) }),
       row({ id: "rowQuiet", label: "Ruhezeit", desc: `In dieser Zeit bleibt ${BRAND} still`, cls: off ? "is-stack is-muted" : "is-stack", control: `<input class="field-control" type="time" id="quietFrom" value="${notify.quiet.from}" aria-label="Ruhezeit ab" aria-describedby="quietError"${off ? " disabled" : ""}><span class="set-to" aria-hidden="true">bis</span><input class="field-control" type="time" id="quietTo" value="${notify.quiet.to}" aria-label="Ruhezeit bis" aria-describedby="quietError"${off ? " disabled" : ""}>${errorHtml("quietError", "")}` }),
-      row({ id: "rowNotifyTest", label: "Probe-Erinnerung", desc: `So sieht die Erinnerung vor der nächsten Stunde aus: ${esc(nextLessonText())}`, control: `<button class="btn btn-quiet" type="button" id="notifyTest">${icon("bell-ring")}Senden</button>` }),
+      row({ id: "rowNotifyTest", label: "Probe-Erinnerung", desc: sampleDesc(), control: `<button class="btn btn-quiet" type="button" id="notifyTest">${icon("bell-ring")}Senden</button>` }),
     ].join("");
   });
   renderKinds();
@@ -1607,12 +1973,11 @@ function renderNotifyMeta() {
   $("notifyMeta").textContent = notify.enabled ? `An, still von ${hm(notify.quiet.from)} bis ${hm(notify.quiet.to)} Uhr` : "Aus";
 }
 
-function nextLessonText() {
-  const today = now();
-  const minute = minutesOf(today);
-  const lesson = lessonsFor(today).find((item) => !item.cancelled && item.startMin > minute) || nextSchoolDay(today)?.lessons[0];
-  if (!lesson) return "Deutsch um 8:00 in R204.";
-  return `${subject(lesson.subject).label} um ${hm(lesson.start)} in ${lesson.room}.`;
+function sampleDesc() {
+  const sample = sampleReminder(now());
+  if (!sample.lesson) return "Zeigt einmal, wie eine Erinnerung bei dir ankommt.";
+  const words = periodWords();
+  return `So sieht die Erinnerung vor ${words.dative} nächsten ${words.one} aus: ${esc(sample.body)}`;
 }
 
 async function allowNotifications() {
@@ -1621,7 +1986,7 @@ async function allowNotifications() {
     await Notification.requestPermission();
   } catch {}
   if (permission() === "granted" && !prefs.notify.enabled) {
-    prefs.notify.enabled = true;
+    Object.assign(prefs.notify, { enabled: true, chosen: true });
     savePrefs();
   }
   renderNotify();
@@ -1640,7 +2005,7 @@ function sendTest() {
     return;
   }
   try {
-    new Notification(BRAND, { body: nextLessonText(), icon: "/static/app/img/hora-favicon.svg", silent: !prefs.notify.sound });
+    new Notification(BRAND, { body: sampleReminder(now()).body, icon: "/static/app/img/hora-favicon.svg", silent: !prefs.notify.sound });
     toast("Probe gesendet", { icon: "bell-ring" });
   } catch {
     toast("Die Probe hat nicht geklappt.", { icon: "bell" });
@@ -1667,15 +2032,16 @@ function changeQuiet() {
 
 function bindNotify() {
   document.addEventListener("reminders:on", () => {
-    prefs.notify.enabled = true;
+    Object.assign(prefs.notify, { enabled: true, chosen: true });
     renderNotify();
   });
   const card = $("notifyCard");
   card.addEventListener("click", (event) => {
     if (event.target.closest("#notifyAllow")) allowNotifications();
+    else if (event.target.closest("#notifySettings")) blockedHere().open?.();
     else if (event.target.closest("#notifyTest")) sendTest();
     else if (event.target.closest("#notifyEnabled")) {
-      prefs.notify.enabled = !prefs.notify.enabled;
+      Object.assign(prefs.notify, { enabled: !prefs.notify.enabled, chosen: true });
       savePrefs();
       renderNotify();
       say(prefs.notify.enabled ? "Erinnerungen an" : "Erinnerungen aus");
@@ -1709,6 +2075,69 @@ function bindNotify() {
   });
 }
 
+const launch = { state: null, busy: false };
+
+function launchDesc(state) {
+  if (!state.pending) return `${BRAND} startet nach dem Anmelden von selbst, damit Erinnerungen auch nach einem Neustart kommen.`;
+  return systemName() === "Windows"
+    ? `Windows hat den Autostart für ${BRAND} abgeschaltet. Schalte ihn in den Einstellungen unter Apps › Autostart wieder ein.`
+    : `macOS wartet noch auf deine Erlaubnis. Schalte ${BRAND} in den Systemeinstellungen unter Allgemein › Anmeldeobjekte ein.`;
+}
+
+function renderLaunch() {
+  const state = launch.state;
+  let card = $("launchCard");
+  if (!state?.supported) {
+    card?.remove();
+    return;
+  }
+  if (!card) {
+    card = Object.assign(document.createElement("div"), { className: "set-card", id: "launchCard" });
+    $("notifyKinds").after(card);
+  }
+  const settings = state.pending && typeof window.hubShell?.openLoginItems === "function"
+    ? `<button class="text-button row-action" type="button" id="launchSettings">${icon("settings")}<span>${systemName() === "Windows" ? "Einstellungen" : "Systemeinstellungen"} öffnen</span></button>`
+    : "";
+  keepFocus(card, () => {
+    card.innerHTML = `<div class="set-row" id="rowLaunch"><div class="set-row-text"><p class="set-row-label" id="rowLaunchLabel">Beim Anmelden starten</p><p class="set-row-desc" id="rowLaunchDesc">${esc(launchDesc(state))}</p>${settings}</div><div class="set-row-control">${switchHtml("launchToggle", !!state.enabled, "rowLaunchLabel", { disabled: launch.busy, describedBy: "rowLaunchDesc" })}</div></div>`;
+  });
+}
+
+async function loadLaunch() {
+  if (typeof window.hubShell?.startAtLogin !== "function") return;
+  try {
+    launch.state = await window.hubShell.startAtLogin();
+  } catch {
+    launch.state = null;
+  }
+  renderLaunch();
+}
+
+async function setLaunch(wanted) {
+  launch.busy = true;
+  renderLaunch();
+  let state = null;
+  try {
+    state = await window.hubShell.setStartAtLogin(wanted);
+  } catch (error) {
+    state = { ...launch.state, error: error?.message || "" };
+  }
+  launch.busy = false;
+  launch.state = state?.supported ? state : launch.state;
+  renderLaunch();
+  if (state?.error) toast(`Das hat nicht geklappt. ${esc(systemName())} meldet: „${esc(state.error)}“`, { icon: "circle-alert", duration: 9000 });
+  else if (wanted && state && !state.enabled && !state.pending) toast(`${esc(systemName())} hat den Autostart nicht übernommen.`, { icon: "circle-alert" });
+  else if (state) say(state.enabled ? "Beim Anmelden starten an" : "Beim Anmelden starten aus");
+}
+
+function bindLaunch() {
+  $("benachrichtigungen").addEventListener("click", (event) => {
+    if (event.target.closest("#launchToggle") && !launch.busy) setLaunch(!launch.state?.enabled);
+    else if (event.target.closest("#launchSettings")) window.hubShell.openLoginItems?.();
+  });
+  addEventListener("focus", () => launch.state?.pending && loadLaunch());
+}
+
 const look = { theme: ["light", "dark"].includes(root.dataset.themeMode) ? root.dataset.themeMode : "auto" };
 const systemDark = matchMedia("(prefers-color-scheme: dark)");
 
@@ -1726,8 +2155,6 @@ function applyTheme(mode, { animate = true } = {}) {
     setTheme(mode);
     return;
   }
-  if (mode === "light" || mode === "dark") storage.set(THEME_KEY, mode);
-  else removeKey(THEME_KEY);
   root.dataset.theme = mode === "auto" ? (systemDark.matches ? "dark" : "light") : mode;
   root.dataset.themeMode = mode;
 }
@@ -1773,7 +2200,7 @@ function renderLook() {
     card.innerHTML = [
       row({ id: "rowTheme", label: "Farbschema", desc: themeDesc(), cls: "is-stack", control: `<div class="segmented look-modes" role="group" aria-labelledby="rowThemeLabel" aria-describedby="rowThemeDesc">${modes.map(([key, text, glyph]) => `<button type="button" id="theme-${key}" data-scheme="${key}" aria-pressed="${look.theme === key}">${icon(glyph)}${text}</button>`).join("")}</div>` }),
       row({ id: "rowMotion", label: "Bewegung reduzieren", desc: motionDesc, control: switchHtml("motionToggle", motionReduced(), "rowMotionLabel", { disabled: locked, describedBy: "rowMotionDesc" }) }),
-      `<div class="set-row" id="rowKeys"><div class="set-row-text"><p class="set-row-label" id="rowKeysLabel">Einzeltasten-Kürzel</p><p class="set-row-desc" id="rowKeysDesc">N für eine Notiz, J und K durch Listen, X hakt ab. Aus, wenn du mit Sprachsteuerung arbeitest.</p><button class="text-button row-action" type="button" id="showShortcuts">${icon("keyboard")}Alle Kürzel ansehen</button></div><div class="set-row-control">${switchHtml("keysToggle", singleKeys(), "rowKeysLabel", { describedBy: "rowKeysDesc" })}</div></div>`,
+      `<div class="set-row" id="rowKeys"><div class="set-row-text"><p class="set-row-label" id="rowKeysLabel">Einzeltasten-Kürzel</p><p class="set-row-desc" id="rowKeysDesc">N für eine Notiz, J und K durch Listen, X hakt ab. Aus, wenn du mit Sprachsteuerung arbeitest.</p><button class="text-button row-action" type="button" id="showShortcuts">${icon("keyboard")}<span>Alle Kürzel ansehen</span></button></div><div class="set-row-control">${switchHtml("keysToggle", singleKeys(), "rowKeysLabel", { describedBy: "rowKeysDesc" })}</div></div>`,
     ].join("");
   });
 }
@@ -1816,24 +2243,45 @@ function bindLook() {
   }).observe(root, { attributes: true, attributeFilter: ["data-theme-mode"] });
 }
 
-const placeState = { editing: false, place: null, query: "", results: [], searching: false, timer: 0, ticket: 0 };
+const placeState = { editing: false, place: null, query: "", results: [], searching: false, stale: false, failed: false, timer: 0, ticket: 0 };
+const PLACE_WORDS = { home: "Zuhause", school: "Schule" };
+const placesCard = () => $("placesCard");
+const placeLine = (item) => (item.area && !item.name.includes(item.area) ? `${item.name}, ${item.area}` : item.name);
+
+function placeResultsHtml() {
+  if (placeState.results.length) {
+    const items = placeState.results.map((item, index) => `<li><button type="button" class="place-pick" data-place-pick="${index}"><span class="place-pick-icon" aria-hidden="true">${icon(item.kind === "stop" ? "train-front" : "map-pin")}</span><span class="place-pick-text"><b>${esc(item.name)}</b>${item.area ? `<small>${esc(item.area)}</small>` : ""}</span></button></li>`).join("");
+    return `<ul class="place-results" role="list" aria-label="Treffer">${items}</ul>`;
+  }
+  if (placeState.query.trim().length < 2) return "";
+  if (placeState.searching) return `<p class="set-row-desc">Suche …</p>`;
+  return `<p class="set-row-desc">${placeState.failed ? "Die Ortssuche ist gerade nicht erreichbar. Versuch es gleich noch einmal." : "Nichts gefunden. Versuch es mit Straße, Hausnummer und Ort."}</p>`;
+}
+
+function renderPlaceResults() {
+  const host = $("placeResults");
+  if (!host) return;
+  const active = document.activeElement?.closest?.("[data-place-pick]");
+  const index = active && host.contains(active) ? active.dataset.placePick : null;
+  host.innerHTML = placeResultsHtml();
+  if (index !== null) (host.querySelector(`[data-place-pick="${index}"]`) || $("placeInput"))?.focus({ preventScroll: true });
+}
 
 function renderPlaces() {
   const card = $("placesCard");
   const info = page.places || {};
   const weather = placeState.editing
     ? `<form class="set-row is-stack place-form" id="weatherForm" novalidate>
-        <div class="set-row-text"><label class="set-row-label" for="weatherInput">Wetter</label><p class="set-row-desc" id="weatherDesc">Ort für die Vorhersage auf der Übersicht</p></div>
+        <div class="set-row-text"><label class="set-row-label" for="weatherInput">Wetter</label><p class="set-row-desc" id="weatherDesc">Ort für die Vorhersage auf der Übersicht.${homeCountsForWeather() ? " Bleibt das Feld leer, gilt Zuhause." : ""}</p></div>
         <div class="set-row-control"><input class="field-control" id="weatherInput" value="${esc(prefs.places.weather)}" maxlength="40" autocomplete="address-level2" aria-describedby="weatherDesc weatherError"><button class="btn btn-quiet" type="button" id="weatherCancel">Abbrechen</button><button class="btn btn-primary" type="submit">Speichern</button>${errorHtml("weatherError", "")}</div>
       </form>`
-    : row({ id: "rowWeather", label: "Wetter", desc: "Ort für die Vorhersage auf der Übersicht", cls: "is-stack", control: `<span class="set-value">${esc(prefs.places.weather || "Noch nicht festgelegt")}</span><button class="btn btn-quiet" type="button" id="weatherEdit">${prefs.places.weather ? "Ändern" : "Festlegen"}</button>` });
+    : row({ id: "rowWeather", label: "Wetter", desc: "Ort für die Vorhersage auf der Übersicht", cls: "is-stack", control: `<span class="set-value">${esc(prefs.places.weather || (typeof info.weatherFromHome === "string" ? (info.weatherFromHome ? `${info.weatherFromHome}, wie Zuhause` : "Wie Zuhause") : "Noch nicht festgelegt"))}</span><button class="btn btn-quiet" type="button" id="weatherEdit">${prefs.places.weather ? "Ändern" : "Festlegen"}</button>` });
   const placeRow = (key, id, label, desc) => {
     if (placeState.place === key) {
-      const items = placeState.results.map((item, index) => `<li><button type="button" class="place-pick" data-place-pick="${index}">${icon(item.kind === "stop" ? "train-front" : "map-pin")}<span><b>${esc(item.name)}</b><small>${esc(item.area || "")}</small></span></button></li>`).join("");
-      return `<form class="set-row is-stack place-form" id="placeForm" data-place="${key}" novalidate>
-        <div class="set-row-text"><label class="set-row-label" for="placeInput">${label}</label><p class="set-row-desc">Haltestelle oder Adresse suchen</p></div>
-        <div class="set-row-control"><input class="field-control" id="placeInput" value="${esc(placeState.query)}" maxlength="80" autocomplete="off" placeholder="z. B. Hauptbahnhof"><button class="btn btn-quiet" type="button" id="placeCancel">Abbrechen</button></div>
-        ${items ? `<ul class="place-results" role="list">${items}</ul>` : placeState.query.length >= 2 ? `<p class="set-row-desc">${placeState.searching ? "Suche …" : "Nichts gefunden."}</p>` : ""}
+      return `<form class="set-row is-stack place-form" id="placeForm" data-place="${key}" novalidate autocomplete="off">
+        <div class="set-row-text"><label class="set-row-label" for="placeInput">${label}</label><p class="set-row-desc" id="placeDesc">Adresse oder Haltestelle suchen, dann einen Treffer wählen</p></div>
+        <div class="set-row-control"><input class="field-control" id="placeInput" value="${esc(placeState.query)}" maxlength="80" autocomplete="off" spellcheck="false" placeholder="Straße, Hausnummer, Ort" aria-describedby="placeDesc">${info[key] ? `<button class="btn btn-quiet" type="button" id="placeRemove">Entfernen</button>` : ""}<button class="btn btn-quiet" type="button" id="placeCancel">Abbrechen</button></div>
+        <div class="place-found" id="placeResults" aria-live="polite">${placeResultsHtml()}</div>
       </form>`;
     }
     return row({ id, label, desc, cls: "is-stack", control: `<span class="set-value">${esc(info[key] || "Noch nicht festgelegt")}</span><button class="btn btn-quiet" type="button" data-place-edit="${key}">${info[key] ? "Ändern" : "Festlegen"}</button>` });
@@ -1851,13 +2299,13 @@ async function saveWeatherPlace(value, input) {
   const before = prefs.places.weather;
   try {
     const result = await request("PUT", "/api/ui/weather/place", { name: value });
-    const place = result.place || value;
+    const place = value ? result.place || value : "";
     placeState.editing = false;
-    page.places = { ...(page.places || {}), weather: place };
+    page.places = { ...(page.places || {}), weather: place, weatherFromHome: place ? null : result.weatherFromHome ?? null };
     prefs.places.weather = place;
     savePrefs();
     renderPlaces();
-    if (place !== before) toast(`Wetter jetzt für ${esc(place)}`, { icon: "map-pin" });
+    if (place !== before) toast(place ? `Wetter jetzt für ${esc(place)}` : "Das Wetter richtet sich wieder nach Zuhause", { icon: "map-pin" });
     $("weatherEdit")?.focus({ preventScroll: true });
   } catch (error) {
     setError(input, $("weatherError"), error.message || "Diesen Ort finde ich gerade nicht. Versuch es mit dem Namen der Stadt.");
@@ -1870,82 +2318,183 @@ async function saveWeatherPlace(value, input) {
 async function searchPlaces(query) {
   const ticket = ++placeState.ticket;
   placeState.searching = true;
-  renderPlaces();
+  placeState.failed = false;
+  renderPlaceResults();
   let results = [];
+  let failed = false;
   try {
     const response = await fetch(`/api/ui/transit/suche?${new URLSearchParams({ q: query })}`, { credentials: "same-origin" });
     const body = await response.json();
-    results = response.ok ? body.places || [] : [];
-  } catch {}
+    if (response.ok) results = body.places || [];
+    else failed = true;
+  } catch {
+    failed = true;
+  }
   if (ticket !== placeState.ticket) return;
   placeState.searching = false;
+  placeState.stale = false;
+  placeState.failed = failed;
   placeState.results = results;
-  renderPlaces();
-  const input = $("placeInput");
-  if (input) {
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
-  }
+  renderPlaceResults();
 }
+
+function closePlaceForm(key) {
+  clearTimeout(placeState.timer);
+  placeState.ticket += 1;
+  placeState.place = null;
+  placeState.results = [];
+  placeState.query = "";
+  placeState.searching = false;
+  placeState.stale = false;
+  renderPlaces();
+  placesCard().querySelector(`[data-place-edit="${key}"]`)?.focus({ preventScroll: true });
+}
+
+// weatherFromHome is the town the forecast takes from home, "" where the address names none, and null while it does not go by home.
+// Only the desktop server knows that rule and says so, in the phone app the weather needs a place of its own.
+const followedWeather = (answer) => ({
+  ...(answer && "weatherFromHome" in answer ? { weatherFromHome: answer.weatherFromHome } : {}),
+  ...(answer && "weatherCanFollowHome" in answer ? { weatherCanFollowHome: answer.weatherCanFollowHome } : {}),
+});
+const homeCountsForWeather = () => !!page.places?.weatherCanFollowHome;
 
 async function pickPlace(key, item) {
   try {
-    const response = await fetch(`/api/ui/places/${key}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: item.name, area: item.area || "", lat: item.lat, lon: item.lon, stop: item.kind === "stop" ? item.id : "" }),
-      credentials: "same-origin",
-    });
-    if (!response.ok) throw new Error();
-    page.places = { ...(page.places || {}), [key]: item.name };
-    placeState.place = null;
-    placeState.results = [];
-    placeState.query = "";
-    renderPlaces();
-    toast(`${key === "home" ? "Zuhause" : "Schule"}: ${esc(item.name)}`, { icon: "map-pin" });
-    card().querySelector(`[data-place-edit="${key}"]`)?.focus({ preventScroll: true });
+    const saved = await request("PUT", `/api/ui/places/${key}`, { name: item.name, area: item.area || "", lat: item.lat, lon: item.lon, stop: item.kind === "stop" ? item.id : "" });
+    page.places = { ...(page.places || {}), [key]: placeLine(item), ...followedWeather(saved) };
+    closePlaceForm(key);
+    toast(`${PLACE_WORDS[key]}: ${esc(placeLine(item))}`, { icon: "map-pin" });
   } catch {
     toast("Der Ort ließ sich gerade nicht speichern.", { icon: "circle-alert" });
   }
 }
 
-const card = () => $("placesCard");
+async function removePlace(key) {
+  const before = (page.places || {})[key] || "";
+  try {
+    const result = await request("DELETE", `/api/ui/places/${key}`);
+    page.places = { ...(page.places || {}), [key]: "", ...followedWeather(result) };
+    closePlaceForm(key);
+    const removed = result?.removed;
+    toast(`${PLACE_WORDS[key]} entfernt`, {
+      icon: "map-pin",
+      action: removed && before ? { label: "Rückgängig", undo: true, run: async () => {
+        try {
+          const restored = await request("PUT", `/api/ui/places/${key}`, removed);
+          page.places = { ...(page.places || {}), [key]: before, ...followedWeather(restored) };
+          renderPlaces();
+        } catch {
+          toast("Der Ort ließ sich gerade nicht zurückholen.", { icon: "circle-alert" });
+        }
+      } } : undefined,
+    });
+  } catch {
+    toast("Der Ort ließ sich gerade nicht entfernen.", { icon: "circle-alert" });
+  }
+}
+
+const passDraft = { net: PASS_NETS[0][0], zones: PASS_ZONES[0] };
+
+function renderTransit() {
+  const card = $("transitCard");
+  const transit = prefs.transit;
+  const chips = transit.passes.length
+    ? `<ul class="room-chips pass-chips" aria-label="Deine Zeitkarten">${transit.passes.map((pass, index) => `<li class="room-chip"><span>${esc(passLabel(pass))}</span><button type="button" class="chip-x" id="pass-remove-${index}" data-remove-pass="${index}" aria-label="${esc(passLabel(pass))} entfernen">${icon("x")}</button></li>`).join("")}</ul>`
+    : "";
+  const form = `<form class="pass-add" id="passForm" novalidate>
+      <label class="visually-hidden" for="passNet">Tarifgebiet</label>
+      <select class="field-control" id="passNet">${PASS_NETS.map(([net, name]) => `<option value="${esc(net)}"${net === passDraft.net ? " selected" : ""}>${esc(name)}</option>`).join("")}</select>
+      <div class="segmented" role="group" aria-label="Tarifbereich">${PASS_ZONES.map((zones) => `<button type="button" id="pass-zones-${zones}" data-pass-zones="${zones}" aria-pressed="${zones === passDraft.zones}">${zones}</button>`).join("")}</div>
+      <button class="btn btn-quiet" type="submit" id="passSubmit">${icon("plus")}Hinzufügen</button>
+    </form>`;
+  keepFocus(card, () => {
+    card.innerHTML = [
+      row({ id: "rowGermanyTicket", label: "Deutschlandticket", desc: "Gilt in Bus, Tram, S- und U-Bahn und in Regionalzügen, nicht im Fernverkehr.", control: switchHtml("germanyTicket", transit.deutschlandticket, "rowGermanyTicketLabel", { describedBy: "rowGermanyTicketDesc" }) }),
+      row({ id: "rowPasses", label: "Zeitkarten im VBB", desc: "Monatskarte, Abo oder Schülerticket für einen Tarifbereich in Berlin und Brandenburg. Der Fahrplan zeigt dann, ob eine Verbindung damit geht und was sie sonst kostet.", cls: "is-stack pass-row", control: chips + form }),
+      row({ id: "rowMaps", label: "Karten-App", desc: `Öffnet Fußwege aus dem Fahrplan. Automatisch nimmt auf diesem Gerät ${platform.mac ? "Apple Karten" : "Google Maps"}.`, cls: "is-stack", control: `<div class="segmented" role="group" aria-labelledby="rowMapsLabel" aria-describedby="rowMapsDesc">${MAP_APPS.map(([key, text, more]) => `<button type="button" id="maps-${key}" data-maps="${key}" aria-pressed="${transit.maps === key}">${text}${more ? `<span class="maps-more">${more}</span>` : ""}</button>`).join("")}</div>` }),
+    ].join("");
+  });
+}
+
+function bindTransit() {
+  const card = $("transitCard");
+  card.addEventListener("click", (event) => {
+    const zones = event.target.closest("[data-pass-zones]");
+    const remove = event.target.closest("[data-remove-pass]");
+    const maps = event.target.closest("[data-maps]");
+    if (event.target.closest("#germanyTicket")) {
+      commitPrefs((value) => (value.transit.deutschlandticket = !value.transit.deutschlandticket), renderTransit);
+      say(prefs.transit.deutschlandticket ? "Deutschlandticket hinterlegt" : "Deutschlandticket entfernt");
+    } else if (zones) {
+      passDraft.zones = zones.dataset.passZones;
+      renderTransit();
+    } else if (remove) {
+      const index = Number(remove.dataset.removePass);
+      const label = passLabel(prefs.transit.passes[index]);
+      commitPrefs((value) => value.transit.passes.splice(index, 1), renderTransit, `Zeitkarte ${esc(label)} entfernt`, "ticket");
+      $("passNet")?.focus({ preventScroll: true });
+    } else if (maps && maps.dataset.maps !== prefs.transit.maps) {
+      commitPrefs((value) => (value.transit.maps = maps.dataset.maps), renderTransit);
+      say(`Karten-App: ${maps.textContent.trim()}`);
+    }
+  });
+  card.addEventListener("change", (event) => {
+    if (event.target.id === "passNet") passDraft.net = event.target.value;
+  });
+  card.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (prefs.transit.passes.some((pass) => pass.net === passDraft.net && pass.zones === passDraft.zones)) {
+      toast(`Die Zeitkarte ${esc(passLabel(passDraft))} ist schon hinterlegt.`, { icon: "ticket" });
+      return;
+    }
+    commitPrefs((value) => value.transit.passes.push({ ...passDraft }), renderTransit, `Zeitkarte ${esc(passLabel(passDraft))} hinterlegt`, "ticket");
+  });
+}
 
 function bindPlaces() {
-  const card = $("placesCard");
-  card.addEventListener("input", (event) => {
+  const host = $("placesCard");
+  host.addEventListener("input", (event) => {
     if (event.target.id !== "placeInput") return;
     placeState.query = event.target.value;
     clearTimeout(placeState.timer);
     if (placeState.query.trim().length < 2) {
+      placeState.ticket += 1;
       placeState.results = [];
+      placeState.searching = false;
+      placeState.stale = false;
+      renderPlaceResults();
       return;
     }
+    placeState.stale = true;
+    placeState.ticket += 1;
     placeState.timer = setTimeout(() => searchPlaces(placeState.query.trim()), 280);
   });
-  card.addEventListener("click", (event) => {
+  host.addEventListener("click", (event) => {
     const edit = event.target.closest("[data-place-edit]");
     if (edit) {
+      clearTimeout(placeState.timer);
+      placeState.ticket += 1;
       placeState.place = edit.dataset.placeEdit;
       placeState.query = "";
       placeState.results = [];
+      placeState.searching = false;
+      placeState.stale = false;
       renderPlaces();
       $("placeInput")?.focus();
       return;
     }
     const pick = event.target.closest("[data-place-pick]");
     if (pick) {
-      const key = card().querySelector("#placeForm")?.dataset.place;
       const item = placeState.results[Number(pick.dataset.placePick)];
-      if (key && item) pickPlace(key, item);
+      if (placeState.place && item) pickPlace(placeState.place, item);
+      return;
+    }
+    if (event.target.closest("#placeRemove")) {
+      removePlace(placeState.place);
       return;
     }
     if (event.target.closest("#placeCancel")) {
-      const key = placeState.place;
-      placeState.place = null;
-      placeState.results = [];
-      renderPlaces();
-      card().querySelector(`[data-place-edit="${key}"]`)?.focus();
+      closePlaceForm(placeState.place);
       return;
     }
     if (event.target.closest("#weatherEdit")) {
@@ -1958,25 +2507,44 @@ function bindPlaces() {
       $("weatherEdit")?.focus();
     }
   });
-  card.addEventListener("submit", (event) => {
-    if (event.target.id !== "weatherForm") return;
+  host.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (event.target.id === "placeForm") {
+      if (placeState.results.length && !placeState.stale) pickPlace(placeState.place, placeState.results[0]);
+      return;
+    }
+    if (event.target.id !== "weatherForm") return;
     const input = $("weatherInput");
     const value = input.value.replace(/\s+/g, " ").trim();
-    if (!value) {
+    if (!value && !homeCountsForWeather()) {
       setError(input, $("weatherError"), "Trag einen Ort ein, zum Beispiel Potsdam.");
       input.focus();
       return;
     }
     saveWeatherPlace(value, input);
   });
-  card.addEventListener("keydown", (event) => {
+  host.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && event.target.id === "weatherInput") {
       event.preventDefault();
       placeState.editing = false;
       renderPlaces();
       $("weatherEdit")?.focus();
+      return;
     }
+    if (!event.target.closest("#placeForm")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closePlaceForm(placeState.place);
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const picks = [...host.querySelectorAll(".place-pick")];
+    if (!picks.length) return;
+    const index = picks.indexOf(event.target.closest(".place-pick"));
+    const next = event.key === "ArrowDown" ? index + 1 : index - 1;
+    event.preventDefault();
+    if (next < 0) $("placeInput")?.focus();
+    else picks[Math.min(next, picks.length - 1)].focus();
   });
 }
 
@@ -2106,15 +2674,11 @@ function subjectFormHtml(key) {
   const owners = hueOwners(key);
   const hue = creating ? HUES.find((item) => !owners[item]) || HUES[0] : info.hue;
   const type = creating ? "GK" : info.type;
-  const count = creating ? 0 : cellsOf(key).length;
   const hues = HUES.map((item) => {
     const text = [HUE_NAMES[item], owners[item] ? `schon bei ${joinWords(owners[item])}` : ""].filter(Boolean).join(", ");
     return `<label class="hue-pick" style="--swatch:var(--hue-${item})" data-tip="${esc(text)}"><input type="radio" name="hue" value="${item}"${item === hue ? " checked" : ""}><span class="visually-hidden">${esc(text)}</span>${icon("check")}</label>`;
   }).join("");
   const types = COURSE_TYPES.map((item) => `<label class="choice"><input type="radio" name="type" value="${item}"${item === type ? " checked" : ""}><span>${COURSE_WORDS[item]}</span></label>`).join("");
-  const iserv = !creating && !info.custom;
-  const lessonsText = count ? `${esc(info.label)} steht in ${plural(count, "Stunde", "Stunden")} im Stundenplan. Beim Löschen werden sie geleert.` : "";
-  const gradesText = iserv ? `Die Noten ${count ? "" : `von ${esc(info.label)} `}bleiben erhalten und zählen weiter im Schnitt. Tests und Abgaben des Fachs blendet ${BRAND} aus, unter „Gelöscht“ holst du es zurück.` : "";
   return `<form class="set-form subject-form" id="subjectForm" data-key="${esc(key)}" novalidate aria-labelledby="subjectFormTitle">
       <p class="set-form-title" id="subjectFormTitle">${creating ? "Neues Fach" : `${esc(info.label)} bearbeiten`}</p>
       <div class="set-form-grid">
@@ -2131,7 +2695,7 @@ function subjectFormHtml(key) {
         <div class="form-field"><label class="form-label" for="subjectNewTitle">Anrede</label><select class="field-control" id="subjectNewTitle" name="newTitle">${TITLES.map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></div>
         <div class="form-field"><label class="form-label" for="subjectNewName">Nachname der neuen Lehrkraft</label><input class="field-control" id="subjectNewName" name="newName" maxlength="40" placeholder="z. B. Schulz" autocomplete="off" aria-describedby="subjectNewNameError">${errorHtml("subjectNewNameError", "")}</div>
       </div>
-      ${creating ? "" : `<div class="form-confirm" id="subjectConfirm" role="alert" hidden><p>${[lessonsText, gradesText].filter(Boolean).join(" ")}</p><div class="set-form-actions"><button type="button" class="btn btn-quiet" id="subjectKeep">Behalten</button><button type="button" class="btn btn-quiet danger-button" id="subjectConfirmDelete">${icon("trash-2")}Fach löschen</button></div></div>`}
+      ${creating ? "" : `<div class="form-confirm" id="subjectConfirm" role="alert" hidden><p id="subjectConfirmText"></p><div class="set-form-actions"><button type="button" class="btn btn-quiet" id="subjectKeep">Behalten</button><button type="button" class="btn btn-quiet danger-button" id="subjectConfirmDelete">${icon("trash-2")}Fach löschen</button></div></div>`}
       <div class="set-form-actions" id="subjectActions">
         ${creating ? "" : `<button type="button" class="btn btn-quiet danger-button form-delete" id="subjectDelete">${icon("trash-2")}Löschen</button>`}
         <button type="button" class="btn btn-quiet" id="subjectCancel">Abbrechen</button>
@@ -2258,6 +2822,8 @@ function saveSubject(formNode) {
     if (name !== plainName(data.subjects[key].label)) own.name = name;
     Object.assign(own, { short, hue, type, teacher, room });
     draft.subjects.items[key] = own;
+    // The Standardraum is where the lessons are that have no room of their own.
+    followRoom(draft.lessons, schoolDefaults.timetable, data.timetable, key, data.subjects[key].room, room);
   }, creating ? `${esc(name)} angelegt` : "", creating ? "plus" : "check");
   catalog.subject = null;
   renderSubjects();
@@ -2271,19 +2837,55 @@ function saveSubject(formNode) {
   }
 }
 
+// A subject from the school plan, and an own one that has grades or entries, is only put aside: its grades stay visible and count on.
+function keptOnDelete(key) {
+  const use = page.subjectUse?.[key];
+  return !data.subjects[key]?.custom || !!(use && (use.grades || use.entries));
+}
+
+function deleteWarning(key) {
+  const info = data.subjects[key];
+  const count = cellsOf(key).length;
+  const lessonsText = count ? `${esc(info.label)} steht in ${plural(count, "Stunde", "Stunden")} im Stundenplan. Beim Löschen werden sie geleert.` : "";
+  const gradesText = keptOnDelete(key) ? `Die Noten ${count ? "" : `von ${esc(info.label)} `}bleiben erhalten und zählen weiter im Schnitt. Tests und Abgaben des Fachs blendet ${BRAND} aus, unter „Gelöscht“ holst du es zurück.` : "";
+  return [lessonsText, gradesText].filter(Boolean).join(" ");
+}
+
+// What hangs on a subject is counted when the page loads. Before a subject goes it is counted again, so that a grade entered since then is not overlooked.
+async function countSubjectUse() {
+  if (root.dataset.shell) return;
+  try {
+    page.subjectUse = (await request("GET", "/api/ui/subjects/use")).use;
+  } catch {}
+}
+
+async function askDeleteSubject(key) {
+  await countSubjectUse();
+  if (catalog.subject !== key || !$("subjectConfirm")) return;
+  if (data.subjects[key]?.custom && !cellsOf(key).length && !keptOnDelete(key)) {
+    deleteSubject(key);
+    return;
+  }
+  $("subjectConfirmText").innerHTML = deleteWarning(key);
+  $("subjectConfirm").hidden = false;
+  $("subjectActions").hidden = true;
+  $("subjectKeep").focus({ preventScroll: true });
+}
+
 function deleteSubject(key) {
   const info = data.subjects[key];
   if (!info) return;
   const shown = cellsOf(key).length;
   const iserv = !info.custom;
+  const kept = keptOnDelete(key);
   commitCatalog((draft) => {
     cellsOf(key, { all: true }).forEach(([week, dow, n]) => {
       if (iserv && baseLesson(week, dow, n)?.subject === key) delete draft.lessons[cellKey(week, dow, n)];
       else setLesson(draft.lessons, week, dow, n, null);
     });
-    if (!iserv) delete draft.subjects.items[key];
+    if (!kept) delete draft.subjects.items[key];
     else if (!draft.subjects.removed.includes(key)) draft.subjects.removed.push(key);
-  }, `${esc(info.label)} gelöscht${shown ? `, ${plural(shown, "Stunde", "Stunden")} geleert` : ""}${iserv ? ". Die Noten bleiben im Schnitt." : ""}`, "trash-2");
+  }, `${esc(info.label)} gelöscht${shown ? `, ${plural(shown, "Stunde", "Stunden")} geleert` : ""}${kept ? ". Die Noten bleiben im Schnitt." : ""}`, "trash-2");
   catalog.subject = null;
   renderSubjects();
   $("subjectAdd")?.focus({ preventScroll: true });
@@ -2394,16 +2996,8 @@ function bindCatalog() {
     if (edit) openSubjectForm(edit.dataset.editSubject);
     else if (event.target.closest("#subjectCancel")) closeSubjectForm();
     else if (event.target.closest("[data-restore-subject]")) restoreSubject(event.target.closest("[data-restore-subject]").dataset.restoreSubject);
-    else if (event.target.closest("#subjectDelete")) {
-      const key = catalog.subject;
-      if (data.subjects[key]?.custom && !cellsOf(key).length) {
-        deleteSubject(key);
-        return;
-      }
-      $("subjectConfirm").hidden = false;
-      $("subjectActions").hidden = true;
-      $("subjectKeep").focus({ preventScroll: true });
-    } else if (event.target.closest("#subjectKeep")) {
+    else if (event.target.closest("#subjectDelete")) askDeleteSubject(catalog.subject);
+    else if (event.target.closest("#subjectKeep")) {
       $("subjectConfirm").hidden = true;
       $("subjectActions").hidden = false;
       $("subjectDelete").focus({ preventScroll: true });
@@ -2543,7 +3137,87 @@ function reloadState() {
   renderAll();
 }
 
-const assistant = { status: null, busy: false };
+const assistant = { status: null, config: null, busy: false, saving: false, basic: storedBasic() };
+
+function storedBasic() {
+  try {
+    return Boolean(JSON.parse(document.getElementById("appStore")?.textContent || "{}")["app-assistant-basic"]);
+  } catch {
+    return false;
+  }
+}
+const AI_SOURCES = [
+  ["auto", "Automatisch", "Nimmt das eingebaute Sprachmodell. Fehlt es, kommt Ollama an die Reihe, danach Claude."],
+  ["local", "Eingebautes Sprachmodell", "Läuft auf diesem Gerät, auch ohne Internet."],
+  ["ollama", "Ollama", "Nutzt ein Modell, das Ollama auf diesem Gerät bereithält."],
+  ["claude", "Claude", "Schickt deine Frage und die Schuldaten, die sie braucht, an Anthropic. Dafür brauchst du einen eigenen API-Schlüssel."],
+  ["offline", "Ohne Sprachmodell", "Der Assistent beantwortet dann nur Fragen zu Stundenplan, Schule und Mathe."],
+];
+const AI_NAMES = { local: "das eingebaute Sprachmodell", ollama: "Ollama" };
+// Why the chosen source cannot answer right now. Whether a stored key is accepted only shows when a question is asked, so nothing here calls it valid.
+const AI_WAITS = {
+  local: () => "Es ist noch nicht installiert.",
+  ollama: (config) => (config.ollama_running ? "Ollama kennt dieses Modell nicht." : "Ollama läuft auf diesem Gerät gerade nicht."),
+  claude: (config) => (config.claude_api_key_set ? "Claude lässt sich auf diesem Gerät gerade nicht ansprechen." : "Es fehlt noch ein Schlüssel."),
+};
+
+function aiSourceRows() {
+  const config = assistant.config;
+  if (!config) return [];
+  const chosen = AI_SOURCES.some(([key]) => key === config.preferred_backend) ? config.preferred_backend : "auto";
+  const active = config.active || {};
+  let state = "";
+  if (chosen !== "offline") {
+    const model = active.model ? ` (${esc(active.model)})` : "";
+    if (chosen !== "auto" && active.backend !== chosen) state = ` ${AI_WAITS[chosen](config)} Bis dahin gibt es nur Antworten ohne Sprachmodell.`;
+    else if (active.backend === "claude") state = ` Fragen gehen mit deinem Schlüssel an Claude${model}.`;
+    else if (active.available && AI_NAMES[active.backend]) state = ` Gerade antwortet ${AI_NAMES[active.backend]}${model}.`;
+    else state = " Gerade ist kein Sprachmodell erreichbar.";
+  }
+  const options = AI_SOURCES.map(([key, name]) => `<option value="${key}"${key === chosen ? " selected" : ""}>${name}</option>`).join("");
+  const rows = [row({
+    id: "rowAiSource", label: "Antworten kommen von", forId: "aiSource", desc: AI_SOURCES.find(([key]) => key === chosen)[2] + state,
+    control: `<select class="field-control" id="aiSource" aria-describedby="rowAiSourceDesc">${options}</select>`, cls: "is-stack",
+  })];
+  if (chosen === "ollama") {
+    const loaded = config.ollama_models || [];
+    const missing = (name) => loaded.length > 0 && !loaded.includes(name) && !loaded.includes(`${name}:latest`);
+    const models = [...new Set([config.ollama_model, ...loaded].filter(Boolean))];
+    const choices = models.map((name) => `<option value="${esc(name)}"${name === config.ollama_model ? " selected" : ""}>${esc(name)}${missing(name) ? " (fehlt in Ollama)" : ""}</option>`).join("");
+    rows.push(row({
+      id: "rowAiOllama", label: "Ollama-Modell", forId: "aiOllamaModel",
+      desc: loaded.length ? "Zur Wahl stehen die Modelle, die Ollama auf diesem Gerät hat." : config.ollama_running ? "Ollama hat noch kein Modell. Lade dort zuerst eins." : "Ollama läuft auf diesem Gerät gerade nicht.",
+      control: `<select class="field-control" id="aiOllamaModel" aria-describedby="rowAiOllamaDesc">${choices}</select>`, cls: "is-stack",
+    }));
+  }
+  if (chosen === "claude") {
+    rows.push(config.claude_api_key_set
+      ? row({ id: "rowAiKey", label: "API-Schlüssel", desc: `Gespeichert: ${esc(config.claude_api_key_masked)}. Er liegt verschlüsselt auf diesem Gerät.`, control: `<button class="btn btn-quiet" type="button" id="aiKeyRemove">Entfernen</button>` })
+      : `<form class="set-row is-stack" id="aiKeyForm" novalidate autocomplete="off">
+          <div class="set-row-text"><label class="set-row-label" for="aiKeyInput">API-Schlüssel</label><p class="set-row-desc" id="aiKeyDesc">Aus der Anthropic-Konsole. Er wird verschlüsselt auf diesem Gerät abgelegt.</p></div>
+          <div class="set-row-control"><input class="field-control" id="aiKeyInput" type="password" maxlength="300" autocomplete="off" spellcheck="false" aria-describedby="aiKeyDesc aiKeyError"><button class="btn btn-primary" type="submit">Speichern</button>${errorHtml("aiKeyError", "")}</div>
+        </form>`);
+  }
+  return rows;
+}
+
+async function saveAiConfig(changes, done = "", focusNext = "") {
+  if (assistant.saving) return;
+  assistant.saving = true;
+  let saved = true;
+  try {
+    assistant.config = await request("POST", "/api/hub/assistant/config", changes);
+  } catch {
+    saved = false;
+    toast("Das ließ sich gerade nicht speichern. Versuch es gleich noch einmal.", { icon: "circle-alert" });
+  }
+  assistant.saving = false;
+  // A key that could not be saved stays in its field. Everything else is drawn again and so falls back to what is stored.
+  if (saved || !("claude_api_key" in changes)) renderAssistant();
+  if (!saved) return;
+  if (done) toast(done, { icon: "check" });
+  if (focusNext) $(focusNext)?.focus({ preventScroll: true });
+}
 const decimalGb = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const gigabytes = (bytes) => (bytes >= 1e9 ? `${decimalGb.format(bytes / 1e9)}\u00a0GB` : `${Math.max(1, Math.round((bytes || 0) / 1e6))}\u00a0MB`);
 
@@ -2577,11 +3251,15 @@ function renderAssistant() {
     meta.textContent = "Nicht verfügbar";
     rows = [row({ id: "rowAiState", label: "Sprachmodell", desc: "Für dieses Gerät gibt es keine passende Laufzeit." })];
   } else {
-    meta.textContent = "Nicht installiert";
+    meta.textContent = assistant.basic ? "Ohne Sprachmodell" : "Nicht installiert";
     const size = (status.runtime?.download || 0) + (model.download || 0);
-    rows = [row({ id: "rowAiState", label: "Sprachmodell", desc: `Nicht installiert. Ohne Sprachmodell beantwortet der Assistent nur Fragen zu Stundenplan, Schule und Mathe. Download ${gigabytes(size)}.`, control: open("Installieren", true) })];
+    const why = assistant.basic ? "Du nutzt den Assistenten ohne Sprachmodell, deshalb beantwortet er nur Fragen zu Stundenplan, Schule und Mathe." : "Ohne Sprachmodell beantwortet der Assistent nur Fragen zu Stundenplan, Schule und Mathe.";
+    rows = [row({ id: "rowAiState", label: "Sprachmodell", desc: `Nicht installiert. ${why} Download ${gigabytes(size)}.`, control: open("Installieren", true) })];
+    if (assistant.basic) {
+      rows.push(row({ id: "rowAiBasic", label: "Wahl beim Öffnen", desc: "Du hast „Ohne KI öffnen“ gewählt. Der Assistent fragt deshalb nicht mehr nach dem Sprachmodell.", control: `<button class="btn btn-quiet" type="button" id="aiAskAgain"${assistant.busy ? " disabled" : ""}>Wieder fragen</button>` }));
+    }
   }
-  keepFocus(card, () => (card.innerHTML = rows.join("")));
+  keepFocus(card, () => (card.innerHTML = [...rows, ...aiSourceRows()].join("")));
 }
 
 async function loadAssistant() {
@@ -2591,6 +3269,17 @@ async function loadAssistant() {
     assistant.status = null;
     $("aiSetCard").innerHTML = row({ id: "rowAiState", label: "Sprachmodell", desc: "Der Stand lässt sich gerade nicht abfragen." });
     return;
+  }
+  renderAssistant();
+  await loadAiConfig();
+}
+
+// Which source answers depends on what is installed, so this is asked again whenever that changes.
+async function loadAiConfig() {
+  try {
+    assistant.config = await request("GET", "/api/hub/assistant/config");
+  } catch {
+    assistant.config = null;
   }
   renderAssistant();
 }
@@ -2609,6 +3298,24 @@ async function removeAssistant(button) {
     assistant.busy = false;
     renderAssistant();
   }
+  await loadAiConfig();
+}
+
+async function askAgain() {
+  assistant.busy = true;
+  renderAssistant();
+  try {
+    const response = await fetch("/api/ui/store/app-assistant-basic", { method: "DELETE", credentials: "same-origin" });
+    if (!response.ok) throw new Error(String(response.status));
+    assistant.basic = false;
+    toast("Beim nächsten Öffnen fragt der Assistent wieder nach dem Sprachmodell.", { icon: "check" });
+  } catch {
+    toast("Das ließ sich gerade nicht speichern. Versuch es gleich noch einmal.", { icon: "circle-alert" });
+  } finally {
+    assistant.busy = false;
+    renderAssistant();
+  }
+  $("rowAiState")?.querySelector("a, button")?.focus({ preventScroll: true });
 }
 
 async function updateRuntime() {
@@ -2634,6 +3341,23 @@ function bindAssistant() {
     const button = event.target.closest("#aiRemove");
     if (button && !button.disabled) removeAssistant(button);
     if (event.target.closest("#aiUpdate:not(:disabled)")) updateRuntime();
+    if (event.target.closest("#aiAskAgain:not(:disabled)")) askAgain();
+    const keyRemove = event.target.closest("#aiKeyRemove");
+    if (keyRemove && confirmTwice("ai-key", keyRemove, "Wirklich entfernen?", "Zum Entfernen noch einmal drücken")) saveAiConfig({ claude_api_key: "" }, "Schlüssel entfernt", "aiKeyInput");
+  });
+  $("aiSetCard").addEventListener("change", (event) => {
+    if (event.target.id === "aiSource") saveAiConfig({ preferred_backend: event.target.value });
+    else if (event.target.id === "aiOllamaModel") saveAiConfig({ ollama_model: event.target.value });
+  });
+  $("aiSetCard").addEventListener("submit", (event) => {
+    if (event.target.id !== "aiKeyForm") return;
+    event.preventDefault();
+    const input = $("aiKeyInput");
+    const key = input.value.trim();
+    const wrong = !key ? "Füg hier deinen Schlüssel ein." : /^sk-ant-\S+$/.test(key) ? "" : "Das sieht nicht nach einem Anthropic-Schlüssel aus. Er beginnt mit sk-ant-.";
+    setError(input, $("aiKeyError"), wrong);
+    if (wrong) input.focus();
+    else saveAiConfig({ claude_api_key: key }, "Schlüssel gespeichert", "aiKeyRemove");
   });
   loadAssistant();
 }
@@ -2645,30 +3369,208 @@ function renderDataMeta() {
   if (node) node.textContent = areas.length ? `Auf diesem Gerät: ${joinWords(areas)}` : "Noch nichts geändert";
 }
 
+let keptData = null;
+
+function storageManager() {
+  try {
+    return window.top.navigator.storage || null;
+  } catch {
+    return navigator.storage || null;
+  }
+}
+
+function storageRow() {
+  const note = storageNote({ shell: root.dataset.shell, persisted: keptData, device: appleDevice(), homeScreen: onHomeScreen(), macSafari: safariOnMac(navigator.userAgent, navigator.maxTouchPoints || 0), brand: BRAND });
+  if (!note) return "";
+  const control = {
+    tab: `<span class="status is-warn">Vorläufig</span>`,
+    kept: `<span class="status is-ok">${icon("circle-check")}Dauerhaft</span>`,
+    ask: `<button class="btn btn-quiet" type="button" id="dataKeep">${icon("hard-drive")}Dauerhaft speichern</button>`,
+  }[note.state];
+  return row({ id: "rowStorage", label: "Speicher", desc: note.text, control });
+}
+
+async function keepData() {
+  let kept = false;
+  try {
+    kept = await storageManager().persist();
+  } catch {}
+  keptData = kept;
+  renderData();
+  if (kept) say("Dauerhaft gespeichert");
+  else toast("Der Browser lässt das gerade nicht zu. Sichere deine Einträge ab und zu mit Exportieren.", { icon: "circle-alert" });
+}
+
 function renderData() {
   const card = $("dataCard");
   keepFocus(card, () => {
     card.innerHTML = [
-      row({ id: "rowExport", label: "Sichern", desc: "Stundenplan, Fächer, Stundenraster, Darstellung und Einstellungen als Datei", control: `<button class="btn btn-quiet" type="button" id="dataExport">${icon("download")}Exportieren</button>` }),
-      row({ id: "rowImport", label: "Wiederherstellen", desc: `Übernimmt eine gesicherte Datei von ${BRAND}`, control: `<button class="btn btn-quiet" type="button" id="dataImport">${icon("upload")}Importieren</button>` }),
-      row({ id: "rowWipe", label: "Alles auf diesem Gerät löschen", desc: "Stundenplan, Fächer und Stundenraster wieder wie in IServ, alle Einstellungen wie beim ersten Start.", control: `<button class="btn btn-quiet danger-button" type="button" id="dataWipe">${icon("trash-2")}Löschen</button>` }),
+      storageRow(),
+      row({ id: "rowExport", label: "Sichern", desc: "Stundenplan, Fächer, Noten, Tests, Klausuren, Aufgaben, Termine, Orte und Einstellungen als Datei", control: `<button class="btn btn-quiet" type="button" id="dataExport">${icon("download")}Exportieren</button>` }),
+      row({ id: "rowImport", label: "Wiederherstellen", desc: `Übernimmt eine gesicherte Datei von ${BRAND}, auch von einem anderen Gerät. Vorhandene Noten, Aufgaben und Termine bleiben. Stecken Noten oder Aufgaben in der Datei, kannst du vorher wählen, ob nur der Stundenplan kommt.`, control: `<button class="btn btn-quiet" type="button" id="dataImport">${icon("upload")}Importieren</button>` }),
+      row({ id: "rowWipe", label: "Alles auf diesem Gerät löschen", desc: "Nimmt alle Änderungen an Stundenplan und Fächern zurück und stellt die Einstellungen wie beim ersten Start.", control: `<button class="btn btn-quiet danger-button" type="button" id="dataWipe">${icon("trash-2")}Löschen</button>` }),
     ].join("");
   });
   renderDataMeta();
 }
 
-function exportData() {
-  const payload = { app: BRAND, version: 1, exportedAt: new Date().toISOString(), values: snapshot() };
-  const name = `${slug(BRAND) || "app"}-einstellungen-${isoDate(now())}.json`;
-  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-  toast(`Gesichert als „${esc(name)}“`, { icon: "download" });
+function portableValues() {
+  const values = snapshot();
+  if (!schoolDefaults) return values;
+  applySchoolEdits();
+  const whole = wholeSchool({
+    subjects: data.subjects,
+    teachers: data.teachers,
+    rooms: data.rooms,
+    blocks: data.blocks,
+    timetable: data.timetable,
+    edits: storage.get(LOCAL_KEYS.lessons),
+    gone: { teachers: storage.get(LOCAL_KEYS.teachers)?.removed, rooms: storage.get(LOCAL_KEYS.rooms)?.removed },
+    weeks: abWeeks(),
+  });
+  Object.entries(whole).forEach(([key, value]) => (values[key] = JSON.stringify(value)));
+  const saved = storage.get(PREFS_KEY);
+  const own = saved && typeof saved === "object" ? saved : {};
+  const basics = { ...(own.school || {}), grade: prefs.school.grade, state: prefs.school.state, birthday: prefs.school.birthday };
+  if (!basics.birthday) delete basics.birthday;
+  values[PREFS_KEY] = JSON.stringify({ ...own, school: basics });
+  return values;
+}
+
+const exported = { records: undefined, pending: null, tour: null };
+const TOUR_OVER = ["done", "skipped"];
+
+function readRecords() {
+  request("GET", "/api/hub/tour").then((answer) => (exported.tour = answer.state || null), () => {});
+  const pending = request("GET", "/api/ui/export").then((answer) => answer.data);
+  exported.pending = pending;
+  pending.then((records) => {
+    if (exported.pending === pending) exported.records = records;
+  }, () => {});
+  return pending;
+}
+
+function forgetRecords() {
+  exported.records = undefined;
+  readRecords();
+}
+
+// The records are read before the tap, so that the share sheet still opens inside the click on iPhone and iPad.
+async function exportData() {
+  let records = exported.records;
+  if (records === undefined) records = await (exported.pending || readRecords()).catch(() => null);
+  const payload = { app: BRAND, version: VERSION, exportedAt: new Date().toISOString(), values: portableValues() };
+  const keys = schoolDefaults ? fileKeys(data.subjects) : new Map();
+  if (schoolDefaults) payload.school = { abReference: data.abReference, subjects: fileSubjects(schoolDefaults.subjects, keys) };
+  if (records) payload.data = fileRecords(records, keys);
+  if (TOUR_OVER.includes(exported.tour)) payload.tour = exported.tour;
+  const name = `${slug(BRAND) || "app"}-sicherung-${isoDate(now())}.json`;
+  const missing = payload.data ? "" : ", aber ohne Noten, Aufgaben und Termine. Sie ließen sich gerade nicht lesen.";
+  const shell = window.hubShell;
+  if (typeof shell?.saveFile === "function") {
+    let saved = null;
+    try {
+      saved = await shell.saveFile(name, JSON.stringify(payload, null, 2));
+    } catch {}
+    if (saved?.error === "denied") {
+      toast(`${BRAND} darf nicht in „Downloads“ speichern. Erlaube es unter Systemeinstellungen › Datenschutz & Sicherheit › Dateien und Ordner.`, { icon: "circle-alert", duration: 12000 });
+      return;
+    }
+    if (saved?.error === "cancelled") return;
+    if (saved?.error === "too-large") {
+      toast("Die Sicherung ist zu groß, um sie hier zu speichern.", { icon: "circle-alert" });
+      return;
+    }
+    if (!saved?.name) {
+      toast("Die Sicherung ließ sich nicht im Ordner „Downloads“ speichern.", { icon: "circle-alert" });
+      return;
+    }
+    const reveal = typeof shell.showFile === "function" && saved.path ? { label: "Im Finder zeigen", run: () => shell.showFile(saved.path) } : undefined;
+    const place = saved.folder ? `in „${esc(saved.folder)}“ ` : "";
+    toast(`Gesichert ${place}als „${esc(saved.name)}“${missing}`, { icon: missing ? "triangle-alert" : "download", action: reveal });
+    return;
+  }
+  const result = await offerFile(name, JSON.stringify(payload, null, 2));
+  if (result === "cancelled") return;
+  if (result === "failed") {
+    toast("Die Sicherung ließ sich nicht teilen. Versuch es noch einmal.", { icon: "circle-alert" });
+    return;
+  }
+  toast(`Gesichert als „${esc(name)}“${missing}`, { icon: missing ? "triangle-alert" : "download" });
+}
+
+const RECORD_NAMES = { deadlines: "deadline", tasks: "task", grades: "grade", notes: "note", events: "event" };
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function patient(method, url, body) {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(url, {
+      method,
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: "same-origin",
+    });
+    if (response.status === 429 && attempt < 5) {
+      await pause(15000);
+      continue;
+    }
+    let answer = {};
+    try {
+      answer = await response.json();
+    } catch {}
+    if (!response.ok || answer.success === false) throw new Error(answer.error || "");
+    return answer;
+  }
+}
+
+async function carryRecords(plan) {
+  await storage.settled();
+  const made = {};
+  const undo = [];
+  const refs = new Map(plan.deadlines.known.map(([item, twin]) => [item.id, twin.id]));
+  let failed = plan.skipped;
+  let known = 0;
+  for (const kind of KINDS) {
+    known += plan[kind].known.length;
+    for (const item of plan[kind].fresh) {
+      try {
+        const saved = (await patient("POST", `/api/ui/${kind}`, BODIES[kind](item, refs)))[RECORD_NAMES[kind]];
+        if (kind === "deadlines") refs.set(item.id, saved?.id);
+        if (saved?.id) undo.push([kind, saved.id]);
+        const word = kind === "deadlines" ? item.kind : kind;
+        made[word] = (made[word] || 0) + 1;
+      } catch {
+        failed += 1;
+      }
+    }
+  }
+  for (const [key, body, previous] of plan.places) {
+    try {
+      const saved = await patient("PUT", `/api/ui/places/${key}`, body);
+      page.places = { ...(page.places || {}), [key]: placeLine(body), ...followedWeather(saved) };
+      undo.push(["places", key, previous]);
+      made.places = (made.places || 0) + 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  forgetRecords();
+  return { made, known, failed, undo };
+}
+
+async function dropRecords(undo) {
+  let left = 0;
+  for (const [kind, id, previous] of [...undo].reverse()) {
+    try {
+      if (kind !== "places") await patient("DELETE", `/api/ui/${kind}/${encodeURIComponent(id)}`);
+      else if (previous) page.places = { ...(page.places || {}), [id]: placeLine(previous), ...followedWeather(await patient("PUT", `/api/ui/places/${id}`, previous)) };
+      else page.places = { ...(page.places || {}), [id]: "", ...followedWeather(await patient("DELETE", `/api/ui/places/${id}`)) };
+    } catch {
+      left += 1;
+    }
+  }
+  forgetRecords();
+  return left;
 }
 
 async function importData(file) {
@@ -2678,35 +3580,162 @@ async function importData(file) {
   } catch {}
   const known = BRAND_NAMES.map((name) => name.toLowerCase());
   const prefix = new RegExp(`^(app|${known.map((name) => slug(name)).filter(Boolean).join("|")})-`);
-  const values = known.includes(String(payload?.app || "").toLowerCase()) && payload.values && typeof payload.values === "object" ? payload.values : null;
+  const ours = known.includes(String(payload?.app || "").toLowerCase());
+  if (ours && payload.kind === "plan") {
+    importFlow({ file });
+    return;
+  }
+  const values = ours && payload.values && typeof payload.values === "object" ? payload.values : null;
   const entries = values ? Object.entries(values).filter(([key, value]) => prefix.test(key) && typeof value === "string").map(([key, value]) => [key.replace(prefix, "app-"), value]) : [];
-  if (!entries.length) {
+  const records = ours && payload.data && typeof payload.data === "object" && !Array.isArray(payload.data) ? payload.data : null;
+  if (!entries.length && !records) {
     toast(`Die Datei ist keine Sicherung von ${BRAND}.`, { icon: "circle-alert" });
     return;
   }
+  if (importing) return;
+  importing = true;
+  const button = $("dataImport");
+  if (button) button.disabled = true;
+  try {
+    const inside = records ? contents(records) : "";
+    const choice = inside ? await askBackup(inside, { settings: entries.length > 0 }) : "all";
+    if (choice === "plan") importFlow({ backup: payload });
+    else if (choice === "all") await takeBackup(file, payload, entries, records);
+  } catch {
+    toast("Die Sicherung ließ sich nicht ganz übernehmen. Lies die Datei noch einmal ein, schon Übernommenes wird dabei nicht doppelt angelegt.", { icon: "triangle-alert" });
+  } finally {
+    importing = false;
+    if ($("dataImport")) $("dataImport").disabled = false;
+  }
+}
+
+let importing = false;
+
+async function carryState(wanted) {
+  const here = page.school?.state || "";
+  if (wanted && wanted !== here && (page.states || []).some((state) => state.code === wanted)) {
+    try {
+      await request("POST", "/api/hub/bundesland", { bundesland: wanted });
+      page.school = { ...(page.school || {}), state: wanted };
+    } catch {}
+  }
+  const settled = page.school?.state || "";
+  if (settled && prefs.school.state !== settled) {
+    prefs.school.state = settled;
+    savePrefs();
+  }
+  renderSchool();
+}
+
+async function takeBackup(file, payload, entries, records) {
   const before = snapshot();
-  restore(Object.fromEntries(entries));
-  toast(`${plural(entries.length, "Eintrag", "Einträge")} aus „${esc(file.name)}“ übernommen`, {
-    icon: "upload",
-    action: { label: "Rückgängig", undo: true, run: () => {
-      restore(before);
-      say("Rückgängig gemacht");
+  const metaBefore = planMeta();
+  const fromFile = planChange("import");
+  const stateBefore = page.school?.state || "";
+  const schoolBefore = { ...prefs.school };
+  let wanted = Object.fromEntries(entries);
+  let keys = null;
+  let retired = [];
+  if (entries.length && payload.school && typeof payload.school === "object" && schoolDefaults) {
+    const parsed = {};
+    entries.forEach(([key, value]) => {
+      try {
+        parsed[key] = JSON.parse(value);
+      } catch {}
+    });
+    const own = { subjects: storage.get(LOCAL_KEYS.subjects), teachers: storage.get(LOCAL_KEYS.teachers), rooms: storage.get(LOCAL_KEYS.rooms) };
+    const fitted = fitSchool(parsed, payload.school, { ...schoolDefaults, own });
+    keys = fitted.keys;
+    retired = fitted.retired;
+    wanted = Object.fromEntries(Object.entries(fitted.values).map(([key, value]) => [key, JSON.stringify(value)]));
+  }
+  let plan = null;
+  if (records) {
+    try {
+      const mine = (await request("GET", "/api/ui/export")).data;
+      plan = recordPlan(records, mine, keys, { google: !!page.accounts?.google?.connected, synced: (data.events || []).filter((item) => item.synced) });
+    } catch {}
+  }
+  const settled = wanted[LOCAL_KEYS.subjects];
+  const used = plan ? subjectsInUse(plan) : new Set();
+  const held = retired.filter((key) => used.has(key));
+  if (held.length) {
+    const draft = JSON.parse(settled);
+    wanted[LOCAL_KEYS.subjects] = JSON.stringify({ ...draft, removed: draft.removed.filter((key) => !held.includes(key)) });
+  }
+  let stateCarried = null;
+  if (entries.length) {
+    fromFile(() => restore(wanted));
+    stateCarried = carryState(prefs.school.state);
+  }
+  const moved = entries.length > 0 && (prefs.school.grade !== schoolBefore.grade || prefs.school.birthday !== schoolBefore.birthday);
+  let done = null;
+  if (plan) {
+    if (planSize(plan) > 12) toast(`Übernehme ${plural(planSize(plan), "Eintrag", "Einträge")} aus „${esc(file.name)}“ …`, { icon: "upload", duration: 600000 });
+    done = await carryRecords(plan);
+    if (held.length) {
+      fromFile(() => storage.set(LOCAL_KEYS.subjects, JSON.parse(settled)));
+      reloadState();
+    }
+    await countSubjectUse();
+    renderPlaces();
+  }
+  if (stateCarried) await Promise.race([stateCarried, pause(8000)]);
+  if (TOUR_OVER.includes(payload.tour)) settleTour(payload.tour);
+  const text = summary({ settings: entries.length > 0, made: done?.made, known: done?.known, failed: done?.failed, unread: !!records && !plan });
+  toast(esc(text), {
+    icon: (done?.failed || (records && !plan)) ? "triangle-alert" : "upload",
+    action: { label: "Rückgängig", undo: true, run: async () => {
+      const left = done ? await dropRecords(done.undo) : 0;
+      if (entries.length) {
+        planRevert(metaBefore, () => restore(before));
+        if (moved) savePrefs();
+        await carryState(stateBefore);
+      }
+      await countSubjectUse();
+      renderPlaces();
+      if (left) toast(`${plural(left, "Eintrag", "Einträge")} ${left === 1 ? "ließ" : "ließen"} sich nicht zurücknehmen.`, { icon: "triangle-alert" });
+      else say("Rückgängig gemacht");
     } },
   });
 }
 
-function wipeData() {
+function settleTour(state) {
+  if (typeof window.AppTour?.settle === "function") window.AppTour.settle(state);
+  else request("POST", "/api/hub/tour", { state }).catch(() => {});
+  exported.tour = state;
+}
+
+async function wipeData() {
   const before = snapshot();
-  if (!Object.keys(before).length) {
-    toast("Auf diesem Gerät ist nichts gespeichert.", { icon: "trash-2" });
+  const metaBefore = planMeta();
+  let signedOut = false;
+  try {
+    signedOut = Boolean(await profile.view?.signOutForWipe(profile.api));
+  } catch {
+    toast("Abmelden hat nicht geklappt, darum ist nichts gelöscht. Versuch es noch einmal.", { icon: "circle-alert" });
     return;
   }
-  restore({});
+  // The first name and the avatar go with everything else; the account keeps its copy, and the undo brings them back here.
+  const named = readProfile();
+  const hadProfile = Boolean(named.name || named.avatar !== "initial" || named.asked);
+  if (hadProfile) replaceProfile(null);
+  if (!Object.keys(before).length) {
+    toast(signedOut ? "Abgemeldet. Auf diesem Gerät war sonst nichts gespeichert." : hadProfile ? "Alles auf diesem Gerät gelöscht" : "Auf diesem Gerät ist nichts gespeichert.", { icon: "trash-2" });
+    return;
+  }
+  // An own subject that still has grades or entries cannot go for good, or they would be hidden. The server puts it aside, and so does the page.
+  await countSubjectUse();
+  const own = subjectStore().items;
+  const used = Object.keys(own).filter((key) => own[key]?.custom && keptOnDelete(key));
+  planRevert(null, () => restore(used.length ? { [LOCAL_KEYS.subjects]: JSON.stringify({ items: Object.fromEntries(used.map((key) => [key, own[key]])), removed: used }) } : {}));
   $("dataWipe")?.focus({ preventScroll: true });
-  toast("Alles auf diesem Gerät gelöscht", {
+  const wiped = signedOut ? "Gelöscht und abgemeldet, im Konto bleibt alles." : "Alles auf diesem Gerät gelöscht";
+  toast(used.length ? `${signedOut ? wiped : "Alles auf diesem Gerät gelöscht."} Fächer mit Noten oder Einträgen stehen weiter unter „Gelöscht“.` : wiped, {
     icon: "trash-2",
     action: { label: "Rückgängig", undo: true, run: () => {
-      restore(before);
+      planRevert(metaBefore, () => restore(before));
+      if (hadProfile) replaceProfile(named);
       say("Rückgängig gemacht");
     } },
   });
@@ -2715,8 +3744,13 @@ function wipeData() {
 function bindData() {
   const card = $("dataCard");
   const file = $("importFile");
+  readRecords();
+  card.addEventListener("pointerdown", (event) => {
+    if (event.target.closest("#dataExport")) readRecords();
+  });
   card.addEventListener("click", (event) => {
     if (event.target.closest("#dataExport")) exportData();
+    else if (event.target.closest("#dataKeep")) keepData();
     else if (event.target.closest("#dataImport")) file.click();
     else if (event.target.closest("#dataWipe")) wipeData();
   });
@@ -2725,6 +3759,12 @@ function bindData() {
     file.value = "";
     if (chosen) importData(chosen);
   });
+  if (root.dataset.shell === "web" && storageManager()?.persisted) {
+    storageManager().persisted().then((kept) => {
+      keptData = kept;
+      renderData();
+    }, () => {});
+  }
 }
 
 function bindAbout() {
@@ -2743,21 +3783,11 @@ function bindAbout() {
   });
 }
 
-function systemName() {
-  const agent = navigator.userAgent;
-  if (/iPhone|iPad/.test(agent)) return "iOS";
-  if (/Android/.test(agent)) return "Android";
-  if (/Mac/.test(agent)) return "macOS";
-  if (/Windows/.test(agent)) return "Windows";
-  if (/Linux/.test(agent)) return "Linux";
-  return "Web";
-}
-
 function renderAbout() {
   const card = $("aboutCard");
   const about = page.about || {};
-  const version = card.dataset.version || about.version || "";
-  const where = platform.desktop ? `${systemName()}, Desktop-App` : `${systemName()}, im Browser`;
+  const version = esc(card.dataset.version || about.version || "unbekannt").replace(/^(.+?) (\([^)]*\))$/, `<span class="about-part">$1</span> <span class="about-part">$2</span>`);
+  const where = platformName();
   const browser = typeof window.hubShell?.openInBrowser === "function"
     ? `<button class="pill" type="button" id="openInBrowser">${icon("arrow-up-right")}Im Browser öffnen</button>`
     : "";
@@ -2768,13 +3798,13 @@ function renderAbout() {
     about.source && [about.source, "Quellcode", "code"],
   ].filter(Boolean);
   card.innerHTML = `<dl class="about-list">
-      <div><dt>Version</dt><dd>${esc(version)}</dd></div>
+      <div><dt>Version</dt><dd>${version}</dd></div>
       <div><dt>Plattform</dt><dd>${esc(where)}</dd></div>
-      <div><dt>Daten</dt><dd>Lokal auf diesem Gerät</dd></div>
-      <div><dt>Lizenz</dt><dd>${esc(about.license || "AGPL-3.0")}</dd></div>
+      <div><dt>Daten</dt><dd>${data?.accountService ? "Auf diesem Gerät, mit Konto auch verschlüsselt in der Cloud" : "Lokal auf diesem Gerät"}</dd></div>
+      <div><dt>Lizenz</dt><dd>${esc(about.license || "PolyForm Noncommercial 1.0.0")}</dd></div>
     </dl>
-    <div class="about-links"><button class="pill" type="button" data-tour-start>${icon("presentation")}Tutorial mit Tinte</button>${browser}${links.map(([href, text, glyph]) => `<a class="pill" href="${esc(href)}" target="_blank" rel="noopener">${icon(glyph)}${text}${icon("arrow-up-right", "is-external")}<span class="visually-hidden">, öffnet in einem neuen Tab</span></a>`).join("")}</div>
-    <p class="about-note">${BRAND} steht unter der GNU Affero General Public License 3.0. Den vollständigen Quellcode dieser Version findest du über den Link.</p>`;
+    <div class="about-links"><button class="pill" type="button" data-feedback>${icon("send")}Rückmeldung geben</button><button class="pill" type="button" data-tour-start>${icon("presentation")}Tutorial mit Luna</button>${browser}${links.map(([href, text, glyph]) => `<a class="pill" href="${esc(href)}" target="_blank" rel="noopener">${icon(glyph)}${text}${icon("arrow-up-right", "is-external")}<span class="visually-hidden">, öffnet in einem neuen Tab</span></a>`).join("")}</div>
+    <p class="about-note">${BRAND} steht unter der PolyForm Noncommercial License 1.0.0. Du darfst es kostenlos nutzen, ändern und weitergeben, aber nicht damit Geld verdienen. Den vollständigen Quellcode dieser Version findest du über den Link.</p>`;
 }
 
 function renderAll() {
@@ -2787,6 +3817,7 @@ function renderAll() {
   renderNotify();
   renderLook();
   renderPlaces();
+  renderTransit();
   renderAssistant();
   renderData();
   renderAbout();
@@ -2942,14 +3973,19 @@ export function init() {
   bindRaster();
   bindSchool();
   bindAccounts();
+  bindAccount();
   bindNotify();
+  bindLaunch();
   bindLook();
   bindPlaces();
+  bindTransit();
   bindAssistant();
   bindData();
   bindAbout();
   bindNav();
   renderAll();
+  onPlanRefresh(refreshRaster, planInUse);
+  loadLaunch();
   if (!openHash()) markSection(sectionInView(), { instant: true });
   document.fonts?.ready.then(() => navState.current && placeMarker(navState.current, { instant: true }));
   loadGoogleCalendars();

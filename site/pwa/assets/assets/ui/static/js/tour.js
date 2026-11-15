@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 (function () {
   'use strict';
@@ -8,7 +8,7 @@
   const brand = () => self.BRAND_NAME || document.documentElement.dataset.brand || '';
   const q = s => document.querySelector(s);
   const narrow = () => matchMedia('(max-width: 759px)').matches;
-  const still = () => !(self.AppTinte && self.AppTinte.motionAllowed());
+  const still = () => !(self.AppLuna && self.AppLuna.motionAllowed());
   const moreButton = () => narrow() ? q('.tabbar [popovertarget="moreSheet"]') : q('#navMore');
   const navItem = key => (narrow() ? q(`.tabbar .tab[data-page="${key}"]`) : q(`.sidebar .nav-item[data-page="${key}"]`)) || moreButton();
   const shown = el => {
@@ -19,6 +19,13 @@
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
+  function withPinned(page) {
+    const kept = new URLSearchParams();
+    const current = new URLSearchParams(location.search);
+    ['datum', 't', 'theme', 'variante', 'clean'].forEach(key => current.has(key) && kept.set(key, current.get(key)));
+    return kept.toString() ? `${page}?${kept}` : page;
+  }
+
   function navList() {
     return narrow() ? q('.tabbar') : q('.sidebar .nav');
   }
@@ -28,34 +35,46 @@
     return id ? q(`#taskGroups .row[data-id="${CSS.escape(id)}"]`) : null;
   }
 
+  const setupNeeded = () => !!(self.AppSetup && self.AppSetup.needed());
+  const value = v => typeof v === 'function' ? v() : v;
+
+  const SAMPLE = 'Vokabeln lernen';
+  const plain = text => String(text || '').toLowerCase().replace(/[„“”"'‚‘’.!]/g, '').replace(/\s+/g, ' ').trim();
+  const sampleRow = () => {
+    const row = run && run.sample && run.sample.id ? q(`#taskList .task[data-id="${CSS.escape(run.sample.id)}"]:not(.is-done)`) : null;
+    return row && plain(row.querySelector('.row-title')?.textContent) === plain(run.sample.title) ? row : null;
+  };
+  // While Luna waits for the user, she and her bubble keep clear of everything the user may want to tap or read.
+  const CONTROLS = 'a[href], button, input, select, textarea, [role="button"], h1, h2, .side-title';
+
   const STEPS = [
     {
       id: 'hello', mode: 'hello',
-      text: () => `Hi, ich bin Tinte! Ich zeige dir in einer Minute, wo in ${brand()} was ist. Unterwegs legen wir zusammen deine erste Aufgabe an.`,
+      text: () => setupNeeded()
+        ? `Hi, ich bin Luna! Ich zeig dir kurz, wo in ${brand()} was ist. Danach tragen wir zusammen deinen Stundenplan ein.`
+        : `Hi, ich bin Luna! Ich zeig dir kurz, wo in ${brand()} was ist.`,
       primary: 'Los geht’s', secondary: 'Später', onSecondary: 'skip'
     },
     {
       id: 'nav', dot: true, mode: 'point', target: navList, back: null,
       text: () => narrow()
-        ? `Unten findest du die Bereiche von ${brand()}. Ein Tipp, und du bist da.`
-        : `Links findest du alle Bereiche von ${brand()}. Ein Klick, und du bist da.`
+        ? 'Unten findest du die Bereiche. Ein Tipp, und du bist da.'
+        : 'Links findest du alle Bereiche. Ein Klick, und du bist da.'
     },
     {
-      id: 'home', dot: true, mode: 'point', target: () => navItem('home'),
-      text: 'In der Übersicht siehst du deinen Tag auf einen Blick: was jetzt dran ist, deine Aufgaben, was fällig wird und die Woche.'
+      id: 'home', page: '/hub', dot: true, mode: 'point', target: () => navItem('home'),
+      text: 'Die Übersicht zeigt dir, welche Stunde gerade dran ist und was heute ansteht.'
     },
     {
-      id: 'tasks', dot: true, mode: 'point', target: () => navItem('tasks'),
-      text: 'Unter Aufgaben sammelst du alles, was ansteht. Komm, wir legen gleich deine erste an!',
-      primary: 'Zeig’s mir', secondary: 'Überspringen', onSecondary: 'calendar'
+      id: 'tasks', page: '/hub/tasks', dot: true, mode: 'point', target: () => navItem('tasks'),
+      text: 'Unter Aufgaben sammelst du, was zu tun ist. Leg gleich deine erste an!',
+      primary: 'Zeig’s mir', secondary: 'Überspringen', onSecondary: 'school'
     },
     {
-      id: 'task-new', page: '/hub/tasks', mode: 'watch', target: () => q('#quickAdd'), dim: false,
-      text: () => narrow()
-        ? 'Schreib hier rein, was ansteht, zum Beispiel „Vokabeln lernen“, und tipp auf Fertig.'
-        : 'Schreib hier rein, was ansteht, zum Beispiel „Vokabeln lernen“, und drück Enter.',
-      short: 'Eintippen, dann auf Fertig tippen.',
-      wait: 'created', secondary: 'Überspringen', onSecondary: 'calendar'
+      id: 'task-new', page: '/hub/tasks', mode: 'watch', target: () => q('#quickAdd'), dim: false, avoid: () => [q('#taskFilter'), q('.tasks-side')],
+      text: `Schreib hier rein, was ansteht, zum Beispiel „${SAMPLE}“, und drück Enter.`,
+      short: 'Schreib oben ins Feld, was ansteht, und tipp auf Fertig.',
+      wait: 'created', secondary: 'Überspringen', onSecondary: 'school'
     },
     {
       id: 'task-done', page: '/hub/tasks', mode: 'cheer', target: newestTask,
@@ -63,43 +82,55 @@
       back: null
     },
     {
-      id: 'calendar', dot: true, mode: 'point', target: () => navItem('calendar'), back: 'tasks',
-      text: 'Im Kalender stehen deine Termine, Ferien und Feiertage. Den Google-Kalender kannst du in den Einstellungen verbinden.'
+      id: 'school', page: '/hub/school', dot: true, mode: 'point', target: () => navItem('school'), back: 'tasks',
+      text: 'Unter Schule findest du deinen Stundenplan und trägst Tests und Noten ein.'
     },
     {
-      id: 'school', dot: true, mode: 'point', target: () => navItem('school'),
-      text: 'Unter Schule liegen Stundenplan, Tests, Klausuren, Hausaufgaben und Noten.'
+      id: 'sample', page: '/hub', mode: 'point', target: sampleRow, needsTarget: true, skip: () => !(run && run.sample && run.sample.id),
+      text: () => `„${run.sample.title}“ war nur ein Beispiel. Soll ich die Aufgabe wieder löschen?`,
+      primary: 'Löschen', onPrimary: 'drop', secondary: 'Behalten', onSecondary: 'bye', back: null
     },
     {
-      id: 'email', dot: true, mode: 'point', target: () => navItem('email'), skip: narrow,
-      text: 'Hier liest du deine E-Mails, sobald dein Postfach verbunden ist.'
-    },
-    {
-      id: 'more', dot: true, mode: 'point', target: moreButton,
-      text: () => narrow()
-        ? 'Unter „Mehr“ liegen E-Mail, Fahrplan, Pomodoro, Training, Lesezeichen und die Einstellungen. Dort kannst du mich auch jederzeit wieder rufen.'
-        : 'Unter „Mehr“ findest du Assistent, Pomodoro, Training, Lesezeichen und Review. Stöber einfach mal rein.'
-    },
-    {
-      id: 'settings', dot: true, mode: 'point', target: () => navItem('settings'), skip: narrow,
-      text: () => `In den Einstellungen passt du ${brand()} an dich an. Dort kannst du mich auch jederzeit wieder rufen.`
-    },
-    {
-      id: 'bye', mode: 'present',
-      text: () => `Das war’s schon! Viel Spaß mit ${brand()}.`,
-      primary: 'Fertig', onPrimary: 'done'
+      id: 'bye', page: '/hub', mode: 'present',
+      text: () => setupNeeded()
+        ? 'Jetzt fehlt nur noch dein Stundenplan. Ich helf dir beim Eintragen, das dauert etwa fünf Minuten.'
+        : `Das war’s schon! ${narrow() ? 'In den Einstellungen unter „Mehr“' : 'In den Einstellungen'} kannst du mich jederzeit wieder rufen.`,
+      primary: () => setupNeeded() ? 'Stundenplan eintragen' : 'Fertig',
+      onPrimary: () => setupNeeded() ? 'setup' : 'done',
+      secondary: () => setupNeeded() ? 'Später' : '', onSecondary: 'done'
     }
   ];
   const skipped = step => !!(step && step.skip && step.skip());
   const dotIds = () => STEPS.filter(s => s.dot && !skipped(s)).map(s => s.id);
   const DOT_OF = { 'task-new': 'tasks', 'task-done': 'tasks' };
   const indexOf = id => STEPS.findIndex(s => s.id === id);
+  const PAGE_TAB = { '/hub': 'home', '/hub/tasks': 'tasks', '/hub/school': 'school' };
+  const tabOf = page => PAGE_TAB[page] || null;
+  // Luna reaches for the tab, taps it, and the page changes; with reduced motion the tab only lights up briefly.
+  const TAP = { reach: 300, leave: 560, still: 140 };
+
+  // How a step marks its target: shaded around it, a pulsing ring while the user acts on a shaded page, a plain ring
+  // around the field to type into while the page stays bright, or nothing.
+  function spotKind(step) {
+    const dim = step.dim !== false, interactive = !!step.wait;
+    if (dim) return interactive ? 'ring' : 'shade';
+    return interactive ? 'outline' : 'off';
+  }
+
+  // Where Luna was on the page before, kept inside this window, so she goes on from there and never starts in a corner.
+  function carried(saved, width, height, size) {
+    if (!saved || !Number.isFinite(saved.gx) || !Number.isFinite(saved.gy)) return null;
+    return { x: clamp(saved.gx, 0, Math.max(0, width - size)), y: clamp(saved.gy, 0, Math.max(0, height - size)) };
+  }
 
   let run = null;
 
   function save(id) {
+    if (run) run.saved = id;
+    const guide = run && run.ui && run.ui.guide;
+    const spot = guide && guide.x > -500 ? { gx: Math.round(guide.x), gy: Math.round(guide.y) } : {};
     try {
-      localStorage.setItem(KEY, JSON.stringify({ id, at: Date.now(), title: run && run.title }));
+      localStorage.setItem(KEY, JSON.stringify({ id, at: Date.now(), title: run && run.title, sample: run && run.sample, ...spot }));
     } catch (_) {}
   }
 
@@ -153,15 +184,20 @@
     measure.querySelector('.tour-text').removeAttribute('id');
     document.body.appendChild(measure);
     const size = narrow() ? 96 : 124;
-    const guide = self.AppTinte.guide({ size });
+    const guide = self.AppLuna.guide({ size });
     return { scrim, spot, rings, bubble, measure, guide, size };
   }
 
-  function start(fromId, resumed) {
+  function start(fromId, resumed, here) {
     if (run) return;
-    if (!self.AppTinte) return;
-    run = { ui: buildUi(), step: null, token: 0, offs: [], title: resumed && resumed.title };
+    if (!self.AppLuna) return;
+    run = { ui: buildUi(), step: null, token: 0, offs: [], title: resumed && resumed.title, sample: resumed && resumed.sample || null };
     const { scrim, bubble } = run.ui;
+    const from = carried(resumed, innerWidth, innerHeight, run.ui.size);
+    if (from) {
+      run.ui.guide.place(from.x, from.y);
+      run.carried = true;
+    }
     bubble.addEventListener('click', onBubbleClick);
     scrim.addEventListener('click', () => {
       run.ui.guide.excite();
@@ -174,7 +210,7 @@
     on(window, 'scroll', relayout, true);
     document.documentElement.classList.add('tour-on');
     run.tracker = setInterval(track, 250);
-    if (resumed) setTimeout(() => go(fromId, { first: true }), 450);
+    if (resumed) setTimeout(() => go(fromId, { first: true, here }), 450);
     else go(fromId || 'hello', { first: true });
   }
 
@@ -202,7 +238,7 @@
   }
 
   async function go(id, options) {
-    if (!run) return;
+    if (!run || run.ending) return;
     const opts = options || {};
     const step = STEPS[indexOf(id)];
     if (!step) return;
@@ -215,11 +251,12 @@
     const token = ++run.token;
     clearWaits();
     save(step.id);
-    if (step.page && location.pathname !== step.page) {
+    if (step.page && location.pathname !== step.page && !opts.here) {
       hideBubble();
-      run.ui.guide.excite();
-      await wait(still() ? 0 : 260);
-      location.href = step.page;
+      clearRings();
+      await tapTab(step.page);
+      if (!run || token !== run.token) return;
+      location.href = withPinned(step.page);
       return;
     }
     run.step = step;
@@ -231,13 +268,18 @@
         await wait(120);
         target = step.target();
       }
-      if (token !== run.token) return;
+      if (!run || token !== run.token) return;
     }
     if (!shown(target)) target = null;
+    if (!target && step.needsTarget) {
+      const after = following(step);
+      if (after) go(after.id, opts);
+      return;
+    }
     if (target && clipped(target)) {
       target.scrollIntoView({ block: target.closest('.sidebar') ? 'nearest' : 'center', behavior: still() ? 'auto' : 'smooth' });
       await wait(still() ? 0 : 380);
-      if (token !== run.token) return;
+      if (!run || token !== run.token) return;
     }
     run.target = target;
     run.rect = target ? rectOf(target) : null;
@@ -246,13 +288,14 @@
     setSpot(step, target);
     const { guide } = run.ui;
     guide.setMode('float');
-    if (opts.first) {
+    if (opts.first && !run.carried) {
       guide.place(spots.gx, spots.gy);
       await guide.appear();
     } else {
+      run.carried = false;
       await guide.moveTo(spots.gx, spots.gy);
     }
-    if (token !== run.token) return;
+    if (!run || token !== run.token) return;
     const aim = target ? aimAt(target, spots) : null;
     if (step.mode === 'point' && aim) guide.setMode('point', aim);
     else if (step.mode === 'watch') guide.setMode('watch', aim || {});
@@ -262,6 +305,33 @@
     if (step.rings) showRings(step.rings());
     showBubble(step, spots);
     arm(step);
+  }
+
+  // Luna taps the tab of the page she goes to: her tentacle reaches out, the tab gives way, then the page changes.
+  async function tapTab(page) {
+    const key = tabOf(page), tab = key ? navItem(key) : null;
+    const { guide } = run.ui;
+    if (!tab || !shown(tab)) {
+      guide.excite();
+      await wait(still() ? 0 : 260);
+      return;
+    }
+    const r = tab.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    setSpot({}, tab);
+    if (still() || document.documentElement.dataset.motion === 'minimal') {
+      const ring = make('i', 'tour-ring', run.ui.rings);
+      Object.assign(ring.style, { left: (r.left - 3) + 'px', top: (r.top - 3) + 'px', width: (r.width + 6) + 'px', height: (r.height + 6) + 'px' });
+      await wait(TAP.still);
+      return;
+    }
+    const token = run.token;
+    guide.setMode('tap', { x, y });
+    await wait(TAP.reach);
+    if (!run || token !== run.token) return;
+    const ripple = make('i', 'tour-tap', run.ui.rings);
+    Object.assign(ripple.style, { left: x + 'px', top: y + 'px' });
+    tab.animate([{ transform: 'none' }, { transform: 'scale(.92)', offset: .4 }, { transform: 'none' }], { duration: 240, easing: 'cubic-bezier(.3, .7, .4, 1)' });
+    await wait(TAP.leave - TAP.reach);
   }
 
   function clipped(el) {
@@ -301,12 +371,23 @@
     if (step.wait === 'created') {
       const input = q('#quickInput');
       onStep(document, 'app:task-created', e => {
-        run.created = e.detail && e.detail.id;
+        const detail = e.detail || {};
+        run.created = detail.id;
+        run.sample = plain(run.typed || detail.title) === plain(SAMPLE) ? { title: detail.title } : null;
+        const sample = run.sample;
+        if (sample && detail.saved) {
+          Promise.resolve(detail.saved).then(task => {
+            if (!run || run.sample !== sample || !task || task.id == null) return;
+            sample.id = String(task.id);
+            save(run.saved);
+          }, () => {});
+        }
         go('task-done');
       });
       if (input) {
         let last = 0;
         onStep(input, 'input', () => {
+          run.typed = input.value;
           const now = performance.now();
           const r = input.getBoundingClientRect();
           run.ui.guide.lookAt(r.left + Math.min(r.width - 12, 14 + input.value.length * 7.5), r.top + r.height / 2);
@@ -330,6 +411,8 @@
     const bw = b.offsetWidth, bh = b.offsetHeight;
     const fits = (x, y, w, h) => x >= m - .5 && y >= m - .5 && x + w <= W - m + .5 && y + h <= H - m + .5;
     const overlaps = (x, y, w, h, r) => r && x < r.right && x + w > r.left && y < r.bottom && y + h > r.top;
+    const avoid = avoidRects(step, target);
+    const free = (x, y, w, h) => !avoid.some(a => overlaps(x, y, w, h, a));
     if (!target) {
       const left = narrow() ? 0 : (q('.sidebar')?.getBoundingClientRect().right || 0);
       const row = s + 8 + bw <= W - left - 2 * m;
@@ -378,9 +461,10 @@
       const gy = r.top - gap - s, gx = midX - s / 2;
       return { gx, gy, bx: clamp(r.left + r.width / 2 - bw / 2, m, W - m - bw), by: gy - 6 - bh, tail: 'bottom' };
     });
+    const clear = p => fits(p.gx, p.gy, s, s) && fits(p.bx, p.by, bw, bh) && !overlaps(p.bx, p.by, bw, bh, r) && !overlaps(p.gx + s * .2, p.gy + s * .2, s * .6, s * .6, r);
     for (const t of tries) {
       const p = t();
-      if (fits(p.gx, p.gy, s, s) && fits(p.bx, p.by, bw, bh) && !overlaps(p.bx, p.by, bw, bh, r) && !overlaps(p.gx + s * .2, p.gy + s * .2, s * .6, s * .6, r)) return p;
+      if (clear(p) && free(p.gx, p.gy, s, s) && free(p.bx, p.by, bw, bh)) return p;
     }
     for (const right of [true, false]) {
       const avail = right ? W - m - (r.right + gap) : r.left - gap - m;
@@ -390,18 +474,30 @@
       const h2 = b.offsetHeight;
       const gy = clamp(r.top, m, H - m - s - 6 - h2);
       const gx = right ? r.right + gap : r.left - gap - s, bx = right ? r.right + gap : r.left - gap - width;
-      if (fits(gx, gy, s, s) && fits(bx, gy + s + 6, width, h2)) return { gx, gy, bx, by: gy + s + 6, tail: 'top', width };
+      if (fits(gx, gy, s, s) && fits(bx, gy + s + 6, width, h2) && free(gx, gy, s, s) && free(bx, gy + s + 6, width, h2)) return { gx, gy, bx, by: gy + s + 6, tail: 'top', width };
     }
-    const dw = W - 2 * m - s - 6;
+    const left = narrow() ? 0 : (q('.sidebar')?.getBoundingClientRect().right || 0);
+    const dw = W - left - 2 * m - s - 6;
     b.style.width = dw + 'px';
     b.classList.add('is-docked');
     const dh = b.offsetHeight, need = Math.max(s, dh);
-    const above = r.top - gap - m, below = H - r.bottom - gap - m;
-    if (above >= need || below >= need) {
-      const top = above >= need;
-      const y0 = top ? r.top - gap - need : r.bottom + gap;
-      return { gx: W - m - s, gy: y0 + (need - s) / 2, bx: m, by: y0 + (need - dh) / 2, tail: 'right', width: dw, docked: true };
+    const docked = y0 => ({ gx: W - m - s, gy: y0 + (need - s) / 2, bx: left + m, by: y0 + (need - dh) / 2, tail: 'right', width: dw, docked: true });
+    // The nearest band across the screen that covers nothing to avoid: right at the target or just past what lies next to it.
+    const bands = [
+      ...[r.top, ...avoid.filter(a => a.top < r.top).map(a => a.top)].map(y => ({ y0: y - gap - need, far: r.top - y + gap })),
+      ...[r.bottom, ...avoid.filter(a => a.bottom > r.bottom).map(a => a.bottom)].map(y => ({ y0: y + gap, far: y - r.bottom + gap }))
+    ].filter(band => band.y0 >= m && band.y0 + need <= H - m && free(left + m, band.y0, W - left - 2 * m, need)).sort((a, z) => a.far - z.far);
+    if (bands.length) return docked(bands[0].y0);
+    for (const t of tries) {
+      const p = t();
+      if (avoid.length && clear(p)) {
+        b.style.width = '';
+        b.classList.remove('is-docked');
+        return p;
+      }
     }
+    const above = r.top - gap - m, below = H - r.bottom - gap - m;
+    if (above >= need || below >= need) return docked(above >= need ? r.top - gap - need : r.bottom + gap);
     b.style.width = '';
     b.classList.remove('is-docked');
     const p = tries[4]();
@@ -411,13 +507,20 @@
     };
   }
 
+  function avoidRects(step, target) {
+    const els = step.avoid ? step.avoid() : [];
+    if (step.wait) els.push(...document.querySelectorAll(CONTROLS));
+    return els.filter(el => el && shown(el) && !(target && (target.contains(el) || el.contains(target))) && !el.closest('.tour-bubble, .luna-guide, .luna'))
+      .map(el => el.getBoundingClientRect()).filter(a => a.bottom > 0 && a.top < innerHeight && a.right > 0 && a.left < innerWidth);
+  }
+
   function setSpot(step, target) {
     const { spot, scrim } = run.ui;
-    const dim = step.dim !== false;
-    const interactive = !!step.wait;
-    scrim.classList.toggle('is-open', !interactive);
-    spot.classList.toggle('is-off', !dim);
-    spot.classList.toggle('is-ring', dim && interactive);
+    const kind = spotKind(step);
+    scrim.classList.toggle('is-open', !step.wait);
+    spot.classList.toggle('is-off', kind === 'off');
+    spot.classList.toggle('is-ring', kind === 'ring');
+    spot.classList.toggle('is-outline', kind === 'outline');
     if (!target) {
       const W = innerWidth, H = innerHeight;
       Object.assign(spot.style, { left: W / 2 + 'px', top: H / 2 + 'px', width: '0px', height: '0px', borderRadius: '50%' });
@@ -461,9 +564,9 @@
     const primary = bubble.querySelector('[data-act=primary]'), secondary = bubble.querySelector('[data-act=secondary]');
     const back = backOf(step);
     primary.hidden = !!step.wait;
-    primary.textContent = step.primary || 'Weiter';
-    secondary.hidden = !(step.secondary || back);
-    secondary.textContent = step.secondary || 'Zurück';
+    primary.textContent = value(step.primary) || 'Weiter';
+    secondary.hidden = !(value(step.secondary) || back);
+    secondary.textContent = value(step.secondary) || 'Zurück';
     bubble.classList.toggle('is-waiting', !!step.wait);
   }
 
@@ -536,28 +639,47 @@
 
   function onBubbleClick(e) {
     const btn = e.target.closest('[data-act]');
-    if (!btn || !run || !run.step) return;
+    if (!btn || !run || !run.step || run.ending) return;
     const act = btn.dataset.act, step = run.step;
     if (act === 'close') return end('skipped');
     if (act === 'primary') return next(step);
     if (act === 'secondary') {
       if (step.onSecondary === 'skip') return end('skipped');
-      if (step.onSecondary) return go(step.onSecondary);
+      if (step.onSecondary === 'done' && value(step.secondary)) return end('done');
+      if (step.onSecondary && step.onSecondary !== 'done') return go(step.onSecondary);
       const back = backOf(step);
       if (back) go(back);
     }
   }
 
-  function next(step) {
-    if (step.onPrimary === 'done') return end('done');
+  function following(step) {
     let i = indexOf(step.id) + 1;
     while (i < STEPS.length && skipped(STEPS[i])) i++;
-    const following = STEPS[i];
-    if (following) go(following.id);
+    return STEPS[i] || null;
+  }
+
+  function next(step) {
+    const after = value(step.onPrimary);
+    if (after === 'setup') return handOver();
+    if (after === 'done') return end('done');
+    if (after === 'drop') dropSample();
+    const then = following(step);
+    if (then) go(then.id);
+  }
+
+  // The home page takes the task out itself, with its undo. Anywhere else the request alone has to do.
+  function dropSample() {
+    const id = run.sample && run.sample.id;
+    run.sample = null;
+    if (!id) return;
+    const asked = new CustomEvent('app:remove-task', { detail: { id }, cancelable: true });
+    if (window.dispatchEvent(asked)) {
+      fetch(`/api/ui/tasks/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
+    }
   }
 
   function onKey(e) {
-    if (!run || !run.step) return;
+    if (!run || !run.step || run.ending) return;
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
     if (e.key === 'Escape') {
       if (run.step.wait === 'created' && document.activeElement === q('#quickInput') && q('#quickInput').value) return;
@@ -569,7 +691,7 @@
     if (e.key === 'Enter' && (e.target === run.ui.bubble || e.target === document.body)) {
       e.preventDefault();
       next(run.step);
-    } else if (e.key === 'ArrowRight') {
+    } else if (e.key === 'ArrowRight' && run.step.onPrimary !== 'drop') {
       e.preventDefault();
       next(run.step);
     } else if (e.key === 'ArrowLeft') {
@@ -606,6 +728,8 @@
     if (!run || run.ending) return;
     run.ending = true;
     run.token++;
+    // Luna still waves goodbye for a moment. Keys already belong to the page again, such as Esc for the setup she handed over to.
+    document.removeEventListener('keydown', onKey, true);
     forget();
     persist(state);
     clearWaits();
@@ -634,14 +758,26 @@
     run = null;
   }
 
-  function resume(saved) {
-    const step = STEPS[indexOf(saved.id)];
-    if (step.page && location.pathname !== step.page) {
-      start('calendar', saved);
+  function handOver() {
+    end('done');
+    if (self.AppSetup) {
+      self.AppSetup.open({ from: 'tour' });
       return;
     }
-    const id = step.id === 'task-form' || step.id === 'task-done' ? 'task-new' : step.id;
-    start(id, saved);
+    const home = withPinned('/hub');
+    location.href = `${home}${home.includes('?') ? '&' : '?'}einrichtung=1`;
+  }
+
+  // A page the step does not belong to was opened on the way, by a link during the step that waits for the user or by
+  // going back. Luna goes on from there instead of pulling the user back.
+  function resume(saved) {
+    const step = STEPS[indexOf(saved.id)];
+    const typing = step.id === 'task-form' || step.id === 'task-done' || step.id === 'task-new';
+    if (step.page && location.pathname !== step.page) {
+      start(typing ? 'school' : step.id, saved, true);
+      return;
+    }
+    start(typing ? 'task-new' : step.id, saved);
   }
 
   function boot() {
@@ -661,11 +797,22 @@
       start('hello');
       return;
     }
-    if (document.body.dataset.tourAuto === '1' && location.pathname === '/hub') {
+    if (document.body.dataset.tourAuto === '1' && location.pathname === '/hub' && !new URLSearchParams(location.search).has('einrichtung')) {
       setTimeout(() => {
-        if (!run && !load()) start('hello');
+        if (!run && !load() && !document.documentElement.classList.contains('setup-open')) start('hello');
       }, 1200);
     }
+  }
+
+  // A backup from a device where the tour is over ends it here too, quietly and for good.
+  function settle(state) {
+    if (run) {
+      run.ending = true;
+      run.token++;
+      teardown();
+    }
+    forget();
+    return persist(state);
   }
 
   self.AppTour = {
@@ -673,7 +820,12 @@
       forget();
       start('hello');
     },
-    stop: () => end('skipped')
+    stop: () => end('skipped'),
+    settle,
+    tabOf,
+    spotKind: id => spotKind(STEPS[indexOf(id)] || {}),
+    carried,
+    TAP
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

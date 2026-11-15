@@ -3,25 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Seite nicht gefunden · Hora</title>
+    <title data-en="Page not found · Hora">Seite nicht gefunden · Hora</title>
     <meta name="robots" content="noindex" />
-    <meta name="theme-color" content="#F8F6EE" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0F1410" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#000000" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <script type="module" crossorigin src="/assets/404-BK08wa3E.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/tinte-DSkvZnf7.js">
-    <link rel="stylesheet" crossorigin href="/assets/tinte-BLa43Fnx.css">
+    <script type="module" crossorigin src="/assets/404-DgRyisGq.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/luna-C-uxyhUc.js">
+    <link rel="stylesheet" crossorigin href="/assets/luna-plXUMLAd.css">
   </head>
-  <body class="not-found">
+  <body class="not-found" data-theme="dark">
     <main class="nf wrap">
-      <div class="nf-tinte" data-tinte aria-hidden="true"></div>
-      <h1 class="nf-title">Diese Seite gibt es nicht.</h1>
-      <p class="nf-text">Vielleicht ein alter Link. Auf der Startseite von Hora geht es weiter.</p>
-      <p class="nf-text nf-en" lang="en">This page doesn't exist. The Hora home page is one click away.</p>
-      <a class="button button-primary" href="/">
+      <div class="nf-luna" data-luna aria-hidden="true"></div>
+      <h1 class="nf-title" data-en="This page doesn’t exist">Diese Seite gibt es nicht</h1>
+      <p class="nf-text" data-en="Maybe an old link. You can carry on from the Hora home page.">Vielleicht ein alter Link. Auf der Startseite von Hora geht es weiter.</p>
+      <a class="ap-btn" href="/">
         <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-        <span>Zur Startseite</span>
+        <span data-en="To the home page">Zur Startseite</span>
       </a>
     </main>
+    <script>
+      try {
+        if (localStorage.getItem("lang") === "en") {
+          document.documentElement.lang = "en";
+          document.querySelectorAll("[data-en]").forEach((el) => { el.textContent = el.dataset.en; });
+        }
+      } catch {}
+    </script>
   </body>
 </html>

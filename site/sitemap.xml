@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Leon Manuel Töpper -->
+<!-- SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://hora-app.netlify.app/</loc></url>
+  <url><loc>https://hora-app.netlify.app/features</loc></url>
+  <url><loc>https://hora-app.netlify.app/privacy-philosophy</loc></url>
+  <url><loc>https://hora-app.netlify.app/download</loc></url>
+  <url><loc>https://hora-app.netlify.app/about</loc></url>
+  <url><loc>https://hora-app.netlify.app/nutzungsbedingungen</loc></url>
+  <url><loc>https://hora-app.netlify.app/datenschutz</loc></url>
+</urlset>

@@ -1,5 +1,6 @@
-import { data, esc, icon, tinte, now, params } from "../core.js";
-import { animates, travels, enterInPlace, token } from "../motion.js";
+import { data, esc, icon, luna, now, params, storage, platform, LOCAL_KEYS } from "../core.js";
+import { animates, travels, token, ms } from "../motion.js";
+import { MAPS, price, rides, ownTickets, ticketState, matchFare, usualFare, mapsApp, walkUrl } from "../transit-rules.js";
 import { toast } from "../shell.js";
 
 const $ = (id) => document.getElementById(id);
@@ -29,6 +30,8 @@ const state = {
   searching: false,
   error: "",
   expanded: -1,
+  fares: new Map(),
+  fareRun: 0,
   live: true,
   board: { stop: places.home?.stop || null, name: places.home?.detail || "", departures: [], error: "", at: null },
   suggest: { input: null, items: [], index: -1, timer: 0, ticket: 0 },
@@ -76,10 +79,6 @@ function timeHtml(time, planned) {
   return `<b>${clockOf(time || planned)}</b>`;
 }
 
-function rides(journey) {
-  return journey.legs.filter((leg) => leg.category !== "fuss" && leg.category !== "rad");
-}
-
 function transferWarnings(journey) {
   const list = rides(journey);
   const warnings = [];
@@ -104,18 +103,37 @@ function ticketBadge(journey) {
   return journey.ticket === "fern" ? `<span class="badge is-fern">${icon("ticket")}Fernverkehr, eigenes Ticket</span>` : "";
 }
 
-function ticketNote(journey) {
-  if (journey.ticket === "deutschland") return `<p class="j-ticket">${icon("ticket")}Geht mit dem Deutschlandticket.</p>`;
-  if (journey.ticket === "fern") return `<p class="j-ticket is-fern">${icon("ticket")}Mit Fernverkehr, dafür reicht das Deutschlandticket nicht.</p>`;
-  return "";
+const transitPrefs = () => storage.get(LOCAL_KEYS.prefs)?.transit;
+const ticketOf = (journey, index) => ticketState(journey, ownTickets(transitPrefs()), state.fares.get(index), !journey.fare || state.fares.has(index));
+
+function ticketNote(journey, index) {
+  const ticket = ticketOf(journey, index);
+  if (!ticket) return "";
+  const hint = ticket.hint ? ` <a href="/hub/settings#fahrplan">Eigenes Ticket hinterlegen</a>` : "";
+  return `<p class="j-ticket is-${ticket.tone}">${icon("ticket")}<span>${esc(ticket.text)}${hint}</span></p>`;
 }
 
-function legsHtml(journey) {
+function fareChip(journey, index) {
+  const ticket = ticketOf(journey, index);
+  return ticket?.price ? `<span class="j-fare">${price(ticket.price)}</span>` : "";
+}
+
+function walkHtml(leg, last) {
+  const end = leg.to.name === "END" ? state.to?.name || "" : leg.to.name;
+  const text = `${leg.minutes} Min. zu Fuß${leg.distance ? `, ${leg.distance} m` : ""}${last && end ? ` bis ${esc(end)}` : ""}`;
+  const app = mapsApp(transitPrefs(), platform.mac);
+  const url = walkUrl(leg, app, now());
+  const body = url
+    ? `<a class="text-button leg-walk" href="${esc(url)}" target="_blank" rel="noopener" data-tip="Weg in ${MAPS[app]} öffnen">${icon("footprints")}<span>${text}</span>${icon("arrow-up-right")}<span class="visually-hidden">, Weg in ${MAPS[app]} öffnen</span></a>`
+    : `${icon("footprints")}${text}`;
+  return `<li class="leg is-walk"><span class="leg-rail" aria-hidden="true"></span><p>${body}</p></li>`;
+}
+
+function legsHtml(journey, at) {
   const parts = [];
   journey.legs.forEach((leg, index) => {
     if (leg.category === "fuss") {
-      if (leg.minutes < 1) return;
-      parts.push(`<li class="leg is-walk"><span class="leg-rail" aria-hidden="true"></span><p>${icon("footprints")}${leg.minutes} Min. zu Fuß${leg.distance ? `, ${leg.distance} m` : ""}${index === journey.legs.length - 1 ? ` bis ${esc(leg.to.name)}` : ""}</p></li>`);
+      if (leg.minutes >= 1) parts.push(walkHtml(leg, index === journey.legs.length - 1));
       return;
     }
     const stops = leg.stops ? `, ${leg.stops} ${leg.stops === 1 ? "Halt" : "Halte"}` : "";
@@ -127,7 +145,7 @@ function legsHtml(journey) {
     </li>`);
   });
   const warnings = transferWarnings(journey).map((item) => `<p class="leg-warning">Umstieg in ${esc(item.at)} knapp, ${Math.max(0, item.gap)} Min.</p>`).join("");
-  return `${warnings}<ol class="legs">${parts.join("")}</ol>${ticketNote(journey)}`;
+  return `${warnings}<ol class="legs">${parts.join("")}</ol><div data-ticket>${ticketNote(journey, at)}</div>`;
 }
 
 function plannedAt(time, ride, side) {
@@ -143,11 +161,54 @@ function journeyHtml(journey, index) {
     <button class="journey-main" type="button" aria-expanded="${open}" aria-controls="journey-${index}">
       <span class="j-times">${timeHtml(journey.start, plannedAt(journey.start, list[0], "from"))}<span class="j-arrow" aria-hidden="true">${icon("arrow-right")}</span>${timeHtml(journey.end, plannedAt(journey.end, list.at(-1), "to"))}</span>
       <span class="j-until">${journey.realtime ? `<i class="live-dot" aria-hidden="true"></i><span class="visually-hidden">Echtzeit, </span>` : ""}${untilText(leave)}</span>
-      <span class="j-legs">${journey.legs.filter((leg) => leg.category !== "fuss" || leg.minutes >= 3).map(lineBadge).join('<span class="j-sep" aria-hidden="true"></span>')}<span class="j-meta">${journeySummary(journey)}</span></span>
+      <span class="j-legs">${journey.legs.filter((leg) => leg.category !== "fuss" || leg.minutes >= 3).map(lineBadge).join('<span class="j-sep" aria-hidden="true"></span>')}<span class="j-meta">${journeySummary(journey)}</span><span data-fare>${fareChip(journey, index)}</span></span>
       <span class="j-extra">${transferWarnings(journey).length ? `<span class="badge is-fern">Umstieg knapp</span>` : ""}${ticketBadge(journey)}</span>
     </button>
-    <div class="j-detail" id="journey-${index}"${open ? "" : " hidden"}>${legsHtml(journey)}</div>
+    <div class="j-detail" id="journey-${index}"><div class="j-detail-inner"><div class="j-detail-body">${legsHtml(journey, index)}</div></div></div>
   </li>`;
+}
+
+function paintFare(index) {
+  const item = $("results").querySelector(`.journey[data-index="${index}"]`);
+  const journey = state.journeys[index];
+  if (!item || !journey) return;
+  item.querySelector("[data-fare]").innerHTML = fareChip(journey, index);
+  item.querySelector("[data-ticket]").innerHTML = ticketNote(journey, index);
+}
+
+async function loadFares() {
+  const run = ++state.fareRun;
+  state.fares = new Map();
+  if (ownTickets(transitPrefs()).germany) return;
+  const groups = new Map();
+  state.journeys.forEach((journey, index) => {
+    if (!journey.fare) return;
+    const key = `${journey.fare.from}|${journey.fare.to}`;
+    groups.set(key, [...(groups.get(key) || []), index]);
+  });
+  await Promise.all([...groups.values()].map(async (indexes) => {
+    const options = [];
+    const settle = (pick) => indexes.forEach((index) => {
+      const fare = state.fares.has(index) ? null : pick(state.journeys[index]);
+      if (!fare) return;
+      state.fares.set(index, fare);
+      paintFare(index);
+    });
+    for (const index of indexes.slice(0, 4)) {
+      if (state.fares.has(index)) continue;
+      const { from, to, time } = state.journeys[index].fare;
+      try {
+        options.push(...((await api("tarif", { von: from, nach: to, zeit: time })).fares || []));
+      } catch {}
+      if (run !== state.fareRun) return;
+      settle((journey) => matchFare(journey, options));
+    }
+    settle(() => usualFare(options));
+    indexes.filter((index) => !state.fares.has(index)).forEach((index) => {
+      state.fares.set(index, null);
+      paintFare(index);
+    });
+  }));
 }
 
 function renderResults() {
@@ -158,18 +219,34 @@ function renderResults() {
   }
   const title = `<h2 class="group-head" id="resultsTitle"><span>Verbindungen</span><small>${esc(state.from.detail || state.from.name)} nach ${esc(state.to.detail || state.to.name)}</small></h2>`;
   if (state.searching) {
-    host.innerHTML = `${title}<div class="loading-card" role="status">${tinte("laedt", 96)}<div><p class="empty-title">Suche Verbindungen</p><p class="empty-text">Live-Daten aus ganz Deutschland.</p></div></div>`;
+    host.innerHTML = `${title}<div class="loading-card" role="status">${luna("laedt", 96)}<div><p class="empty-title">Suche Verbindungen</p><p class="empty-text">Live-Daten aus ganz Deutschland.</p></div></div>`;
     return;
   }
   if (state.error) {
-    host.innerHTML = `${title}<div class="empty-state">${tinte("ruhe", 130)}<p class="empty-title">${esc(state.error)}</p><p class="empty-text">Die Daten kommen von einem freien Dienst, manchmal hakt er kurz.</p><button type="button" class="empty-action" data-retry>Nochmal versuchen${icon("chevron-right")}</button></div>`;
+    host.innerHTML = `${title}<div class="empty-state">${luna("ruhe", 130)}<p class="empty-title">${esc(state.error)}</p><p class="empty-text">Die Daten kommen von einem freien Dienst, manchmal hakt er kurz.</p><button type="button" class="empty-action" data-retry>Nochmal versuchen${icon("chevron-right")}</button></div>`;
     return;
   }
   if (!state.journeys.length) {
-    host.innerHTML = `${title}<div class="empty-state">${tinte("ruhe", 130)}<p class="empty-title">Keine Verbindung gefunden.</p><p class="empty-text">Probier eine andere Uhrzeit oder eine Haltestelle in der Nähe.</p></div>`;
+    host.innerHTML = `${title}<div class="empty-state">${luna("ruhe", 130)}<p class="empty-title">Keine Verbindung gefunden.</p><p class="empty-text">Probier eine andere Uhrzeit oder eine Haltestelle in der Nähe.</p></div>`;
     return;
   }
   host.innerHTML = `${title}<ol class="journeys">${state.journeys.map(journeyHtml).join("")}</ol>`;
+}
+
+function toggleJourney(index) {
+  const before = state.expanded;
+  state.expanded = before === index ? -1 : index;
+  [before, index].forEach((at) => {
+    const item = $("results").querySelector(`.journey[data-index="${at}"]`);
+    if (!item) return;
+    const open = state.expanded === at;
+    item.classList.toggle("is-open", open);
+    item.querySelector(".journey-main").setAttribute("aria-expanded", String(open));
+  });
+  if (state.expanded !== index) return;
+  setTimeout(() => {
+    if (state.expanded === index) $("results").querySelector(`.journey[data-index="${index}"]`)?.scrollIntoView({ block: "nearest", behavior: travels() ? "smooth" : "auto" });
+  }, ms("--dur-unfold") + 40);
 }
 
 function queryTime() {
@@ -185,6 +262,8 @@ async function searchJourneys() {
   state.searching = true;
   state.error = "";
   state.expanded = -1;
+  state.fareRun += 1;
+  state.fares = new Map();
   renderResults();
   try {
     const body = await api("verbindungen", { von: state.from.id, nach: state.to.id, zeit: queryTime(), ankunft: state.when === "arrive" ? "1" : "0" });
@@ -197,6 +276,7 @@ async function searchJourneys() {
   }
   state.searching = false;
   renderResults();
+  loadFares();
   const list = $("results").querySelector(".journeys");
   if (list && travels()) [...list.children].forEach((node, index) => node.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 260, delay: index * 40, easing: token("--ease-out"), fill: "backwards" }));
 }
@@ -528,14 +608,7 @@ function bind() {
       return;
     }
     const head = event.target.closest(".journey-main");
-    if (!head) return;
-    const item = head.closest(".journey");
-    const index = Number(item.dataset.index);
-    state.expanded = state.expanded === index ? -1 : index;
-    renderResults();
-    const detail = $(`journey-${index}`);
-    if (state.expanded === index && detail) enterInPlace(detail);
-    $("results").querySelector(`.journey[data-index="${index}"] .journey-main`)?.focus({ preventScroll: true });
+    if (head) toggleJourney(Number(head.closest(".journey").dataset.index));
   });
   $("locateButton").addEventListener("click", locate);
 }

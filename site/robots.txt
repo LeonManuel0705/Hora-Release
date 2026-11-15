@@ -1,8 +1,8 @@
-# robots.txt
-# Allow all crawlers to index the site
+# SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 User-agent: *
 Allow: /
-
-# Disallow API routes
 Disallow: /api/
+
+Sitemap: https://hora-app.netlify.app/sitemap.xml

@@ -3,18 +3,24 @@ const creations = new Map();
 const queues = new Map();
 
 async function send(method, url, body) {
+  const text = body === undefined ? undefined : JSON.stringify(body);
   const response = await fetch(url, {
     method,
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: text === undefined ? {} : { "Content-Type": "application/json" },
+    body: text,
     credentials: "same-origin",
-    keepalive: true,
+    // A request that may outlive the page must stay small: browsers refuse more than 64 KB of them at once.
+    keepalive: (text?.length || 0) < 20000,
   });
   let payload = null;
   try {
     payload = await response.json();
   } catch {}
-  if (!response.ok || payload?.success === false) throw new Error(payload?.error || `HTTP ${response.status}`);
+  if (!response.ok || payload?.success === false) {
+    const error = new Error(payload?.error || `HTTP ${response.status}`);
+    error.server = payload?.message || null;
+    throw error;
+  }
   return payload;
 }
 
@@ -22,10 +28,11 @@ function failed(error) {
   window.dispatchEvent(new CustomEvent("app:save-failed", { detail: { message: error?.message || "" } }));
 }
 
-function queue(key, job) {
+// A caller that tells about a failure itself asks for quiet, so the general warning does not come on top.
+function queue(key, job, { quiet = false } = {}) {
   const next = (queues.get(key) || Promise.resolve()).catch(() => {}).then(job);
   queues.set(key, next);
-  next.catch(failed);
+  next.catch(quiet ? () => {} : failed);
   return next;
 }
 
@@ -47,6 +54,8 @@ function create(key, url, body, pick) {
   creations.set(key, job);
   return queue(key, () => job);
 }
+
+export const serverId = (id) => serverIds.get(id) || null;
 
 const clean = (value) => (value === undefined ? null : value);
 
@@ -81,6 +90,7 @@ export const tasks = {
       if ("date" in changes && changes.date) body.date = changes.date;
       if ("title" in changes) body.title = changes.title;
       if ("subject" in changes) body.subject = clean(changes.subject);
+      if ("notes" in changes) body.detail = changes.notes || "";
       return Object.keys(body).length ? deadlines.update(ref, body) : Promise.resolve();
     }
     const body = Object.fromEntries(Object.entries(changes).map(([key, value]) => [key, clean(value)]));
@@ -95,7 +105,16 @@ export const tasks = {
     return queue(id, async () => send("DELETE", `/api/ui/tasks/${encodeURIComponent(await resolved(id))}`));
   },
   restore(task) {
-    if (homeworkRef(task.id)) return Promise.resolve();
+    const ref = homeworkRef(task.id);
+    if (ref) {
+      const status = task.done ? "abgegeben" : "offen";
+      if (task.source === "iserv") return deadlines.update(ref, { hidden: false, status });
+      serverIds.delete(ref);
+      creations.delete(ref);
+      const saved = deadlines.create({ id: ref, kind: "Hausaufgabe", title: task.title, subject: task.subject, date: task.date, detail: task.notes ?? task.detail ?? "" });
+      if (task.done) deadlines.update(ref, { status });
+      return saved;
+    }
     serverIds.delete(task.id);
     creations.delete(task.id);
     return tasks.create(task);
@@ -124,6 +143,9 @@ function eventBody(item) {
     place: item.place || "",
     kind: item.kind || "private",
     notes: item.notes || "",
+    ...(item.recurrence ? { recurrence: item.recurrence } : {}),
+    ...(item.reminderMinutes != null ? { reminderMinutes: item.reminderMinutes } : {}),
+    ...(item.googleCalendar ? { calendar: item.googleCalendar } : {}),
   };
 }
 
@@ -131,12 +153,12 @@ export const events = {
   create(item) {
     return create(item.id, "/api/ui/events", eventBody(item), (payload) => payload.event);
   },
-  update(id, changes) {
+  update(id, changes, options) {
     const body = Object.fromEntries(Object.entries(changes).map(([key, value]) => [key, clean(value)]));
-    return queue(id, async () => send("PATCH", `/api/ui/events/${encodeURIComponent(await resolved(id))}`, body));
+    return queue(id, async () => send("PATCH", `/api/ui/events/${encodeURIComponent(await resolved(id))}`, body), options);
   },
-  remove(id) {
-    return queue(id, async () => send("DELETE", `/api/ui/events/${encodeURIComponent(await resolved(id))}`));
+  remove(id, options) {
+    return queue(id, async () => send("DELETE", `/api/ui/events/${encodeURIComponent(await resolved(id))}`), options);
   },
   restore(item) {
     serverIds.delete(item.id);
@@ -156,7 +178,14 @@ export const grades = {
 
 export const notes = {
   create(item) {
-    return queue(`note-${Date.now()}`, () => send("POST", "/api/ui/notes", { type: item.type, title: item.title, details: item.details || "" }));
+    const body = { type: item.type, title: item.title, details: item.details || "", ...(item.created ? { created: item.created } : {}) };
+    return queue(`note-${Date.now()}`, async () => (await send("POST", "/api/ui/notes", body)).note);
+  },
+  update(id, changes) {
+    return queue(`note-${id}`, () => send("PATCH", `/api/ui/notes/${encodeURIComponent(id)}`, changes));
+  },
+  remove(id) {
+    return queue(`note-${id}`, () => send("DELETE", `/api/ui/notes/${encodeURIComponent(id)}`));
   },
 };
 
@@ -174,7 +203,7 @@ export function debounced(delay, run) {
     waiting.clear();
   };
   flushers.add(flush);
-  return (key, ...args) => {
+  const schedule = (key, ...args) => {
     clearTimeout(waiting.get(key)?.timer);
     const timer = setTimeout(() => {
       waiting.delete(key);
@@ -182,4 +211,9 @@ export function debounced(delay, run) {
     }, delay);
     waiting.set(key, { timer, args });
   };
+  schedule.cancel = (key) => {
+    clearTimeout(waiting.get(key)?.timer);
+    waiting.delete(key);
+  };
+  return schedule;
 }

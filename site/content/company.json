@@ -2,7 +2,7 @@
   "name": "Hora",
   "description": "Hora bündelt Stundenplan, IServ, Aufgaben, Noten und Fahrplan in einer kostenlosen Schul-App ohne Konto.",
   "logoUrl": "/logo.svg",
-  "repository": "https://github.com/LeonManuel0705/Hora",
+  "repository": "https://github.com/LeonManuel0705/Hora-Release",
   "website": "https://hora-app.netlify.app",
   "websiteHost": "hora-app.netlify.app",
   "email": "horaapp.team@gmail.com"

@@ -21,6 +21,8 @@
   .mail-folders button[aria-pressed="false"]:hover { background: color-mix(in oklab, var(--surface) 60%, transparent); color: var(--ink); }
 }
 
+.mail-folders button[aria-pressed="false"]:is(:active, .is-pressed) { background: color-mix(in oklab, var(--surface) 80%, transparent); color: var(--ink); }
+
 .mail-filters { display: flex; flex-wrap: wrap; gap: 6px; }
 .mail-filters .pill {
   gap: 6px;
@@ -29,7 +31,7 @@
   font-weight: var(--weight-medium);
   transition: background-color var(--dur-state) var(--ease-out), color var(--dur-state) var(--ease-out), scale var(--spring-tactile-dur) var(--spring-tactile);
 }
-.mail-filters .pill:active { scale: var(--scale-press); transition-duration: var(--dur-press); }
+.mail-filters .pill:is(:active, .is-pressed) { scale: var(--scale-press); transition-duration: var(--dur-press); }
 
 @media (hover: hover) and (pointer: fine) {
   .mail-filters .pill[aria-pressed="false"]:hover { background: var(--surface-hover); color: var(--ink); }
@@ -173,12 +175,14 @@
 .date-state { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--done-soft); color: var(--done-ink); }
 .date-state .icon { --s: 14; stroke-width: calc(44px / var(--s)); }
 .date-row.is-added .date-title { color: var(--ink-soft); }
-.date-row:active { background: color-mix(in oklab, var(--ink) 8%, transparent); }
+.date-row:is(:active, .is-pressed) { background: color-mix(in oklab, var(--ink) 8%, transparent); }
 
 @media (hover: hover) and (pointer: fine) {
   .date-row:hover { background: color-mix(in oklab, var(--ink) 5%, transparent); transition-duration: var(--dur-hover-in); }
   .date-row:hover .date-chev { translate: 2px 0; }
 }
+
+.date-row:is(:active, .is-pressed) .date-chev { translate: 2px 0; }
 
 .mail-reader {
   padding: 0 20px 22px;
@@ -283,7 +287,7 @@
   transition: background-color var(--dur-hover-out) var(--ease-hover), scale var(--spring-tactile-dur) var(--spring-tactile);
 }
 .suggest-button .icon { --s: 16; }
-.suggest-button:active { scale: var(--scale-press); transition-duration: var(--dur-press); }
+.suggest-button:is(:active, .is-pressed) { scale: var(--scale-press); transition-duration: var(--dur-press); }
 
 @media (hover: hover) and (pointer: fine) {
   .suggest-button:hover { background: var(--brand-hover); transition-duration: var(--dur-hover-in); }
@@ -329,7 +333,7 @@
 .reader-file-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--ink); }
 .reader-file-text small { font-size: var(--text-xs); color: var(--ink-muted); }
 .reader-file-get { --s: 16; color: var(--ink-muted); }
-.reader-file:active { scale: 0.99; transition-duration: var(--dur-press); }
+.reader-file:is(:active, .is-pressed) { scale: 0.99; transition-duration: var(--dur-press); }
 
 @media (hover: hover) and (pointer: fine) {
   .reader-file:hover { background: var(--surface-hover); transition-duration: var(--dur-hover-in); }
@@ -393,7 +397,8 @@
   .mail-folders { width: 100%; }
   .mail-folders button { flex: 0 0 auto; justify-content: center; }
   .mail-folders button[aria-pressed="false"] { min-width: 44px; }
-  .mail-folders button[aria-pressed="true"] { flex: 1 1 auto; }
+  .mail-folders button[aria-pressed="true"] { flex: 1 1 auto; min-width: 0; }
+  .mail-folders .folder-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mail-filters .pill { flex: 0 0 auto; }
   .mail-search input, .compose .field-control { font-size: 16px; }
   .mail-preview { -webkit-line-clamp: 2; }
