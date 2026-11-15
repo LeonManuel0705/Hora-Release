@@ -23,6 +23,15 @@ def secret_key(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-crypto-utils")
 
 
+# Every test client calls from 127.0.0.1, so on a fast machine one route's 200 requests a minute would
+# run out across tests and the next sign-in with the token would get 429 instead of a session.
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    limiter = getattr(sys.modules.get('app.app'), 'limiter', None)
+    if limiter is not None:
+        limiter.reset()
+
+
 @pytest.fixture(autouse=True)
 def no_background_check_left_running():
     yield
