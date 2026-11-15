@@ -9,7 +9,8 @@
 set -e
 
 APP_NAME="Hora"
-ZIP_URL="https://hora-app.netlify.app/downloads/Hora-macOS.zip"
+VERSION="0.6.0"
+ZIP_URL="https://github.com/LeonManuel0705/Hora-Release/releases/download/v$VERSION/$APP_NAME-$VERSION-macOS.zip"
 INSTALL_DIR="/Applications"
 APP="$INSTALL_DIR/$APP_NAME.app"
 STAGED="$INSTALL_DIR/.$APP_NAME-neu.app"

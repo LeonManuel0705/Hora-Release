@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import json
 import re
 import shutil
 import subprocess
@@ -28,3 +29,12 @@ RELEASE_FILES = ('landing-page/public/version.json', 'landing-page/public/instal
 def test_no_placeholder_of_a_release_is_left_for_the_website():
     left = [f'{name}: {token}' for name in RELEASE_FILES for token in re.findall(r'TODO_[A-Z0-9_]+', (ROOT / name).read_text(encoding='utf-8'))]
     assert not left, 'Fill these in from the Mac build and the release build before publishing:\n' + '\n'.join(left)
+
+
+def test_the_mac_installer_loads_the_release_the_website_names():
+    version = json.loads((ROOT / 'landing-page/public/version.json').read_text(encoding='utf-8'))['version']
+    repository = json.loads((ROOT / 'brand/brand.json').read_text(encoding='utf-8'))['repository']
+    script = (ROOT / 'landing-page/public/install-macos.sh').read_text(encoding='utf-8')
+    assert f'const version = "{version}";' in (ROOT / 'landing-page/src/js/lib/platform.js').read_text(encoding='utf-8')
+    assert f'VERSION="{version}"' in script
+    assert f'ZIP_URL="{repository}/releases/download/v$VERSION/$APP_NAME-$VERSION-macOS.zip"' in script

@@ -2,14 +2,14 @@ import { brandName, brandRepository } from "./i18n.js";
 
 const version = "0.6.0";
 const release = `${brandRepository}/releases/download/v${version}`;
-const macZip = `${brandName}-macOS.zip`;
+const macZip = `${brandName}-${version}-macOS.zip`;
 const windowsSetup = `${brandName}-Setup-${version}.exe`;
 const linuxDeb = `${brandName}-${version}.deb`;
 const linuxAppImage = `${brandName}-${version}.AppImage`;
 const androidApk = `${brandName}-${version}.apk`;
 
 export const PLATFORMS = {
-  macos: { id: "macos", name: "macOS", href: `/downloads/${macZip}`, file: macZip, bytes: 90200569, mark: "apple", kind: "zip" },
+  macos: { id: "macos", name: "macOS", href: `${release}/${macZip}`, file: macZip, bytes: 90200569, mark: "apple", kind: "zip" },
   windows: { id: "windows", name: "Windows", href: `${release}/${windowsSetup}`, file: windowsSetup, bytes: "TODO_BYTES_WINDOWS_SETUP", mark: "windows", kind: "exe" },
   linux: {
     id: "linux", name: "Linux", href: `${release}/${linuxDeb}`, file: linuxDeb, bytes: "TODO_BYTES_LINUX_DEB", mark: "linux", kind: "deb",
