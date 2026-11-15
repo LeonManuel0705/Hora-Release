@@ -149,7 +149,7 @@
   "platforms": {
     "macos": {
       "name": "macOS",
-      "note": "No Python needed on Macs with Apple silicon. Intel Macs need Python 3 (for example via the Xcode command line tools) and internet on first launch."
+      "note": "macOS 12 or newer. No Python needed on Macs with Apple silicon. Intel Macs need Python 3 (for example via the Xcode command line tools) and internet on first launch."
     },
     "windows": {
       "name": "Windows",

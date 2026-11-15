@@ -149,7 +149,7 @@
   "platforms": {
     "macos": {
       "name": "macOS",
-      "note": "Auf Macs mit Apple Chip ohne Python. Intel-Macs brauchen Python 3 (z. B. über die Xcode-Befehlszeilentools) und beim ersten Start Internet."
+      "note": "macOS 12 oder neuer. Auf Macs mit Apple Chip ohne Python. Intel-Macs brauchen Python 3 (z. B. über die Xcode-Befehlszeilentools) und beim ersten Start Internet."
     },
     "windows": {
       "name": "Windows",
