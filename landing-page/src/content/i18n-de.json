@@ -905,13 +905,12 @@
     ],
     "tile_luna_label": "Luna antippen, dann winkt sie",
     "privacy_title": "Deine Noten gehen nur dich was an",
-    "privacy_text": "Deine Daten bleiben auf deinem Gerät. Mit einem Konto kommt eine verschlüsselte Kopie dazu, die nur deine Geräte lesen können.⁴ Was die App mit ihnen macht, kannst du im Quellcode nachlesen, Zeile für Zeile.",
+    "privacy_text": "Deine Daten bleiben auf deinem Gerät. Mit einem Konto kommt eine verschlüsselte Kopie dazu, die nur deine Geräte lesen können.³ Was die App mit ihnen macht, kannst du im Quellcode nachlesen, Zeile für Zeile.",
     "privacy_link": "Mehr zum Datenschutz",
     "get_title": "Hol dir {{BRAND_NAME}}",
     "get_text": "Kostenlos für Mac, Windows, Linux und Android. Aufs iPhone kommt {{BRAND_NAME}} als Web-App.",
     "get_all": "Alle Downloads und Anleitungen",
     "fine": "Version 0.6 gibt es für alle Plattformen. Alle Daten in den Bildern sind ausgedacht.",
-    "footnote": "³ Gilt für den Mac: 24,0 MB in Version 0.5 statt 39,4 MB beim letzten Mac-Download (Nexus 0.3.0).",
     "high_title": "Was sonst noch drin ist",
     "high_label": "Weitere Funktionen",
     "high_prev": "Vorherige Karte",
@@ -940,8 +939,8 @@
       },
       {
         "id": "size",
-        "lead": "39 % kleiner³",
-        "text": "Lädt schneller herunter, startet schlanker und bietet weniger Angriffsfläche."
+        "lead": "Ein Stundenplan auf allen Geräten³",
+        "text": "Mit dem freiwilligen Konto ist dein Plan auf Handy und Computer derselbe. Verschlüsselt, bevor er dein Gerät verlässt."
       },
       {
         "id": "luna",
@@ -1107,11 +1106,11 @@
     ],
     "free_lesson": "In der Schule lernt man: Wenn eine App nichts kostet, bist du das Produkt.",
     "free_title": "Bei {{BRAND_NAME}} nicht",
-    "free_text": "Von dir bekomme ich nichts, kein Geld und keine Daten. Ich baue {{BRAND_NAME}} aus Spaß und aus Überzeugung: Eine App für die Schule gehört nicht hinter eine Paywall, und deine Daten gehören weder Werbefirmen noch sonst jemandem. Sie gehören dir. Deshalb liegen sie nur auf deinem Gerät, und nicht einmal ich komme an sie heran.",
+    "free_text": "Von dir bekomme ich nichts, kein Geld und keine Daten. Ich baue {{BRAND_NAME}} aus Spaß und aus Überzeugung: Eine App für die Schule gehört nicht hinter eine Paywall, und deine Daten gehören weder Werbefirmen noch sonst jemandem. Sie gehören dir. Deshalb liegen sie auf deinem Gerät, und nicht einmal ich komme an sie heran.³",
     "free_label": "Preis: 0 Euro",
     "footnote_iserv": "¹ IServ gibt es in den Apps für Mac, Windows, Linux und Android. Auf dem iPhone läuft {{BRAND_NAME}} als Web-App, dort geht IServ nicht.",
     "footnote_iserv_web": "¹ IServ gibt es nur in den Apps für Mac, Windows, Linux und Android. In der Web-App auf deinem {device} geht IServ nicht, Hausaufgaben trägst du dort selbst ein.",
     "footnote_agent": "² Das Sprachmodell für den Assistenten lädt {{BRAND_NAME}} erst, wenn du ihn zum ersten Mal öffnest, etwa 3 GB.",
-    "footnote_account": "⁴ Das Konto ist freiwillig und noch eine Beta. Damit gleicht {{BRAND_NAME}} Stundenplan, Vorname und Profilbild zwischen deinen Geräten ab. Die App verschlüsselt sie vorher auf deinem Gerät, die Kopie liegt bei Cloudflare in der EU."
+    "footnote_account": "³ Das Konto ist freiwillig und noch eine Beta. Damit gleicht {{BRAND_NAME}} Stundenplan, Vorname und Profilbild zwischen deinen Geräten ab. Die App verschlüsselt sie vorher auf deinem Gerät, die Kopie liegt bei Cloudflare in der EU. Deine E-Mail-Adresse sehe ich, deine Einträge nicht."
   }
 }

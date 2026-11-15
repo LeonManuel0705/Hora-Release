@@ -905,13 +905,12 @@
     ],
     "tile_luna_label": "Tap Luna and she waves",
     "privacy_title": "Your grades are your business",
-    "privacy_text": "Your data stays on your device. With an account, an encrypted copy comes along that only your devices can read.⁴ What the app does with it is in the source code, line by line.",
+    "privacy_text": "Your data stays on your device. With an account, an encrypted copy comes along that only your devices can read.³ What the app does with it is in the source code, line by line.",
     "privacy_link": "More on privacy",
     "get_title": "Get {{BRAND_NAME}}",
     "get_text": "Free for Mac, Windows, Linux and Android. On iPhone, {{BRAND_NAME}} runs as a web app.",
     "get_all": "All downloads and instructions",
     "fine": "Version 0.6 is out for every platform. All data in the pictures is made up.",
-    "footnote": "³ Applies to the Mac: 24.0 MB in version 0.5 instead of 39.4 MB for the last Mac download (Nexus 0.3.0).",
     "high_title": "What else is inside",
     "high_label": "More features",
     "high_prev": "Previous card",
@@ -940,8 +939,8 @@
       },
       {
         "id": "size",
-        "lead": "39 % smaller³",
-        "text": "Downloads faster, starts leaner and leaves less to attack."
+        "lead": "One timetable on all your devices³",
+        "text": "With the optional account, your plan is the same on your phone and your computer. Encrypted before it leaves your device."
       },
       {
         "id": "luna",
@@ -1107,11 +1106,11 @@
     ],
     "free_lesson": "At school they teach you: if an app is free, you are the product.",
     "free_title": "Not with {{BRAND_NAME}}",
-    "free_text": "I get nothing from you, no money and no data. I build {{BRAND_NAME}} for fun and out of conviction: a school app does not belong behind a paywall, and your data belongs neither to advertisers nor to anyone else. It belongs to you. That is why it stays on your device, and not even I can get to it.",
+    "free_text": "I get nothing from you, no money and no data. I build {{BRAND_NAME}} for fun and out of conviction: a school app does not belong behind a paywall, and your data belongs neither to advertisers nor to anyone else. It belongs to you. That is why it stays on your device, and not even I can get to it.³",
     "free_label": "Price: 0 euros",
     "footnote_iserv": "¹ IServ works in the apps for Mac, Windows, Linux and Android. On iPhone, {{BRAND_NAME}} runs as a web app, where IServ is not available.",
     "footnote_iserv_web": "¹ IServ is only available in the apps for Mac, Windows, Linux and Android. The web app on your {device} has no IServ, so you add homework yourself.",
     "footnote_agent": "² {{BRAND_NAME}} downloads the assistant's language model only when you first open it, about 3 GB.",
-    "footnote_account": "⁴ The account is optional and still a beta. With it, {{BRAND_NAME}} keeps your timetable, first name and profile picture the same on all your devices. The app encrypts them on your device first, and the copy is kept at Cloudflare in the EU."
+    "footnote_account": "³ The account is optional and still a beta. With it, {{BRAND_NAME}} keeps your timetable, first name and profile picture the same on all your devices. The app encrypts them on your device first, and the copy is kept at Cloudflare in the EU. I can see your email address, not your entries."
   }
 }
