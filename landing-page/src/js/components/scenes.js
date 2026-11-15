@@ -32,7 +32,7 @@ const HOURS = [
   { hour: 18, rain: 70, glyph: "cloud-rain" },
 ];
 const SECURITY = ["login", "mail", "iserv", "assistant", "desktop", "web"];
-const LIBS = { old: 19, gone: [2, 5, 8, 11, 15] };
+const LESSON_TINTS = [["#E3EFEB", "#2A8E8E"], ["#F6E8E8", "#B26D7E"], ["#E5EDF3", "#5986BD"]];
 const CARRY = [["tasks", "tasks"], ["calendar", "events"], ["school", "grades"], ["key", "logins"]];
 
 const s = (key) => escapeHtml(t(`start.scene.${key}`));
@@ -103,21 +103,34 @@ function securityScene() {
   </div>`;
 }
 
-function sizeScene() {
-  const fmt = new Intl.NumberFormat(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  const bricks = (keep) => Array.from({ length: LIBS.old }, (_, i) => (keep || !LIBS.gone.includes(i) ? "<i></i>" : "<i data-gone hidden></i>")).join("");
-  const row = (age, name, visual, value) => `<div class="sc-download-row is-${age}"><span class="sc-download-name">${name}</span>${visual}<span class="sc-download-mb">${value}</span></div>`;
-  const now = `${escapeHtml(brandName)} 0.5`;
-  return `<div class="sc sc-size" data-scene="size" role="img" aria-label="${s("size_alt")}">
-    <div class="sc-app sc-download">
-      <p class="sc-download-title">${icon("laptop", { size: 17 })}${s("size_title")}</p>
-      <p class="sc-download-label">${s("size_weight")}</p>
-      ${row("old", s("size_old"), '<span class="sc-download-bar"><i></i></span>', `${fmt.format(39.4)} MB`)}
-      ${row("new", now, '<span class="sc-download-bar"><i></i></span>', `<b data-from="39.4" data-to="24">${fmt.format(24)}</b> MB`)}
-      <p class="sc-download-label">${s("size_libs")}</p>
-      ${row("old", s("size_old"), `<span class="sc-libs">${bricks(true)}</span>`, LIBS.old)}
-      ${row("new", now, `<span class="sc-libs" data-libs>${bricks(false)}</span>`, `<b data-libs-count>${LIBS.old - LIBS.gone.length}</b>`)}
+function syncScene() {
+  const lessons = raw("start.scene.sync_lessons") || [];
+  const last = lessons.length - 1;
+  const tint = (i) => {
+    const [fill, stripe] = LESSON_TINTS[i % LESSON_TINTS.length];
+    return `style="--fill:${fill};--stripe:${stripe}"`;
+  };
+  const room = (lesson, i, where) => (i === last
+    ? `<span class="sc-sync-room is-changed" data-room="${where}"><i class="sc-sync-mark"></i><b>${escapeHtml(lesson.room)}</b>${where === "laptop" ? '<i class="sc-sync-caret"></i>' : ""}</span>`
+    : `<span class="sc-sync-room"><b>${escapeHtml(lesson.room)}</b></span>`);
+  const subject = (lesson) => `<span class="sc-sync-subject">${escapeHtml(lesson.subject)}</span>`;
+  const rows = lessons.map((lesson, i) => `<li class="sc-sync-row"><span class="sc-sync-time">${escapeHtml(lesson.time)}</span><span class="sc-sync-lesson" ${tint(i)}>${subject(lesson)}${room(lesson, i, "laptop")}</span></li>`).join("");
+  const tiles = lessons.map((lesson, i) => `<li class="sc-sync-lesson"${i === last ? " data-tile" : ""} ${tint(i)}>${subject(lesson)}${room(lesson, i, "phone")}</li>`).join("");
+  return `<div class="sc sc-sync" data-scene="sync" data-old-room="${s("sync_room_old")}" role="img" aria-label="${s("sync_alt")}">
+    <div class="sc-sync-laptop">
+      <div class="sc-app sc-sync-screen">
+        <p class="sc-sync-head">${mark()}<b>${s("sync_title")}</b><span>${s("sync_day")}</span></p>
+        <ol class="sc-sync-list">${rows}</ol>
+      </div>
+      <span class="sc-sync-base"></span>
     </div>
+    <div class="sc-app sc-sync-phone">
+      <span class="sc-sync-island"></span>
+      <p class="sc-sync-day">${s("sync_day")}</p>
+      <ol class="sc-sync-tiles">${tiles}</ol>
+    </div>
+    <span class="sc-sync-packet"><span>${icon("lock", { size: 15, stroke: 2.4 })}<i></i><i></i><i></i><i></i></span></span>
+    <p class="sc-sync-done">${icon("lock", { size: 16, stroke: 2.2 })}${s("sync_done")}</p>
   </div>`;
 }
 
@@ -176,7 +189,7 @@ export const SCENES = {
   weather: weatherScene,
   tour: tourScene,
   security: securityScene,
-  size: sizeScene,
+  sync: syncScene,
   luna: guardScene,
   move: moveScene,
   phone: phoneScene,
@@ -289,32 +302,60 @@ const PLAYERS = {
       countTo(scene.querySelector("[data-tally]"), 0, 30, 120 + rows.length * 110 + 400);
     },
   },
-  size: {
+  sync: {
     prepare(scene) {
-      hidden(scene.querySelector(".is-new .sc-download-bar i"), { transform: "scaleX(1)" });
-      scene.querySelectorAll("[data-gone]").forEach((brick) => (brick.hidden = false));
-      scene.querySelector("[data-libs-count]").textContent = LIBS.old;
+      scene.querySelectorAll("[data-room] b").forEach((text) => {
+        text.dataset.room = text.textContent;
+        text.textContent = scene.dataset.oldRoom;
+      });
+      scene.querySelectorAll(".sc-sync-mark").forEach((mark) => hidden(mark, POP));
+      hidden(scene.querySelector(".sc-sync-done"), RISE);
     },
     play(scene, later) {
-      enter(scene.querySelector(".is-new .sc-download-bar i"), { transform: "scaleX(1)" }, { delay: 300, duration: 1150 });
-      const number = scene.querySelector("[data-from]");
-      later(300, () => countTo(number, Number(number.dataset.from), Number(number.dataset.to), 1150, 1));
-      const gone = [...scene.querySelectorAll("[data-gone]")];
-      const kept = [...scene.querySelectorAll("[data-libs] i:not([data-gone])")];
-      gone.forEach((brick, i) => brick.animate([{}, { opacity: 0, transform: `translateY(30px) rotate(${i % 2 ? 26 : -26}deg) scale(0.7)` }], { delay: 1300 + i * 90, duration: 540, easing: "cubic-bezier(0.5, 0, 0.75, 0)", fill: "forwards" }));
-      const count = scene.querySelector("[data-libs-count]");
-      gone.forEach((_, i) => later(1300 + i * 90 + 260, () => (count.textContent = LIBS.old - i - 1)));
-      later(1300 + gone.length * 90 + 480, () => {
-        const before = new Map(kept.map((brick) => [brick, brick.getBoundingClientRect().left]));
-        gone.forEach((brick) => {
-          brick.getAnimations().forEach((anim) => anim.cancel());
-          brick.hidden = true;
-        });
-        kept.forEach((brick, i) => {
-          const dx = before.get(brick) - brick.getBoundingClientRect().left;
-          if (dx) brick.animate([{ transform: `translateX(${dx}px)` }, {}], { duration: 600, delay: i * 16, easing: SPRING });
-        });
+      const laptop = scene.querySelector('[data-room="laptop"]');
+      const phone = scene.querySelector('[data-room="phone"]');
+      const typed = laptop.querySelector("b");
+      const old = scene.dataset.oldRoom;
+      const room = typed.dataset.room;
+      enter(laptop.querySelector(".sc-sync-mark"), POP, { delay: 120, duration: 420, easing: SPRING });
+      laptop.querySelector(".sc-sync-caret").animate([{ opacity: 1 }, { opacity: 1, offset: 0.9 }, { opacity: 0 }], { delay: 120, duration: 700 });
+      [...old].forEach((_, i) => later(220 + i * 45, () => (typed.textContent = old.slice(0, old.length - i - 1))));
+      [...room].forEach((_, i) => later(420 + i * 80, () => (typed.textContent = room.slice(0, i + 1))));
+      const box = scene.getBoundingClientRect();
+      const centre = (el) => {
+        const rect = el.getBoundingClientRect();
+        return [rect.left + rect.width / 2 - box.left, rect.top + rect.height / 2 - box.top];
+      };
+      const [x0, y0] = centre(laptop);
+      const [x1, y1] = centre(phone);
+      const packet = scene.querySelector(".sc-sync-packet");
+      Object.assign(packet.style, { left: `${x0}px`, top: `${y0}px` });
+      const away = `translate(${x1 - x0}px, ${y1 - y0}px)`;
+      const lift = Math.max(56, (x1 - x0) * 0.45);
+      const timing = { delay: 780, duration: 1250 };
+      packet.animate([
+        { opacity: 0, transform: "none", easing: EASE },
+        { opacity: 1, transform: "none", offset: 0.18 },
+        { opacity: 1, transform: "none", offset: 0.26, easing: "cubic-bezier(0.45, 0, 0.35, 1)" },
+        { opacity: 1, transform: away, offset: 0.86, easing: "cubic-bezier(0.5, 0, 0.75, 0)" },
+        { opacity: 0, transform: away },
+      ], timing);
+      packet.firstElementChild.animate([
+        { transform: "translateY(0) scale(0.4)", easing: SPRING },
+        { transform: "translateY(-8px) scale(1)", offset: 0.18 },
+        { transform: "translateY(-8px) scale(1)", offset: 0.26, easing: "cubic-bezier(0.3, 0.55, 0.55, 1)" },
+        { transform: `translateY(${-lift}px) scale(1)`, offset: 0.56, easing: "cubic-bezier(0.45, 0, 0.7, 0.45)" },
+        { transform: "translateY(0) scale(0.92)", offset: 0.86, easing: "cubic-bezier(0.5, 0, 0.75, 0)" },
+        { transform: "translateY(0) scale(0.4)" },
+      ], timing);
+      later(1830, () => {
+        const text = phone.querySelector("b");
+        text.textContent = text.dataset.room;
+        text.animate([{ opacity: 0, transform: "translateY(60%)" }, {}], { duration: 460, easing: SPRING });
+        enter(phone.querySelector(".sc-sync-mark"), POP, { duration: 520, easing: SPRING });
+        scene.querySelector("[data-tile]").animate([{}, { transform: "scale(1.04)" }, {}], { duration: 440, easing: "ease-out" });
       });
+      enter(scene.querySelector(".sc-sync-done"), RISE, { delay: 2080, duration: 540 });
     },
   },
   guard: {

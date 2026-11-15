@@ -119,6 +119,29 @@ const tests = {
       assert.match(lang.steps.ios[1], /\{share\}/);
     }
   },
+  "every start card has a scene with a player, and every scene text exists in both languages"() {
+    const source = readFileSync(resolve(site, "js/components/scenes.js"), "utf8");
+    const block = (name) => source.slice(source.indexOf(`const ${name} = {`), source.indexOf("\n};", source.indexOf(`const ${name} = {`)));
+    const scenes = [...block("SCENES").matchAll(/^\s+(\w+): \w+,$/gm)].map((match) => match[1]);
+    const players = [...block("PLAYERS").matchAll(/^ {2}(\w+): \{$/gm)].map((match) => match[1]);
+    for (const lang of [de, en]) {
+      const ids = lang.start.cards.map((card) => card.id);
+      assert.equal(new Set(ids).size, ids.length, "card ids are unique");
+      for (const id of ids) assert.ok(scenes.includes(id), `card ${id} has no scene`);
+    }
+    for (const [, name] of source.matchAll(/data-scene="(\w+)"/g)) assert.ok(players.includes(name), `scene ${name} has no player`);
+    const keys = [...source.matchAll(/\bs\("(\w+)"\)/g)].map((match) => match[1]);
+    const lists = [...source.matchAll(/raw\("start\.scene\.(\w+)"\)/g)].map((match) => match[1]);
+    assert.ok(keys.includes("sync_alt") && lists.includes("sync_lessons"));
+    for (const lang of [de, en]) {
+      for (const key of keys) assert.equal(typeof lang.start.scene[key], "string", key);
+      for (const key of lists) assert.ok(lang.start.scene[key] && typeof lang.start.scene[key] === "object", key);
+      assert.ok(!Object.keys(lang.start.scene).some((key) => key.startsWith("size_")), "the download scene is gone");
+    }
+    const rooms = (lang) => lang.start.scene.sync_lessons.map((lesson) => [lesson.time, lesson.room]);
+    assert.deepEqual(rooms(en), rooms(de), "both languages show the same plan");
+    assert.notEqual(de.start.scene.sync_lessons.at(-1).room, de.start.scene.sync_room_old, "the last lesson changes its room");
+  },
   "new copy has no dashes inside sentences and no hardcoded name"() {
     for (const lang of [de, en]) {
       const added = strings([lang.install, lang.steps, lang.meta.desc, lang.start.lede_plain, lang.start.footnote_iserv, lang.start.footnote_iserv_web, lang.download_page.faq, lang.privacy_policy, lang.terms]);

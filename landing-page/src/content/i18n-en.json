@@ -938,7 +938,7 @@
         "text": "More than 30 fixes after several security reviews."
       },
       {
-        "id": "size",
+        "id": "sync",
         "lead": "One timetable on all your devices³",
         "text": "With the optional account, your plan is the same on your phone and your computer. Encrypted before it leaves your device."
       },
@@ -1010,11 +1010,28 @@
       "security_version": "Version 0.5",
       "security_fixes": "fixes",
       "security_alt": "The security review of {{BRAND_NAME}} 0.5 with more than 30 fixes. Checked were sign in, mail, IServ, the assistant, the desktop apps and the protection from other websites.",
-      "size_title": "Mac app",
-      "size_weight": "Download",
-      "size_libs": "Bundled libraries",
-      "size_old": "Nexus 0.3",
-      "size_alt": "The Mac download shrinks from 39.4 MB for Nexus 0.3 to 24 MB for {{BRAND_NAME}} 0.5, and the app now bundles 14 libraries instead of 19.",
+      "sync_title": "Timetable",
+      "sync_day": "Thursday",
+      "sync_lessons": [
+        {
+          "time": "7:45",
+          "subject": "Chemistry",
+          "room": "B206"
+        },
+        {
+          "time": "9:35",
+          "subject": "German",
+          "room": "A117"
+        },
+        {
+          "time": "11:25",
+          "subject": "Maths",
+          "room": "B105"
+        }
+      ],
+      "sync_room_old": "A021",
+      "sync_done": "Encrypted and synced",
+      "sync_alt": "On the computer, maths on Thursday moves from room A021 to B105. The change travels encrypted to the phone, which then shows the same plan.",
       "guard_done": "Task created",
       "guard_task": "Maths: p. 42, no. 3 by Friday",
       "guard_check": "Tick off tasks",

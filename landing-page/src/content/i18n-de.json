@@ -938,7 +938,7 @@
         "text": "Über 30 Korrekturen nach mehreren Sicherheitsprüfungen."
       },
       {
-        "id": "size",
+        "id": "sync",
         "lead": "Ein Stundenplan auf allen Geräten³",
         "text": "Mit dem freiwilligen Konto ist dein Plan auf Handy und Computer derselbe. Verschlüsselt, bevor er dein Gerät verlässt."
       },
@@ -1010,11 +1010,28 @@
       "security_version": "Version 0.5",
       "security_fixes": "Korrekturen",
       "security_alt": "Die Sicherheitsprüfung von {{BRAND_NAME}} 0.5 mit über 30 Korrekturen. Geprüft wurden Anmeldung, Mails, IServ, Assistent, Desktop-Apps und der Schutz vor fremden Webseiten.",
-      "size_title": "Mac-App",
-      "size_weight": "Download",
-      "size_libs": "Mitgelieferte Programmbibliotheken",
-      "size_old": "Nexus 0.3",
-      "size_alt": "Der Mac-Download schrumpft von 39,4 MB bei Nexus 0.3 auf 24 MB bei {{BRAND_NAME}} 0.5. Statt 19 bringt die App nur noch 14 Programmbibliotheken mit.",
+      "sync_title": "Stundenplan",
+      "sync_day": "Donnerstag",
+      "sync_lessons": [
+        {
+          "time": "7:45",
+          "subject": "Chemie",
+          "room": "B206"
+        },
+        {
+          "time": "9:35",
+          "subject": "Deutsch LK",
+          "room": "A117"
+        },
+        {
+          "time": "11:25",
+          "subject": "Mathe",
+          "room": "B105"
+        }
+      ],
+      "sync_room_old": "A021",
+      "sync_done": "Verschlüsselt abgeglichen",
+      "sync_alt": "Am Computer bekommt Mathe am Donnerstag den Raum B105 statt A021. Die Änderung geht verschlüsselt aufs Handy, dort steht danach derselbe Plan.",
       "guard_done": "Aufgabe angelegt",
       "guard_task": "Mathe: S. 42, Nr. 3 bis Freitag",
       "guard_check": "Aufgaben abhaken",

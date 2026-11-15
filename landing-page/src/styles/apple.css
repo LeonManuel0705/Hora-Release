@@ -382,7 +382,7 @@ body[data-theme="dark"] .menu-lines i { background: var(--ap-text); }
 .hl-weather { --tile: linear-gradient(180deg, #094B62 0%, #16819E 100%); }
 .hl-tour { --tile: linear-gradient(180deg, #F7E6C6 0%, #DCB27A 100%); --cap-lead: #2E3A2F; --cap-text: rgb(46 58 47 / 0.72); }
 .hl-security { --tile: linear-gradient(180deg, #212B23 0%, #3B5438 100%); }
-.hl-size { --tile: linear-gradient(180deg, #274A80 0%, #4C7FC3 100%); }
+.hl-sync { --tile: linear-gradient(180deg, #24467A 0%, #4474B6 100%); }
 .hl-luna { --tile: linear-gradient(180deg, #F9F7F1 0%, #E0D7C4 100%); --cap-lead: #2E3A2F; --cap-text: rgb(46 58 47 / 0.72); }
 .hl-move { --tile: linear-gradient(180deg, #4F2F64 0%, #8B5AA6 100%); }
 .hl-phone { --tile: linear-gradient(180deg, #F8EFDF 0%, #EACFA0 100%); --cap-lead: #2E3A2F; --cap-text: rgb(46 58 47 / 0.72); }
@@ -455,20 +455,36 @@ body[data-theme="dark"] .menu-lines i { background: var(--ap-text); }
 .sc-check-row:last-child { border-bottom: 0; }
 .sc-check { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #86A36F; color: #1F2A20; }
 
-.sc-download { width: min(660px, 88%); padding: 26px 30px 28px; }
-.ap .sc-download-title { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 700; }
-.ap .sc .sc-download-label { margin-top: 18px; font-size: 14px; font-weight: 620; color: #7A8076; }
-.ap .sc .sc-download-row + .sc-download-label { margin-top: 20px; padding-top: 18px; border-top: 1px solid #E1DCD0; }
-.sc-download-row { display: grid; grid-template-columns: 116px minmax(0, 1fr) 90px; align-items: center; gap: 16px; margin-top: 10px; font-size: 18px; font-weight: 620; }
-.sc-download-row.is-old { color: #7A8076; }
-.sc-download-bar { height: 18px; border-radius: 99px; background: rgb(46 58 47 / 0.07); overflow: hidden; }
-.sc-download-bar i { display: block; height: 100%; border-radius: 99px; background: #BDB8AA; transform-origin: 0 50%; }
-.is-new .sc-download-bar i { background: linear-gradient(90deg, #E7C694 0%, #D4AE76 100%); transform: scaleX(0.61); }
-.sc-download-mb { text-align: right; font-weight: 720; }
-.sc-libs { display: grid; grid-template-columns: repeat(19, minmax(0, 1fr)); gap: 5px; height: 22px; }
-.sc-libs i { border-radius: 6px; background: #BDB8AA; }
-.is-new .sc-libs i { background: linear-gradient(180deg, #E7C694 0%, #D4AE76 100%); }
-.sc-libs i[hidden] { display: none; }
+.sc-sync { grid-template-columns: auto auto; justify-content: center; align-items: end; column-gap: 124px; row-gap: 30px; padding: 12px 0 34px; }
+.sc-sync-laptop { width: 432px; }
+.sc-sync-screen { padding: 18px; border-radius: 22px 22px 8px 8px; }
+.ap .sc .sc-sync-head { display: flex; align-items: center; gap: 9px; padding: 0 4px 14px; font-size: 14px; font-weight: 600; color: #5E665B; }
+.sc-sync-head .sc-mark { width: 22px; height: 20px; }
+.sc-sync-head b { font-size: 17px; font-weight: 740; letter-spacing: -0.015em; color: #2E3A2F; }
+.sc-sync-head span { margin-left: auto; }
+.sc-sync-list, .sc-sync-tiles { display: grid; gap: 8px; }
+.sc-sync-row { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; gap: 10px; }
+.sc-sync-time { font-size: 13px; font-weight: 640; color: #7A8076; text-align: right; }
+.sc-sync-lesson { display: flex; align-items: center; gap: 10px; padding: 11px 14px 12px 16px; border-radius: 13px; background: var(--fill); box-shadow: inset 3px 0 0 var(--stripe); font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+.sc-sync-subject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-sync-room { position: relative; display: inline-flex; align-items: center; min-width: 2.5em; margin-left: auto; font-size: 14.5px; font-weight: 600; color: #5E665B; }
+.sc-sync-room b { position: relative; font-weight: inherit; }
+.sc-sync-room.is-changed { font-weight: 740; color: #2E3A2F; }
+.sc-sync-mark { position: absolute; inset: -3px -8px; border-radius: 99px; background: #E7C694; }
+.sc-sync-caret { position: relative; width: 2px; height: 1.1em; margin: 0 -3px 0 1px; border-radius: 2px; background: #2E3A2F; opacity: 0; }
+.sc-sync-base { position: relative; display: block; height: 15px; margin: 0 -28px; border-radius: 3px 3px 18px 18px; background: linear-gradient(180deg, #F4F1EA 0%, #CFC9BB 100%); box-shadow: 0 2px 4px rgb(12 18 13 / 0.12), 0 34px 50px -26px rgb(8 12 9 / 0.7); }
+.sc-sync-base::before { content: ""; position: absolute; left: 50%; top: 0; width: 86px; height: 5px; margin-left: -43px; border-radius: 0 0 8px 8px; background: #BDB6A7; }
+.sc-sync-phone { width: 200px; padding: 12px 12px 14px; border-radius: 34px; }
+.sc-sync-island { display: block; width: 58px; height: 16px; margin: 0 auto; border-radius: 99px; background: #2E3A2F; }
+.ap .sc .sc-sync-day { margin: 14px 4px 10px; font-size: 15px; font-weight: 740; letter-spacing: -0.01em; }
+.sc-sync-tiles .sc-sync-lesson { display: grid; justify-items: start; gap: 3px; padding: 10px 12px 11px 15px; }
+.sc-sync-tiles .sc-sync-room { margin-left: 0; }
+.sc-sync-packet { position: absolute; left: 0; top: 0; z-index: 3; opacity: 0; pointer-events: none; }
+.sc-sync-packet > span { display: flex; align-items: center; gap: 5px; translate: -50% -50%; padding: 9px 14px 9px 12px; border-radius: 99px; background: #2E3A2F; color: #E7C694; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 16px 28px -14px rgb(8 12 9 / 0.8); }
+.sc-sync-packet i { width: 6px; height: 6px; border-radius: 50%; background: rgb(248 246 238 / 0.72); }
+.sc-sync-packet .icon { margin-right: 3px; }
+.ap .sc-sync-done { grid-column: 1 / -1; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 17px; font-weight: 660; color: #FFFFFF; }
+.sc-sync-done .icon { color: #E7C694; }
 
 .sc-guard { grid-template-columns: min(600px, 88%); justify-content: center; }
 .sc-guard-mascot { position: relative; z-index: 2; justify-self: end; width: 128px; margin: 0 22px -22px 0; }
@@ -915,17 +931,29 @@ body[data-theme="dark"] .mobile-menu .lang-toggle { color: var(--ap-text); box-s
   .sc-report-count small { font-size: 11px; }
   .sc-check-row { height: 35px; gap: 10px; font-size: 13.5px; }
   .sc-check { width: 21px; height: 21px; }
-  .sc-download { width: calc(100% - 32px); padding: 16px 16px 18px; border-radius: 20px; }
-  .ap .sc-download-title { font-size: 15px; }
-  .ap .sc .sc-download-label { margin-top: 12px; font-size: 12px; }
-  .ap .sc .sc-download-row + .sc-download-label { margin-top: 13px; padding-top: 11px; }
-  .sc-download-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name value" "visual visual"; gap: 5px 9px; margin-top: 8px; font-size: 13px; }
-  .sc-download-name { grid-area: name; }
-  .sc-download-mb { grid-area: value; }
-  .sc-download-bar, .sc-libs { grid-area: visual; }
-  .sc-download-bar { height: 10px; }
-  .sc-libs { gap: 4px; height: 16px; }
-  .sc-libs i { border-radius: 4px; }
+  .sc-sync { column-gap: 26px; row-gap: 18px; padding: 8px 0 24px; }
+  .sc-sync-laptop { width: 188px; }
+  .sc-sync-screen { padding: 9px 8px; border-radius: 13px 13px 5px 5px; }
+  .ap .sc .sc-sync-head { gap: 5px; padding: 0 2px 7px; font-size: 9.5px; }
+  .sc-sync-head .sc-mark { width: 13px; height: 12px; }
+  .sc-sync-head b { font-size: 11px; }
+  .sc-sync-list, .sc-sync-tiles { gap: 4px; }
+  .sc-sync-row { grid-template-columns: 25px minmax(0, 1fr); gap: 4px; }
+  .sc-sync-time { font-size: 9px; }
+  .sc-sync-lesson { gap: 6px; padding: 6px 7px 7px 9px; border-radius: 8px; box-shadow: inset 2px 0 0 var(--stripe); font-size: 11px; }
+  .sc-sync-room { font-size: 10px; }
+  .sc-sync-mark { inset: -2px -5px; }
+  .sc-sync-base { height: 8px; margin: 0 -13px; border-radius: 2px 2px 10px 10px; }
+  .sc-sync-base::before { width: 40px; height: 3px; margin-left: -20px; border-radius: 0 0 5px 5px; }
+  .sc-sync-phone { width: 96px; padding: 7px 6px 8px; border-radius: 20px; }
+  .sc-sync-island { width: 30px; height: 9px; }
+  .ap .sc .sc-sync-day { margin: 8px 3px 6px; font-size: 10.5px; }
+  .sc-sync-tiles .sc-sync-lesson { gap: 1px; padding: 6px 6px 7px 9px; }
+  .sc-sync-packet > span { gap: 3px; padding: 5px 9px 5px 8px; }
+  .sc-sync-packet .icon { width: 12px; height: 12px; margin-right: 2px; }
+  .sc-sync-packet i { width: 4px; height: 4px; }
+  .ap .sc-sync-done { gap: 6px; font-size: 13px; }
+  .sc-sync-done .icon { width: 14px; height: 14px; }
   .sc-guard { grid-template-columns: calc(100% - 32px); }
   .sc-guard-mascot { width: 86px; margin: 0 6px -18px 0; }
   .sc-guard-mascot .luna { width: 86px; height: 86px; }
