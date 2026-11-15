@@ -11,7 +11,7 @@ import { slotMarkup } from "../ui/notice.js";
 import { resendMarkup, mountResend } from "../ui/resend.js";
 import { createFormKit } from "../ui/form-kit.js";
 
-const lede = (email) => `Wenn zu <strong>${esc(email)}</strong> ein Konto gehört, haben wir einen Code geschickt.`;
+const lede = (email) => `Wenn zu <strong>${esc(email)}</strong> ein Konto gehört, haben wir einen Code geschickt. Schau auch im Spam-Ordner nach.`;
 
 export default {
   id: "reset",

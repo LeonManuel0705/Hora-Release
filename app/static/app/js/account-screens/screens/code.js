@@ -10,7 +10,7 @@ import { slotMarkup, createNotice } from "../ui/notice.js";
 import { resendMarkup, mountResend } from "../ui/resend.js";
 
 const lede = (email, expiresAt) =>
-  `Wir haben einen Code an <strong>${esc(email)}</strong> geschickt. Er gilt noch ${formatDuration(Math.max(30, Math.round((expiresAt - Date.now()) / 1000)))}.`;
+  `Wir haben einen Code an <strong>${esc(email)}</strong> geschickt. Er gilt noch ${formatDuration(Math.max(30, Math.round((expiresAt - Date.now()) / 1000)))}. Schau auch im Spam-Ordner nach.`;
 
 export default {
   id: "code",
