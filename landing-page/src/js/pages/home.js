@@ -63,13 +63,7 @@ function highlights() {
 
 function agent() {
   const chat = raw("start.chat") || [];
-  const day = raw("start.day") || [];
   const bubbles = chat.map((message, i) => `<li class="ap-msg is-${message.from}" data-msg="${i}"${message.mood ? ` data-mood="${message.mood}"` : ""}><p>${escapeHtml(message.text)}</p></li>`).join("");
-  const moments = day.map((moment) => `<li class="ap-moment ap-reveal">
-      <div class="ap-moment-luna">${luna(moment.mood, 132, "", { still: true })}</div>
-      <p class="ap-moment-time">${escapeHtml(moment.time)}</p>
-      <p class="ap-moment-text">${escapeHtml(moment.text)}</p>
-    </li>`).join("");
   return `<section class="ap-agent" id="luna" aria-labelledby="ap-agent-title">
     <div class="ap-agent-head">
       <p class="ap-eyebrow ap-reveal">${escapeHtml(t("start.agent_eyebrow"))}</p>
@@ -88,8 +82,6 @@ function agent() {
         <div class="ap-chat-input" aria-hidden="true"><span>${escapeHtml(t("start.agent_input"))}</span><i></i></div>
       </div>
     </div>
-    <h3 class="ap-agent-day-title ap-reveal">${escapeHtml(t("start.day_title"))}</h3>
-    <ol class="ap-moments">${moments}</ol>
   </section>`;
 }
 

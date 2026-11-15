@@ -1098,29 +1098,6 @@
         "text": "Ja, bis Dienstag sind es fünf Tage. Heute noch die Aufgaben auf S. 58, morgen Vierfeldertafeln, am Wochenende Baumdiagramme."
       }
     ],
-    "day_title": "Und den ganzen Tag dabei",
-    "day": [
-      {
-        "time": "7:12",
-        "mood": "ruhe",
-        "text": "Guten Morgen. Gleich Chemie in B206."
-      },
-      {
-        "time": "13:40",
-        "mood": "laedt",
-        "text": "Moment, ich hole die Hausaufgaben aus IServ."
-      },
-      {
-        "time": "16:05",
-        "mood": "geschafft",
-        "text": "Alles abgehakt. Feierabend."
-      },
-      {
-        "time": "21:40",
-        "mood": "schlaeft",
-        "text": "Ich schlafe schon. Morgen um 7:45 geht es weiter."
-      }
-    ],
     "free_lesson": "In der Schule lernt man: Wenn eine App nichts kostet, bist du das Produkt.",
     "free_title": "Bei {{BRAND_NAME}} nicht",
     "free_text": "Von dir bekomme ich nichts, kein Geld und keine Daten. Ich baue {{BRAND_NAME}} aus Spaß und aus Überzeugung: Eine App für die Schule gehört nicht hinter eine Paywall, und deine Daten gehören weder Werbefirmen noch sonst jemandem. Sie gehören dir. Deshalb liegen sie auf deinem Gerät, und nicht einmal ich komme an sie heran.³",

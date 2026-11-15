@@ -1098,29 +1098,6 @@
         "text": "Yes, there are five days until Tuesday. Page 58 tonight, two-way tables tomorrow, tree diagrams at the weekend."
       }
     ],
-    "day_title": "And there all day",
-    "day": [
-      {
-        "time": "7:12",
-        "mood": "ruhe",
-        "text": "Good morning. Chemistry in B206 next."
-      },
-      {
-        "time": "13:40",
-        "mood": "laedt",
-        "text": "One moment, fetching your homework from IServ."
-      },
-      {
-        "time": "16:05",
-        "mood": "geschafft",
-        "text": "Everything ticked off. Time off."
-      },
-      {
-        "time": "21:40",
-        "mood": "schlaeft",
-        "text": "Already asleep. Back at 7:45 tomorrow."
-      }
-    ],
     "free_lesson": "At school they teach you: if an app is free, you are the product.",
     "free_title": "Not with {{BRAND_NAME}}",
     "free_text": "I get nothing from you, no money and no data. I build {{BRAND_NAME}} for fun and out of conviction: a school app does not belong behind a paywall, and your data belongs neither to advertisers nor to anyone else. It belongs to you. That is why it stays on your device, and not even I can get to it.³",
