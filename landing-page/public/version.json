@@ -27,8 +27,8 @@
   "downloads": {
     "android": {
       "url": "https://github.com/LeonManuel0705/Hora-Release/releases/download/v0.6.0/Hora-0.6.0.apk",
-      "size": "TODO_BYTES_ANDROID_APK",
-      "sha256": "TODO_SHA256_ANDROID_APK"
+      "size": 106634694,
+      "sha256": "1538f3b8f099c44a858efce2c10a75fc73981c1ea8619be3724a0a7aab1ad2b3"
     }
   }
 }

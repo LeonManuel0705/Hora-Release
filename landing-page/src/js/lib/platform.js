@@ -10,12 +10,12 @@ const androidApk = `${brandName}-${version}.apk`;
 
 export const PLATFORMS = {
   macos: { id: "macos", name: "macOS", href: `${release}/${macZip}`, file: macZip, bytes: 90200569, mark: "apple", kind: "zip" },
-  windows: { id: "windows", name: "Windows", href: `${release}/${windowsSetup}`, file: windowsSetup, bytes: "TODO_BYTES_WINDOWS_SETUP", mark: "windows", kind: "exe" },
+  windows: { id: "windows", name: "Windows", href: `${release}/${windowsSetup}`, file: windowsSetup, bytes: 178027483, mark: "windows", kind: "exe" },
   linux: {
-    id: "linux", name: "Linux", href: `${release}/${linuxDeb}`, file: linuxDeb, bytes: "TODO_BYTES_LINUX_DEB", mark: "linux", kind: "deb",
-    alt: { href: `${release}/${linuxAppImage}`, file: linuxAppImage, bytes: "TODO_BYTES_LINUX_APPIMAGE" },
+    id: "linux", name: "Linux", href: `${release}/${linuxDeb}`, file: linuxDeb, bytes: 166994284, mark: "linux", kind: "deb",
+    alt: { href: `${release}/${linuxAppImage}`, file: linuxAppImage, bytes: 195768599 },
   },
-  android: { id: "android", name: "Android", href: `${release}/${androidApk}`, file: androidApk, bytes: "TODO_BYTES_ANDROID_APK", mark: "android", kind: "apk" },
+  android: { id: "android", name: "Android", href: `${release}/${androidApk}`, file: androidApk, bytes: 106634694, mark: "android", kind: "apk" },
   ios: { id: "ios", name: "iPhone und iPad", nameEn: "iPhone and iPad", href: "/pwa/", file: null, bytes: 0, mark: "apple", kind: "pwa" },
   web: { id: "web", name: "Browser", nameEn: "Browser", href: "/pwa/", file: null, bytes: 0, mark: "globe", kind: "pwa" },
 };
