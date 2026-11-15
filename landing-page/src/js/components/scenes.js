@@ -309,6 +309,7 @@ const PLAYERS = {
         text.textContent = scene.dataset.oldRoom;
       });
       scene.querySelectorAll(".sc-sync-mark").forEach((mark) => hidden(mark, POP));
+      scene.querySelector('[data-room="phone"]').classList.add("is-waiting");
       hidden(scene.querySelector(".sc-sync-done"), RISE);
     },
     play(scene, later) {
@@ -351,6 +352,7 @@ const PLAYERS = {
       later(1830, () => {
         const text = phone.querySelector("b");
         text.textContent = text.dataset.room;
+        phone.classList.remove("is-waiting");
         text.animate([{ opacity: 0, transform: "translateY(60%)" }, {}], { duration: 460, easing: SPRING });
         enter(phone.querySelector(".sc-sync-mark"), POP, { duration: 520, easing: SPRING });
         scene.querySelector("[data-tile]").animate([{}, { transform: "scale(1.04)" }, {}], { duration: 440, easing: "ease-out" });
