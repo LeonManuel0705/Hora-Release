@@ -1,8 +1,8 @@
 {
   "version": "0.6.0",
   "versionName": "0.6.0 Beta",
-  "buildNumber": "TODO_MAC_BUILD_NUMBER",
-  "releaseDate": "2026-11-14",
+  "buildNumber": 41,
+  "releaseDate": "2026-11-15",
   "minSupportedVersion": "0.1",
   "updateUrl": "https://hora-app.netlify.app/download",
   "platformUrls": {

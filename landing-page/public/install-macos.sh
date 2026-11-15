@@ -52,7 +52,7 @@ curl -fsSL --retry 2 -o "$TMP_DIR/Hora-macOS.zip" "$ZIP_URL" \
     || fail "Der Download hat nicht geklappt. Prüf deine Internetverbindung und versuch es noch einmal."
 
 # Verify checksum (update EXPECTED_SHA on each release)
-EXPECTED_SHA="TODO_SHA256_MAC_ZIP"
+EXPECTED_SHA="42d7a9db57f739ab632b3a59f2a69f98bae34eb21d4e4ef803504327ce81efcf"
 ACTUAL_SHA=$(shasum -a 256 "$TMP_DIR/Hora-macOS.zip" | awk '{print $1}')
 if [ "$EXPECTED_SHA" != "PLACEHOLDER_UPDATE_ON_RELEASE" ] && [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
     fail "Die Prüfsumme stimmt nicht. Die Datei ist unvollständig oder verändert, deshalb wurde nichts installiert."
