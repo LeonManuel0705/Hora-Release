@@ -1,30 +1,42 @@
 import {
-  data, flags, params, esc, icon, tinte, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
+  data, flags, params, esc, icon, luna, now, pinnedTime, toMin, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, isoWeek, subject, hueVar, blockOf, glue, relativeDay, inDays, duration, shortDate, WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT,
-  abWeeks, gradeScale, activeSubjectKeys,
+  abWeeks, gradeScale, activeSubjectKeys, ASSESSMENTS, isAssessment, assessmentCount, pastText, pastWord, homeworkDate, periodWords, BRAND,
+  storage, LOCAL_KEYS,
 } from "../core.js";
 import { animates, travels, token, ms } from "../motion.js";
-import { toast, registerSearch, syncTime, typing, overlayOpen, pageUrl } from "../shell.js";
+import { toast, registerSearch, syncTime, typing, overlayOpen, pageUrl, keepOneLine } from "../shell.js";
 import { deadlines as deadlineApi, grades as gradeApi } from "../api.js";
+import { askAtFirstEntry } from "../reminders.js";
+import { onPlanRefresh, planViewsFree } from "../plan-refresh.js";
 
 const $ = (id) => document.getElementById(id);
 const page = data?.page || {};
 const narrow = matchMedia("(max-width: 1100px)");
 const compact = matchMedia("(max-width: 560px)");
 
-const KIND_ORDER = { Klausur: 0, Test: 1, Referat: 2, Abgabe: 3, Hausaufgabe: 4 };
-const FLAG_WORDS = { Klausur: "Klausur", Test: "Test", Referat: "Referat", Abgabe: "Abgabe", Hausaufgabe: "HA" };
-const FLAG_ICONS = { Klausur: "nx-test", Test: "nx-test", Referat: "presentation", Abgabe: "file-text", Hausaufgabe: "notebook-pen" };
-const NEXT_WORDS = { Test: "Nächster Test", Klausur: "Nächste Klausur", Referat: "Nächstes Referat" };
-const GRADE_TYPES = { klausur: "Klausur", test: "Test", muendlich: "Mündlich", sonstiges: "Sonstiges" };
+const KIND_ORDER = { Klausur: 0, Test: 1, Vortrag: 2, Abgabe: 3, Hausaufgabe: 4 };
+const FLAG_WORDS = { Klausur: "Klausur", Test: "Test", Vortrag: "Vortrag", Abgabe: "Abgabe", Hausaufgabe: "HA" };
+const FLAG_ICONS = { ...Object.fromEntries(Object.entries(ASSESSMENTS).map(([kind, info]) => [kind, info.icon])), Abgabe: "file-text", Hausaufgabe: "notebook-pen" };
+const NOTE_HINTS = { Vortrag: "z. B. Dauer, Gruppe, Handout", Abgabe: "z. B. Seite und Nummer", Hausaufgabe: "z. B. Seite und Nummer" };
+const GRADE_TYPES = { klausur: "Klausur", test: "Test", muendlich: "Mündlich", vortrag: "Vortrag", sonstiges: "Sonstiges" };
 const COURSE_WORDS = { LK: "Leistungskurs", GK: "Grundkurs", SK: "Seminarkurs" };
 const POINT_NOTES = ["6", "5\u2212", "5", "5+", "4\u2212", "4", "4+", "3\u2212", "3", "3+", "2\u2212", "2", "2+", "1\u2212", "1", "1+"];
 const RATINGS = [[13, "Sehr gut"], [10, "Gut"], [7, "Befriedigend"], [4, "Ausreichend"], [1, "Mangelhaft"], [0, "Ungenügend"]];
 const CALC_TOOLS = [["ziel", "Zielnote"], ["fach", "Fachnote"], ["umrechnen", "Umrechnen"]];
 const CALC_SYSTEMS = [["points", "Punkte"], ["grades", "Noten"]];
 const MARKS = [6, 5.3, 5, 4.7, 4.3, 4, 3.7, 3.3, 3, 2.7, 2.3, 2, 1.7, 1.3, 1, 0.7];
-const SEMESTER = page.semester || "Q3";
-const SEMESTERS = ["Q1", "Q2", SEMESTER].filter((value, index, list) => list.indexOf(value) === index);
+// Empty while the class is unknown, so the grades of now are shown without naming a term.
+const SEMESTER = page.semester || "";
+const IN_TERM = SEMESTER ? ` ${SEMESTER}` : "";
+const termName = (term) => term || "Jetzt";
+const SEMESTERS = (() => {
+  const earlier = new Set(Object.values(page.history || {}).flatMap((terms) => Object.keys(terms || {})));
+  const upper = /^Q([1-4])$/.exec(SEMESTER);
+  for (let number = 1; upper && number < Number(upper[1]); number += 1) earlier.add(`Q${number}`);
+  earlier.delete(SEMESTER);
+  return [...[...earlier].sort((a, b) => a.localeCompare(b, "de", { numeric: true })), SEMESTER];
+})();
 
 const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const widow = (text) => text.replace(/ (\S{1,12})$/, "\u00a0$1");
@@ -59,8 +71,6 @@ const readList = (text, system = "points") => String(text ?? "")
   .flatMap((token) => ((token.match(/,/g) || []).length > 1 ? token.split(",") : [token]))
   .map((token) => readValue(token, system))
   .filter((value) => value != null);
-const isExam = (item) => item.kind === "Test" || item.kind === "Klausur";
-const isAssessment = (item) => isExam(item) || item.kind === "Referat";
 const isHomework = (item) => item.kind === "Hausaufgabe" || item.kind === "Abgabe";
 const byDate = (a, b) => a.date.localeCompare(b.date) || (a.block || 0) - (b.block || 0);
 const cellKey = (iso, block) => `${iso}:${block}`;
@@ -81,7 +91,9 @@ const state = {
   gradeForm: false,
   gradeSemester: SEMESTER,
   calc: { open: false, table: false, tool: "ziel", system: null, subject: null, average: "", count: "", target: "", exams: ["", "", "", ""], other: "", points: 12, mark: 2 },
-  vplan: { loaded: false, loading: false, stand: null },
+  vplan: { loaded: false, loading: false, stand: null, files: [], problem: null, message: "", supported: true, page: 0, zoomed: false },
+  writtenOpen: false,
+  openNotes: new Set(),
   signature: "",
   tick: 0,
   fresh: new Set(),
@@ -106,6 +118,7 @@ function changesOn(date) {
 }
 
 const blockList = () => [...(data.blocks || [])].sort((a, b) => toMin(a.start) - toMin(b.start));
+const nth = (n) => `${n}.\u00a0${periodWords().one}`;
 
 function lessonsOn(date) {
   const dow = date.getDay();
@@ -267,10 +280,10 @@ const subjectTag = (key) => `<span class="subject"><i class="subject-dot" style=
 function slotLabel(lesson, time) {
   const diff = dayDiff(time.date, lesson.iso);
   const day = diff === 0 ? "Heute" : diff === 1 ? "Morgen" : `${WEEKDAYS_SHORT[lesson.date.getDay()]}., ${lesson.date.getDate()}.${lesson.date.getMonth() + 1}.`;
-  return `${day}, ${lesson.block}.\u00a0Block`;
+  return `${day}, ${nth(lesson.block)}`;
 }
 
-const slotText = (date, block) => `${WEEKDAYS_SHORT[date.getDay()]}., ${date.getDate()}.${date.getMonth() + 1}.${block ? `, ${block}.\u00a0Block` : ""}`;
+const slotText = (date, block) => `${WEEKDAYS_SHORT[date.getDay()]}., ${date.getDate()}.${date.getMonth() + 1}.${block ? `, ${nth(block)}` : ""}`;
 
 function gradesFor(key, semester = SEMESTER) {
   return state.grades.filter((grade) => grade.subject === key && (grade.semester || SEMESTER) === semester).sort((a, b) => b.date.localeCompare(a.date));
@@ -313,7 +326,7 @@ function sortedSubjects(rows) {
 
 function focusKeyOf(node) {
   if (!node || node === document.body) return null;
-  for (const attr of ["data-cell", "data-open-item", "data-open-lesson", "data-open-subject", "data-open-grades", "data-week", "data-semester", "data-slot", "data-kind", "data-calc-tool", "data-calc-system", "data-calc", "data-calc-for"]) {
+  for (const attr of ["data-cell", "data-open-item", "data-open-lesson", "data-open-subject", "data-open-grades", "data-edit-item", "data-delete-item", "data-done-item", "data-note-more", "data-delete-grade", "data-week", "data-semester", "data-slot", "data-kind", "data-calc-tool", "data-calc-system", "data-calc", "data-calc-for"]) {
     if (node.hasAttribute?.(attr)) return `[${attr}="${CSS.escape(node.getAttribute(attr))}"]`;
   }
   return node.id ? `#${CSS.escape(node.id)}` : null;
@@ -324,14 +337,7 @@ function keepFocus(container, paint) {
   const key = active && container.contains(active) ? focusKeyOf(active) : null;
   paint();
   if (!key || container.contains(document.activeElement)) return;
-  container.querySelector(key)?.focus({ preventScroll: true });
-}
-
-function say(text) {
-  const live = $("liveStatus");
-  if (!live) return;
-  live.textContent = "";
-  requestAnimationFrame(() => (live.textContent = text));
+  (container.querySelector(key) || container.querySelector("#panelTitle"))?.focus({ preventScroll: true });
 }
 
 function renderHead() {
@@ -366,7 +372,7 @@ function flagHtml(item, overdue) {
 
 function lessonLabel(lesson, phase, items, context) {
   const info = subject(lesson.subject);
-  const parts = [`${WEEKDAYS[lesson.date.getDay()]}, ${lesson.block}. Block, ${hm(lesson.start)} bis ${hm(lesson.end)}: ${info.name}`];
+  const parts = [`${WEEKDAYS[lesson.date.getDay()]}, ${nth(lesson.block)}, ${hm(lesson.start)} bis ${hm(lesson.end)}: ${info.name}`];
   if (lesson.cancelled) parts.push(`entfällt${lesson.note ? `, Grund: ${lesson.note}` : ""}`);
   else if (lesson.movedFrom) parts.push(`heute in Raum ${lesson.room} statt ${lesson.movedFrom}`);
   else parts.push(`Raum ${lesson.room}`);
@@ -421,8 +427,8 @@ function tableHtml() {
     const cls = iso === context.time.iso ? " is-today" : iso < context.time.iso ? " is-past" : "";
     return `<th scope="col" class="tt-day${cls}"${iso === context.time.iso ? ' aria-current="date"' : ""}><span class="tt-day-head" aria-hidden="true"><span class="tt-day-name">${WEEKDAYS_SHORT[day.getDay()]}</span><span class="tt-day-date">${day.getDate()}.${day.getMonth() + 1}.</span></span><span class="visually-hidden">${WEEKDAYS[day.getDay()]}, ${day.getDate()}. ${MONTHS[day.getMonth()]}${iso === context.time.iso ? ", heute" : ""}</span></th>`;
   }).join("");
-  const rows = blockList().map((block, row) => `<tr><th scope="row" class="block"><span class="block-visual" aria-hidden="true"><span class="block-num">${block.n}</span><span class="block-time">${hm(block.start)}<br>${hm(block.end)}</span></span><span class="visually-hidden">${block.n}. Block, ${hm(block.start)} bis ${hm(block.end)}</span></th>${days.map((day, col) => cellHtml(lessons[col].find((lesson) => lesson.block === block.n), block, row, col, context)).join("")}</tr>`).join("");
-  return `<thead><tr><th scope="col" class="corner"><span class="visually-hidden">Block</span></th>${head}</tr></thead><tbody>${rows}</tbody>`;
+  const rows = blockList().map((block, row) => `<tr><th scope="row" class="block"><span class="block-visual" aria-hidden="true"><span class="block-num">${block.n}</span><span class="block-time">${hm(block.start)}<br>${hm(block.end)}</span></span><span class="visually-hidden">${nth(block.n)}, ${hm(block.start)} bis ${hm(block.end)}</span></th>${days.map((day, col) => cellHtml(lessons[col].find((lesson) => lesson.block === block.n), block, row, col, context)).join("")}</tr>`).join("");
+  return `<thead><tr><th scope="col" class="corner"><span class="visually-hidden">${periodWords().one}</span></th>${head}</tr></thead><tbody>${rows}</tbody>`;
 }
 
 function anchorCell(table) {
@@ -582,8 +588,8 @@ function changeDays() {
 function changeRow(lesson) {
   const info = subject(lesson.subject);
   const title = lesson.cancelled
-    ? `${lesson.block}.\u00a0Block ${info.label} entfällt`
-    : `${lesson.block}.\u00a0Block ${info.label} in ${lesson.room}`;
+    ? `${nth(lesson.block)} ${info.label} entfällt`
+    : `${nth(lesson.block)} ${info.label} in ${lesson.room}`;
   const detail = lesson.cancelled
     ? `${hm(lesson.start)} bis ${hm(lesson.end)}, ${lesson.teacher}${lesson.note ? `, Grund: ${lesson.note}` : ""}`
     : `statt ${lesson.movedFrom}, ${hm(lesson.start)} bis ${hm(lesson.end)}`;
@@ -593,23 +599,24 @@ function changeRow(lesson) {
   </button></li>`;
 }
 
-function vplanHtml() {
+function planStand() {
+  const stamp = state.vplan.stand;
+  if (!stamp) return "";
+  const date = new Date(stamp);
+  if (Number.isNaN(date.getTime())) return "";
+  const time = `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const diff = dayDiff(clockState().date, isoDate(date));
+  if (diff === 0) return `Stand ${time} Uhr`;
+  if (diff === -1) return `Stand gestern, ${time} Uhr`;
+  return `Stand ${shortDate(date)} ${time} Uhr`;
+}
+
+function changesHtml(head) {
   const time = clockState();
-  const offline = flags.offline;
-  const tools = `<button class="icon-button${state.vplan.loading ? " is-spinning" : ""}" type="button" id="vplanRefresh" aria-label="Vertretungsplan aus IServ neu laden" data-tip="Neu laden">${icon("refresh-cw")}</button>`;
-  const head = `<div class="ov-head"><h2 class="side-title" id="vplanTitle">Vertretungsplan</h2>${tools}</div>`;
-  if (state.vplan.loading) {
-    return `${head}<div class="ov-loading" role="status">${tinte("laedt", 84)}<div><p class="empty-title">Hole Vertretungsplan aus IServ</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
-  }
-  if (!data.status?.iserv) {
-    return `<div class="ov-head"><h2 class="side-title" id="vplanTitle">Vertretungsplan</h2></div><p class="ov-calm is-quiet">${icon("graduation-cap")}<span>Verbinde IServ unter <a class="inline-link" href="${esc(pageUrl("settings", "/hub/settings#konten"))}" data-page="settings">Einstellungen, Konten</a>, dann erscheint hier der Vertretungsplan.</span></p>`;
-  }
-  if (!(data.changes || []).length && !(page.changes || []).length) {
-    return `${head}<p class="ov-calm is-quiet">${icon("graduation-cap")}<span>Der Vertretungsplan kommt als Datei aus IServ. Änderungen siehst du dort.</span></p>`;
-  }
-  const stand = offline
-    ? `<p class="side-meta is-offline">${icon("wifi-off")}Offline, Stand ${esc(state.vplan.stand || syncTime())} Uhr</p>`
-    : `<p class="side-meta">Stand ${esc(state.vplan.stand || syncTime())} Uhr</p>`;
+  const synced = syncTime();
+  const stand = flags.offline
+    ? `<p class="side-meta is-offline">${icon("wifi-off")}${synced ? `Offline, Stand ${esc(synced)} Uhr` : "Offline"}</p>`
+    : synced ? `<p class="side-meta">Stand ${esc(synced)} Uhr</p>` : "";
   const days = changeDays();
   const groups = days.map((day) => {
     const changed = lessonsOn(day).filter((lesson) => lesson.changed);
@@ -631,19 +638,93 @@ function vplanHtml() {
   return `${head}${stand}${lists}`;
 }
 
+function vplanHtml() {
+  const plan = state.vplan;
+  const title = `<h2 class="side-title" id="vplanTitle">Vertretungsplan</h2>`;
+  if (data.status?.iservAvailable === false) {
+    return `<div class="ov-head">${title}</div><p class="ov-calm is-quiet">${icon("graduation-cap")}<span>Den Vertretungsplan holt ${esc(BRAND)} in der App für Mac, Windows, Linux und Android aus IServ.</span></p>`;
+  }
+  if (!data.status?.iserv) {
+    return `<div class="ov-head">${title}</div><p class="ov-calm is-quiet">${icon("graduation-cap")}<span>Verbinde IServ unter <a class="inline-link" href="${esc(pageUrl("settings", "/hub/settings#konten"))}" data-page="settings">Einstellungen, Konten</a>, dann erscheint hier der Vertretungsplan.</span></p>`;
+  }
+  const tools = `<button class="icon-button${plan.loading ? " is-spinning" : ""}" type="button" id="vplanRefresh" aria-label="Vertretungsplan aus IServ neu laden" data-tip="Neu laden">${icon("refresh-cw")}</button>`;
+  const head = `<div class="ov-head">${title}${tools}</div>`;
+  if ((data.changes || []).length || (page.changes || []).length) return changesHtml(head);
+  if (!plan.supported) {
+    return `<div class="ov-head">${title}</div><p class="ov-calm is-quiet">${icon("graduation-cap")}<span>Der Vertretungsplan kommt als Datei aus IServ. Änderungen siehst du dort.</span></p>`;
+  }
+  if (!plan.files.length) {
+    if (plan.loading || !plan.loaded) {
+      return `${head}<div class="ov-loading" role="status">${luna("laedt", 84)}<div><p class="empty-title">Hole Vertretungsplan aus IServ</p><p class="empty-text">Dauert nur einen Moment.</p></div></div>`;
+    }
+    return `${head}<p class="ov-calm is-quiet">${icon("graduation-cap")}<span>${esc(plan.message || "IServ zeigt gerade keinen Vertretungsplan.")}</span></p>`;
+  }
+  const unreachable = plan.problem === "offline" || plan.problem === "login";
+  const note = [plan.problem ? plan.message : "", planStand()].filter(Boolean).join(" ");
+  const stand = `<p class="side-meta${unreachable ? " is-offline" : ""}">${unreachable ? icon("wifi-off") : ""}<span>${esc(note)}</span></p>`;
+  const first = plan.files[0];
+  const thumb = first.type === "image"
+    ? `<button type="button" class="plan-thumb" data-plan-open="0" aria-label="Vertretungsplan groß ansehen" data-tip="Groß ansehen"><img src="${esc(first.url)}" alt="" decoding="async"></button>`
+    : `<button type="button" class="plan-thumb is-file" data-plan-open="0">${icon("file-text")}<span>Vertretungsplan öffnen</span></button>`;
+  const pages = plan.files.length > 1
+    ? `<div class="plan-pages" role="group" aria-label="Seiten">${plan.files.map((file, index) => `<button type="button" class="pill" data-plan-open="${index}">Seite ${index + 1}</button>`).join("")}</div>`
+    : "";
+  return `${head}${stand}${thumb}${pages}`;
+}
+
+function renderPlanViewer() {
+  const plan = state.vplan;
+  plan.page = Math.max(0, Math.min(plan.page, plan.files.length - 1));
+  const file = plan.files[plan.page];
+  const stage = $("planStage");
+  if (!file || !stage) return;
+  const tabs = $("planTabs");
+  tabs.hidden = plan.files.length < 2;
+  tabs.innerHTML = plan.files.map((entry, index) => `<button type="button" data-plan-page="${index}" aria-pressed="${index === plan.page}">Seite ${index + 1}</button>`).join("");
+  $("planViewerMeta").textContent = planStand();
+  const label = `Vertretungsplan, Seite ${plan.page + 1}`;
+  stage.classList.toggle("is-zoomed", plan.zoomed && file.type === "image");
+  stage.innerHTML = file.type === "image"
+    ? `<img class="plan-sheet" src="${esc(file.url)}" alt="${label}">`
+    : `<iframe class="plan-frame" src="${esc(file.url)}" title="${label}"></iframe>`;
+  stage.scrollTo(0, 0);
+}
+
+function openPlan(index) {
+  const dialog = $("planViewer");
+  if (!dialog || !state.vplan.files.length) return;
+  state.vplan.page = Math.max(0, Math.min(index, state.vplan.files.length - 1));
+  state.vplan.zoomed = false;
+  renderPlanViewer();
+  if (!dialog.open) dialog.showModal();
+}
+
+function zoomPlan(event) {
+  const stage = $("planStage");
+  const sheet = stage.querySelector(".plan-sheet");
+  const before = sheet.getBoundingClientRect();
+  const x = Math.min(1, Math.max(0, (event.clientX - before.left) / before.width));
+  const y = Math.min(1, Math.max(0, (event.clientY - before.top) / before.height));
+  state.vplan.zoomed = !state.vplan.zoomed;
+  stage.classList.toggle("is-zoomed", state.vplan.zoomed);
+  const after = sheet.getBoundingClientRect();
+  stage.scrollLeft += after.left + x * after.width - event.clientX;
+  stage.scrollTop += after.top + y * after.height - event.clientY;
+}
+
 function nextTestHtml() {
   const time = clockState();
   const next = state.items.filter((item) => isAssessment(item) && item.date >= time.iso).sort(byDate)[0];
   if (!next) {
-    return `<h2 class="side-title">Tests und Klausuren</h2><p class="ov-calm is-quiet">${icon("circle-check")}<span>Keine angekündigt.</span></p>`;
+    return `<h2 class="side-title">Tests, Klausuren und Vorträge</h2><p class="ov-calm is-quiet">${icon("circle-check")}<span>Keine angekündigt.</span></p>`;
   }
   const target = parseDate(next.date);
   const diff = dayDiff(time.date, next.date);
   const block = itemBlock(next);
   const lesson = block ? lessonAt(next.date, block) : null;
-  const where = [block ? `${block}.\u00a0Block` : "", lesson ? lesson.room : ""].filter(Boolean).join(", ");
+  const where = [block ? nth(block) : "", lesson ? lesson.room : ""].filter(Boolean).join(", ");
   const soon = diff <= 1 ? " is-soon" : "";
-  return `<h2 class="side-title" id="nextTestTitle">${esc(NEXT_WORDS[next.kind] || "Als Nächstes")}</h2>
+  return `<h2 class="side-title" id="nextTestTitle">${esc(ASSESSMENTS[next.kind].next)}</h2>
     <button type="button" class="ov-item" data-open-item="${esc(next.id)}" aria-describedby="nextTestTitle">
       ${leaf(target, soon)}
       <span class="ov-item-text"><b>${esc(subject(next.subject).label)}${where ? `, ${esc(where)}` : ""}</b><span class="ov-item-title">${widow(glue(esc(next.title)))}</span><small class="due-when${diff <= 1 ? " is-urgent" : ""}">${esc(diff <= 1 ? cap(relativeDay(diff, target)) : cap(inDays(diff)))}</small></span>
@@ -655,10 +736,12 @@ function gradesSummaryHtml() {
   const rows = semesterRows(SEMESTER);
   const value = overallOf(rows);
   const count = rows.reduce((sum, row) => sum + row.count, 0);
-  const previous = overallOf(semesterRows(SEMESTERS[SEMESTERS.indexOf(SEMESTER) - 1] || ""));
-  const trend = value != null && previous != null ? `${SEMESTERS[SEMESTERS.indexOf(SEMESTER) - 1]}: ${decimal(previous)}` : "";
-  return `<button type="button" class="ov-item ov-grades" data-open-grades="1" aria-label="Noten ${SEMESTER}${value != null ? `, Schnitt ${decimal(value)} Punkte` : ", noch keine Noten"}">
-    <span class="ov-item-text"><span class="side-title">Noten ${SEMESTER}</span><small>${value != null ? `${plural(count, "Note", "Noten")}${trend ? `, ${esc(trend)}` : ""}` : "Noch keine Noten eingetragen"}</small></span>
+  const at = SEMESTERS.indexOf(SEMESTER);
+  const before = at > 0 ? SEMESTERS[at - 1] : null;
+  const previous = before == null ? null : overallOf(semesterRows(before));
+  const trend = value != null && previous != null ? `${before}: ${decimal(previous)}` : "";
+  return `<button type="button" class="ov-item ov-grades" data-open-grades="1" aria-label="Noten${IN_TERM}${value != null ? `, Schnitt ${decimal(value)} Punkte` : ", noch keine Noten"}">
+    <span class="ov-item-text"><span class="side-title">Noten${IN_TERM}</span><small>${value != null ? `${plural(count, "Note", "Noten")}${trend ? `, ${esc(trend)}` : ""}` : "Noch keine Noten eingetragen"}</small></span>
     ${value != null ? `<span class="ov-number num">${decimal(value)}</span>` : ""}
     ${icon("chevron-right", "chev-end")}
   </button>`;
@@ -675,27 +758,30 @@ function dueMeta(item, time) {
   const target = parseDate(item.date);
   const diff = dayDiff(time.date, item.date);
   const block = itemBlock(item);
-  const kind = `<span class="kind${isExam(item) ? " is-test" : ""}">${isExam(item) ? icon("nx-test") : ""}${esc(item.kind)}</span>`;
+  const kind = `<span class="kind${isAssessment(item) ? " is-test" : ""}">${isAssessment(item) ? icon(FLAG_ICONS[item.kind]) : ""}${esc(item.kind)}</span>`;
   const tag = item.subject ? `${subjectTag(item.subject)}, ` : "";
   const prep = prepOf(item);
+  const written = diff < 0 && isAssessment(item);
   let when;
-  if (diff < 0) when = `<span class="due-when is-urgent">${overdueText(diff, target)}</span>`;
+  if (written) when = `<span class="row-note is-ready">${icon("check")}${esc(pastText(diff, target, item.kind))}</span>`;
+  else if (diff < 0) when = `<span class="due-when is-urgent">${overdueText(diff, target)}</span>`;
   else if (diff <= 1) when = `<span class="due-when${prep.total && !prep.open ? "" : " is-urgent"}">${relativeDay(diff, target)}</span>`;
   else when = `<span class="due-when">${inDays(diff)}</span>`;
-  const blockText = block && diff >= 0 ? `, ${block}.\u00a0Block` : "";
+  const blockText = block && diff >= 0 ? `, ${nth(block)}` : "";
   let prepText = "";
-  if (prep.total) prepText = prep.open ? `, ${plural(prep.open, "Aufgabe offen", "Aufgaben offen")}` : `, <span class="row-note is-ready">${icon("check")}vorbereitet</span>`;
+  if (prep.total && !written) prepText = prep.open ? `, ${plural(prep.open, "Aufgabe offen", "Aufgaben offen")}` : `, <span class="row-note is-ready">${icon("check")}vorbereitet</span>`;
   return `${kind} ${tag}${when}${blockText}${prepText}`;
 }
 
 function dueRow(item, time) {
   const diff = dayDiff(time.date, item.date);
   const prep = prepOf(item);
-  const leafClass = diff < 0 ? "is-overdue" : diff <= 1 && !(prep.total && !prep.open) ? "is-soon" : "";
-  return `<li class="row due is-interactive" data-row="${esc(item.id)}">
+  const written = diff < 0 && isAssessment(item);
+  const leafClass = written ? "is-done" : diff < 0 ? "is-overdue" : diff <= 1 && !(prep.total && !prep.open) ? "is-soon" : "";
+  return `<li class="row due is-interactive${written ? " is-written" : ""}" data-row="${esc(item.id)}">
     ${leaf(parseDate(item.date), leafClass)}
     <div class="row-main">
-      <p class="row-title"><button type="button" class="row-link" data-open-item="${esc(item.id)}">${widow(glue(esc(item.title)))}</button></p>
+      <p class="row-title"><button type="button" class="row-link" data-open-item="${esc(item.id)}"><span class="row-text">${widow(glue(esc(item.title)))}</span></button></p>
       <p class="row-meta">${dueMeta(item, time)}</p>
     </div>
     ${icon("chevron-right", "chev-end")}
@@ -705,23 +791,23 @@ function dueRow(item, time) {
 function renderTests() {
   const time = clockState();
   const list = state.items.filter((item) => isAssessment(item) && item.date >= time.iso).sort(byDate);
-  const exams = list.filter((item) => item.kind === "Klausur").length;
-  const tests = list.filter((item) => item.kind === "Test").length;
-  const parts = [];
-  if (tests) parts.push(plural(tests, "Test", "Tests"));
-  if (exams) parts.push(plural(exams, "Klausur", "Klausuren"));
-  const others = list.length - tests - exams;
-  if (others) parts.push(plural(others, "Referat", "Referate"));
-  $("testsMeta").textContent = parts.join(", ");
+  const written = state.items.filter((item) => isAssessment(item) && item.date < time.iso).sort((a, b) => byDate(b, a));
+  $("testsMeta").textContent = assessmentCount(list);
   const body = $("testsBody");
+  const open = state.writtenOpen && written.length > 0;
+  const word = pastWord(written);
+  const past = written.length
+    ? `<button class="done-toggle" type="button" id="writtenToggle" aria-expanded="${open}" aria-controls="writtenList">${icon("chevron-right")}<span>${written.length} ${word}</span></button>
+      <ul class="rows done-list" id="writtenList" aria-label="${cap(word)}"${open ? "" : " hidden"}>${open ? written.map((item) => dueRow(item, time)).join("") : ""}</ul>`
+    : "";
   keepFocus(body, () => {
     if (!list.length) {
       const hour = time.min / 60;
       const kind = hour >= 21 || hour < 5 ? "schlaeft" : "ruhe";
-      body.innerHTML = `<div class="empty-state">${tinte(kind)}<p class="empty-title">Keine Tests in Sicht.</p><p class="empty-text">Angekündigte Tests und Klausuren trägst du hier ein.</p><button type="button" class="empty-action" data-new-test="">Test eintragen${icon("chevron-right")}</button></div>`;
+      body.innerHTML = `<div class="empty-state">${luna(kind)}<p class="empty-title">Keine Tests in Sicht.</p><p class="empty-text">Angekündigte Tests, Klausuren und Vorträge trägst du hier ein.</p><button type="button" class="empty-action" data-new-test="">Test eintragen${icon("chevron-right")}</button></div>${past}`;
       return;
     }
-    body.innerHTML = `<ul class="rows" aria-labelledby="testsTitle">${list.map((item) => dueRow(item, time)).join("")}</ul>`;
+    body.innerHTML = `<ul class="rows" aria-labelledby="testsTitle">${list.map((item) => dueRow(item, time)).join("")}</ul>${past}`;
   });
 }
 
@@ -736,7 +822,7 @@ function renderHomework() {
   keepFocus(body, () => {
     body.innerHTML = list.length
       ? `<ul class="rows" aria-labelledby="homeworkTitle">${list.map((item) => dueRow(item, time)).join("")}</ul>`
-      : `<p class="empty-line">Keine offenen Hausaufgaben.<small>Neue kommen automatisch aus IServ.</small></p>`;
+      : `<p class="empty-line">Keine offenen Hausaufgaben.${data.status?.iserv && data.status.iservParts?.homework ? "<small>Neue aus IServ kommen von selbst dazu.</small>" : ""}</p>`;
   });
 }
 
@@ -818,6 +904,55 @@ function panelHead(title, sub = "", key = null) {
   </div>`;
 }
 
+const remote = (item) => item.origin === "iserv";
+const editable = (item) => !item.pinned && /^(hw|test|exam|talk|new)-/.test(item.id);
+const changeable = (item) => editable(item) && !remote(item);
+
+function itemTools(item) {
+  if (!editable(item)) return "";
+  const title = esc(item.title);
+  const done = isHomework(item) && item.status !== "abgegeben"
+    ? `<button class="icon-button" type="button" data-done-item="${esc(item.id)}" aria-label="Erledigt: ${title}" data-tip="Erledigt">${icon("check")}</button>`
+    : "";
+  const edit = !changeable(item)
+    ? ""
+    : `<button class="icon-button" type="button" data-edit-item="${esc(item.id)}" aria-label="Bearbeiten: ${title}" data-tip="Bearbeiten">${icon("pencil")}</button>`;
+  return `<span class="note-tools">${done}${edit}<button class="icon-button is-danger" type="button" data-delete-item="${esc(item.id)}" aria-label="Löschen: ${title}" data-tip="Löschen">${icon("trash-2")}</button></span>`;
+}
+
+function itemNote(item) {
+  const test = isAssessment(item);
+  const done = item.status === "abgegeben" ? `<small>Erledigt</small>` : "";
+  return `<div class="lesson-note${test ? " is-test" : ""}">${icon(FLAG_ICONS[item.kind] || "notebook-pen")}<span class="note-text"><b>${esc(item.kind)}:</b> ${esc(item.title)}${item.detail ? detailHtml(item) : ""}${done}</span>${itemTools(item)}</div>`;
+}
+
+function detailHtml(item) {
+  const open = state.openNotes.has(item.id);
+  return `<small class="note-detail${open ? " is-open" : ""}">${esc(item.detail)}</small><button type="button" class="text-button note-more" data-note-more="${esc(item.id)}" aria-expanded="${open}" hidden><span>${open ? "Weniger anzeigen" : "Mehr anzeigen"}</span></button>`;
+}
+
+function fitNotes() {
+  document.querySelectorAll("#schoolPanel .note-more").forEach((button) => {
+    const text = button.previousElementSibling;
+    const open = text.classList.contains("is-open");
+    text.classList.remove("is-open");
+    button.hidden = text.scrollHeight <= text.clientHeight + 1;
+    text.classList.toggle("is-open", open);
+  });
+}
+
+function itemBox(item, time) {
+  const target = parseDate(item.date);
+  const diff = dayDiff(time.date, item.date);
+  const written = diff < 0 && isAssessment(item);
+  const status = written ? pastText(diff, target, item.kind) : diff < 0 ? overdueText(diff, target) : inDays(diff);
+  return `<div class="lesson-box is-${diff < 0 ? "past" : "future"}">
+    <p class="lesson-box-when"><b>${esc(slotText(target, itemBlock(item)))}</b></p>
+    <p class="lesson-box-status">${esc(cap(status))}</p>
+    ${itemNote(item)}
+  </div>`;
+}
+
 function lessonBox(lesson, time) {
   const phase = phaseOf(lesson, time);
   const diff = dayDiff(time.date, lesson.iso);
@@ -825,10 +960,7 @@ function lessonBox(lesson, time) {
   const lines = [];
   if (lesson.cancelled) lines.push(`<p class="lesson-note is-urgent">${icon("calendar-x-2")}<span>Entfällt${lesson.note ? `, Grund: ${esc(lesson.note)}` : ""}</span></p>`);
   else if (lesson.movedFrom) lines.push(`<p class="lesson-note is-urgent">${icon("nx-room")}<span>In <b>${esc(lesson.room)}</b> statt ${esc(lesson.movedFrom)}</span></p>`);
-  items.forEach((item) => {
-    const test = isAssessment(item);
-    lines.push(`<p class="lesson-note${test ? " is-test" : ""}">${icon(FLAG_ICONS[item.kind] || "notebook-pen")}<span><b>${esc(item.kind)}:</b> ${esc(item.title)}${item.detail ? `<small>${esc(item.detail)}</small>` : ""}</span></p>`);
-  });
+  items.forEach((item) => lines.push(itemNote(item)));
   let status;
   if (lesson.cancelled) status = phase === "past" ? "Vorbei" : cap(relativeDay(diff, lesson.date));
   else if (phase === "now") status = `Läuft, noch <b data-remaining>${lesson.endMin - time.min}</b>\u00a0Min.`;
@@ -846,7 +978,8 @@ function lessonBox(lesson, time) {
 
 function slotsHtml(key) {
   const slots = slotsOf(key);
-  const line = (list) => list.length ? list.map((slot) => `${WEEKDAYS_SHORT[slot.dow % 7]}. ${slot.block}.\u00a0Block`).join(", ") : "keine Stunde";
+  const words = periodWords();
+  const line = (list) => list.length ? list.map((slot) => `${WEEKDAYS_SHORT[slot.dow % 7]}.\u00a0${nth(slot.block)}`).join(", ") : `${words.none} ${words.one}`;
   if (!abWeeks()) return `<ul class="slot-list"><li><span>${esc(line(slots.A))}</span></li></ul>`;
   return `<ul class="slot-list">${["A", "B"].map((week) => `<li><span class="week-badge" aria-label="${week}-Woche">${week}</span><span>${esc(line(slots[week]))}</span></li>`).join("")}</ul>`;
 }
@@ -880,14 +1013,14 @@ function gradeListHtml(key) {
     const type = GRADE_TYPES[grade.type] || grade.type;
     const what = grade.title || type;
     const when = `${date.getDate()}.${date.getMonth() + 1}.`;
-    return `<li class="grade-row"><span class="grade-points num" aria-label="${grade.points} Punkte">${grade.points}</span><span class="grade-what">${esc(what)}<small>${esc(what === type ? when : `${type}, ${when}`)}</small></span></li>`;
+    return `<li class="grade-row"><span class="grade-points num" aria-label="${grade.points} Punkte">${grade.points}</span><span class="grade-what">${esc(what)}<small>${esc(what === type ? when : `${type}, ${when}`)}</small></span><button class="icon-button is-danger grade-remove" type="button" data-delete-grade="${esc(grade.id)}" aria-label="Note löschen: ${esc(what)}, ${grade.points} Punkte" data-tip="Löschen">${icon("trash-2")}</button></li>`;
   }).join("");
   const form = state.gradeForm
     ? gradeFormHtml()
-    : `<div class="grade-actions"><button type="button" class="text-button grade-add" data-grade-form>${icon("plus")}Note eintragen</button>${list.length ? `<button type="button" class="text-button" data-calc-for="${esc(key)}">Zielnote berechnen</button>` : ""}</div>`;
+    : `<div class="grade-actions"><button type="button" class="text-button grade-add" data-grade-form>${icon("plus")}<span>Note eintragen</span></button>${list.length ? `<button type="button" class="text-button" data-calc-for="${esc(key)}"><span>Zielnote berechnen</span></button>` : ""}</div>`;
   return `<div class="field panel-grades">
-    <div class="field-split"><span class="field-label" id="gradesLabel">Noten ${SEMESTER}</span>${average != null ? `<span class="grade-average">Schnitt <b class="num">${decimal(average)}</b></span>` : ""}</div>
-    ${list.length ? `<ul class="grade-list" aria-labelledby="gradesLabel">${rows}</ul>` : `<p class="field-empty">Noch keine Note in ${SEMESTER}.</p>`}
+    <div class="field-split"><span class="field-label" id="gradesLabel">Noten${IN_TERM}</span>${average != null ? `<span class="grade-average">Schnitt <b class="num">${decimal(average)}</b></span>` : ""}</div>
+    ${list.length ? `<ul class="grade-list" aria-labelledby="gradesLabel">${rows}</ul>` : `<p class="field-empty">Noch keine Note${SEMESTER ? ` in ${SEMESTER}` : ""}.</p>`}
     ${past.length ? `<p class="grade-history">${esc(past.join(", "))} Punkte</p>` : ""}
     ${form}
   </div>`;
@@ -919,21 +1052,35 @@ function subjectPanelHtml(key, lesson = null) {
   const rooms = [...new Set([...slots.A, ...slots.B].map((slot) => slot.room))];
   const next = upcoming(time, (entry) => entry.subject === key)[0] || null;
   const showNext = next && !(lesson && next.iso === lesson.iso && next.block === lesson.block);
-  const due = upcomingFor(key, time, lesson);
+  const picked = !lesson && state.selection?.item ? state.items.find((item) => item.id === state.selection.item) : null;
+  const due = upcomingFor(key, time, lesson).filter((item) => item !== picked);
   const fields = [];
+  const words = periodWords();
   if (showNext) {
     const diff = dayDiff(time.date, next.iso);
-    fields.push(`<div class="field is-row"><span class="field-label">Nächste Stunde</span><span class="field-value"><button type="button" class="link-button" data-open-lesson="${cellKey(next.iso, next.block)}">${esc(slotText(next.date, next.block))}</button><small>${esc(diff === 0 ? `heute um ${hm(next.start)}` : inDays(diff))}, ${esc(next.room)}</small></span></div>`);
+    fields.push(`<div class="field is-row"><span class="field-label">${words.dative === "der" ? "Nächste" : "Nächster"} ${words.one}</span><span class="field-value"><button type="button" class="link-button" data-open-lesson="${cellKey(next.iso, next.block)}">${esc(slotText(next.date, next.block))}</button><small>${esc(diff === 0 ? `heute um ${hm(next.start)}` : inDays(diff))}, ${esc(next.room)}</small></span></div>`);
   }
-  fields.push(`<div class="field is-row"><span class="field-label">Stunden</span><span class="field-value">${slotsHtml(key)}</span></div>`);
+  fields.push(`<div class="field is-row"><span class="field-label">${words.many}</span><span class="field-value">${slotsHtml(key)}</span></div>`);
   fields.push(`<div class="field is-row"><span class="field-label">${rooms.length === 1 ? "Raum" : "Räume"}</span><span class="field-value num">${esc(rooms.join(", "))}</span></div>`);
   if (course.topic) fields.push(`<div class="field is-row"><span class="field-label">Thema</span><span class="field-value">${esc(course.topic)}</span></div>`);
   fields.push(`<div class="field"><span class="field-label" id="dueLabel">Anstehend</span>${due.length ? `<ul class="mini-list" aria-labelledby="dueLabel">${due.map((item) => miniDueHtml(item, time)).join("")}</ul>` : `<p class="field-empty">Nichts angekündigt.</p>`}</div>`);
   fields.push(gradeListHtml(key));
   return `${panelHead(info.name, sub, key)}
-    ${lesson ? lessonBox(lesson, time) : ""}
+    ${lesson ? lessonBox(lesson, time) : picked ? itemBox(picked, time) : ""}
     <div class="panel-fields school-fields">${fields.join("")}</div>
     <div class="panel-actions"><button type="button" class="btn btn-quiet" data-new-test="${esc(key)}">${icon("plus")}Test eintragen</button></div>`;
+}
+
+// One quiet line where the grades are, for an upper-school plan without any Leistungskurs, as after an import; an
+// answered Noch keine for this grade keeps it away.
+function coursesHint() {
+  if (typeof window.AppSetup?.open !== "function") return "";
+  const school = storage.get(LOCAL_KEYS.prefs)?.school || {};
+  const grade = Number.isInteger(school.grade) ? school.grade : data.user?.grade;
+  if (!Number.isInteger(grade) || grade < 11 || school.noCourses === grade) return "";
+  const types = activeSubjectKeys().map((key) => data.subjects[key]?.type).filter((type) => type !== "SK");
+  if (!types.length || types.includes("LK")) return "";
+  return `<p class="side-hint courses-hint">Noch kein Leistungskurs markiert. <button type="button" class="inline-link" data-open-courses>Leistungskurse wählen</button></p>`;
 }
 
 function gradesPanelHtml() {
@@ -942,7 +1089,9 @@ function gradesPanelHtml() {
   const value = overallOf(rows);
   const scored = sortedSubjects(rows.filter((row) => row.value != null));
   const missing = sortedSubjects(rows.filter((row) => row.value == null && !retiredKey(row.key)));
-  const switcher = `<div class="segmented grade-switch" role="group" aria-label="Halbjahr">${SEMESTERS.map((item) => `<button type="button" data-semester="${item}" aria-pressed="${item === semester}">${item}</button>`).join("")}</div>`;
+  const switcher = SEMESTERS.length > 1
+    ? `<div class="segmented grade-switch" role="group" aria-label="Halbjahr">${SEMESTERS.map((item) => `<button type="button" data-semester="${esc(item)}" aria-pressed="${item === semester}">${esc(termName(item))}</button>`).join("")}</div>`
+    : "";
   const bars = scored.map((row) => {
     const info = subject(row.key);
     const gone = retiredKey(row.key);
@@ -959,11 +1108,12 @@ function gradesPanelHtml() {
   let entry = "";
   if (semester === SEMESTER) {
     if (!activeSubjectKeys().length) entry = `<p class="side-hint">Noten trägst du ein, sobald dein Stundenplan Fächer hat.</p>`;
-    else entry = `<div class="grades-entry">${state.gradeForm ? gradeFormHtml({ pick: true }) : `<div class="grade-actions"><button type="button" class="text-button grade-add" data-grade-form>${icon("plus")}Note eintragen</button></div>`}</div>`;
+    else entry = `<div class="grades-entry">${state.gradeForm ? gradeFormHtml({ pick: true }) : `<div class="grade-actions"><button type="button" class="text-button grade-add" data-grade-form>${icon("plus")}<span>Note eintragen</span></button></div>`}</div>`;
   }
   return `${panelHead("Noten", "Punkte, Leistungskurse zählen doppelt")}
     ${switcher}
-    ${value != null ? `<p class="grades-total"><b class="grades-number num">${decimal(value)}</b><span>Punkte im Schnitt${semester === SEMESTER ? `, ${plural(rows.reduce((sum, row) => sum + row.count, 0), "Note", "Noten")} bisher` : ""}</span></p>` : `<p class="field-empty">Für ${semester} sind noch keine Noten eingetragen.</p>`}
+    ${semester === SEMESTER ? coursesHint() : ""}
+    ${value != null ? `<p class="grades-total"><b class="grades-number num">${decimal(value)}</b><span>Punkte im Schnitt${semester === SEMESTER ? `, ${plural(rows.reduce((sum, row) => sum + row.count, 0), "Note", "Noten")} bisher` : ""}</span></p>` : `<p class="field-empty">${semester ? `Für ${esc(semester)} sind` : "Bisher sind"} noch keine Noten eingetragen.</p>`}
     ${entry}
     ${bars ? `<ol class="grade-bars" aria-label="Schnitt je Fach">${bars}</ol>` : ""}
     ${note ? `<p class="side-hint">${note}</p>` : ""}
@@ -1170,11 +1320,11 @@ function scaleHtml(overall) {
     return `<tr><th scope="row">${word}</th>${cells.join("")}</tr>`;
   }).join("");
   const title = grades ? "Noten und Bewertung" : "Punkte und Noten";
-  const caption = grades ? "Noten der Mittelstufe mit Wert und Bewertung" : "Punkte und Noten in der Oberstufe";
-  const hint = mine == null ? "" : grades ? `Umrandet: dein Schnitt in ${SEMESTER} als Note.` : `Umrandet: dein Schnitt in ${SEMESTER}, gerundet.`;
+  const label = grades ? "Noten der Mittelstufe mit Wert und Bewertung" : "Punkte und Noten in der Oberstufe";
+  const hint = mine == null ? "" : grades ? `Umrandet: dein Schnitt${SEMESTER ? ` in ${SEMESTER}` : ""} als Note.` : `Umrandet: dein Schnitt${SEMESTER ? ` in ${SEMESTER}` : ""}, gerundet.`;
   return `<details class="calc scale-box"${state.calc.table ? " open" : ""}>
     <summary class="calc-summary"><span>${title}</span>${icon("chevron-down", "calc-chev")}</summary>
-    <table class="scale${grades ? " is-grades" : ""}"><caption class="visually-hidden">${caption}</caption><tbody>${rows}</tbody></table>
+    <table class="scale${grades ? " is-grades" : ""}" aria-label="${label}"><tbody>${rows}</tbody></table>
     ${hint ? `<p class="side-hint">${hint}</p>` : ""}
   </details>`;
 }
@@ -1222,27 +1372,50 @@ function testSlots(key) {
   return upcoming(clockState(), (lesson) => lesson.subject === key, 4, 35);
 }
 
+const TEXT_LIMITS = { title: 300, detail: 2000 };
+
+function countHtml(field, text) {
+  const limit = TEXT_LIMITS[field];
+  return `<small class="field-count${text.length >= limit ? " is-full" : ""}" data-count="${field}"${text.length < limit * 0.9 ? " hidden" : ""}>${text.length} von ${limit} Zeichen</small>`;
+}
+
+function showCount(field, text) {
+  const node = document.querySelector(`#schoolPanel [data-count="${field}"]`);
+  if (node) node.outerHTML = countHtml(field, text);
+}
+
 function testFormHtml() {
   const draft = state.draft;
+  const editing = !!draft.id;
+  const homework = isHomework(draft);
   const slots = draft.subject ? testSlots(draft.subject) : [];
   const custom = draft.date && !slots.some((slot) => slot.iso === draft.date && slot.block === draft.block);
-  const options = activeSubjectKeys().map((key) => `<option value="${esc(key)}"${key === draft.subject ? " selected" : ""}>${esc(subject(key).name)}</option>`).join("");
+  const keys = activeSubjectKeys();
+  if (draft.subject && !keys.includes(draft.subject) && data.subjects[draft.subject]) keys.push(draft.subject);
+  const none = homework ? `<option value=""${draft.subject ? "" : " selected"}>Kein Fach</option>` : "";
+  const options = none + keys.map((key) => `<option value="${esc(key)}"${key === draft.subject ? " selected" : ""}>${esc(subject(key).name)}</option>`).join("");
   const time = clockState();
   const pills = slots.map((slot) => `<button type="button" class="pill" data-slot="${cellKey(slot.iso, slot.block)}" aria-pressed="${draft.date === slot.iso && draft.block === slot.block}">${esc(slotLabel(slot, time))}</button>`).join("");
   const customLabel = custom ? esc(slotText(parseDate(draft.date), draft.block)) : "Anderer Tag";
+  const head = editing ? panelHead(`${draft.kind} bearbeiten`) : panelHead(`${draft.kind} eintragen`, "Wähle die Stunde hier oder direkt im Stundenplan.");
+  const kinds = homework
+    ? ""
+    : `<div class="field"><span class="field-label" id="testKindLabel">Art</span>
+        <div class="field-body" role="group" aria-labelledby="testKindLabel">${Object.keys(ASSESSMENTS).map((kind) => `<button type="button" class="pill" data-kind="${kind}" aria-pressed="${draft.kind === kind}">${kind}</button>`).join("")}</div>
+      </div>`;
+  const ready = draft.date && (homework || draft.subject);
   return `<form id="testForm" class="test-form" autocomplete="off" novalidate>
-    ${panelHead("Test eintragen", "Wähle die Stunde hier oder direkt im Stundenplan.")}
+    ${head}
     <div class="panel-fields school-fields">
       <label class="field"><span class="field-label">Fach</span><select class="field-control" id="testSubject">${options}</select></label>
-      <div class="field"><span class="field-label" id="testWhenLabel">Wann</span>
-        <div class="field-body" role="group" aria-labelledby="testWhenLabel">${pills}<button type="button" class="pill" data-slot="pick" aria-pressed="${custom}">${icon("calendar-days")}${customLabel}</button><input class="date-proxy" type="date" id="testDate" value="${esc(draft.date || "")}" min="${esc(clockState().iso)}" tabindex="-1" aria-hidden="true"></div>
+      <div class="field"><span class="field-label" id="testWhenLabel">${homework ? "Fällig" : "Wann"}</span>
+        <div class="field-body" role="group" aria-labelledby="testWhenLabel">${pills}<button type="button" class="pill" data-slot="pick" aria-pressed="${custom}">${icon("calendar-days")}${customLabel}</button><input class="date-proxy" type="date" id="testDate" value="${esc(draft.date || "")}"${editing ? "" : ` min="${esc(time.iso)}"`} tabindex="-1" aria-hidden="true"></div>
       </div>
-      <div class="field"><span class="field-label" id="testKindLabel">Art</span>
-        <div class="field-body" role="group" aria-labelledby="testKindLabel">${["Test", "Klausur"].map((kind) => `<button type="button" class="pill" data-kind="${kind}" aria-pressed="${draft.kind === kind}">${kind}</button>`).join("")}</div>
-      </div>
-      <label class="field"><span class="field-label">Thema</span><input class="field-control" id="testTitle" value="${esc(draft.title)}" placeholder="z. B. Vektoren im Raum" maxlength="90"></label>
+      ${kinds}
+      <label class="field"><span class="field-label">${homework ? "Aufgabe" : "Thema"}</span><textarea class="field-control is-line" id="testTitle" rows="1" maxlength="${TEXT_LIMITS.title}" enterkeyhint="done" placeholder="${homework ? "z. B. Arbeitsblatt Nr. 3" : "z. B. Vektoren im Raum"}">${esc(draft.title)}</textarea>${countHtml("title", draft.title)}</label>
+      <label class="field"><span class="field-label">${NOTE_HINTS[draft.kind] ? "Notiz" : "Lernstoff"}</span><textarea class="field-control" id="testDetail" rows="2" maxlength="${TEXT_LIMITS.detail}" placeholder="${NOTE_HINTS[draft.kind] || "z. B. Seiten, Themen, Hilfsmittel"}">${esc(draft.detail || "")}</textarea>${countHtml("detail", draft.detail || "")}</label>
     </div>
-    <div class="panel-actions"><button type="button" class="btn btn-quiet" data-panel-close>Abbrechen</button><button type="submit" class="btn btn-primary" id="testSave"${draft.subject && draft.date ? "" : " disabled"}>Eintragen</button></div>
+    <div class="panel-actions">${editing ? `<button type="button" class="btn btn-quiet panel-delete" data-delete-item="${esc(draft.id)}">${icon("trash-2")}Löschen</button>` : ""}<button type="button" class="btn btn-quiet" data-panel-close>Abbrechen</button><button type="submit" class="btn btn-primary" id="testSave"${ready ? "" : " disabled"}>${editing ? "Speichern" : "Eintragen"}</button></div>
   </form>`;
 }
 
@@ -1258,9 +1431,13 @@ function renderPanel() {
       panel.innerHTML = subjectPanelHtml(selection.key);
     } else if (selection.type === "grades") {
       panel.innerHTML = gradesPanelHtml();
-    } else if (selection.type === "test") {
+    } else if (selection.type === "test" && state.draft) {
       panel.innerHTML = testFormHtml();
+    } else if (selection.type === "item") {
+      const item = state.items.find((entry) => entry.id === selection.item);
+      panel.innerHTML = item ? `${panelHead(item.kind)}${itemBox(item, clockState())}` : "";
     }
+    fitNotes();
   });
   panel.setAttribute("aria-labelledby", "panelTitle");
 }
@@ -1279,9 +1456,10 @@ function openPanel(selection, { trigger = null, form = false } = {}) {
   const same = !opening && state.selection.type === selection.type && JSON.stringify(state.selection) === JSON.stringify(selection);
   state.selection = selection;
   state.gradeForm = form;
-  if (trigger) state.returnTo = focusKeyOf(trigger);
+  if (trigger && !panel.contains(trigger)) state.returnTo = focusKeyOf(trigger);
   renderPanel();
   panel.hidden = false;
+  fitNotes();
   $("schoolPage").classList.add("has-panel");
   markSelection();
   if (opening && animates()) {
@@ -1312,6 +1490,7 @@ function closePanel({ refocus = false } = {}) {
     $("schoolPage").classList.remove("has-panel");
   };
   markSelection();
+  planViewsFree();
   if (narrow.matches && animates()) {
     panel.getAnimations().forEach((animation) => animation.cancel());
     const out = panel.animate(
@@ -1360,6 +1539,11 @@ function revealCell(iso, block) {
 function openItem(id, trigger) {
   const item = state.items.find((entry) => entry.id === id);
   if (!item) return;
+  if (!item.subject || !activeKey(item.subject)) {
+    if (changeable(item)) openEditForm(id, trigger);
+    else openPanel({ type: "item", item: id }, { trigger });
+    return;
+  }
   const block = itemBlock(item);
   if (block && lessonAt(item.date, block)) {
     openLesson(item.date, block, trigger);
@@ -1380,10 +1564,24 @@ function defaultSubject() {
   return upcoming(time)[0]?.subject || activeSubjectKeys()[0];
 }
 
-function openTestForm(key, trigger) {
-  state.draft = { subject: key || defaultSubject(), date: null, block: null, kind: "Test", title: "" };
+function openTestForm(key, trigger, kind = "Test") {
+  const begun = state.selection?.type === "test" && state.draft && !state.draft.id ? state.draft : null;
+  if (begun && !key && begun.kind !== kind) {
+    updateDraft({ kind });
+    $("schoolPanel").querySelector('[data-kind][aria-pressed="true"]')?.focus({ preventScroll: true });
+    return;
+  }
+  state.draft = { subject: key || defaultSubject(), date: null, block: null, kind, title: "", detail: "" };
   openPanel({ type: "test" }, { trigger });
   requestAnimationFrame(() => $("testSubject")?.focus({ preventScroll: true }));
+}
+
+function openEditForm(id, trigger) {
+  const item = state.items.find((entry) => entry.id === id);
+  if (!item || !changeable(item)) return;
+  state.draft = { id, subject: item.subject || "", date: item.date, block: itemBlock(item), kind: item.kind, title: item.title, detail: item.detail || "" };
+  openPanel({ type: "test", item: id }, { trigger });
+  requestAnimationFrame(() => $("testTitle")?.focus({ preventScroll: true }));
 }
 
 function updateDraft(changes) {
@@ -1406,28 +1604,92 @@ function popCell(iso, block) {
   node.animate([{ opacity: 0, transform: "scale(0.6)" }, { opacity: 1, transform: "none" }], { duration: ms("--spring-tactile-dur") || 340, easing: token("--spring-tactile"), fill: "backwards" });
 }
 
+function showItem(item) {
+  const block = itemBlock(item);
+  if (!item.subject || !activeKey(item.subject)) openPanel({ type: "item", item: item.id });
+  else if (block && lessonAt(item.date, block)) openPanel({ type: "lesson", iso: item.date, block, item: item.id });
+  else openPanel({ type: "subject", key: item.subject, item: item.id });
+  markSelection();
+  flashRow(item.id);
+}
+
 function saveTest() {
   const draft = state.draft;
-  if (!draft?.subject || !draft.date) return;
-  const title = draft.title.trim() || `${draft.kind} in ${subject(draft.subject).label}`;
-  const item = { id: `new-${Date.now()}`, kind: draft.kind, title, subject: draft.subject, date: draft.date, detail: "", status: "offen" };
+  const homework = !!draft && isHomework(draft);
+  if (!draft?.date || (!homework && !draft.subject)) return;
+  const title = draft.title.trim() || (homework ? "Hausaufgabe" : `${draft.kind} in ${subject(draft.subject).label}`);
+  const detail = (draft.detail || "").trim();
+  if (draft.id) {
+    updateItem(draft, title, detail);
+    return;
+  }
+  const item = { id: `new-${Date.now()}`, kind: draft.kind, title, subject: draft.subject, date: draft.date, detail, status: "offen" };
   if (draft.block) item.block = draft.block;
   state.items.push(item);
   deadlineApi.create(item);
+  askAtFirstEntry();
   const index = abWeeks() ? weekIndexOf(item.date) : null;
   if (index != null) state.week = index;
   renderWeekSwitch();
   renderAll();
   state.draft = null;
-  if (item.block && lessonAt(item.date, item.block)) openPanel({ type: "lesson", iso: item.date, block: item.block, item: item.id });
-  else openPanel({ type: "subject", key: item.subject, item: item.id });
-  markSelection();
-  flashRow(item.id);
+  showItem(item);
   if (item.block) popCell(item.date, item.block);
   $("panelTitle")?.focus({ preventScroll: true });
   toast(`Eingetragen: ${esc(item.kind)} ${esc(subject(item.subject).label)}, ${esc(shortDate(parseDate(item.date)))}`, {
-    icon: "nx-test",
+    icon: FLAG_ICONS[item.kind],
     action: { label: "Rückgängig", undo: true, run: () => removeItem(item.id) },
+  });
+}
+
+function updateItem(draft, title, detail) {
+  const index = state.items.findIndex((entry) => entry.id === draft.id);
+  if (index < 0) return;
+  const item = state.items[index];
+  if (remote(item)) return;
+  const changes = { title, subject: draft.subject || null, date: draft.date, detail };
+  state.draft = null;
+  if (draft.kind !== item.kind) {
+    const moved = { ...item, ...changes, id: `new-${Date.now()}`, kind: draft.kind, status: "offen" };
+    if (draft.block) moved.block = draft.block;
+    else delete moved.block;
+    const swap = (from, to) => {
+      const at = state.items.findIndex((entry) => entry.id === from.id);
+      if (at < 0) return false;
+      state.items.splice(at, 1, to);
+      deadlineApi.remove(from.id);
+      deadlineApi.create(to);
+      renderAll();
+      return true;
+    };
+    swap(item, moved);
+    showItem(moved);
+    $("panelTitle")?.focus({ preventScroll: true });
+    toast(`Gespeichert: ${esc(moved.kind)} „${esc(moved.title)}“`, {
+      icon: "check",
+      action: { label: "Rückgängig", undo: true, run: () => {
+        const back = { ...item, id: `new-${Date.now()}` };
+        if (swap(moved, back) && state.selection?.type !== "test") showItem(back);
+      } },
+    });
+    return;
+  }
+  const before = { title: item.title, subject: item.subject || null, date: item.date, detail: item.detail || "" };
+  const apply = (values) => {
+    Object.assign(item, values);
+    item.block = itemBlock({ ...item, block: null }) || undefined;
+    deadlineApi.update(item.id, values);
+    renderAll();
+  };
+  apply(changes);
+  showItem(item);
+  $("panelTitle")?.focus({ preventScroll: true });
+  toast(`Gespeichert: ${esc(item.kind)} „${esc(item.title)}“`, {
+    icon: "check",
+    action: { label: "Rückgängig", undo: true, run: () => {
+      apply(before);
+      if (state.selection?.type !== "test") showItem(item);
+    } },
   });
 }
 
@@ -1436,9 +1698,69 @@ function removeItem(id) {
   if (index < 0) return;
   state.items.splice(index, 1);
   deadlineApi.remove(id);
+  if (state.selection?.type === "item" && state.selection.item === id) closePanel({ refocus: true });
   if (state.selection?.item === id) delete state.selection.item;
   renderAll();
   if (state.selection) renderPanel();
+}
+
+function deleteItem(id) {
+  const item = state.items.find((entry) => entry.id === id);
+  if (!item) return;
+  if (state.selection?.type === "test" && state.draft?.id === id) closePanel({ refocus: true });
+  removeItem(id);
+  if (document.activeElement === document.body) (document.querySelector("#overview [data-open-item]") || $("newTest"))?.focus({ preventScroll: true });
+  toast(`Gelöscht: ${esc(item.kind)} „${esc(item.title)}“`, {
+    icon: "trash-2",
+    action: { label: "Rückgängig", undo: true, run: () => {
+      const back = remote(item) ? item : { ...item, id: `new-${Date.now()}` };
+      state.items.push(back);
+      if (remote(item)) {
+        deadlineApi.update(item.id, { hidden: false, status: item.status === "abgegeben" ? "abgegeben" : "offen" });
+      } else {
+        deadlineApi.create(back);
+        if (back.status === "abgegeben") deadlineApi.update(back.id, { status: "abgegeben" });
+      }
+      renderAll();
+      if (state.selection) renderPanel();
+      flashRow(back.id);
+    } },
+  });
+}
+
+function completeItem(id) {
+  const item = state.items.find((entry) => entry.id === id);
+  if (!item) return;
+  const mark = (status) => {
+    item.status = status;
+    deadlineApi.update(id, { status });
+    renderAll();
+    if (state.selection) renderPanel();
+  };
+  mark("abgegeben");
+  toast(`Erledigt: „${esc(item.title)}“`, { icon: "check", action: { label: "Rückgängig", undo: true, run: () => mark("offen") } });
+}
+
+function deleteGrade(id) {
+  const index = state.grades.findIndex((grade) => grade.id === id);
+  if (index < 0) return;
+  const grade = state.grades[index];
+  const repaint = () => {
+    if (state.selection) renderPanel();
+    renderOverview();
+  };
+  state.grades.splice(index, 1);
+  gradeApi.remove(id);
+  repaint();
+  toast(`Note gelöscht: ${plural(grade.points, "Punkt", "Punkte")} in ${esc(subject(grade.subject).label)}`, {
+    icon: "trash-2",
+    action: { label: "Rückgängig", undo: true, run: () => {
+      const back = { ...grade, id: `g-new-${Date.now()}` };
+      state.grades.push(back);
+      gradeApi.create(back);
+      repaint();
+    } },
+  });
 }
 
 function saveGrade(form) {
@@ -1481,6 +1803,37 @@ function bindPanel() {
     const target = event.target;
     if (target.closest("[data-panel-close]")) {
       closePanel({ refocus: true });
+      return;
+    }
+    const editButton = target.closest("[data-edit-item]");
+    if (editButton) {
+      openEditForm(editButton.dataset.editItem, editButton);
+      return;
+    }
+    if (target.closest("[data-open-courses]")) {
+      window.AppSetup?.open({ only: "courses" });
+      return;
+    }
+    const deleteButton = target.closest("[data-delete-item]");
+    if (deleteButton) {
+      deleteItem(deleteButton.dataset.deleteItem);
+      return;
+    }
+    const doneButton = target.closest("[data-done-item]");
+    if (doneButton) {
+      completeItem(doneButton.dataset.doneItem);
+      return;
+    }
+    const moreButton = target.closest("[data-note-more]");
+    if (moreButton) {
+      const id = moreButton.dataset.noteMore;
+      if (!state.openNotes.delete(id)) state.openNotes.add(id);
+      renderPanel();
+      return;
+    }
+    const gradeButton = target.closest("[data-delete-grade]");
+    if (gradeButton) {
+      deleteGrade(gradeButton.dataset.deleteGrade);
       return;
     }
     const lessonButton = target.closest("[data-open-lesson]");
@@ -1560,15 +1913,32 @@ function bindPanel() {
       renderPanel();
       return;
     }
-    if (event.target.id === "testSubject" && state.draft) updateDraft({ subject: event.target.value, date: null, block: null });
+    if (event.target.id === "testSubject" && state.draft) {
+      const key = event.target.value;
+      if (state.draft.id) updateDraft({ subject: key, block: lessonsOn(parseDate(state.draft.date)).find((entry) => entry.subject === key)?.block || null });
+      else updateDraft({ subject: key, date: null, block: null });
+    }
     if (event.target.id === "testDate" && state.draft && event.target.value) {
       const lesson = lessonsOn(parseDate(event.target.value)).find((entry) => entry.subject === state.draft.subject);
       updateDraft({ date: event.target.value, block: lesson?.block || null });
       panel.querySelector('[data-slot="pick"]')?.focus();
     }
   });
+  panel.addEventListener("beforeinput", (event) => {
+    if (event.target.id !== "testTitle" || event.isComposing || !["insertLineBreak", "insertParagraph"].includes(event.inputType)) return;
+    event.preventDefault();
+    event.target.form.requestSubmit();
+  });
   panel.addEventListener("input", (event) => {
-    if (event.target.id === "testTitle" && state.draft) state.draft.title = event.target.value;
+    if (event.target.id === "testTitle" && state.draft) {
+      keepOneLine(event.target);
+      state.draft.title = event.target.value;
+      showCount("title", state.draft.title);
+    }
+    if (event.target.id === "testDetail" && state.draft) {
+      state.draft.detail = event.target.value;
+      showCount("detail", state.draft.detail);
+    }
     const field = event.target.dataset.calc;
     if (!field || field === "subject") return;
     if (field === "points") {
@@ -1617,7 +1987,7 @@ function onBoardClick(event) {
       const chosen = $("schoolPanel").querySelector('[data-slot][aria-pressed="true"]');
       if (chosen && travels()) chosen.animate([{ transform: "scale(0.92)" }, { transform: "none" }], { duration: ms("--spring-tactile-dur") || 340, easing: token("--spring-tactile") });
     } else {
-      toast("Für einen Test nur kommende Stunden wählen.", { icon: "info", duration: 3000 });
+      toast("Wähle eine kommende Stunde.", { icon: "info", duration: 3000 });
     }
     return;
   }
@@ -1642,9 +2012,16 @@ function bind() {
     if (button) setWeek(Number(button.dataset.week));
   });
   $("newTest").addEventListener("click", (event) => openTestForm(null, event.currentTarget));
+  $("newTalk").addEventListener("click", (event) => openTestForm(null, event.currentTarget, "Vortrag"));
   $("newGrade").addEventListener("click", (event) => openGradeForm(event.currentTarget));
   const lists = $("schoolLists");
   lists.addEventListener("click", (event) => {
+    if (event.target.closest("#writtenToggle")) {
+      state.writtenOpen = !state.writtenOpen;
+      renderTests();
+      if (state.writtenOpen && travels()) [...$("writtenList").children].forEach((node, index) => node.animate([{ opacity: 0, translate: "0 -4px" }, { opacity: 1, translate: "0 0" }], { duration: 240, delay: index * 30, easing: token("--ease-out"), fill: "backwards" }));
+      return;
+    }
     const item = event.target.closest("[data-open-item]");
     if (item) {
       openItem(item.dataset.openItem, item);
@@ -1663,6 +2040,11 @@ function bind() {
       startVplan({ manual: true });
       return;
     }
+    const planButton = event.target.closest("[data-plan-open]");
+    if (planButton) {
+      openPlan(Number(planButton.dataset.planOpen));
+      return;
+    }
     const change = event.target.closest("[data-open-lesson]");
     if (change) {
       const [iso, block] = change.dataset.openLesson.split(":");
@@ -1678,6 +2060,21 @@ function bind() {
     if (grades) openGrades(grades);
   });
   bindPanel();
+  $("planViewer")?.addEventListener("close", () => document.querySelector("#overview [data-plan-open]")?.focus({ preventScroll: true }));
+  $("planViewer")?.addEventListener("click", (event) => {
+    const dialog = event.currentTarget;
+    const tab = event.target.closest("[data-plan-page]");
+    if (tab) {
+      state.vplan.page = Number(tab.dataset.planPage);
+      state.vplan.zoomed = false;
+      renderPlanViewer();
+      dialog.querySelector('[aria-pressed="true"]')?.focus();
+    } else if (event.target.closest(".plan-sheet")) {
+      zoomPlan(event);
+    } else if (event.target === dialog) {
+      dialog.close();
+    }
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || !state.selection || overlayOpen()) return;
     if (typing(event.target) && event.target.closest("#gradeForm")) {
@@ -1691,7 +2088,7 @@ function bind() {
   document.addEventListener("pointerdown", (event) => {
     if (!state.selection || !narrow.matches) return;
     const target = event.target;
-    if (target.closest("#schoolPanel, .lesson, #weekSwitch, [data-open-item], [data-open-lesson], [data-open-subject], [data-open-grades], [data-new-test], #newTest, #newGrade, .toast, [popover], dialog, .tabbar, .topbar, .variant-switch")) return;
+    if (target.closest("#schoolPanel, .lesson, #weekSwitch, [data-open-item], [data-open-lesson], [data-open-subject], [data-open-grades], [data-new-test], #newTest, #newTalk, #newGrade, .toast, [popover], dialog, .tabbar, .topbar, .variant-switch")) return;
     closePanel();
   });
   document.addEventListener("visibilitychange", () => {
@@ -1703,11 +2100,64 @@ function bind() {
   document.fonts?.ready.then(fitLabels);
 }
 
-function startVplan({ manual = false } = {}) {
-  state.vplan.loaded = true;
-  state.vplan.loading = false;
+const PLAN_FRESH = 15 * 60 * 1000;
+
+async function fetchPlan(fresh) {
+  const response = await fetch(`/api/ui/vplan${fresh ? "?frisch=1" : ""}`, { credentials: "same-origin", cache: "no-store" });
+  if (response.status === 404) return null;
+  const body = await response.json();
+  if (!response.ok || body.success === false) throw new Error(body.error || "");
+  return body;
+}
+
+function applyPlan(body) {
+  const plan = state.vplan;
+  plan.files = body.files || [];
+  plan.stand = body.cachedAt || null;
+  plan.problem = body.problem || null;
+  plan.message = body.message || "";
+  plan.loaded = true;
+}
+
+async function startVplan({ manual = false } = {}) {
+  const plan = state.vplan;
+  if (!data.status?.iserv || plan.loading || flags.empty || (data.changes || []).length || (page.changes || []).length) {
+    if (manual && !plan.loading) location.reload();
+    return;
+  }
+  plan.loading = true;
   renderOverview();
-  if (manual) location.reload();
+  const pages = () => plan.files.map((file) => file.url).join(" ");
+  let shown = pages();
+  try {
+    let body = manual ? null : await fetchPlan(false);
+    if (!manual && body === null) {
+      plan.supported = false;
+      return;
+    }
+    if (body) {
+      applyPlan(body);
+      renderOverview();
+      shown = pages();
+    }
+    const age = body?.cachedAt ? Date.now() - new Date(body.cachedAt).getTime() : Infinity;
+    if (manual || !body.files.length || !(age < PLAN_FRESH)) {
+      body = await fetchPlan(true);
+      if (body === null) plan.supported = false;
+      else applyPlan(body);
+    }
+  } catch {
+    plan.problem = "offline";
+    plan.message = "IServ ist gerade nicht erreichbar.";
+  } finally {
+    plan.loading = false;
+    plan.loaded = true;
+    renderOverview();
+    const viewer = $("planViewer");
+    if (viewer?.open && !plan.files.length) viewer.close();
+    else if (viewer?.open && pages() !== shown) renderPlanViewer();
+    else if (viewer?.open) $("planViewerMeta").textContent = planStand();
+  }
 }
 
 function changedKeys() {
@@ -1771,38 +2221,64 @@ function registerPalette() {
       run: () => openPanel({ type: "subject", key }),
     })),
     ...state.items.filter(isAssessment).filter((item) => item.date >= clockState().iso).map((item) => ({
-      group: "Tests und Klausuren",
+      group: "Tests, Klausuren und Vorträge",
       label: `${item.kind} ${subject(item.subject).label}: ${item.title}`,
-      icon: "nx-test",
+      icon: FLAG_ICONS[item.kind],
       hint: shortDate(parseDate(item.date)),
       run: () => openItem(item.id),
     })),
     { group: "Schule", label: "Test eintragen", icon: "plus", keywords: "klausur", run: () => openTestForm(null) },
+    { group: "Schule", label: "Vortrag eintragen", icon: "plus", keywords: "referat präsentation", run: () => openTestForm(null, null, "Vortrag") },
     { group: "Schule", label: "Note eintragen", icon: "plus", keywords: "punkte bewertung", run: () => openGradeForm() },
     { group: "Schule", label: "Noten ansehen", icon: "graduation-cap", keywords: "schnitt punkte", run: () => openGrades() },
     { group: "Schule", label: "Notenrechner", icon: "graduation-cap", keywords: "zielnote fachnote punkte umrechnen", run: () => openCalculator(state.calc.subject || scoredKeys()[0] || "") },
   ]);
 }
 
+function bindNotes() {
+  window.addEventListener("app:note", (event) => {
+    const detail = event.detail;
+    if (detail.type !== "homework") return;
+    event.preventDefault();
+    const item = { id: `hw-new-${Date.now()}`, kind: "Hausaufgabe", title: detail.title, subject: detail.subject || null, date: detail.date || homeworkDate(detail.subject), detail: detail.details || "", status: "offen" };
+    state.items.push(item);
+    deadlineApi.create(item);
+    renderAll();
+    flashRow(item.id);
+    toast(`Hausaufgabe für ${esc(shortDate(parseDate(item.date)))} angelegt: „${esc(item.title)}“`, {
+      icon: "check",
+      action: { label: "Rückgängig", undo: true, run: () => removeItem(item.id) },
+    });
+  });
+}
+
 export function init() {
   if (!$("schoolPage") || !data) return;
   state.items = flags.empty ? [] : [...(data.deadlines || []), ...(page.exams || [])].filter(visibleItem).map((item) => ({ ...item }));
   state.grades = flags.empty ? [] : (page.grades || []).map((grade) => ({ ...grade }));
-  state.vplan.loaded = true;
-  state.vplan.stand = syncTime();
+  state.vplan.loaded = !!((data.changes || []).length || (page.changes || []).length);
   state.signature = timeSignature();
   const edit = $("editTimetable");
   if (edit) edit.href = settingsHref();
   renderWeekSwitch();
   renderAll();
   bind();
+  bindNotes();
   registerPalette();
   scrollToToday();
   growNow();
   openFromUrl();
-  if (!state.vplan.loaded) startVplan();
+  startVplan();
   scheduleTick();
+  onPlanRefresh(() => {
+    renderWeekSwitch();
+    renderAll();
+  });
+  onPlanRefresh(() => state.selection && renderPanel(), panelInUse);
 }
+
+// The panel waits while a form in it is open or the focus is inside, as with the minute tick.
+const panelInUse = () => !!state.selection && (state.selection.type === "test" || state.gradeForm || $("schoolPanel").contains(document.activeElement));
 
 function settingsHref() {
   const href = pageUrl("settings", "/hub/settings#stundenplan");

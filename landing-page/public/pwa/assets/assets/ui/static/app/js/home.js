@@ -1,27 +1,43 @@
 import {
   data, flags, esc, icon, now, pinnedTime, toMin, clock, hm, startOfDay, addDays, isoDate, parseDate, dayDiff, minutesOf,
   weekType, abWeeks, isoWeek, subject, hueVar, glue, lessonsFor, activeLessons, nextSchoolDay, relativeDay, inDays, duration, shortDate,
-  longDate, eventsOn, nextDeparture, schoolDeparture, weatherAt, rainFrom, hourIcon, hasWeather, storage, changesFor,
-  WEEKDAYS, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "./core.js";
+  longDate, eventsOn, nextDeparture, weatherAt, rainFrom, hourIcon, hasWeather, currentSky, skyCode, periodWords, storage, changesFor, ASSESSMENTS, isAssessment, isOverdue, pastText, pastWord, nextRepeatDate, followLinks, homeworkDate,
+  holidayOn, hasPlan, NO_TEACHER, WEEKDAYS_SHORT, MONTHS, MONTHS_SHORT, BRAND } from "./core.js";
 import { animates, travels, rich, level, flipKeyed, exitInPlace, enterInPlace, setDigits, pop, crossfade, swapText, breath, chalkCheck, bezier, token, ms } from "./motion.js";
 import { renderScene, playIntro, classifyEvent, pickProps } from "./desk.js";
 import { toast, openPage, registerSearch, typing, shortcutsEnabled, overlayOpen, placeNear, clampSheet, parseNote, cleanTitle, syncTime } from "./shell.js";
-import { tasks as taskApi, deadlines as deadlineApi, notes as noteApi } from "./api.js";
+import { tasks as taskApi, deadlines as deadlineApi, serverId } from "./api.js";
+import { dueItems as dueLists, blockIn, testAhead, homeFirst, forecastRow, DUE_DAYS } from "./home-rules.js";
+import { onPlanRefresh } from "./plan-refresh.js";
 
 const $ = (id) => document.getElementById(id);
-const DAY_START = data.blocks?.length ? Math.min(...data.blocks.map((block) => toMin(block.start))) : 480;
-const DAY_END = data.blocks?.length ? Math.max(...data.blocks.map((block) => toMin(block.end))) : 900;
-const SPAN = DAY_END - DAY_START;
+let DAY_START = 480;
+let DAY_END = 900;
+let SPAN = DAY_END - DAY_START;
+let PERIOD = periodWords();
+let thisPeriod = "";
 const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const clamp = (value, low = 0, high = 1) => Math.min(high, Math.max(low, value));
 const widow = (text) => text.replace(/ (\S{1,12})$/, "\u00a0$1");
-const nb = (text) => String(text).replace(/ /g, " ");
+const nth = (n) => `${n}.\u00a0${PERIOD.one}`;
+
+// The day's span and the word for a period follow the block times, which a plan taken over from another device can change.
+function measureDay() {
+  DAY_START = data.blocks?.length ? Math.min(...data.blocks.map((block) => toMin(block.start))) : 480;
+  DAY_END = data.blocks?.length ? Math.max(...data.blocks.map((block) => toMin(block.end))) : 900;
+  SPAN = DAY_END - DAY_START;
+  PERIOD = periodWords();
+  thisPeriod = `${PERIOD.dative === "der" ? "dieser" : "diesem"} ${PERIOD.one}`;
+}
+
+measureDay();
 
 const state = {
-  tasks: flags.empty ? [] : data.tasks.map((task) => ({ ...task })),
+  tasks: flags.empty ? [] : [...data.tasks, ...(data.taskPool || []).filter((task) => !task.done && task.date && !task.someday)].map((task) => ({ ...task })),
   deadlines: flags.empty ? [] : data.deadlines.map((item) => ({ ...item })),
   deleted: [],
   doneOpen: false,
+  writtenOpen: false,
   day: null,
   pending: new Set(),
   settleTimer: 0,
@@ -36,6 +52,7 @@ function computeDay(date) {
   const lessons = lessonsFor(date);
   const active = activeLessons(lessons);
   const base = { date, nowMin, lessons, active, changes: changesFor(date) };
+  if (!hasPlan()) return { ...base, kind: "unplanned" };
   if (!active.length) return { ...base, kind: "free", school: nextSchoolDay(date) };
   const first = active[0];
   const last = active[active.length - 1];
@@ -57,14 +74,12 @@ const todayTasks = () => state.tasks.filter(isTodayTask);
 const openTasks = () => todayTasks().filter((task) => !task.done);
 const doneTasks = () => todayTasks().filter((task) => task.done);
 const upcomingTasks = () => state.tasks.filter((task) => !isTodayTask(task) && !task.done);
-const deadlineById = (id) => state.deadlines.find((item) => item.id === id);
 const byPriority = (a, b) => Number(!!b.priority) - Number(!!a.priority);
 const rowFor = (id) => document.querySelector(`#taskList .task[data-id="${CSS.escape(id)}"], #doneList .task[data-id="${CSS.escape(id)}"]`);
 const label = (key) => subject(key).label;
-const isTest = (item) => item.kind === "Test" || item.kind === "Klausur";
 
-function testOnDate(iso, block) {
-  return state.deadlines.find((item) => isTest(item) && item.date === iso && (!block || item.block === block));
+function testOnDate(iso, block, lessons) {
+  return state.deadlines.find((item) => isAssessment(item) && item.date === iso && blockIn(item, lessons) === block);
 }
 
 function spoken(min) {
@@ -82,21 +97,6 @@ function effort(min) {
   return `${hours}${halves % 2 ? "½" : ""} Std.`;
 }
 
-function weatherWord(item) {
-  if (item.rain >= 50) return `Regen, ${item.rain} %`;
-  if (item.rain >= 30) return `Niesel, ${item.rain} %`;
-  return "trocken";
-}
-
-function weatherPhrase(fromHour) {
-  const rain = rainFrom(fromHour);
-  if (rain == null) return fromHour >= 17 ? "den Abend über trocken" : "bis zum Abend trocken";
-  if (rain <= fromHour) return `Regen um ${fromHour} Uhr`;
-  return `trocken bis ${rain} Uhr`;
-}
-
-const weatherButton = (text, tail = "") => `<span class="glue"><button type="button" class="inline-action" data-open-weather popovertarget="weatherSheet">${text}</button>${tail}</span>`;
-
 function overdueText(diff, target) {
   if (diff === -1) return "seit gestern überfällig";
   if (diff > -7) return `seit ${-diff} Tagen überfällig`;
@@ -109,22 +109,21 @@ function changeLine(day) {
   const lines = [];
   if (cancelled.length) {
     const end = day.active.length ? day.active[day.active.length - 1].end : null;
-    lines.push(`${cancelled.map((lesson) => `${lesson.block}.`).join(" und ")} Block entfällt${end ? `, Schluss um ${hm(end)}` : ""}`);
+    lines.push(`${cancelled.map((lesson) => `${lesson.block}.`).join(" und ")} ${PERIOD.one} entfällt${end ? `, Schluss um ${hm(end)}` : ""}`);
   }
-  moved.forEach((lesson) => lines.push(`${lesson.block}. Block heute in ${lesson.room} statt ${lesson.movedFrom}`));
+  moved.forEach((lesson) => lines.push(`${nth(lesson.block)} heute in ${lesson.room} statt ${lesson.movedFrom}`));
   if (!lines.length) return "";
   return `<p class="today-change">${icon("calendar-x-2")}<span>${esc(lines.join(". "))}.</span></p>`;
 }
 
-function lessonMeta(lesson, prefix = "") {
-  const room = lesson.movedFrom ? `<b>${esc(lesson.room)}</b> statt ${esc(lesson.movedFrom)}` : `<b>${esc(lesson.room)}</b>`;
-  return `${prefix}${room}, ${esc(lesson.teacher)}`;
-}
-
-function timeLine(parts) {
-  if (parts.plain != null) return `<p class="today-time is-plain">${parts.plain}</p>`;
-  const value = parts.value != null ? `<span class="today-count digits" data-digits="${esc(parts.value)}">${esc(parts.value)}</span>` : "";
-  return `<p class="today-time"><span class="today-time-visual" aria-hidden="true"><span class="today-time-lead">${esc(parts.lead)}</span>${value}${parts.unit ? `<span class="today-time-unit">${esc(parts.unit)}</span>` : ""}${parts.tail ? `<span class="today-time-tail">${esc(parts.tail)}</span>` : ""}</span><span class="visually-hidden" data-sr-time></span></p>`;
+function testLine(day) {
+  const test = testAhead(state.deadlines, day);
+  if (!test) return "";
+  const what = test.subject ? `in ${subject(test.subject).name}` : `„${test.title}“`;
+  const text = day.lesson && test.block === day.lesson.block
+    ? `${test.kind} in ${thisPeriod}`
+    : `Heute ${test.kind} ${what}${test.block ? `, ${nth(test.block)}` : ""}`;
+  return `<p class="today-change is-test">${icon(ASSESSMENTS[test.kind].icon)}<span>${esc(text)}</span></p>`;
 }
 
 function reachableBus(day) {
@@ -136,175 +135,6 @@ function reachableBus(day) {
   return { ...bus, missed };
 }
 
-function morningBus(day) {
-  if (day.kind !== "morning" && day.kind !== "soon") return null;
-  const bus = schoolDeparture(day.lesson.startMin, day.nowMin);
-  if (!bus) return null;
-  const leave = bus.leave - day.nowMin;
-  return leave <= 10 || bus.late ? { ...bus, leaveIn: Math.max(0, leave) } : null;
-}
-
-function heroNow(day) {
-  const change = inSchool(day) ? changeLine(day) : "";
-  const title = (text) => `<h2 class="today-title" id="todayTitle">${esc(text)}</h2>`;
-  const busNow = morningBus(day);
-  if (busNow) {
-    const arrival = busNow.late ? `, <span class="today-late">an ${busNow.arrive}, ${busNow.lateBy}\u00a0Min. nach Beginn</span>` : "";
-    const missed = busNow.missed ? `<p class="today-meta is-quiet">Der Bus um ${esc(busNow.missed)} ${day.nowMin >= toMin(busNow.missed) ? "ist schon weg" : "ist nicht mehr zu schaffen"}.</p>` : "";
-    const parts = busNow.leaveIn > 0
-      ? { lead: "Los in", value: String(busNow.leaveIn), unit: "Min.", tail: "", sr: `Los in ${spoken(busNow.leaveIn)}, Abfahrt ${busNow.time}.` }
-      : { lead: "Jetzt los", value: null, unit: "", tail: "", sr: `Jetzt los, Abfahrt ${busNow.time}.` };
-    return {
-      html: `${change}${title(`${busNow.mode} ${busNow.line} um ${busNow.time}`)}<p class="today-meta">ab <b>${esc(busNow.from)}</b>, ${busNow.walk}\u00a0Min. zu Fuß${arrival}</p>${missed}`,
-      parts,
-    };
-  }
-  if (day.kind === "lesson") {
-    const lesson = day.lesson;
-    const left = lesson.endMin - day.nowMin;
-    return {
-      html: `${change}${title(label(lesson.subject))}<p class="today-meta">${lessonMeta(lesson, `${lesson.block}. Block, `)}</p>`,
-      parts: { lead: "noch", value: String(left), unit: "Min.", tail: `bis ${hm(lesson.end)}`, sr: `Noch ${spoken(left)} bis ${hm(lesson.end)}.` },
-    };
-  }
-  if (day.kind === "break" || day.kind === "soon" || day.kind === "morning") {
-    const lesson = day.lesson;
-    const wait = lesson.startMin - day.nowMin;
-    const meta = `<p class="today-meta">${lessonMeta(lesson, `${lesson.block}. Block, `)}</p>`;
-    let parts;
-    if (day.kind === "break") parts = { lead: "Pause, noch", value: String(wait), unit: "Min.", tail: `bis ${hm(lesson.start)}`, sr: `Pause, noch ${spoken(wait)} bis ${hm(lesson.start)}.` };
-    else if (day.kind === "soon") parts = { lead: "Beginn in", value: String(wait), unit: "Min.", tail: `um ${hm(lesson.start)}`, sr: `Beginn in ${spoken(wait)} um ${hm(lesson.start)}.` };
-    else parts = { lead: "Beginn um", value: hm(lesson.start), unit: "Uhr,", tail: `in ${duration(wait)}`, sr: `Beginn um ${hm(lesson.start)} Uhr, in ${spoken(wait)}.` };
-    return { html: `${change}${title(label(lesson.subject))}${meta}`, parts };
-  }
-  if (day.kind === "afterSoon") {
-    const bus = reachableBus(day);
-    if (bus) {
-      const departs = toMin(bus.time) + bus.delay;
-      const leave = departs - bus.walk - day.nowMin;
-      const delay = bus.delay ? `, heute ${bus.delay} Min. später` : "";
-      const missed = bus.missed ? `<p class="today-meta is-quiet">Der Bus um ${esc(bus.missed)} ${day.nowMin >= toMin(bus.missed) ? "ist schon weg" : "ist nicht mehr zu schaffen"}.</p>` : "";
-      const parts = leave > 0
-        ? { lead: "Los in", value: String(leave), unit: "Min.", tail: "", sr: `Los in ${spoken(leave)}, Abfahrt ${clock(departs)}.` }
-        : { lead: "Jetzt los", value: null, unit: "", tail: "", sr: `Jetzt los, Abfahrt ${clock(departs)}.` };
-      return {
-        html: `${title(`${bus.mode} ${bus.line} um ${bus.time}`)}<p class="today-meta">ab <b>${esc(bus.from)}</b>, ${bus.walk} Min. zu Fuß${delay}</p>${missed}`,
-        parts,
-      };
-    }
-  }
-  const school = day.school || nextSchoolDay(day.date);
-  if (!school) {
-    return { html: `${title("Kein Unterricht")}<p class="today-meta">In den nächsten zehn Tagen steht nichts im Stundenplan.</p>`, parts: { plain: "" } };
-  }
-  const first = school.lessons[0];
-  const lastLesson = school.lessons[school.lessons.length - 1];
-  const when = cap(relativeDay(school.offset, school.date));
-  const test = testOnDate(isoDate(school.date));
-  const testText = test ? `, <span class="today-flagline">${esc(subject(test.subject).name.replace(/ LK$/, ""))}-${esc(test.kind)} im ${test.block}. Block</span>` : "";
-  const weekNote = school.offset > 1 && abWeeks() ? `, ${weekType(school.date)}-Woche` : "";
-  const count = school.lessons.length;
-  return {
-    html: `${title(label(first.subject))}<p class="today-meta">${esc(when)}, ${first.block}. Block um ${hm(first.start)}, <b>${esc(first.room)}</b></p>`,
-    parts: { plain: `${count} ${count === 1 ? "Block" : "Blöcke"} bis ${hm(lastLesson.end)}${weekNote}${testText}` },
-  };
-}
-
-function nextBlock(labelText, main, meta) {
-  return `<p class="today-next-line"><span class="today-next-label">${labelText}</span><span class="today-next-main">${main}</span></p><p class="today-next-meta">${meta}</p>`;
-}
-
-function heroNext(day) {
-  const busNow = morningBus(day);
-  if (busNow) {
-    const lesson = day.lesson;
-    return nextBlock("Danach", esc(label(lesson.subject)), `<b>${esc(lesson.room)}</b>, ${hm(lesson.start)}`);
-  }
-  if (inSchool(day)) {
-    const next = day.next;
-    if (next) {
-      const room = next.movedFrom ? `<b>${esc(next.room)}</b> statt ${esc(next.movedFrom)}` : `<b>${esc(next.room)}</b>`;
-      return nextBlock("Danach", esc(label(next.subject)), `${room}, ${hm(next.start)}`);
-    }
-    const last = day.active[day.active.length - 1];
-    const bus = nextDeparture(last.endMin);
-    return nextBlock("Danach", "Schulschluss", `um ${hm(last.end)}${bus ? `, ${esc(bus.mode)} ${esc(bus.line)} um <b>${esc(bus.time)}</b>` : ""}`);
-  }
-  const later = eventsOn(day.date).filter((event) => event.start && toMin(event.start) > day.nowMin);
-  if (later.length) {
-    const event = later[0];
-    return nextBlock(day.kind === "afterSoon" ? "Danach" : "Heute noch", esc(event.title), `<b>${esc(event.start)}</b>, ${esc(event.place)}`);
-  }
-  const lateTask = (task) => !!task.dueTime && day.nowMin >= toMin(task.dueTime);
-  const evening = (task) => /heute abend/i.test(task.anchor || "");
-  const open = openTasks().sort((a, b) => Number(lateTask(a)) - Number(lateTask(b)) || Number(evening(b)) - Number(evening(a)) || byPriority(a, b));
-  if (open.length && day.nowMin >= 13 * 60) {
-    const task = open[0];
-    const note = task.deadline ? linkPhrase(task, day.date) : "";
-    return nextBlock(day.kind === "evening" ? "Heute Abend noch" : "Heute noch", glue(esc(task.title)), `etwa ${effort(task.minutes || 20)}${note ? `, ${glue(esc(note))}` : ""}`);
-  }
-  const upcoming = state.deadlines
-    .map((item) => ({ ...item, diff: dayDiff(day.date, item.date) }))
-    .filter((item) => item.diff >= 1 && !item.pinned)
-    .sort((a, b) => a.diff - b.diff || Number(isTest(b)) - Number(isTest(a)))[0];
-  if (upcoming) {
-    const target = parseDate(upcoming.date);
-    const labelText = { Test: "Nächster Test", Klausur: "Nächste Klausur", Referat: "Nächstes Referat", Hausaufgabe: "Nächste Hausaufgabe" }[upcoming.kind] || "Nächste Abgabe";
-    const block = upcoming.block ? ` im ${upcoming.block}. Block` : "";
-    return nextBlock(labelText, esc(label(upcoming.subject)), `<b>${esc(cap(relativeDay(upcoming.diff, target)))}</b>${block}, ${esc(glue(upcoming.title))}`);
-  }
-  return nextBlock("Heute noch", "nichts geplant", "Kalender und IServ sind abgeglichen");
-}
-
-function heroAfter(day) {
-  const pieces = [];
-  if (day.kind === "lesson" || day.kind === "break") {
-    const last = day.active[day.active.length - 1];
-    const bus = nextDeparture(last.endMin);
-    if (bus) {
-      const delay = bus.delay ? `, heute ${bus.delay} Min. später` : "";
-      const hour = Math.floor(toMin(bus.time) / 60);
-      const late = delay ? delay.replace(/^, /, "") : "";
-      const weather = hasWeather() ? weatherButton(weatherPhrase(hour), ".") : "";
-      const tail = weather ? `${late ? ` ${late},` : ""} ${weather}` : late ? ` ${late}.` : "";
-      pieces.push(`Heimweg mit dem <span class="glue"><button type="button" class="inline-action" data-page-action="vbb">${esc(bus.mode)} ${esc(bus.line)} um ${esc(bus.time)}</button>${tail ? "," : "."}</span>${tail}`);
-    }
-    const evening = eventsOn(day.date).filter((event) => event.start && toMin(event.start) >= last.endMin);
-    if (evening.length) pieces.push(`Danach ${evening.map((event) => `${esc(event.start)} ${esc(event.title)}`).join(" und ")}.`);
-  } else if (day.kind === "soon" || day.kind === "morning") {
-    const first = day.active[0];
-    const bus = morningBus(day) ? null : schoolDeparture(first.startMin, day.nowMin);
-    const hour = Math.max(6, Math.floor(day.nowMin / 60));
-    const current = weatherAt(hour);
-    if (bus) {
-      const leave = bus.leave - day.nowMin;
-      const when = leave <= 15 ? `los in ${leave}\u00a0Minuten` : `los um ${clock(bus.leave)}`;
-      pieces.push(`Zur Schule mit dem <span class="glue"><button type="button" class="inline-action" data-page-action="vbb">${esc(bus.mode)} ${esc(bus.line)} um ${esc(bus.time)}</button>,</span> ${when}.`);
-    }
-    const last = day.active[day.active.length - 1];
-    pieces.push(current ? `Draußen ${weatherButton(`${current.temp}°, ${weatherPhrase(hour)}`, ".")} Schluss um ${hm(last.end)}.` : `Schluss um ${hm(last.end)}.`);
-  } else {
-    const later = eventsOn(day.date).filter((event) => event.start && toMin(event.start) > day.nowMin);
-    const outdoor = hasWeather() ? later.find((event) => event.place && !/discord|online|zoom/i.test(event.place)) : null;
-    if (outdoor) {
-      const item = weatherAt(Math.floor(toMin(outdoor.start) / 60));
-      pieces.push(`${esc(outdoor.title)} um ${esc(outdoor.start)}: ${weatherButton(weatherWord(item), ".")}`);
-    }
-    const rest = later.filter((event) => event !== outdoor && event !== later[0]);
-    if (rest.length) pieces.push(`Später ${rest.map((event) => `${esc(event.start)} ${esc(event.title)}`).join(" und ")}.`);
-    const morning = data.weather.tomorrowMorning;
-    const school = day.school;
-    if (!outdoor && day.nowMin >= 17 * 60 && morning && school?.offset === 1) {
-      const bus = schoolDeparture(school.lessons[0].startMin, 0);
-      pieces.push(`Morgen früh ${weatherButton(`${morning.temp}°, ${morning.rain >= 40 ? "Regen" : "trocken"}`, bus ? "," : ".")}${bus ? ` ${esc(bus.mode)} ${esc(bus.line)} um ${esc(bus.time)}.` : ""}`);
-    } else if (!outdoor && day.nowMin < 22 * 60 && hasWeather()) {
-      const hour = Math.max(7, Math.floor(day.nowMin / 60));
-      pieces.push(`Wetter: ${weatherButton(weatherPhrase(hour), ".")}`);
-    }
-  }
-  return pieces.map((piece) => `<span class="after-piece">${piece}</span>`).join(" ");
-}
-
 function timeInline(parts) {
   if (parts.plain != null) return parts.plain;
   const value = parts.value != null ? `<span class="today-count digits" data-digits="${esc(parts.value)}">${esc(parts.value)}</span>` : "";
@@ -312,12 +142,15 @@ function timeInline(parts) {
 }
 
 function heroCopy(day) {
-  const change = inSchool(day) ? changeLine(day) : "";
+  const change = inSchool(day) ? `${changeLine(day)}${testLine(day)}` : "";
   const title = (text) => `<h2 class="today-title" id="todayTitle">${esc(text)}</h2>`;
   const eyebrow = (text) => `<p class="today-eyebrow">${text}</p>`;
-  const place = (lesson) => (lesson.movedFrom ? `<b>${esc(lesson.room)}</b> statt ${esc(lesson.movedFrom)}` : `<b>${esc(lesson.room)}</b>`);
-  const upNext = (lesson) => `Danach <b>${esc(label(lesson.subject))}</b>, ${esc(lesson.room)}, ${hm(lesson.start)}`;
-  const closing = (last) => `Danach Schulschluss um <b>${hm(last.end)}</b>`;
+  const place = (lesson) => (lesson.movedFrom ? `<b>${esc(lesson.room)}</b> statt ${esc(lesson.movedFrom)}` : lesson.room ? `<b>${esc(lesson.room)}</b>` : "");
+  const where = (lesson) => [place(lesson), lesson.teacher && lesson.teacher !== NO_TEACHER ? esc(lesson.teacher) : ""].filter(Boolean).map((part) => `${part}, `).join("");
+  const upNext = (lesson) => `Danach <b>${esc(label(lesson.subject))}</b>, ${lesson.room ? `${esc(lesson.room)}, ` : ""}${hm(lesson.start)}`;
+  const ride = (bus) => `${bus.mode === "bus" ? "Bus " : bus.mode === "tram" ? "Tram " : ""}${esc(bus.line)} um ${esc(bus.time)}`;
+  const homeBus = day.kind === "afterSoon" ? reachableBus(day) : day.last ? nextDeparture(day.last.endMin) : null;
+  const closing = (last) => `Danach Schulschluss um <b>${hm(last.end)}</b>${homeBus ? `, ${ride(homeBus)}` : ""}`;
   const tomorrow = (school) => {
     if (!school) return "In den nächsten zehn Tagen steht nichts im Stundenplan";
     const first = school.lessons[0];
@@ -327,8 +160,8 @@ function heroCopy(day) {
     const lesson = day.lesson;
     const left = lesson.endMin - day.nowMin;
     return {
-      head: `${eyebrow(`Jetzt, ${lesson.block}. Block`)}${change}${title(label(lesson.subject))}`,
-      meta: `${place(lesson)}, ${esc(lesson.teacher)}, `,
+      head: `${eyebrow(`Jetzt, ${nth(lesson.block)}`)}${change}${title(label(lesson.subject))}`,
+      meta: where(lesson),
       parts: { lead: "noch", value: String(left), unit: "Min.", sr: `Noch ${spoken(left)} bis ${hm(lesson.end)}.` },
       next: day.next ? upNext(day.next) : closing(day.last),
     };
@@ -336,13 +169,13 @@ function heroCopy(day) {
   if (day.kind === "break" || day.kind === "soon" || day.kind === "morning") {
     const lesson = day.lesson;
     const wait = lesson.startMin - day.nowMin;
-    const head = day.kind === "break" ? `Pause bis ${hm(lesson.start)}` : day.kind === "soon" ? `Gleich, ${lesson.block}. Block` : `Heute ab ${hm(lesson.start)}`;
+    const head = day.kind === "break" ? `Pause bis ${hm(lesson.start)}` : day.kind === "soon" ? `Gleich, ${nth(lesson.block)}` : `Heute ab ${hm(lesson.start)}`;
     const parts = day.kind === "morning"
       ? { plain: `in ${duration(wait)}` }
       : { lead: "in", value: String(wait), unit: "Min.", sr: `Beginn in ${spoken(wait)} um ${hm(lesson.start)}.` };
     return {
       head: `${eyebrow(head)}${change}${title(label(lesson.subject))}`,
-      meta: `${place(lesson)}, ${esc(lesson.teacher)}, `,
+      meta: where(lesson),
       parts,
       next: day.next ? upNext(day.next) : closing(day.last),
     };
@@ -350,19 +183,31 @@ function heroCopy(day) {
   const later = eventsOn(day.date).filter((event) => event.start && toMin(event.end || event.start) > day.nowMin);
   const school = day.school || nextSchoolDay(day.date);
   const open = openTasks();
-  const workload = open.length ? `${open.length} ${open.length === 1 ? "Aufgabe" : "Aufgaben"} offen, etwa ${effort(open.reduce((sum, task) => sum + (task.minutes || 0), 0))}` : "Alle Aufgaben erledigt";
-  if (day.kind === "free") {
-    const weekend = [0, 6].includes(day.date.getDay());
-    const event = later[0];
+  const workload = open.length ? `${open.length} ${open.length === 1 ? "Aufgabe" : "Aufgaben"} offen, etwa ${effort(open.reduce((sum, task) => sum + (task.minutes || 0), 0))}` : todayTasks().length ? "Alle Aufgaben erledigt" : "";
+  const weekend = [0, 6].includes(day.date.getDay());
+  const holiday = holidayOn(day.date);
+  if (day.kind === "unplanned") {
+    const when = holiday ? holiday.title : weekend ? "Wochenende" : "";
     return {
-      head: `${eyebrow(weekend ? "Wochenende" : "Heute frei")}${title(event ? event.title : "Kein Unterricht")}`,
+      head: `${when ? eyebrow(esc(when)) : ""}${title("Noch kein Stundenplan")}`,
+      meta: "Trag ihn einmal ein, dann steht hier, welche Stunde gerade dran ist und in welchem Raum.",
+      parts: { plain: "" },
+      next: `<button class="btn btn-primary today-setup" type="button" data-open-setup="home">${icon("table-2")}Stundenplan eintragen</button><span class="today-setup-note">dauert etwa fünf Minuten</span>${data?.accountService ? '<button class="text-button today-account" type="button" data-account-open="signin"><span>Ich habe schon ein Konto</span></button>' : ""}`,
+    };
+  }
+  if (day.kind === "free") {
+    const event = later[0];
+    const what = event ? event.title : holiday && !weekend ? holiday.title : "Kein Unterricht";
+    return {
+      head: `${eyebrow(weekend ? "Wochenende" : "Heute frei")}${title(what)}`,
       meta: event ? `<b>${esc(event.start)}</b>${event.place ? `, ${esc(event.place)}` : ""}` : workload,
       parts: { plain: "" },
       next: tomorrow(school),
     };
   }
   const evening = day.nowMin >= 17 * 60;
-  if (later.length) {
+  const homeNow = day.kind === "afterSoon" && homeFirst(homeBus, later[0], day.nowMin);
+  if (later.length && !homeNow) {
     const [event, second] = later;
     const started = toMin(event.start) <= day.nowMin;
     return {
@@ -372,11 +217,13 @@ function heroCopy(day) {
       next: second ? `Danach <b>${esc(second.title)}</b> um ${esc(second.start)}` : tomorrow(school),
     };
   }
+  const way = homeNow ? `Heimweg mit <b>${ride(homeBus)}</b> ab ${esc(homeBus.from)}` : "";
+  const after = homeNow && later[0];
   return {
     head: `${eyebrow(day.kind === "afterSoon" ? `Schule vorbei um ${hm(day.last.end)}` : evening ? "Heute Abend" : "Heute Nachmittag")}${title("Feierabend")}`,
-    meta: workload,
+    meta: after ? way : workload,
     parts: { plain: "" },
-    next: tomorrow(school),
+    next: after ? `Danach <b>${esc(after.title)}</b> um ${esc(after.start)}${after.place ? `, ${esc(after.place)}` : ""}` : way || tomorrow(school),
   };
 }
 
@@ -416,11 +263,12 @@ function sceneModel(day) {
   const preview = !!flags.scene;
   const later = (preview ? previewEvents(day) : eventsOn(day.date)).filter((event) => !event.start || toMin(event.end || event.start) > day.nowMin);
   const deadlines = state.deadlines.map((item) => ({ ...item, diff: dayDiff(day.date, item.date) }));
-  const test = deadlines.filter((item) => isTest(item) && item.diff >= 0 && item.diff <= 4).sort((a, b) => a.diff - b.diff)[0];
-  const talk = deadlines.some((item) => item.kind === "Referat" && item.diff >= 0 && item.diff <= 21) && open.some((task) => /referat|folie/i.test(task.title));
-  const due = deadlines.filter((item) => !isTest(item) && !item.pinned && item.diff >= -7 && item.diff <= 3 && item.status !== "abgegeben").length;
+  const test = deadlines.filter((item) => isAssessment(item) && item.diff >= 0 && item.diff <= 4).sort((a, b) => a.diff - b.diff)[0];
+  const talk = deadlines.some((item) => item.kind === "Vortrag" && item.diff >= 0 && item.diff <= 21) && open.some((task) => /vortrag|referat|präsentation|folie/i.test(task.title));
+  const due = deadlines.filter((item) => !isAssessment(item) && !item.pinned && item.diff >= -7 && item.diff <= 3 && item.status !== "abgegeben").length;
   const hour = day.nowMin / 60;
   const time = hour < 5 || hour >= 21 ? "night" : hour < 7.5 ? "dawn" : hour < 17.5 ? "day" : "dusk";
+  const sky = currentSky(Math.floor(hour))?.kind || null;
   const bloom = total > 0 && !open.length;
   const lampOn = (!!test && test.diff <= 1) || time === "dusk" || time === "night";
   const candidates = [];
@@ -438,11 +286,12 @@ function sceneModel(day) {
   const reading = open.find((task) => /lesen|lektüre|kapitel|korrektur/i.test(task.title));
   if (reading && !preview) candidates.push({ key: "book", tip: reading.title, rank: 5, order: 0 });
   if (flags.scene === "lesen") candidates.push({ key: "book", tip: "Seminararbeit: Kapitel 3 gegenlesen", rank: 0, order: 0 });
-  if (!day.active.length && !preview) candidates.push({ key: "football", tip: "Heute frei", rank: 6, order: 0 });
+  if (!day.active.length && !preview && day.kind !== "unplanned") candidates.push({ key: "football", tip: "Heute frei", rank: 6, order: 0 });
   const props = pickProps(candidates);
   const bits = [open.length ? `${open.length} ${open.length === 1 ? "offene Aufgabe" : "offene Aufgaben"}` : bloom ? "alles erledigt" : "nichts offen", ...props.map((prop) => prop.tip).filter(Boolean)];
   return {
     time,
+    sky,
     minute: day.nowMin,
     books: Math.min(4, open.length),
     papers: open.length > 4,
@@ -494,17 +343,11 @@ function renderHero(day, previous) {
     if (changedFocus && animates()) swapText(nextNode, nextHtml);
     else nextNode.innerHTML = nextHtml;
   }
-  const after = "";
-  const afterNode = $("todayAfter");
-  afterNode.hidden = !after;
-  if (afterNode.dataset.html !== after) {
-    afterNode.dataset.html = after;
-    afterNode.innerHTML = after;
-  }
   if (changedFocus) breath($("trackNow"));
 }
 
 function trackModel(day) {
+  if (day.kind === "unplanned") return { mode: "none", lessons: [], date: day.date };
   if (["free", "evening"].includes(day.kind)) {
     const school = day.school;
     if (!school) return { mode: "empty", lessons: [], date: day.date };
@@ -528,12 +371,18 @@ const stateWords = { "is-done": "vorbei", "is-now": "läuft", "is-next": "als N�
 function renderTrack(day) {
   const track = $("track");
   const model = trackModel(day);
+  track.hidden = model.mode === "none";
+  if (track.hidden) {
+    track.dataset.signature = "";
+    track.replaceChildren();
+    return;
+  }
   const byBlock = new Map(model.lessons.map((lesson) => [lesson.block, lesson]));
   const signature = `${model.mode}|${isoDate(model.date)}|${model.lessons.map((lesson) => `${lesson.block}${lesson.subject}${lesson.cancelled ? "x" : ""}${lesson.room}`).join()}`;
-  track.setAttribute("aria-label", model.mode === "preview" ? `Blöcke am ${longDate(model.date)}` : "Blöcke heute");
+  track.setAttribute("aria-label", model.mode === "preview" ? `${PERIOD.many} am ${longDate(model.date)}` : `${PERIOD.many} heute`);
   if (track.dataset.signature !== signature) {
     track.dataset.signature = signature;
-    const caption = model.mode === "preview" ? `<span class="track-caption" aria-hidden="true">Blöcke ${esc(relativeDay(model.offset, model.date))}</span>` : "";
+    const caption = model.mode === "preview" ? `<span class="track-caption" aria-hidden="true">${PERIOD.many} ${esc(relativeDay(model.offset, model.date))}</span>` : "";
     track.innerHTML = data.blocks.map((block) => {
       const start = toMin(block.start);
       const left = ((start - DAY_START) / SPAN) * 100;
@@ -542,13 +391,13 @@ function renderTrack(day) {
       const time = `${hm(block.start)}–${hm(block.end)}`;
       const place = `style="left:${left.toFixed(3)}%;width:${width.toFixed(3)}%"`;
       if (!lesson) {
-        return `<div class="segment is-free" role="button" aria-disabled="true" data-block="${block.n}" tabindex="-1" ${place} aria-label="${block.n}. Block, ${hm(block.start)} bis ${hm(block.end)}, frei">
+        return `<div class="segment is-free" role="button" aria-disabled="true" data-block="${block.n}" tabindex="-1" ${place} aria-label="${nth(block.n)}, ${hm(block.start)} bis ${hm(block.end)}, frei">
           <span class="segment-time"><span class="segment-clock">${time}</span></span><span class="segment-label"><span class="label-full">Frei</span><span class="label-short">frei</span></span></div>`;
       }
       const info = subject(lesson.subject);
-      const test = testOnDate(isoDate(model.date), block.n);
-      const tip = `${block.n}. Block, ${time}: <b>${esc(info.name)}</b> in ${esc(lesson.room)}, ${esc(lesson.teacher)}${test ? `<br>${esc(test.kind)}: ${esc(test.title)}` : ""}${lesson.cancelled ? "<br>Entfällt" : ""}`;
-      return `<div class="segment" role="button" data-block="${block.n}" tabindex="-1" data-tip="${esc(tip)}" data-tip-side="below" data-page-action="school" ${place}>
+      const test = testOnDate(isoDate(model.date), block.n, model.lessons);
+      const tip = `${nth(block.n)}, ${time}: <b>${esc(info.name)}</b>${lesson.room ? ` in ${esc(lesson.room)}` : ""}${lesson.teacher && lesson.teacher !== NO_TEACHER ? `, ${esc(lesson.teacher)}` : ""}${test ? `<br>${esc(test.kind)}: ${esc(test.title)}` : ""}${lesson.cancelled ? "<br>Entfällt" : ""}`;
+      return `<div class="segment" role="button" data-block="${block.n}" tabindex="-1" data-tip="${esc(tip)}" data-tip-side="below" data-page-action="school" style="left:${left.toFixed(3)}%;width:${width.toFixed(3)}%;--hue:${hueVar(lesson.subject)}">
         <span class="segment-fill" aria-hidden="true"></span>
         <svg class="segment-outline" aria-hidden="true" focusable="false"><rect pathLength="1"/></svg>
         <span class="segment-time"><span class="segment-done-icon">${icon("check")}</span><span class="segment-clock">${time}</span></span>
@@ -565,9 +414,9 @@ function renderTrack(day) {
     ["is-done", "is-now", "is-next", "is-cancelled"].forEach((name) => node.classList.toggle(name, name === cls));
     const progress = cls === "is-now" ? (day.nowMin - lesson.startMin) / (lesson.endMin - lesson.startMin) : 0;
     node.style.setProperty("--p", progress.toFixed(4));
-    const test = testOnDate(isoDate(model.date), lesson.block);
+    const test = testOnDate(isoDate(model.date), lesson.block, model.lessons);
     const status = stateWords[cls];
-    node.setAttribute("aria-label", `${lesson.block}. Block, ${hm(lesson.start)} bis ${hm(lesson.end)}, ${subject(lesson.subject).name}, ${lesson.room}, ${lesson.teacher}${test ? `, ${test.kind}` : ""}${status ? `, ${status}` : ""}`);
+    node.setAttribute("aria-label", `${nth(lesson.block)}, ${hm(lesson.start)} bis ${hm(lesson.end)}, ${subject(lesson.subject).name}${lesson.room ? `, ${lesson.room}` : ""}${lesson.teacher && lesson.teacher !== NO_TEACHER ? `, ${lesson.teacher}` : ""}${test ? `, ${test.kind}` : ""}${status ? `, ${status}` : ""}`);
     if (!focusTarget && (cls === "is-now" || cls === "is-next")) focusTarget = node;
   });
   const segments = [...track.querySelectorAll(".segment")];
@@ -576,7 +425,27 @@ function renderTrack(day) {
     const pick = focusTarget || segments.find((node) => !node.classList.contains("is-free")) || segments[0];
     segments.forEach((node) => (node.tabIndex = node === pick ? 0 : -1));
   }
+  fitTrack();
   placeMarker(day, model);
+}
+
+// The text's own width, unclipped and to the fraction of a pixel. scrollWidth rounds and misses an ellipsis by a few tenths.
+function textWidth(node) {
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  return range.getBoundingClientRect().width;
+}
+
+function fitTrack() {
+  const segments = [...$("track").querySelectorAll(".segment")];
+  const over = (node) => {
+    const label = node.querySelector(".segment-label");
+    return !!label && textWidth(label) > label.getBoundingClientRect().width + 0.05;
+  };
+  segments.forEach((node) => node.classList.remove("is-tight", "is-bare"));
+  segments.filter(over).forEach((node) => node.classList.add("is-tight"));
+  // One lesson shown as a dot among labelled ones looks broken. Then the whole track shows dots, the tooltip keeps the name.
+  if (segments.some((node) => node.classList.contains("is-tight") && over(node))) segments.forEach((node) => node.classList.add("is-bare"));
 }
 
 function markerFor(day, model) {
@@ -679,17 +548,6 @@ function layoutTrack({ outline = true } = {}) {
   if (outline && next) next.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: 320, delay: 60 + segments.length * 40 + 80, easing: curve, fill: "backwards" });
 }
 
-function linkPhrase(task, date) {
-  const item = task.deadline ? deadlineById(task.deadline) : null;
-  if (!item) return "";
-  const diff = dayDiff(date, item.date);
-  if (diff === 0 && item.kind === "Hausaufgabe") return "";
-  const target = parseDate(item.date);
-  const when = item.pinned ? "" : diff === 1 ? " morgen" : diff < 7 ? ` am ${WEEKDAYS[target.getDay()]}` : ` am ${target.getDate()}.${target.getMonth() + 1}.`;
-  const noun = { Test: "den Test", Klausur: "die Klausur", Referat: "das Referat", Abgabe: item.pinned ? "die Seminararbeit" : "die Abgabe", Hausaufgabe: "die Hausaufgabe" }[item.kind] || "die Abgabe";
-  return `für ${noun}${when}`;
-}
-
 function renderHeader(day) {
   const date = day.date;
   $("headDate").textContent = longDate(date);
@@ -721,11 +579,11 @@ function taskRow(task, date) {
       ${meta ? `<p class="row-meta">${meta}</p>` : ""}
     </div>
     <div class="row-trailing">
-      ${task.done ? "" : `<div class="row-actions">
-        <button class="icon-button" type="button" data-act="later" aria-label="Auf morgen verschieben: ${title}" data-tip="Auf morgen">${icon("calendar-plus")}</button>
+      <div class="row-actions">
+        ${task.done ? "" : `<button class="icon-button" type="button" data-act="later" aria-label="Auf morgen verschieben: ${title}" data-tip="Auf morgen">${icon("calendar-plus")}</button>`}
         <button class="icon-button" type="button" data-act="delete" aria-label="Löschen: ${title}" data-tip="Löschen">${icon("trash-2")}</button>
       </div>
-      <button class="icon-button row-menu-button" type="button" data-act="menu" aria-label="Aktionen für ${title}" aria-haspopup="menu" aria-controls="rowMenu">${icon("ellipsis")}</button>`}
+      <button class="icon-button row-menu-button" type="button" data-act="menu" aria-label="Aktionen für ${title}" aria-haspopup="menu" aria-controls="rowMenu">${icon("ellipsis")}</button>
       ${task.priority && !task.done ? `<span class="flag" data-tip="Wichtig" role="img" aria-label="Wichtig">${icon("flag")}</span>` : ""}
     </div>
   </li>`;
@@ -783,7 +641,7 @@ function renderTasks() {
     }
   } else {
     list.innerHTML = open.slice(0, 5).map((task) => taskRow(task, date)).join("");
-    if (open.length > 5) list.insertAdjacentHTML("beforeend", `<li class="row is-interactive more-row" data-more-tasks data-flip="tasks-more" tabindex="-1"><span></span><button type="button" class="row-link more-link">${open.length - 5} weitere Aufgaben</button>${icon("chevron-right", "chev-end")}</li>`);
+    if (open.length > 5) list.insertAdjacentHTML("beforeend", `<li class="row is-interactive more-row" data-more-tasks data-flip="tasks-more" tabindex="-1"><span></span><button type="button" class="row-link more-link">${open.length === 6 ? "1 weitere Aufgabe" : `${open.length - 5} weitere Aufgaben`}</button>${icon("chevron-right", "chev-end")}</li>`);
   }
   const doneList = $("doneList");
   const filed = doneTasks().filter((task) => !state.pending.has(task.id));
@@ -819,54 +677,58 @@ function dueMeta(item, date) {
     const text = progress ? `, ${progress.unit}\u00a0${progress.done}\u00a0von\u00a0${progress.total}` : "";
     return { html: `${subjectText}, ${inDays(diff)}${text}${bar}`, prepared, diff };
   }
-  const kind = `<span class="kind${isTest(item) ? " is-test" : ""}">${isTest(item) ? icon("nx-test") : ""}${esc(item.kind)}</span>`;
+  const kind = `<span class="kind${isAssessment(item) ? " is-test" : ""}">${isAssessment(item) ? icon(ASSESSMENTS[item.kind].icon) : ""}${esc(item.kind)}</span>`;
   let when;
-  if (diff < 0) when = `<span class="due-when is-urgent">${overdueText(diff, target)}</span>`;
+  if (diff < 0 && isAssessment(item)) when = `<span class="row-note is-ready">${icon("check")}${esc(pastText(diff, target, item.kind))}</span>`;
+  else if (diff < 0) when = `<span class="due-when is-urgent">${overdueText(diff, target)}</span>`;
   else if (diff <= 1) when = `<span class="due-when${prepared ? "" : " is-urgent"}">${cap(relativeDay(diff, target))}</span>`;
   else when = `<span class="due-when">${inDays(diff)}</span>`;
   const prep = prepared ? `, <span class="row-note is-ready">${icon("check")}vorbereitet</span>` : "";
-  return { html: `${kind} ${subjectText}${subjectText ? ", " : ""}${when}${prep}`, prepared, diff };
+  return { html: `${kind}${subjectText ? ` ${subjectText}` : ""}, ${when}${prep}`, prepared, diff };
 }
 
 function dueRow(item, date) {
   const target = parseDate(item.date);
   const meta = dueMeta(item, date);
-  const leafClass = meta.diff < 0 ? "is-overdue" : meta.diff <= 1 && !meta.prepared && !item.pinned ? "is-soon" : "";
+  const written = meta.diff < 0 && isAssessment(item);
+  const leafClass = written ? "is-done" : meta.diff < 0 ? "is-overdue" : meta.diff <= 1 && !meta.prepared && !item.pinned ? "is-soon" : "";
   const page = item.source === "task" ? "tasks" : "school";
-  return `<li class="row due is-interactive" data-id="${esc(item.id)}" tabindex="-1">
+  const href = page === "tasks" ? "/hub/tasks" : `/hub/school?eintrag=${encodeURIComponent(item.id)}`;
+  return `<li class="row due is-interactive${written ? " is-written" : ""}" data-id="${esc(item.id)}" tabindex="-1">
     ${leaf(target, date, leafClass)}
     <div class="row-main">
-      <p class="row-title"><a class="row-link" href="${page === "tasks" ? "/hub/tasks" : "/hub/school"}" data-page-action="${page}">${widow(glue(esc(item.title)))}</a></p>
+      <p class="row-title"><a class="row-link" href="${esc(href)}" data-page-action="${page}"><span class="row-text">${widow(glue(esc(item.title)))}</span></a></p>
       <p class="row-meta">${meta.html}</p>
     </div>
     ${icon("chevron-right", "chev-end")}
   </li>`;
 }
 
-function dueItems(date) {
-  const linked = new Set(state.tasks.map((task) => task.deadline).filter(Boolean));
-  const deadlines = state.deadlines.map((item) => ({ ...item, source: "deadline", diff: dayDiff(date, item.date) }));
-  const own = upcomingTasks().map((task) => ({
-    id: task.id, kind: "Aufgabe", title: task.title, subject: task.subject, date: task.date, block: task.block, source: "task", diff: dayDiff(date, task.date),
-  }));
-  const overdue = deadlines.filter((item) => item.diff < 0 && item.status !== "abgegeben").sort((a, b) => a.diff - b.diff);
-  const soon = [
-    ...deadlines.filter((item) => item.diff >= 0 && item.diff <= 14 && !item.pinned && !(item.diff === 0 && linked.has(item.id))),
-    ...own.filter((item) => item.diff <= 14),
-  ].sort((a, b) => a.diff - b.diff || Number(isTest(b)) - Number(isTest(a)));
-  const pinned = deadlines.filter((item) => item.pinned && item.diff >= 0);
-  return { overdue, soon, pinned };
+const dueItems = (date) => dueLists(date, state.deadlines, upcomingTasks());
+
+function renderWritten(written, date) {
+  const toggle = $("writtenToggle");
+  const list = $("writtenList");
+  if (!toggle || !list) return;
+  const open = state.writtenOpen && written.length > 0;
+  toggle.hidden = !written.length;
+  $("writtenLabel").textContent = `${written.length} ${pastWord(written)}`;
+  toggle.setAttribute("aria-expanded", String(open));
+  list.setAttribute("aria-label", cap(pastWord(written)));
+  list.hidden = !open;
+  list.innerHTML = open ? written.map((item) => dueRow(item, date)).join("") : "";
 }
 
 function renderDue() {
   const date = state.day.date;
   const list = $("dueList");
-  const { overdue, soon, pinned } = dueItems(date);
-  const horizon = addDays(startOfDay(date), 14);
+  const { overdue, soon, pinned, written } = dueItems(date);
+  const horizon = addDays(startOfDay(date), DUE_DAYS);
   $("dueMeta").textContent = `bis ${shortDate(horizon)}`;
+  renderWritten(written, date);
   if (!overdue.length && !soon.length && !pinned.length) {
     const stand = flags.offline ? ` (Stand ${syncTime()} Uhr)` : "";
-    list.innerHTML = `<li class="empty-line" data-flip="due-empty">Bis ${longDate(horizon)} keine Abgaben${stand}.<small>Tests und Hausaufgaben kommen automatisch aus IServ.</small></li>`;
+    list.innerHTML = `<li class="empty-line" data-flip="due-empty">Bis ${longDate(horizon)} keine Abgaben${stand}.<small>Tests und Hausaufgaben trägst du unter Schule ein.</small></li>`;
     return;
   }
   let html = overdue.map((item) => dueRow(item, date)).join("");
@@ -890,6 +752,7 @@ function weekStart(day) {
 
 function renderWeek(day) {
   const { monday, next } = weekStart(day);
+  const planned = hasPlan();
   const today = isoDate(day.date);
   const friday = addDays(monday, 4);
   $("weekTitle").textContent = next ? "Nächste Woche" : "Diese Woche";
@@ -904,6 +767,7 @@ function renderWeek(day) {
     const iso = isoDate(date);
     const lessons = lessonsFor(date);
     const active = activeLessons(lessons);
+    const holiday = holidayOn(date);
     const byBlock = new Map(lessons.map((lesson) => [lesson.block, lesson]));
     const isToday = iso === today;
     const past = iso < today || (isToday && ["afterSoon", "evening"].includes(day.kind));
@@ -912,19 +776,20 @@ function renderWeek(day) {
       return lesson && !lesson.cancelled ? `<i style="--hue:${hueVar(lesson.subject)}"></i>` : `<i class="is-free"></i>`;
     }).join("");
     const line = active.length
-      ? `${active.length} ${active.length === 1 ? "Block" : "Blöcke"}, ${active[0].startMin === DAY_START ? "" : `${hm(active[0].start)} `}bis ${hm(active[active.length - 1].end)}`
-      : "Unterrichtsfrei";
-    const overdueHere = state.deadlines.filter((item) => item.date === iso && iso < today && item.status !== "abgegeben");
+      ? `${active.length} ${active.length === 1 ? PERIOD.one : PERIOD.many}, ${active[0].startMin === DAY_START ? "" : `${hm(active[0].start)} `}bis ${hm(active[active.length - 1].end)}`
+      : holiday ? holiday.title : planned ? "Unterrichtsfrei" : "";
+    const overdueHere = state.deadlines.filter((item) => item.date === iso && isOverdue(item, today));
     const markers = [];
     if (past && !isToday) {
       overdueHere.forEach((item) => markers.push({ order: 0, text: `${item.kind} ${subject(item.subject).name.replace(/ LK$/, "")}, überfällig`, html: `<p class="marker is-overdue">${icon("triangle-alert")}<span>${esc(item.kind)} ${esc(subject(item.subject).name.replace(/ LK$/, ""))}, überfällig</span></p>` }));
     } else {
-      state.deadlines.filter((item) => item.date === iso && !item.pinned).forEach((item) => {
+      state.deadlines.filter((item) => item.date === iso && !item.pinned && item.status !== "abgegeben").forEach((item) => {
         const name = subject(item.subject).name.replace(/ LK$/, "");
-        const block = item.block ? `, ${item.block}. Block` : "";
-        const test = isTest(item);
+        const n = blockIn(item, lessons);
+        const block = n ? `, ${nth(n)}` : "";
+        const test = isAssessment(item);
         const text = `${item.kind} ${name}${block}`;
-        markers.push({ order: test ? 0 : 1, text, html: `<p class="marker${test ? " is-test" : ""}">${icon(test ? "nx-test" : "list-checks")}<span>${esc(text)}</span></p>` });
+        markers.push({ order: test ? 0 : 1, text, html: `<p class="marker${test ? " is-test" : ""}">${icon(test ? ASSESSMENTS[item.kind].icon : "list-checks")}<span>${esc(text)}</span></p>` });
       });
       state.tasks.filter((task) => task.date === iso && !task.done && iso > today).forEach((task) => {
         markers.push({ order: 1, text: task.title, html: `<p class="marker">${icon("check")}<span>${esc(task.title)}</span></p>` });
@@ -941,14 +806,14 @@ function renderWeek(day) {
     let headExtra = "";
     if (isToday && !past) headExtra = `<span class="today-tag">heute</span>`;
     else if (past && overdueHere.length) headExtra = `<i class="day-alert" aria-hidden="true"></i>`;
-    else if (past) headExtra = icon("check", "day-check");
+    else if (past && planned) headExtra = icon("check", "day-check");
     const subjects = active.map((lesson) => subject(lesson.subject).name).join(", ");
-    const aria = `${longDate(date)}${isToday ? ", heute" : ""}, ${line}${subjects ? `: ${subjects}` : ""}${markers.length ? `. ${markers.map((marker) => marker.text).join(". ")}` : ""}`;
+    const aria = `${longDate(date)}${isToday ? ", heute" : ""}${line ? `, ${line}` : ""}${subjects ? `: ${subjects}` : ""}${markers.length ? `. ${markers.map((marker) => marker.text).join(". ")}` : ""}`;
     const classes = ["day", isToday ? "is-today" : "", past && !isToday ? "is-past" : "", past && overdueHere.length ? "has-alert" : ""].filter(Boolean).join(" ");
     cells.push(`<li><button type="button" class="${classes}" data-page-action="calendar" style="--d:${i}" aria-label="${esc(aria)}">
       <span class="day-head"><span class="day-name">${WEEKDAYS_SHORT[date.getDay()]}</span><em>${date.getDate()}.</em>${headExtra}</span>
       <span class="day-bar" aria-hidden="true">${bar}</span>
-      <span class="day-body">${past && !isToday ? "" : `<span class="day-line">${esc(line)}</span>`}${shown}${extra}</span>
+      <span class="day-body">${(past && !isToday) || !line ? "" : `<span class="day-line">${esc(line)}</span>`}${shown}${extra}</span>
     </button></li>`);
   }
   const strip = $("weekStrip");
@@ -961,9 +826,14 @@ function renderWeek(day) {
 
 function renderWeather() {
   const place = data.weather?.place || "";
-  $("weatherTitle").textContent = place ? `Wetter in ${place}` : "Wetter";
+  // A home whose address names no town still gets its forecast, only without a name for it.
+  const atHome = !place && !!data.weather?.fromHome;
+  $("weatherTitle").textContent = place ? `Wetter in ${place}` : atHome ? "Wetter zu Hause" : "Wetter";
   if (!hasWeather()) {
-    $("weatherSummary").textContent = place ? `Für ${place} liegt gerade keine Vorhersage vor.` : "Leg in den Einstellungen unter Orte fest, für welchen Ort du das Wetter sehen willst.";
+    const setUp = data.weather?.canFollowHome
+      ? "Leg in den Einstellungen unter Orte dein Zuhause oder einen eigenen Ort für das Wetter fest."
+      : "Leg in den Einstellungen unter Orte fest, für welchen Ort du das Wetter sehen willst.";
+    $("weatherSummary").textContent = place ? `Für ${place} liegt gerade keine Vorhersage vor.` : atHome ? "Für dein Zuhause liegt gerade keine Vorhersage vor." : setUp;
     $("weatherHours").innerHTML = "";
     return;
   }
@@ -974,7 +844,8 @@ function renderWeather() {
   const bus = day && (day.kind === "lesson" || day.kind === "break") ? nextDeparture(day.last.endMin) : day?.kind === "afterSoon" ? reachableBus(day) : null;
   const rain = rainFrom(hour);
   const wind = data.weather.wind == null ? "" : `, Wind ${data.weather.wind} km/h`;
-  let summary = `Jetzt <b>${current.temp}°</b>, ${current.rain >= 30 ? "Niesel" : hour >= 12 && hour <= 14 ? "heiter bis wolkig" : "bedeckt"}${wind}.`;
+  const sky = currentSky(hour);
+  let summary = `Jetzt <b>${current.temp}°</b>${sky ? `, ${sky.word}` : ""}${wind}.`;
   if (bus) {
     const busHour = Math.floor(toMin(bus.time) / 60);
     summary += rain == null || rain > busHour ? ` Heimweg um ${bus.time} noch trocken.` : ` Zum Heimweg um ${bus.time} Regen, Jacke einpacken.`;
@@ -984,22 +855,111 @@ function renderWeather() {
     summary += ` Ab ${rain} Uhr ${info.rain >= 50 ? "Regen" : "Niesel"} mit ${info.rain} % Wahrscheinlichkeit.`;
   }
   $("weatherSummary").innerHTML = summary;
-  const start = Math.max(6, Math.min(hour, 16));
-  $("weatherHours").innerHTML = Array.from({ length: 8 }, (_, index) => {
-    const item = weatherAt(start + index);
+  const { hours, first } = forecastRow(data.weather.hours, hour);
+  const row = $("weatherHours");
+  row.innerHTML = hours.map((item, index) => {
     const spokenRain = item.rain ? `, Regen ${item.rain} Prozent` : ", trocken";
-    return `<li class="hour${item.h === hour ? " is-now" : ""}${item.rain >= 30 ? " is-rain" : ""}" style="--d:${index}" aria-label="${item.h === hour ? "Jetzt" : `${item.h} Uhr`}, ${item.temp} Grad${spokenRain}">
-      <span class="hour-time" aria-hidden="true">${item.h === hour ? "Jetzt" : `${item.h} Uhr`}</span>${icon(hourIcon(item))}<b aria-hidden="true">${item.temp}°</b><span class="hour-rain" aria-hidden="true">${item.rain ? `${item.rain} %` : ""}</span>
+    return `<li class="hour${item.h === hour ? " is-now" : ""}${item.rain >= 30 ? " is-rain" : ""}" style="--d:${Math.max(0, Math.min(8, index - first))}" aria-label="${item.h === hour ? "Jetzt" : `${item.h} Uhr`}, ${item.temp} Grad${spokenRain}">
+      <span class="hour-time" aria-hidden="true">${item.h === hour ? "Jetzt" : `${item.h} Uhr`}</span>${icon(hourIcon(item))}<b aria-hidden="true">${item.temp}°</b><span class="hour-rain" aria-hidden="true">${item.rain ? `${item.rain} %` : ""}</span>
     </li>`;
   }).join("");
-  pop([...$("weatherHours").children]);
+  row.dataset.first = String(first);
+  pop([...row.children].slice(first, first + 8));
+}
+
+// The row opens on the hour now; before that the sheet has no layout to scroll in.
+function showWeatherNow() {
+  const row = $("weatherHours");
+  const item = row?.children[Number(row.dataset.first) || 0];
+  if (!item) return;
+  row.scrollLeft = item.offsetLeft - row.firstElementChild.offsetLeft;
+  edgeWeather();
+}
+
+function edgeWeather() {
+  const row = $("weatherHours");
+  if (!row) return;
+  const room = row.scrollWidth - row.clientWidth;
+  row.classList.toggle("is-start", row.scrollLeft <= 1);
+  row.classList.toggle("is-end", row.scrollLeft >= room - 1);
+}
+
+// Touch and trackpads scroll the row by themselves; a mouse wheel turns into sideways steps while the row has room
+// that way, and a mouse can drag it.
+function bindWeatherRow() {
+  const row = $("weatherHours");
+  if (!row || row.dataset.bound) return;
+  row.dataset.bound = "1";
+  row.tabIndex = 0;
+  row.setAttribute("aria-label", "Vorhersage nach Stunden");
+  row.addEventListener("scroll", edgeWeather, { passive: true });
+  row.addEventListener("wheel", (event) => {
+    if (event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+    const room = row.scrollWidth - row.clientWidth;
+    const step = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? row.clientWidth : 1);
+    const next = Math.max(0, Math.min(room, row.scrollLeft + step));
+    if (room <= 0 || Math.abs(next - row.scrollLeft) < 1) return;
+    event.preventDefault();
+    row.scrollLeft = next;
+  }, { passive: false });
+  let drag = null;
+  row.addEventListener("pointerdown", (event) => {
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    drag = { x: event.clientX, left: row.scrollLeft, moved: false, id: event.pointerId };
+  });
+  row.addEventListener("pointermove", (event) => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x;
+    if (!drag.moved && Math.abs(dx) < 4) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      row.setPointerCapture(event.pointerId);
+      row.classList.add("is-dragging");
+    }
+    row.scrollLeft = drag.left - dx;
+  });
+  const release = () => {
+    if (!drag) return;
+    drag = null;
+    row.classList.remove("is-dragging");
+  };
+  row.addEventListener("pointerup", release);
+  row.addEventListener("pointercancel", release);
+  row.addEventListener("lostpointercapture", release);
+  $("weatherSheet")?.addEventListener("toggle", (event) => {
+    if (event.newState === "open") showWeatherNow();
+  });
+}
+
+function renderWeatherChip() {
+  const chip = $("headWeather");
+  if (!chip) return;
+  const hour = now().getHours();
+  const item = hasWeather() ? weatherAt(hour) : null;
+  chip.hidden = !item;
+  if (!item) return;
+  const sky = currentSky(hour);
+  const glyph = hourIcon({ ...item, code: skyCode(hour) });
+  const word = sky?.word || (item.rain >= 40 ? "Regen möglich" : "");
+  const html = `${icon(glyph)}<b>${item.temp}°</b>${word ? `<span>${esc(word)}</span>` : ""}`;
+  if (chip.dataset.html === html) return;
+  chip.dataset.html = html;
+  chip.innerHTML = html;
+  chip.setAttribute("aria-label", `Wetter${data.weather.place ? ` in ${data.weather.place}` : ""}: ${item.temp} Grad${word ? `, ${word}` : ""}. Vorhersage öffnen`);
 }
 
 function interactiveRows() {
   const lists = [$("taskList"), $("dueList")];
   if (!$("doneList").hidden) lists.splice(1, 0, $("doneList"));
+  if ($("writtenList") && !$("writtenList").hidden) lists.push($("writtenList"));
   return lists.flatMap((list) => [...list.querySelectorAll(".row.is-interactive")]);
 }
+
+let keyRow = null;
+
+document.addEventListener("pointerdown", () => {
+  keyRow = null;
+}, true);
 
 function focusRow(row) {
   if (!row) return;
@@ -1017,7 +977,7 @@ const FLIP_SELECTOR = "#taskList > li, #addTask, #doneToggle, #doneList > li, #d
 
 function holdFocus(paint) {
   const active = document.activeElement;
-  const row = active?.closest?.("#taskList .row[data-id], #doneList .row[data-id], #dueList .row[data-id]");
+  const row = active?.closest?.("#taskList .row[data-id], #doneList .row[data-id], #dueList .row[data-id], #writtenList .row[data-id]");
   const part = !row || active === row ? "" : active.matches(".check") ? ".check" : active.matches(".row-link") ? ".row-link" : active.dataset.act ? `[data-act="${active.dataset.act}"]` : "";
   const list = row?.parentElement.id;
   paint();
@@ -1115,6 +1075,39 @@ function celebrateIfDone() {
   if (box.bottom < 80 || box.top > innerHeight - 80) toast("Alles für heute erledigt.", { icon: "circle-check" });
 }
 
+const savedId = (task) => String(serverId(task.id) || task.id);
+
+function restoreSaved(task) {
+  const before = savedId(task);
+  taskApi.restore(task).then(() => followLinks.rename(before, savedId(task)), () => {});
+}
+
+function dropFollow(task) {
+  const linked = task.follow || followLinks.get(savedId(task));
+  task.follow = null;
+  followLinks.drop(savedId(task));
+  const follow = linked && state.tasks.find((item) => !item.done && (item.id === linked || savedId(item) === String(linked)));
+  if (!follow) return;
+  state.tasks = state.tasks.filter((item) => item !== follow);
+  taskApi.remove(follow.id);
+}
+
+// An occurrence that is already there is used as it is and never taken back by undo:
+// it may belong to a second copy of the task or was entered by hand. Only what this tick created is.
+function followUp(task, date, extra = {}) {
+  const twin = state.tasks.find((item) => item !== task && item.title === task.title && (item.subject || null) === (task.subject || null) && item.repeat === task.repeat && item.date === date);
+  if (twin) {
+    task.follow = null;
+    followLinks.drop(savedId(task));
+    return twin;
+  }
+  const follow = { ...task, ...extra, id: `${task.id}-${Date.now()}`, done: false, follow: null, date };
+  state.tasks.push(follow);
+  task.follow = follow.id;
+  taskApi.create(follow).then((saved) => followLinks.set(savedId(task), saved.id), () => {});
+  return follow;
+}
+
 function toggleTask(id, { restoreFocus = false, via = "keyboard" } = {}) {
   const task = state.tasks.find((item) => item.id === id);
   if (!task) return;
@@ -1122,6 +1115,7 @@ function toggleTask(id, { restoreFocus = false, via = "keyboard" } = {}) {
   task.done = !task.done;
   task.doneAt = task.done ? clock(minutesOf(now())) : null;
   taskApi.done(id, task.done);
+  if (!task.done) dropFollow(task);
   if (row) {
     row.classList.toggle("is-done", task.done);
     row.querySelector(".check").setAttribute("aria-checked", String(task.done));
@@ -1129,9 +1123,14 @@ function toggleTask(id, { restoreFocus = false, via = "keyboard" } = {}) {
   renderTaskMeta();
   state.celebrationDue = task.done && !openTasks().length && storage.get("app-celebrated") !== todayIso();
   if (task.done) {
-    toast(`Erledigt: „${esc(task.title)}“`, {
+    let follow = null;
+    const next = task.repeat && !task.someday ? nextRepeatDate(task.date || todayIso(), task.repeat) : null;
+    if (next) follow = followUp(task, next, { doneAt: null, doneDay: null });
+    toast(follow ? `Erledigt. Nächste am ${esc(shortDate(parseDate(follow.date)))}` : `Erledigt: „${esc(task.title)}“`, {
       icon: "check",
-      action: { label: "Rückgängig", undo: true, run: () => toggleTask(id, { restoreFocus: true }) },
+      action: { label: "Rückgängig", undo: true, run: () => {
+        if (task.done) toggleTask(id, { restoreFocus: true });
+      } },
       returnFocus: () => focusTaskAt(0),
     });
     state.pending.add(id);
@@ -1159,8 +1158,11 @@ function removeTask(id, kind, { refocus = false } = {}) {
   const row = rowFor(id);
   const rowIndex = row ? [...$("taskList").querySelectorAll(".task")].indexOf(row) : -1;
   const hadFocus = refocus || row?.contains(document.activeElement) || document.activeElement === row;
+  const before = task.date || null;
+  const beforeSomeday = !!task.someday;
   if (kind === "later") {
     task.date = isoDate(addDays(state.day.date, 1));
+    task.someday = false;
     taskApi.update(id, { date: task.date, someday: false });
   } else {
     state.tasks.splice(index, 1);
@@ -1174,24 +1176,25 @@ function removeTask(id, kind, { refocus = false } = {}) {
   exitInPlace(row).then(finish);
   toast(kind === "later" ? `Auf morgen verschoben: „${esc(task.title)}“` : `Gelöscht: „${esc(task.title)}“`, {
     icon: kind === "later" ? "calendar-plus" : "trash-2",
-    action: { label: "Rückgängig", undo: true, run: () => restoreTask(id, kind) },
+    action: { label: "Rückgängig", undo: true, run: () => restoreTask(id, kind, before, beforeSomeday) },
     returnFocus: () => focusTaskAt(0),
   });
 }
 
-function restoreTask(id, kind) {
+function restoreTask(id, kind, before = null, someday = false) {
   if (kind === "later") {
     const task = state.tasks.find((item) => item.id === id);
     if (task) {
-      delete task.date;
-      taskApi.update(id, { date: null, someday: false });
+      task.date = before;
+      task.someday = someday;
+      taskApi.update(id, { date: before, someday });
     }
   } else {
     const at = state.deleted.findIndex((entry) => entry.task.id === id);
     if (at < 0) return;
     const [entry] = state.deleted.splice(at, 1);
     state.tasks.splice(Math.min(entry.index, state.tasks.length), 0, entry.task);
-    taskApi.restore(entry.task);
+    restoreSaved(entry.task);
   }
   settleLists();
   const back = rowFor(id);
@@ -1199,8 +1202,8 @@ function restoreTask(id, kind) {
   back?.querySelector(".check")?.focus({ preventScroll: true });
 }
 
-function createTask({ title, subjectKey, date, block, minutes = 20 }) {
-  const task = { id: `new-${Date.now()}`, title, subject: subjectKey, anchor: block ? `vor dem ${block}. Block` : "", minutes, done: false };
+function createTask({ title, subjectKey, date, block, minutes = 20, notes = "" }) {
+  const task = { id: `new-${Date.now()}`, title, subject: subjectKey, anchor: block ? `vor ${PERIOD.dative} ${nth(block)}` : "", minutes, notes, done: false };
   if (date && date > todayIso()) task.date = date;
   if (block) task.block = block;
   state.tasks.push(task);
@@ -1263,6 +1266,7 @@ function openRowMenu(button) {
   if (!menu || !row) return;
   menuInvoker = button;
   menu.dataset.id = row.dataset.id;
+  menu.querySelector('[data-menu-act="later"]').hidden = row.classList.contains("is-done");
   menu.showPopover();
   placeNear(menu, button, "right");
   clampSheet(menu);
@@ -1328,7 +1332,11 @@ function bindLists() {
       return;
     }
     const row = event.target.closest(".task");
-    if (row && event.target.closest(".check")) toggleTask(row.dataset.id, { restoreFocus: true });
+    if (!row) return;
+    if (event.target.closest(".check")) toggleTask(row.dataset.id, { restoreFocus: true });
+    const act = event.target.closest("[data-act]")?.dataset.act;
+    if (act === "delete") removeTask(row.dataset.id, "delete");
+    if (act === "menu") openRowMenu(event.target.closest("[data-act]"));
   });
   $("doneToggle").addEventListener("click", () => {
     state.doneOpen = !state.doneOpen;
@@ -1349,14 +1357,19 @@ function bindLists() {
     const row = document.querySelector(`#dueList .due[data-id="${CSS.escape($("headOverdue").dataset.id || "")}"]`);
     focusRow(row);
   });
+  $("writtenToggle")?.addEventListener("click", () => {
+    state.writtenOpen = !state.writtenOpen;
+    renderDue();
+    if (state.writtenOpen && travels()) [...$("writtenList").children].forEach((node, index) => node.animate([{ opacity: 0, translate: "0 -4px" }, { opacity: 1, translate: "0 0" }], { duration: 240, delay: index * 30, easing: token("--ease-out"), fill: "backwards" }));
+  });
   document.addEventListener("click", (event) => {
     const target = event.target.closest("[data-page-action]");
     if (!target || event.target.closest(".check, [data-act]")) return;
     if (target.matches("a")) event.preventDefault();
-    openPage(target.dataset.pageAction);
+    openPage(target.dataset.pageAction, target.matches("a") ? target.getAttribute("href") : undefined);
   });
   document.addEventListener("click", (event) => {
-    const row = event.target.closest("#dueList .row.is-interactive");
+    const row = event.target.closest("#dueList .row.is-interactive, #writtenList .row.is-interactive");
     if (!row || event.target.closest("a, button")) return;
     row.querySelector(".row-link")?.click();
   });
@@ -1388,15 +1401,17 @@ function bindKeys() {
     const rows = interactiveRows();
     const current = document.activeElement?.closest?.(".row.is-interactive");
     const index = rows.indexOf(current);
-    if (key === "j") {
+    if (key === "j" || key === "k") {
       event.preventDefault();
-      focusRow(rows[Math.min(rows.length - 1, index + 1)] || rows[0]);
-    } else if (key === "k") {
-      event.preventDefault();
-      focusRow(rows[Math.max(0, index - 1)] || rows[0]);
+      const target = rows[key === "j" ? Math.min(rows.length - 1, index + 1) : Math.max(0, index - 1)] || rows[0];
+      focusRow(target);
+      keyRow = target?.dataset.id || null;
     } else if (key === "x" && current?.classList.contains("task") && current.contains(event.target)) {
       event.preventDefault();
       toggleTask(current.dataset.id, { restoreFocus: true });
+    } else if ((key === "backspace" || key === "delete") && current?.classList.contains("task") && event.target === current) {
+      event.preventDefault();
+      if (!event.shiftKey && !event.repeat && keyRow === current.dataset.id) removeTask(current.dataset.id, "delete", { refocus: true });
     } else if (key === "enter" && event.target === current) {
       event.preventDefault();
       current.querySelector(".row-link")?.click();
@@ -1409,24 +1424,32 @@ function bindKeys() {
 
 function bindEvents() {
   window.addEventListener("app:add-task", openAddRow);
+  window.addEventListener("app:remove-task", (event) => {
+    const id = String(event.detail?.id || "");
+    if (!state.tasks.some((task) => task.id === id)) return;
+    event.preventDefault();
+    removeTask(id, "delete");
+  });
+  bindWeatherRow();
   window.addEventListener("app:weather-open", renderWeather);
   window.addEventListener("app:note", (event) => {
-    event.preventDefault();
     const detail = event.detail;
+    // Notes and ideas have no place on the overview. The shell stores them and points to where they are listed.
+    if (detail.type !== "task" && detail.type !== "homework") return;
+    event.preventDefault();
     const today = todayIso();
-    const typeWords = { task: "Aufgabe", homework: "Hausaufgabe", note: "Notiz", idea: "Idee" };
-    const when = detail.date && detail.date !== today ? ` für ${shortDate(parseDate(detail.date))}` : "";
+    const typeWords = { task: "Aufgabe", homework: "Hausaufgabe" };
+    const date = detail.type === "homework" ? detail.date || homeworkDate(detail.subject) : detail.date;
+    const when = date && date !== today ? ` für ${shortDate(parseDate(date))}` : "";
     let id = null;
-    if (detail.type === "task" || (detail.type === "homework" && (!detail.date || detail.date === today))) {
-      id = createTask({ title: detail.title, subjectKey: detail.subject, date: detail.date, block: detail.block }).id;
-    } else if (detail.type === "homework") {
+    if (detail.type === "task") {
+      id = createTask({ title: detail.title, subjectKey: detail.subject, date: detail.date, block: detail.block, notes: detail.details || "" }).id;
+    } else {
       id = `hw-new-${Date.now()}`;
-      const item = { id, kind: "Hausaufgabe", title: detail.title, subject: detail.subject || null, date: detail.date, block: detail.block, detail: detail.details || "", status: "offen" };
+      const item = { id, kind: "Hausaufgabe", title: detail.title, subject: detail.subject || null, date, block: detail.block, detail: detail.details || "", status: "offen" };
       state.deadlines.push(item);
       deadlineApi.create(item);
       settleLists();
-    } else {
-      noteApi.create({ type: detail.type, title: detail.title, details: detail.details });
     }
     toast(`${typeWords[detail.type]}${when} angelegt: „${esc(detail.title)}“`, {
       icon: "check",
@@ -1446,7 +1469,7 @@ function bindEvents() {
       },
     })),
     ...state.deadlines.map((item) => ({
-      group: "Fällig", label: `${item.kind}: ${item.title}`, icon: isTest(item) ? "nx-test" : "calendar-days", keywords: subject(item.subject).name,
+      group: "Fällig", label: `${item.kind}: ${item.title}`, icon: ASSESSMENTS[item.kind]?.icon || "calendar-days", keywords: subject(item.subject).name,
       hint: `${label(item.subject)}, ${shortDate(parseDate(item.date))}`,
       run: () => {
         const row = document.querySelector(`.due[data-id="${CSS.escape(item.id)}"]`);
@@ -1468,6 +1491,7 @@ function render(previous) {
   const day = computeDay(date);
   state.day = day;
   renderHeader(day);
+  renderWeatherChip();
   renderHero(day, previous);
   renderTrack(day);
   const dayChanged = !previous || isoDate(previous.date) !== isoDate(day.date);
@@ -1533,7 +1557,22 @@ export function initHome() {
   const day = render(null);
   choreograph(day);
   requestAnimationFrame(() => requestAnimationFrame(() => $("track").classList.add("is-live")));
+  let fitFrame = 0;
+  new ResizeObserver(() => {
+    cancelAnimationFrame(fitFrame);
+    fitFrame = requestAnimationFrame(fitTrack);
+  }).observe($("track"));
+  document.fonts?.ready.then(fitTrack);
   scheduleTick();
+  onPlanRefresh(() => {
+    measureDay();
+    $("track").dataset.signature = "";
+    render(state.day);
+  });
+  onPlanRefresh(() => holdFocus(() => {
+    renderTasks();
+    renderDue();
+  }), () => overlayOpen() || listInUse());
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       saveSeen(state.day);

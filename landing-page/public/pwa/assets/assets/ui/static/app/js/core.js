@@ -30,7 +30,7 @@ export const MONTHS_SHORT = ["Jan", "Feb", "März", "Apr", "Mai", "Juni", "Juli"
 export const platform = {
   mac: /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent),
   electron: /Electron/.test(navigator.userAgent),
-  desktop: /Electron/.test(navigator.userAgent) || Boolean(window.hubShell),
+  desktop: /Electron/.test(navigator.userAgent) || (Boolean(window.hubShell) && !["android", "ios"].includes(document.documentElement.dataset.shell)),
   touch: matchMedia("(hover: none)").matches,
 };
 
@@ -54,7 +54,9 @@ export function safeMarkup(markup, allowed = ["B", "BR", "STRONG", "EM"]) {
 
 export const icon = (name, cls = "") => `<svg class="icon ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
-export { tinte } from "./tinte.js";
+export { luna } from "./luna.js";
+import { expandEvents } from "./recurrence.js";
+import { PLAN_KEYS, sameValue } from "./plan-format.js";
 
 export const toMin = (hhmm) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -92,6 +94,20 @@ export function now() {
 }
 
 export const pinnedTime = () => params.has("t");
+
+export function stretchOf(first, last, today, year = null) {
+  const base = startOfDay(today);
+  const full = year != null && year < 100 ? year + 2000 : year;
+  if (full != null && (full < base.getFullYear() - 1 || full > base.getFullYear() + 10)) return null;
+  const valid = (date, [day, month]) => date.getDate() === day && date.getMonth() === month;
+  const later = last[1] < first[1] || (last[1] === first[1] && last[0] < first[0]);
+  for (const startYear of full != null ? [full] : [base.getFullYear() - 1, base.getFullYear(), base.getFullYear() + 1]) {
+    const start = new Date(startYear, first[1], first[0]);
+    const end = new Date(startYear + (later ? 1 : 0), last[1], last[0]);
+    if (valid(start, first) && valid(end, last) && end >= base) return { date: start < base ? base : start, end, begun: start < base };
+  }
+  return null;
+}
 
 export function weekType(date) {
   if (!abWeeks()) return "A";
@@ -158,6 +174,19 @@ export function nextSchoolDay(from) {
   return null;
 }
 
+export function homeworkDate(subjectKey, from = now()) {
+  const start = startOfDay(from);
+  let schoolDay = null;
+  for (let offset = 1; offset <= 70; offset += 1) {
+    const date = addDays(start, offset);
+    const lessons = activeLessons(lessonsFor(date));
+    if (!lessons.length) continue;
+    if (!subjectKey || lessons.some((lesson) => lesson.subject === subjectKey)) return isoDate(date);
+    schoolDay = schoolDay || date;
+  }
+  return isoDate(schoolDay || addDays(start, 1));
+}
+
 export function relativeDay(offset, date) {
   if (offset === 0) return "heute";
   if (offset === 1) return "morgen";
@@ -175,6 +204,76 @@ export function inDays(offset) {
   return `in ${weeks}\u00a0Wochen`;
 }
 
+export const ASSESSMENTS = {
+  Test: { icon: "nx-test", many: "Tests", next: "Nächster Test", past: "geschrieben" },
+  Klausur: { icon: "nx-test", many: "Klausuren", next: "Nächste Klausur", past: "geschrieben" },
+  Vortrag: { icon: "presentation", many: "Vorträge", next: "Nächster Vortrag", past: "gehalten" },
+};
+export const isAssessment = (item) => !!item && Object.hasOwn(ASSESSMENTS, item.kind);
+export const isOverdue = (item, today) => item.date < today && item.status !== "abgegeben" && !isAssessment(item);
+
+export function pastText(offset, date, kind) {
+  const word = ASSESSMENTS[kind]?.past || "geschrieben";
+  if (offset === -1) return `gestern ${word}`;
+  if (offset > -7) return `vor ${-offset}\u00a0Tagen ${word}`;
+  return `am ${date.getDate()}.${date.getMonth() + 1}. ${word}`;
+}
+
+export function pastWord(items) {
+  const words = new Set(items.map((item) => ASSESSMENTS[item.kind]?.past));
+  return (words.size === 1 && [...words][0]) || "vorbei";
+}
+
+export const assessmentCount = (items) => Object.entries(ASSESSMENTS)
+  .map(([kind, info]) => [items.filter((item) => item.kind === kind).length, kind, info.many])
+  .filter(([count]) => count)
+  .map(([count, one, many]) => `${count}\u00a0${count === 1 ? one : many}`)
+  .join(", ");
+
+function monthsOn(date, count) {
+  const next = new Date(date.getFullYear(), date.getMonth() + count, 1);
+  const last = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(date.getDate(), last));
+  return next;
+}
+
+export function nextRepeatDate(iso, repeat, after = isoDate(now())) {
+  const days = { daily: 1, weekly: 7 }[repeat];
+  if (!days && repeat !== "monthly") return null;
+  const date = parseDate(iso);
+  for (let turn = 1; turn <= 800; turn += 1) {
+    const next = isoDate(days ? addDays(date, days * turn) : monthsOn(date, turn));
+    if (next > after) return next;
+  }
+  return null;
+}
+
+const FOLLOW_KEY = "app-task-follow";
+// Kept as a list of pairs, oldest first. An object would sort number-like ids, and the cap would drop the wrong links.
+const followPairs = () => {
+  const value = storage.get(FOLLOW_KEY);
+  const pairs = Array.isArray(value) ? value : value && typeof value === "object" ? Object.entries(value) : [];
+  return pairs.filter((pair) => Array.isArray(pair) && pair.length === 2).map(([id, follow]) => [String(id), String(follow)]);
+};
+const keepFollowPairs = (pairs) => storage.set(FOLLOW_KEY, pairs.slice(-60));
+
+export const followLinks = {
+  get: (id) => followPairs().find(([key]) => key === String(id))?.[1] || null,
+  set(id, follow) {
+    keepFollowPairs([...followPairs().filter(([key]) => key !== String(id)), [String(id), String(follow)]]);
+  },
+  drop(id) {
+    const pairs = followPairs();
+    const kept = pairs.filter(([key]) => key !== String(id));
+    if (kept.length !== pairs.length) keepFollowPairs(kept);
+  },
+  rename(from, to) {
+    const pairs = followPairs();
+    const renamed = pairs.map((pair) => pair.map((id) => (id === String(from) ? String(to) : id)));
+    if (String(from) !== String(to) && pairs.some((pair) => pair.includes(String(from)))) keepFollowPairs(renamed);
+  },
+};
+
 export function duration(min) {
   if (min < 60) return `${min}\u00a0Min.`;
   const h = Math.floor(min / 60);
@@ -186,7 +285,7 @@ export const shortDate = (date) => `${WEEKDAYS_SHORT[date.getDay()]}., ${date.ge
 export const longDate = (date) => `${WEEKDAYS[date.getDay()]}, ${date.getDate()}. ${MONTHS[date.getMonth()]}`;
 
 export const eventsOn = (date) =>
-  (flags.empty ? [] : data.events)
+  expandEvents(flags.empty ? [] : data.events, isoDate(date), isoDate(date))
     .filter((event) => event.date === isoDate(date))
     .sort((a, b) => (a.start || "00:00").localeCompare(b.start || "00:00"));
 
@@ -239,16 +338,63 @@ export function rainFrom(hour) {
   return rainy ? rainy.h : null;
 }
 
+// WMO weather codes as the forecast service sends them.
+const SKIES = [
+  [[0], "clear", "klar"],
+  [[1], "partly", "heiter"],
+  [[2], "partly", "wolkig"],
+  [[3], "cloudy", "bedeckt"],
+  [[45, 48], "fog", "Nebel"],
+  [[51, 53, 55, 56, 57], "drizzle", "Niesel"],
+  [[61, 63, 66], "rain", "Regen"],
+  [[65, 67], "rain", "starker Regen"],
+  [[80, 81, 82], "rain", "Schauer"],
+  [[71, 73, 75, 77, 85, 86], "snow", "Schnee"],
+  [[95, 96, 99], "storm", "Gewitter"],
+];
+
+const night = (hour) => hour >= 20 || hour < 7;
+
+export function skyOf(code, hour = 12) {
+  const found = Number.isInteger(code) ? SKIES.find(([codes]) => codes.includes(code)) : null;
+  if (!found) return null;
+  const [, kind, word] = found;
+  return { kind, word: kind === "clear" && !night(hour) ? "sonnig" : word };
+}
+
+// The forecast for the hour asked comes first. The current weather was read when the page was built, and the page stays open for hours.
+export function skyCode(hour) {
+  const exact = weatherHours().find((item) => item.h === hour);
+  if (Number.isInteger(exact?.code)) return exact.code;
+  if (Number.isInteger(data?.weather?.code)) return data.weather.code;
+  return weatherAt(hour)?.code;
+}
+
+export function currentSky(hour) {
+  return skyOf(skyCode(hour), hour);
+}
+
+const SKY_ICONS = { clear: ["sun", "moon"], partly: ["cloud-sun", "cloud-moon"], cloudy: ["cloud", "cloud"], fog: ["cloud-fog", "cloud-fog"], drizzle: ["cloud-drizzle", "cloud-drizzle"], rain: ["cloud-rain", "cloud-rain"], snow: ["cloud-snow", "cloud-snow"], storm: ["cloud-lightning", "cloud-lightning"] };
+
 export function hourIcon(item) {
+  const sky = skyOf(item.code, item.h);
+  if (sky) return SKY_ICONS[sky.kind][night(item.h) ? 1 : 0];
   if (item.rain >= 50) return "cloud-rain";
   if (item.rain >= 30) return "cloud-drizzle";
-  if (item.h >= 20 || item.h < 7) return "cloud-moon";
-  if (item.h >= 12 && item.h <= 14) return "cloud-sun";
   return "cloud";
 }
 
+const PLAN_META_KEY = "app-timetable-meta";
+const SYNC_KEY = "app-timetable-sync";
+const ACCOUNT_KEY = "app-account";
+const PROFILE_KEY = "app-profile";
+const PLAN_ORIGINS = ["edit", "import", "share"];
+// Kept for this device alone: storage.keys() leaves them out, so no backup, restore or wipe takes or touches them.
+const DEVICE_KEYS = new Set([PLAN_META_KEY, SYNC_KEY, ACCOUNT_KEY, PROFILE_KEY]);
+
 const SERVER_KEYS = new Set([
   "app-timetable-edits", "app-block-times", "app-ab-swap", "app-ab-weeks", "app-subjects", "app-teachers", "app-rooms",
+  PLAN_META_KEY, SYNC_KEY, ACCOUNT_KEY, PROFILE_KEY,
   "app-settings", "app-motion", "app-theme-choice", "app-single-keys", "app-task-filter", "app-cal-view",
 ]);
 
@@ -281,6 +427,10 @@ function persist(key, value) {
   return next;
 }
 
+const device = typeof data?.device === "string" && data.device ? data.device : null;
+let openChange = null;
+let clockSeen = Math.max(0, ...[serverValues.get(PLAN_META_KEY)?.seen, serverValues.get(PLAN_META_KEY)?.at].filter(Number.isFinite));
+
 export const storage = {
   get(key) {
     if (SERVER_KEYS.has(key)) {
@@ -292,8 +442,11 @@ export const storage = {
       return null;
     }
   },
+  // The plan's record is written only by the plan's own changes and the sync state only by the sync, so a backup file or a shared plan never brings in either of another device.
   set(key, value) {
+    if (DEVICE_KEYS.has(key)) return;
     if (SERVER_KEYS.has(key)) {
+      if (PLAN_KEYS.includes(key)) planTouched();
       serverValues.set(key, JSON.parse(JSON.stringify(value)));
       persist(key, value);
       return;
@@ -303,7 +456,9 @@ export const storage = {
     } catch {}
   },
   remove(key) {
+    if (DEVICE_KEYS.has(key)) return;
     if (SERVER_KEYS.has(key)) {
+      if (PLAN_KEYS.includes(key)) planTouched();
       serverValues.delete(key);
       persist(key, undefined);
       return;
@@ -313,9 +468,142 @@ export const storage = {
     } catch {}
   },
   keys() {
-    return [...serverValues.keys()];
+    return [...serverValues.keys()].filter((key) => !DEVICE_KEYS.has(key));
+  },
+  settled() {
+    if (openChange && !openChange.explicit) settleChange();
+    return Promise.all(writes.values());
   },
 };
+
+function deviceStore(key) {
+  return {
+    get: () => (serverValues.has(key) ? JSON.parse(JSON.stringify(serverValues.get(key))) : null),
+    set(value) {
+      if (value == null) {
+        if (!serverValues.has(key)) return;
+        serverValues.delete(key);
+        persist(key, undefined);
+        return;
+      }
+      if (sameValue(serverValues.get(key), value)) return;
+      serverValues.set(key, JSON.parse(JSON.stringify(value)));
+      persist(key, value);
+    },
+  };
+}
+
+export const syncStore = deviceStore(SYNC_KEY);
+export const accountStore = deviceStore(ACCOUNT_KEY);
+export const profileStore = deviceStore(PROFILE_KEY);
+
+const planValues = () => PLAN_KEYS.map((key) => serverValues.get(key) ?? null);
+const planListeners = new Set();
+const planChanged = () => planListeners.forEach((listener) => listener(planMeta()));
+
+// Called after every change of the plan that planChange or an own edit recorded, never after planRevert.
+export function onPlanChange(listener) {
+  planListeners.add(listener);
+  return () => planListeners.delete(listener);
+}
+
+function keepRecord(record) {
+  if (record) clockSeen = Math.max(clockSeen, record.at);
+  const value = record ? { at: record.at, origin: record.origin, device: record.device ?? null, seen: clockSeen } : { seen: clockSeen };
+  if (sameValue(serverValues.get(PLAN_META_KEY), value)) return;
+  serverValues.set(PLAN_META_KEY, value);
+  persist(PLAN_META_KEY, value);
+}
+
+function settleChange() {
+  const change = openChange;
+  openChange = null;
+  if (!change?.origin || sameValue(change.before, planValues())) return;
+  if (change.shared?.at && planMeta()?.at === change.shared.at) {
+    planChanged();
+    return;
+  }
+  // A hybrid clock: a device clock set back can never date a change before one this device has already seen.
+  const at = Math.max(Date.now(), clockSeen + 1);
+  clockSeen = at;
+  keepRecord({ at, origin: change.origin, device });
+  if (change.shared) change.shared.at = at;
+  planChanged();
+}
+
+// A write to the plan outside planChange is an own edit, and all such writes of one task are one change.
+function planTouched() {
+  if (openChange) return;
+  const change = { origin: "edit", before: planValues() };
+  openChange = change;
+  queueMicrotask(() => openChange === change && settleChange());
+}
+
+export function planMeta() {
+  const saved = serverValues.get(PLAN_META_KEY);
+  if (!Number.isFinite(saved?.at) || !PLAN_ORIGINS.includes(saved.origin)) return null;
+  return { at: saved.at, origin: saved.origin, device: typeof saved.device === "string" ? saved.device : null };
+}
+
+// Runs the writes in run as one change of the plan with the given origin, or with null as writes the app makes on its
+// own, which never count. Without run it hands back a function for an action that writes in several steps, and all its
+// steps share one time.
+export function planChange(origin, run) {
+  if (!run) {
+    const shared = { at: 0 };
+    return (step) => planStep(origin, step, shared);
+  }
+  return planStep(origin, run, null);
+}
+
+function planStep(origin, run, shared) {
+  if (!origin) return planQuiet(run);
+  if (openChange?.explicit) return run();
+  settleChange();
+  openChange = { origin, before: planValues(), explicit: true, shared };
+  try {
+    return run();
+  } finally {
+    settleChange();
+  }
+}
+
+function planQuiet(run) {
+  const change = openChange;
+  const before = planValues();
+  if (!change) openChange = { origin: null, explicit: true };
+  try {
+    return run();
+  } finally {
+    if (!change) openChange = null;
+    else if (change.before) {
+      const after = planValues();
+      change.before = change.before.map((value, index) => (sameValue(before[index], after[index]) ? value : after[index]));
+    }
+  }
+}
+
+// Takes the plan back to an earlier record, or to none: undoing an import or a shared plan brings back the plan as it was, not a new edit.
+export function planRevert(record, run) {
+  settleChange();
+  openChange = { origin: null, explicit: true };
+  try {
+    return run();
+  } finally {
+    openChange = null;
+    keepRecord(record);
+  }
+}
+
+// A plan from before the records were kept has none. The sync records it as it stands, so that it can travel.
+export function planAdopt(origin) {
+  settleChange();
+  if (planMeta() || !PLAN_ORIGINS.includes(origin)) return planMeta();
+  const at = Math.max(Date.now(), clockSeen + 1);
+  clockSeen = at;
+  keepRecord({ at, origin, device });
+  return planMeta();
+}
 
 export const LOCAL_KEYS = {
   lessons: "app-timetable-edits",
@@ -329,13 +617,35 @@ export const LOCAL_KEYS = {
   prefs: "app-settings",
 };
 
-export const abWeeks = () => storage.get(LOCAL_KEYS.abWeeks) !== false;
-export const gradeScale = () => ((storage.get(LOCAL_KEYS.prefs)?.school?.grade ?? 12) >= 11 ? "points" : "grades");
+const anyLesson = (timetable) => Object.values(timetable || {}).some((days) => Object.values(days || {}).some((entries) => (entries || []).length));
+const storedPlan = anyLesson(data?.timetable) || Object.values(storage.get(LOCAL_KEYS.lessons) || {}).some(Boolean);
+
+// A plan stored before A/B weeks were asked for keeps them on, as it always had them. A new plan has them once the answer is saved.
+export const abWeeks = () => {
+  const saved = storage.get(LOCAL_KEYS.abWeeks);
+  return typeof saved === "boolean" ? saved : storedPlan;
+};
+export const abAnswered = () => typeof storage.get(LOCAL_KEYS.abWeeks) === "boolean";
+export const abSettled = () => abAnswered() || storedPlan;
+export const hasPlan = () => anyLesson(abWeeks() ? data?.timetable : { A: data?.timetable?.A });
+export const gradeScale = () => {
+  const saved = storage.get(LOCAL_KEYS.prefs)?.school?.grade;
+  const grade = Number.isInteger(saved) ? saved : Number.isInteger(data?.user?.grade) ? data.user.grade : 12;
+  return grade >= 11 ? "points" : "grades";
+};
+
+// A school with single periods calls them Stunden, one with double periods Blöcke. The words fit into the sentences around them.
+export function periodWords(blocks = data?.blocks) {
+  const single = !!blocks?.length && blocks.every((block) => toMin(block.end) - toMin(block.start) <= 60);
+  return single
+    ? { one: "Stunde", many: "Stunden", dative: "der", inside: "In der", it: "Sie", which: "die", none: "keine" }
+    : { one: "Block", many: "Blöcke", dative: "dem", inside: "Im", it: "Er", which: "der", none: "kein" };
+}
 
 export const HUES = ["rose", "ochre", "olive", "moss", "jade", "teal", "lake", "slate", "iris", "orchid", "brick", "plum"];
 export const COURSE_TYPES = ["LK", "GK", "SK"];
 export const NO_TEACHER = "ohne Lehrkraft";
-export const MAX_BLOCKS = 8;
+export const MAX_BLOCKS = 12;
 export const activeSubjectKeys = () => Object.keys(data?.subjects || {}).filter((key) => !data.subjects[key].retired);
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -442,10 +752,10 @@ function resolveSubjects(teachers) {
     result[key] = make({ ...info, type: defaultType(key, info), teacher: teacher ? teacherId(teacher) : "", room: defaultRoom(key), custom: false, retired: removed.has(key) }, items[key] || {});
   });
   Object.entries(items).forEach(([key, own]) => {
-    if (result[key] || removed.has(key) || schoolDefaults.subjects[key] || !own?.custom) return;
+    if (result[key] || schoolDefaults.subjects[key] || !own?.custom) return;
     const name = typeof own.name === "string" ? own.name.trim() : "";
     if (!name || !HUES.includes(own.hue)) return;
-    result[key] = make({ name, label: name, short: name.slice(0, 3), hue: own.hue, type: "GK", teacher: "", room: "", custom: true }, own);
+    result[key] = make({ name, label: name, short: name.slice(0, 3), hue: own.hue, type: "GK", teacher: "", room: "", custom: true, retired: removed.has(key) }, own);
   });
   return result;
 }

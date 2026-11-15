@@ -1,0 +1,57 @@
+// SPDX-FileCopyrightText: 2026 Leon Manuel Töpper
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+import { dayDiff, isoDate, isAssessment, isOverdue, toMin } from "./core.js";
+
+export const WRITTEN_DAYS = 14;
+export const DUE_DAYS = 14;
+export const HOME_BEFORE_EVENT = 45;
+
+export function dueItems(date, deadlines, upcoming) {
+  const all = deadlines.map((item) => ({ ...item, source: "deadline", diff: dayDiff(date, item.date) }));
+  const own = upcoming.map((task) => ({
+    id: task.id, kind: "Aufgabe", title: task.title, subject: task.subject, date: task.date, block: task.block, source: "task", diff: dayDiff(date, task.date),
+  }));
+  const today = isoDate(date);
+  const overdue = all.filter((item) => isOverdue(item, today)).sort((a, b) => a.diff - b.diff);
+  const written = all.filter((item) => item.diff < 0 && item.diff >= -WRITTEN_DAYS && isAssessment(item)).sort((a, b) => b.diff - a.diff);
+  const soon = [
+    ...all.filter((item) => item.diff >= 0 && item.diff <= DUE_DAYS && !item.pinned && item.status !== "abgegeben"),
+    ...own.filter((item) => item.diff <= DUE_DAYS),
+  ].sort((a, b) => a.diff - b.diff || Number(isAssessment(b)) - Number(isAssessment(a)));
+  const pinned = all.filter((item) => item.pinned && item.diff >= 0);
+  return { overdue, soon, pinned, written };
+}
+
+// The page checks the lesson the server named against the day it shows, as the school page does.
+export function blockIn(item, lessons) {
+  if (item.block && lessons.some((lesson) => lesson.block === item.block && lesson.subject === item.subject)) return item.block;
+  return lessons.find((lesson) => lesson.subject === item.subject)?.block || null;
+}
+
+export function testAhead(deadlines, day) {
+  const iso = isoDate(day.date);
+  const endOf = (block) => day.lessons.find((lesson) => lesson.block === block)?.endMin ?? Infinity;
+  return deadlines
+    .filter((item) => isAssessment(item) && item.date === iso)
+    .map((item) => ({ ...item, block: blockIn(item, day.lessons) }))
+    .filter((item) => day.nowMin < endOf(item.block))
+    .sort((a, b) => (a.block || 99) - (b.block || 99))[0] || null;
+}
+
+// Right after school the ride home comes first, unless an event starts within the next 45 minutes or before the bus leaves.
+export function homeFirst(bus, event, nowMin) {
+  if (!bus) return false;
+  if (!event) return true;
+  const start = toMin(event.start);
+  return start - nowMin > HOME_BEFORE_EVENT && toMin(bus.time) < start;
+}
+
+// The hours of the weather sheet: every hour the forecast holds for the day, in order, and where the row opens, on the
+// hour now or the next one there is.
+export function forecastRow(hours, hour) {
+  const list = (Array.isArray(hours) ? hours : []).filter((item) => Number.isInteger(item?.h) && Number.isFinite(item.temp)).sort((a, b) => a.h - b.h);
+  const next = list.findIndex((item) => item.h >= hour);
+  return { hours: list, first: next < 0 ? Math.max(0, list.length - 1) : next };
+}
+
